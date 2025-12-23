@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import FocusOverlay from "@/components/FocusOverlay";
-import { Kbd } from "@/components/ui/kbd";
 import { Calendar05 } from "@/components/DatePicker";
 
 import {
