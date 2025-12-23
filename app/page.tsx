@@ -28,7 +28,7 @@ export default function Home() {
       <div
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('/backgrounds/Colosseum.jpg')",
+          backgroundImage: "url('https://storage.googleapis.com/openbookings-backgrounds/Coliseum%20Photo.jpg')",
         }}
       >
         {/* Dark overlay for text readability */}

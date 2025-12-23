@@ -1,16 +1,21 @@
 import type { NextConfig } from "next";
 
+const nonce = crypto.randomUUID();
+
 const ContentSecurityPolicy = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  default-src 'none';
+  script-src 'self' 'nonce-${nonce}';
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: blob:;
+  img-src 'self' data: blob: https://storage.googleapis.com;
   font-src 'self';
   connect-src 'self' https:;
   frame-src 'self';
+  frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
   form-action 'self';
+  upgrade-insecure-requests;
+  block-all-mixed-content;
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
