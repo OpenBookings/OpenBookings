@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
-const nonce = crypto.randomUUID();
-
 const ContentSecurityPolicy = `
-  default-src 'none';
-  script-src 'self' 'nonce-${nonce}';
+  default-src 'self';
+  script-src 'self' 'unsafe-eval' 'unsafe-inline';
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://storage.googleapis.com;
   font-src 'self';
