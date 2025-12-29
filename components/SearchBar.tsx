@@ -32,8 +32,8 @@ function SearchBox({
   value: string;
   onChange: (value: string) => void;
   onSearch?: () => void;
-  placeholder: string;
-  className: string;
+  placeholder?: string;
+  className?: string;
 }) {
   const { query, refine } = useSearchBox();
   const { hits } = useHits<SearchResult>();
