@@ -1,5 +1,5 @@
 # ---------- BUILD STAGE ----------
-    FROM node:lts-alpine AS builder
+    FROM node:slim AS builder
     WORKDIR /app
     
     # Install deps
@@ -14,7 +14,7 @@
     
     
     # ---------- RUNTIME STAGE ----------
-    FROM node:lts-alpine
+    FROM node:slim
     WORKDIR /app
     
     ENV NODE_ENV=production

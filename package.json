@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
+    "algoliasearch": "^5.46.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -19,6 +20,7 @@
     "react": "19.2.1",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.1",
+    "react-instantsearch-hooks-web": "^6.47.3",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

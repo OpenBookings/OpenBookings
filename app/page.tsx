@@ -10,7 +10,12 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
-import { CalendarIcon, PersonIcon, MagnifyingGlassIcon } from "@/components/Icons";
+import {
+  CalendarIcon,
+  PersonIcon,
+  MagnifyingGlassIcon,
+} from "@/components/Icons";
+import { SearchBar } from "@/components/SearchBar";
 
 export default function Home() {
   const [checkIn, setCheckIn] = useState("");
@@ -27,15 +32,21 @@ export default function Home() {
       <div
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('https://storage.googleapis.com/openbookings-backgrounds/Coliseum%20Photo.jpg')",
+          backgroundImage:
+            "url('https://storage.googleapis.com/openbookings-backgrounds/SanFransico-GoldenGateBridge.avif')",
         }}
       >
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black/40"></div>
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0) 100%)",
+          }}
+        ></div>
       </div>
 
       {/* Main content - CTA */}
-      <div className="min-h-screen flex items-end justify-start px-8 sm:pb-8 md:px-12 lg:px-16 relative z-10">
+      <div className="fixed bottom-0 left-0 flex items-end justify-start px-8 sm:pb-8 md:px-12 lg:px-16 z-10">
         <div className="max-w-4xl text-left flex items-center">
           <div className="flex flex-col items-center justify-center mr-7">
             <div
@@ -47,7 +58,7 @@ export default function Home() {
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
               Discover{" "}
               <span className="bg-clip-text text-transparent bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400 select-none">
-                Rome
+                San Francisco
               </span>
             </h1>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-300 select-none">
@@ -83,17 +94,7 @@ export default function Home() {
               onClose={() => setOpenSearchBar(false)}
             >
               <div>
-                <InputGroup className=" backdrop-blur-sm rounded-lg sm:rounded-xl border border-white/10">
-                  <InputGroupInput
-                    placeholder="Where are you going?"
-                    value={destination ?? ""}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="text-white"
-                  />
-                  <InputGroupAddon>
-                    <MagnifyingGlassIcon />
-                  </InputGroupAddon>
-                </InputGroup>
+                <SearchBar value={destination} onChange={(value) => setDestination(value)} onSearch={() => setOpenSearchBar(false)} placeholder="Where are you going?" />
               </div>
             </FocusOverlay>
 
@@ -123,12 +124,12 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Separator */}
                 <div className="shrink-0 px-1 sm:px-2">
                   <div className="w-px h-6 sm:h-8 bg-white/20"></div>
                 </div>
-                
+
                 {/* Till Date */}
                 <div className="flex-1 min-w-0 text-right">
                   <div className="text-[10px] sm:text-xs text-slate-400 font-medium mb-0.5">
@@ -155,8 +156,35 @@ export default function Home() {
               open={openDatePicker}
               onClose={() => setOpenDatePicker(false)}
             >
-              <div>
-                <Calendar05 />
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Calendar05
+                  checkIn={checkIn}
+                  checkOut={checkOut}
+                  onDateChange={(range) => {
+                    // Format date as YYYY-MM-DD in local timezone
+                    const formatDate = (date: Date): string => {
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${year}-${month}-${day}`
+                    }
+
+                    if (range?.from) {
+                      setCheckIn(formatDate(range.from))
+                    } else {
+                      setCheckIn("")
+                    }
+                    
+                    if (range?.to) {
+                      setCheckOut(formatDate(range.to))
+                    } else {
+                      setCheckOut("")
+                    }
+                  }}
+                />
               </div>
             </FocusOverlay>
 
