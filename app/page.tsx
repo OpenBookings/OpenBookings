@@ -10,7 +10,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
-import { CalendarIcon, PersonIcon, MagnifyingGlassIcon } from "@/components/Icons";
+import {
+  CalendarIcon,
+  PersonIcon,
+  MagnifyingGlassIcon,
+} from "@/components/Icons";
 
 export default function Home() {
   const [checkIn, setCheckIn] = useState("");
@@ -27,15 +31,21 @@ export default function Home() {
       <div
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('https://storage.googleapis.com/openbookings-backgrounds/Coliseum%20Photo.jpg')",
+          backgroundImage:
+            "url('https://storage.googleapis.com/openbookings-backgrounds/Hawaii-Honolulu.avif')",
         }}
       >
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black/40"></div>
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0) 100%)",
+          }}
+        ></div>
       </div>
 
       {/* Main content - CTA */}
-      <div className="min-h-screen flex items-end justify-start px-8 sm:pb-8 md:px-12 lg:px-16 relative z-10">
+      <div className="fixed bottom-0 left-0 flex items-end justify-start px-8 sm:pb-8 md:px-12 lg:px-16 z-10">
         <div className="max-w-4xl text-left flex items-center">
           <div className="flex flex-col items-center justify-center mr-7">
             <div
@@ -123,12 +133,12 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Separator */}
                 <div className="shrink-0 px-1 sm:px-2">
                   <div className="w-px h-6 sm:h-8 bg-white/20"></div>
                 </div>
-                
+
                 {/* Till Date */}
                 <div className="flex-1 min-w-0 text-right">
                   <div className="text-[10px] sm:text-xs text-slate-400 font-medium mb-0.5">
