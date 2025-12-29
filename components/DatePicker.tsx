@@ -13,24 +13,58 @@ interface Calendar05Props {
 export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props) {
   const dateRange: DateRange | undefined = React.useMemo(() => {
     if (!checkIn && !checkOut) return undefined
+    
+    const from = checkIn ? new Date(checkIn + 'T00:00:00') : undefined
+    const to = checkOut ? new Date(checkOut + 'T00:00:00') : undefined
+    
+    // Validate dates
+    if (from && isNaN(from.getTime())) return undefined
+    if (to && isNaN(to.getTime())) return undefined
+    
     return {
-      from: checkIn ? new Date(checkIn) : undefined,
-      to: checkOut ? new Date(checkOut) : undefined,
+      from,
+      to,
     }
   }, [checkIn, checkOut])
+
+  const [month, setMonth] = React.useState<Date>(() => {
+    return dateRange?.from || new Date()
+  })
+
+  // Update month when dateRange changes (but only if it's a significant change)
+  React.useEffect(() => {
+    if (dateRange?.from) {
+      const newMonth = new Date(dateRange.from)
+      setMonth((currentMonth) => {
+        // Only update if the month/year is different
+        if (
+          newMonth.getMonth() !== currentMonth.getMonth() ||
+          newMonth.getFullYear() !== currentMonth.getFullYear()
+        ) {
+          return newMonth
+        }
+        return currentMonth
+      })
+    }
+  }, [dateRange?.from])
 
   const handleSelect = (range: DateRange | undefined) => {
     onDateChange?.(range)
   }
 
+  const handleMonthChange = (newMonth: Date) => {
+    setMonth(newMonth)
+  }
+
   return (
     <Calendar
       mode="range"
-      defaultMonth={dateRange?.from || new Date()}
+      month={month}
+      onMonthChange={handleMonthChange}
       selected={dateRange}
       onSelect={handleSelect}
       numberOfMonths={2}
-      className="rounded-lg border shadow-sm"
+      className="rounded-lg border shadow-sm bg-white/10 backdrop-blur-sm border-white/20"
     />
   )
 }

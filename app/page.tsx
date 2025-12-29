@@ -15,6 +15,7 @@ import {
   PersonIcon,
   MagnifyingGlassIcon,
 } from "@/components/Icons";
+import { SearchBar } from "@/components/SearchBar";
 
 export default function Home() {
   const [checkIn, setCheckIn] = useState("");
@@ -32,7 +33,7 @@ export default function Home() {
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
-            "url('https://storage.googleapis.com/openbookings-backgrounds/Hawaii-Honolulu.avif')",
+            "url('https://storage.googleapis.com/openbookings-backgrounds/SanFransico-GoldenGateBridge.avif')",
         }}
       >
         <div
@@ -57,7 +58,7 @@ export default function Home() {
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
               Discover{" "}
               <span className="bg-clip-text text-transparent bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400 select-none">
-                Rome
+                San Francisco
               </span>
             </h1>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-300 select-none">
@@ -93,17 +94,7 @@ export default function Home() {
               onClose={() => setOpenSearchBar(false)}
             >
               <div>
-                <InputGroup className=" backdrop-blur-sm rounded-lg sm:rounded-xl border border-white/10">
-                  <InputGroupInput
-                    placeholder="Where are you going?"
-                    value={destination ?? ""}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="text-white"
-                  />
-                  <InputGroupAddon>
-                    <MagnifyingGlassIcon />
-                  </InputGroupAddon>
-                </InputGroup>
+                <SearchBar value={destination} onChange={(value) => setDestination(value)} onSearch={() => setOpenSearchBar(false)} placeholder="Where are you going?" />
               </div>
             </FocusOverlay>
 
@@ -165,8 +156,35 @@ export default function Home() {
               open={openDatePicker}
               onClose={() => setOpenDatePicker(false)}
             >
-              <div>
-                <Calendar05 />
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Calendar05
+                  checkIn={checkIn}
+                  checkOut={checkOut}
+                  onDateChange={(range) => {
+                    // Format date as YYYY-MM-DD in local timezone
+                    const formatDate = (date: Date): string => {
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      return `${year}-${month}-${day}`
+                    }
+
+                    if (range?.from) {
+                      setCheckIn(formatDate(range.from))
+                    } else {
+                      setCheckIn("")
+                    }
+                    
+                    if (range?.to) {
+                      setCheckOut(formatDate(range.to))
+                    } else {
+                      setCheckOut("")
+                    }
+                  }}
+                />
               </div>
             </FocusOverlay>
 
