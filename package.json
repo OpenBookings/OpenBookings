@@ -20,7 +20,7 @@
     "react": "19.2.1",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.1",
-    "react-instantsearch-hooks-web": "^6.47.3",
+    "react-instantsearch": "^7.0.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

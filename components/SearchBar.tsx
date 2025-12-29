@@ -152,7 +152,7 @@ function SearchBox({
           ref={resultsRef}
           className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50"
         >
-          {hits.map((hit) => (
+          {hits.map((hit: SearchResult) => (
             <button
               key={hit.objectID}
               type="button"
