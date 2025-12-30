@@ -124,7 +124,7 @@ function SearchBox({
   return (
     <div className="relative w-full">
       <form
-        className={`flex items-center gap-2 rounded-lg border shadow-sm bg-white/10 backdrop-blur-sm border-white/20 px-3 py-2 ${className}`}
+        className={`flex items-center gap-2 rounded-lg border shadow-sm bg-black/50 backdrop-blur-sm border-white/10 px-3 py-2 ${className}`}
         onSubmit={handleFormSubmit}
         autoComplete="off"
       >
@@ -139,9 +139,9 @@ function SearchBox({
             }
           }}
           placeholder={placeholder}
-          className="flex-1"
+          className="flex-1 bg-transparent text-white placeholder:text-white/50"
         />
-        <Button type="submit" size="icon" variant="ghost" aria-label="Search">
+        <Button type="submit" size="icon" variant="ghost" aria-label="Search" className="text-white hover:bg-white/10">
           <MagnifyingGlassIcon />
         </Button>
       </form>
@@ -150,17 +150,17 @@ function SearchBox({
       {showResults && hits.length > 0 && (
         <div
           ref={resultsRef}
-          className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm border border-white/20 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50"
+          className="absolute top-full left-0 right-0 mt-2 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg shadow-2xl max-h-96 overflow-y-auto z-50 custom-scrollbar"
         >
           {hits.map((hit: SearchResult) => (
             <button
               key={hit.objectID}
               type="button"
               onClick={() => handleResultClick(hit)}
-              className="w-full px-4 py-3 text-left hover:bg-white/50 transition-colors border-b border-white/10 last:border-b-0"
+              className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-white/10 last:border-b-0"
             >
-              <div className="font-medium text-gray-900">{hit.city}</div>
-              <div className="text-sm text-gray-600">{hit.country}</div>
+              <div className="font-medium text-white">{hit.city}</div>
+              <div className="text-sm text-white/70">{hit.country}</div>
             </button>
           ))}
         </div>

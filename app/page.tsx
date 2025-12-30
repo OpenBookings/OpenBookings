@@ -28,8 +28,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen text-white relative">
-      {/* Background Image */}
-      <div
+            {/* Background Image */}
+            <div
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
@@ -55,10 +55,10 @@ export default function Home() {
             ></div>
           </div>
           <div className="flex flex-col justify-center">
-            <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
               Discover{" "}
               <span className="bg-clip-text text-transparent bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400 select-none">
-                San Francisco
+                Chefchaouen
               </span>
             </h1>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-300 select-none">
