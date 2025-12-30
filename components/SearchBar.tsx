@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { InstantSearch, useSearchBox, useHits, Configure } from "react-instantsearch-hooks-web";
+import { InstantSearch, useSearchBox, useHits, Configure } from "react-instantsearch";
 import type { BaseHit } from "instantsearch.js";
 import { searchClient, ALGOLIA_INDEX_NAME } from "@/lib/algolia";
 import { Input } from "@/components/ui/input";
