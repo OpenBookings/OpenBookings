@@ -33,7 +33,7 @@ export default function Home() {
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
-            "url('https://storage.googleapis.com/openbookings-backgrounds/SanFransico-GoldenGateBridge.avif')",
+            "url('https://storage.googleapis.com/openbookings-backgrounds/Morroco-Chefchaouen.avif')",
         }}
       >
         <div
