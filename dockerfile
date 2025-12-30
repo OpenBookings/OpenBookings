@@ -1,10 +1,10 @@
 # ---------- BUILD STAGE ----------
-    FROM node:slim AS builder
+    FROM node:lts-alpine AS builder
     WORKDIR /app
     
     # Install deps
     COPY package*.json ./
-    RUN npm ci --legacy-peer-deps
+    RUN npm ci
     
     # Copy source
     COPY . .
@@ -14,7 +14,7 @@
     
     
     # ---------- RUNTIME STAGE ----------
-    FROM node:slim
+    FROM node:lts-alpine
     WORKDIR /app
     
     ENV NODE_ENV=production
