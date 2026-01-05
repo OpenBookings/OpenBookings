@@ -64,7 +64,7 @@ export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props)
       selected={dateRange}
       onSelect={handleSelect}
       numberOfMonths={2}
-      className="rounded-lg border shadow-sm bg-white/10 backdrop-blur-sm border-white/20"
+      className="rounded-lg border border-white/20 shadow-2xl bg-black/70 backdrop-blur-md p-4"
     />
   )
 }

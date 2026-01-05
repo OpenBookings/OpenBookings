@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
+import { getRandomBackgroundImage } from "@/lib/background";
 
 import {
   InputGroup,
@@ -25,6 +26,12 @@ export default function Home() {
 
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
+  const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string } | null>(null);
+
+  // Set random background only on client side to avoid hydration mismatch
+  useEffect(() => {
+    setBackgroundImage(getRandomBackgroundImage());
+  }, []);
 
   return (
     <main className="min-h-screen text-white relative">
@@ -33,7 +40,7 @@ export default function Home() {
         className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
-            "url('https://storage.googleapis.com/openbookings-backgrounds/Morroco-Chefchaouen.avif')",
+            backgroundImage ? `url('${backgroundImage.url}')` : undefined,
         }}
       >
         <div
@@ -43,6 +50,33 @@ export default function Home() {
               "linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0) 100%)",
           }}
         ></div>
+      </div>
+
+      {/* Logo in top left corner */}
+      <div 
+        className="fixed top-0 left-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 select-none"
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      >
+        <img 
+          src="/openbookings-logo.svg" 
+          alt="OpenBookings Logo" 
+          className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none"
+          draggable="false"
+          style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+        />
+        {/* <p className="text-xl text-gray-300 pb-0.5 pt-0.5">OpenBookings</p> */}
+      </div>
+
+      {/* Profile in top right corner */}
+      <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
+        <button className="text-sm sm:text-base md:text-lg text-white font-medium transition-colors px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-black/50 backdrop-blur-md border border-white/10">
+          Sign in
+        </button>
+        <img 
+          src="/profile_avatar.png" 
+          alt="Profile" 
+          className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-white/50 transition-all border-2 border-white/20"
+        />
       </div>
 
       {/* Main content - CTA */}
@@ -58,7 +92,7 @@ export default function Home() {
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
               Discover{" "}
               <span className="bg-clip-text text-transparent bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400 select-none">
-                Chefchaouen
+                {backgroundImage?.name || ""}
               </span>
             </h1>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-300 select-none">
@@ -76,7 +110,7 @@ export default function Home() {
               The world is waiting...
             </h2>
             {/* Destination - Centered with navigation arrows */}
-            <InputGroup className="bg-black/50 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-all group">
+            <InputGroup className="bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-all group">
               <InputGroupInput
                 placeholder="Destination..."
                 value={destination ?? ""}
