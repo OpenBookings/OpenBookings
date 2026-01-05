@@ -124,7 +124,7 @@ function SearchBox({
   return (
     <div className="relative w-full">
       <form
-        className={`flex items-center gap-2 rounded-lg border shadow-sm bg-black/50 backdrop-blur-sm border-white/10 px-3 py-2 ${className}`}
+        className={`flex items-center gap-2 rounded-lg border shadow-sm bg-black/70 backdrop-blur-md border-white/20 px-3 py-2 ${className}`}
         onSubmit={handleFormSubmit}
         autoComplete="off"
       >
@@ -139,7 +139,7 @@ function SearchBox({
             }
           }}
           placeholder={placeholder}
-          className="flex-1 bg-transparent text-white placeholder:text-white/50"
+          className="flex-1 bg-transparent text-white placeholder:text-white/50 border border-white/20"
         />
         <Button type="submit" size="icon" variant="ghost" aria-label="Search" className="text-white hover:bg-white/10">
           <MagnifyingGlassIcon />
