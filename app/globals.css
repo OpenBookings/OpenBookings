@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-:root{
+:root {
   --background: oklch(0.1405 0.0044 285.8238);
   --foreground: oklch(0.9848 0 0);
   --card: oklch(0.1405 0.0044 285.8238);
@@ -44,14 +44,19 @@
   --shadow-spread: -0.5rem;
   --shadow-opacity: 0.1;
   --shadow-color: hsl(240 10% 3.9%);
-  --shadow-2xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.05);
-  --shadow-xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.05);
-  --shadow-sm: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.10), 0rem 1px 2px -1.5px hsl(240 10% 3.9000% / 0.10);
-  --shadow: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.10), 0rem 1px 2px -1.5px hsl(240 10% 3.9000% / 0.10);
-  --shadow-md: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.10), 0rem 2px 4px -1.5px hsl(240 10% 3.9000% / 0.10);
-  --shadow-lg: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.10), 0rem 4px 6px -1.5px hsl(240 10% 3.9000% / 0.10);
-  --shadow-xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.10), 0rem 8px 10px -1.5px hsl(240 10% 3.9000% / 0.10);
-  --shadow-2xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9000% / 0.25);
+  --shadow-2xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.05);
+  --shadow-xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.05);
+  --shadow-sm: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
+    0rem 1px 2px -1.5px hsl(240 10% 3.9% / 0.1);
+  --shadow: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
+    0rem 1px 2px -1.5px hsl(240 10% 3.9% / 0.1);
+  --shadow-md: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
+    0rem 2px 4px -1.5px hsl(240 10% 3.9% / 0.1);
+  --shadow-lg: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
+    0rem 4px 6px -1.5px hsl(240 10% 3.9% / 0.1);
+  --shadow-xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
+    0rem 8px 10px -1.5px hsl(240 10% 3.9% / 0.1);
+  --shadow-2xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.25);
 }
 
 @theme inline {
@@ -121,23 +126,33 @@
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
   }
-  
+
   /* Firefox */
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+
+  .text-glow {
+    text-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.35),
+      0 0 24px rgba(255, 255, 255, 0.15);
+  }
+
+  .text-stroke-hero {
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.1);
   }
 }

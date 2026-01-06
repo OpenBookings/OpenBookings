@@ -6,7 +6,8 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://storage.googleapis.com;
   font-src 'self';
-  connect-src 'self' https:;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https:;
+  worker-src 'self' blob:;
   frame-src 'self';
   frame-ancestors 'none';
   object-src 'none';

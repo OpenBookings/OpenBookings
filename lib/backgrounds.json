@@ -1,0 +1,108 @@
+[
+    {
+      "id": 1,
+      "name": "Sydney",
+      "image_path": "Australia-Sydney.avif",
+      "gradient-a": "#06192F",
+      "gradient-b": "#EAF4FF"
+    },
+    {
+      "id": 2,
+      "name": "Paris",
+      "image_path": "France-Paris.avif",
+      "gradient-a": "#0A1020",
+      "gradient-b": "#F3E6C8"
+    },
+    {
+      "id": 3,
+      "name": "Honolulu",
+      "image_path": "Hawaii-Honolulu.avif",
+      "gradient-a": "#0B2A2A",
+      "gradient-b": "#FFD9C2"
+    },
+    {
+      "id": 4,
+      "name": "Iceland",
+      "image_path": "Iceland-Reykjavik.avif",
+      "gradient-a": "#0C1F26",
+      "gradient-b": "#D8F1FF"
+    },
+    {
+      "id": 5,
+      "name": "Rome",
+      "image_path": "Italy-Rome.avif",
+      "gradient-a": "#2A0C0C",
+      "gradient-b": "#F2D6A2"
+    },
+    {
+      "id": 6,
+      "name": "Osaka",
+      "image_path": "Japan-Osaka.avif",
+      "gradient-a": "#140A10",
+      "gradient-b": "#F6B7C8"
+    },
+    {
+      "id": 7,
+      "name": "Morroco",
+      "image_path": "Morroco-Chefchaouen.avif",
+      "gradient-a": "#0A1E3A",
+      "gradient-b": "#EADFCC"
+    },
+    {
+      "id": 8,
+      "name": "Amsterdam",
+      "image_path": "Netherlands-Amsterdam.avif",
+      "gradient-a": "#0B1422",
+      "gradient-b": "#F5C86A"
+    },
+    {
+      "id": 9,
+      "name": "San Francisco",
+      "image_path": "USA-SanFrancisco.avif",
+      "gradient-a": "#1E242B",
+      "gradient-b": "#FFD2A6"
+    },
+    {
+      "id": 10,
+      "name": "Rio de Janeiro",
+      "image_path": "Brazil-RioDeJaneiro.avif",
+      "gradient-a": "#2A0A12",
+      "gradient-b": "#FFB1C8"
+    },
+    {
+      "id": 11,
+      "name": "Tuscany",
+      "image_path": "Italy-Tuscany.avif",
+      "gradient-a": "#2A1A0F",
+      "gradient-b": "#FFD8A8"
+    },
+    {
+      "id": 12,
+      "name": "Lake Como",
+      "image_path": "Italy-LakeComo.avif",
+      "gradient-a": "#0F2336",
+      "gradient-b": "#D6E6F2"
+    },
+    {
+      "id": 13,
+      "name": "New York City",
+      "image_path": "USA-NewYorkCity.avif",
+      "gradient-a": "#0A0D14",
+      "gradient-b": "#BEE7FF"
+    },
+    {
+      "id": 14,
+      "name": "Zermatt",
+      "image_path": "Switzerland-Zermatt.avif",
+      "gradient-a": "#0B1620",
+      "gradient-b": "#EAF6FF"
+    },
+    {
+      "id": 15,
+      "name": "Sa Pa",
+      "image_path": "Vietnam-SaPa.avif",
+      "gradient-a": "#0F2416",
+      "gradient-b": "#E6F5C9"
+    }
+  ]
+  

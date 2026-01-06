@@ -26,7 +26,7 @@ export default function Home() {
 
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
-  const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string } | null>(null);
+  const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string; gradientA: string; gradientB: string } | null>(null);
 
   // Set random background only on client side to avoid hydration mismatch
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function Home() {
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       >
         <img 
-          src="/openbookings-logo.svg" 
+          src="/Openbookings-logo.svg" 
           alt="OpenBookings Logo" 
           className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none"
           draggable="false"
@@ -89,13 +89,20 @@ export default function Home() {
             ></div>
           </div>
           <div className="flex flex-col justify-center">
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
+            <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none text-gray-300">
               Discover{" "}
-              <span className="bg-clip-text text-transparent bg-linear-to-r from-indigo-400 via-purple-400 to-pink-400 select-none">
+              <span 
+                className="bg-clip-text text-transparent select-none text-glow text-stroke-hero"
+                style={{
+                  backgroundImage: backgroundImage 
+                    ? `linear-gradient(to top right, ${backgroundImage.gradientA}, ${backgroundImage.gradientB})`
+                    : undefined
+                }}
+              >
                 {backgroundImage?.name || ""}
               </span>
             </h1>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-300 select-none">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight mb-4 ml-0.5 text-gray-400 select-none">
               Quick, Easy & Open-Source
             </h1>
           </div>
