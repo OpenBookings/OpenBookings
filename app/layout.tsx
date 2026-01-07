@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
+import { Auth0Provider } from "@auth0/nextjs-auth0/client";
 import "./globals.css";
 
-export const metadata = {
-  title: "Development",
-  description: "Hello World",
+export const metadata: Metadata = {
+  title: "OpenBookings",
+  description: "Quick, Easy & Open-Source",
+  icons: {
+    icon: "/Openbookings-logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -12,7 +17,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body>{children}</body>
+      <body>
+        <Auth0Provider>
+          {children}
+        </Auth0Provider>
+      </body>
     </html>
   );
 }
