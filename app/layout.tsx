@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: "OpenBookings",
   description: "Quick, Easy & Open-Source",
   icons: {
-    icon: "/Openbookings-logo.svg",
+    icon: "/Openbookings-logo-v2.svg",
   },
 };
 

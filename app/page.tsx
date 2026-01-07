@@ -66,7 +66,7 @@ export default function Home() {
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       >
         <img 
-          src="/Openbookings-logo.svg" 
+          src="/Openbookings-logo-v2.svg" 
           alt="OpenBookings Logo" 
           className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none"
           draggable="false"
