@@ -64,12 +64,15 @@ export default function Home() {
           draggable="false"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
         />
-        {/* <p className="text-xl text-gray-300 pb-0.5 pt-0.5">OpenBookings</p> */}
       </div>
 
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
-        <button className="text-sm sm:text-base md:text-lg text-white font-medium transition-colors px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-black/50 backdrop-blur-md border border-white/10">
+        <button
+          className="text-sm sm:text-base md:text-lg text-white font-medium transition-colors px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-black/50 backdrop-blur-md border border-white/10"
+          type="button"
+          onClick={() => window.location.href = "https://auth.openbookings.co/"}
+        >
           Sign in
         </button>
         <img 
