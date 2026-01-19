@@ -2,13 +2,13 @@ import type { NextConfig } from "next";
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://consent.cookiebot.com https://consentcdn.cookiebot.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com;
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: blob: https://storage.googleapis.com https://*.cookiebot.com;
+  img-src 'self' data: blob: https://storage.googleapis.com https://cdn-cookieyes.com;
   font-src 'self';
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://*.cookiebot.com https:;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https:;
   worker-src 'self' blob:;
-  frame-src 'self' https://consent.cookiebot.com https://consentcdn.cookiebot.com;
+  frame-src 'self' https://cdn-cookieyes.com;
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';

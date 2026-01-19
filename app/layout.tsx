@@ -22,13 +22,7 @@ export default function RootLayout({
         <script id="Cookiebot" src="https://consent.cookiebot.com/uc.js" data-cbid="cea90d99-6fb6-4db4-9820-9c25fd17ba0a" data-blockingmode="auto" type="text/javascript"></script>
       </head>
       <body>
-        <Script
-          id="Cookiebot"
-          src="https://consent.cookiebot.com/uc.js"
-          data-cbid="cea90d99-6fb6-4db4-9820-9c25fd17ba0a"
-          data-blockingmode="auto"
-          strategy="afterInteractive"
-        />
+      <script id="cookieyes" type="text/javascript" src="https://cdn-cookieyes.com/client_data/b30e1d3caf278cdefa0819752c00f4f4/script.js"></script>
         <Auth0Provider>
           {children}
         </Auth0Provider>
