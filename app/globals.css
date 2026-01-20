@@ -157,8 +157,6 @@
   }
 }
 
-/* Auth0 Integration Styles */
-
 .loading-state, .error-state {
   background-color: #2d313c;
   border-radius: 15px;
@@ -207,13 +205,6 @@
   max-width: 500px;
   width: 90%;
   animation: fadeInScale 0.8s ease-out forwards;
-}
-
-.auth0-logo {
-  width: 160px;
-  margin-bottom: 1.5rem;
-  opacity: 0;
-  animation: slideInDown 1s ease-out forwards 0.2s;
 }
 
 .main-title {
@@ -384,9 +375,5 @@
   .button {
     padding: 0.9rem 2rem;
     font-size: 1rem;
-  }
-  
-  .auth0-logo {
-    width: 120px;
   }
 }

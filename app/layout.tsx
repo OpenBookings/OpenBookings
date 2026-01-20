@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { Auth0Provider } from "@auth0/nextjs-auth0/client";
-import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,9 +21,7 @@ export default function RootLayout({
       </head>
       <body>
       <script id="cookieyes" type="text/javascript" src="https://cdn-cookieyes.com/client_data/b30e1d3caf278cdefa0819752c00f4f4/script.js"></script>
-        <Auth0Provider>
-          {children}
-        </Auth0Provider>
+        {children}
       </body>
     </html>
   );

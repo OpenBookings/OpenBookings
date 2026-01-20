@@ -1,14 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useUser } from "@auth0/nextjs-auth0/client";
+import { useState, useEffect } from "react";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
 import LoginButton from "@/components/LoginButton";
-import LogoutButton from "@/components/LogoutButton";
-import Profile from "@/components/Profile";
-import ProfilePopup from "@/components/ProfilePopup";
 
 import {
   InputGroup,
@@ -24,7 +20,6 @@ import {
 import { SearchBar } from "@/components/SearchBar";
 
 export default function Home() {
-  const { user, isLoading: userLoading } = useUser();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [people, setPeople] = useState(2);
@@ -32,9 +27,7 @@ export default function Home() {
 
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
-  const [openProfilePopup, setOpenProfilePopup] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string; gradientA: string; gradientB: string } | null>(null);
-  const profileImageRef = useRef<HTMLImageElement>(null);
 
   // Set random background only on client side to avoid hydration mismatch
   useEffect(() => {
@@ -76,30 +69,7 @@ export default function Home() {
 
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
-        {userLoading ? (
-          <LoginButton />
-        ) : user ? (
-          <>
-            <img
-              ref={profileImageRef}
-              src={user.picture || "/profile_avatar.png"}
-              alt={user.name || "Profile"}
-              className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-white/50 transition-all border-2 border-white/20"
-              onClick={() => setOpenProfilePopup(!openProfilePopup)}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = "/profile_avatar.png";
-              }}
-            />
-            <ProfilePopup
-              open={openProfilePopup}
-              onClose={() => setOpenProfilePopup(false)}
-              anchorRef={profileImageRef}
-            />
-          </>
-        ) : (
-          <LoginButton />
-        )}
+        <LoginButton />
       </div>
 
       {/* Main content - CTA */}
