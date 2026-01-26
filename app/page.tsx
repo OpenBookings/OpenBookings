@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
@@ -19,6 +20,30 @@ import {
 } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
 
+// Component to handle Firebase auth callback redirects
+function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: boolean) => void }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const oobCode = searchParams.get("oobCode");
+    const callback = searchParams.get("callback");
+    const mode = searchParams.get("mode");
+    
+    // Check if this is a Firebase authentication callback
+    if (oobCode || (callback && mode)) {
+      onRedirecting(true);
+      // Preserve all query parameters when redirecting
+      const params = new URLSearchParams(searchParams.toString());
+      router.replace(`/auth/verify?${params.toString()}`);
+      return;
+    }
+    onRedirecting(false);
+  }, [searchParams, router, onRedirecting]);
+
+  return null;
+}
+
 export default function Home() {
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -28,13 +53,35 @@ export default function Home() {
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string; gradientA: string; gradientB: string } | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  // Stable callback for redirect handler
+  const handleRedirecting = useCallback((redirecting: boolean) => {
+    setIsRedirecting(redirecting);
+  }, []);
 
   // Set random background only on client side to avoid hydration mismatch
   useEffect(() => {
     setBackgroundImage(getRandomBackgroundImage());
   }, []);
 
+  // Show loading state while redirecting
+  if (isRedirecting) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
+    <>
+      <Suspense fallback={null}>
+        <AuthRedirectHandler onRedirecting={handleRedirecting} />
+      </Suspense>
     <main className="min-h-screen text-white relative">
             {/* Background Image */}
             <div
@@ -259,5 +306,6 @@ export default function Home() {
         </div>
       </div>
     </main>
+    </>
   );
 }

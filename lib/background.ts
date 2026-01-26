@@ -7,8 +7,8 @@ type Background = {
   "gradient-b": string;
 };
 // URL builder for background images
-export const getBackgroundImageUrl = (image_path: string) => {
-  return `https://storage.googleapis.com/openbookings-backgrounds/${image_path}`;
+const getBackgroundImageUrl = (image_path: string) => {
+  return `https://images.openbookings.co/${image_path}`;
 };
 
 // Random background image picker

@@ -4,7 +4,7 @@ const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com;
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: blob: https://storage.googleapis.com https://cdn-cookieyes.com;
+  img-src 'self' data: blob: https://images.openbookings.co https://cdn-cookieyes.com;
   font-src 'self';
   connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https:;
   worker-src 'self' blob:;
