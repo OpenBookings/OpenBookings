@@ -2,6 +2,8 @@
 
 import { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { auth } from "@/lib/firebase/firebase";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
@@ -24,27 +26,56 @@ import { SearchBar } from "@/components/SearchBar";
 function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: boolean) => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Check authentication state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthChecked(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
+    // Wait for auth state to be checked before processing redirects
+    if (!authChecked) {
+      return;
+    }
+
     const oobCode = searchParams.get("oobCode");
     const callback = searchParams.get("callback");
     const mode = searchParams.get("mode");
     
     // Check if this is a Firebase authentication callback
     if (oobCode || (callback && mode)) {
+      // If user is already authenticated, clear the query params and stay on home
+      if (user) {
+        // User is authenticated, clear query params to prevent redirect loop
+        router.replace("/");
+        onRedirecting(false);
+        console.log("User is authenticated, clearing query params and staying on home");
+        return;
+      }
+      
+      // User not authenticated, redirect to verify page
       onRedirecting(true);
       // Preserve all query parameters when redirecting
       const params = new URLSearchParams(searchParams.toString());
       router.replace(`/auth/verify?${params.toString()}`);
+      console.log("Redirecting to verify page");
       return;
     }
     onRedirecting(false);
-  }, [searchParams, router, onRedirecting]);
+  }, [searchParams, router, onRedirecting, user, authChecked]);
 
   return null;
 }
 
 export default function Home() {
+  const router = useRouter();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [people, setPeople] = useState(2);
@@ -54,6 +85,16 @@ export default function Home() {
   const [openDatePicker, setOpenDatePicker] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState<{ url: string; name: string; gradientA: string; gradientB: string } | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Track authentication state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Stable callback for redirect handler
   const handleRedirecting = useCallback((redirecting: boolean) => {
@@ -116,7 +157,22 @@ export default function Home() {
 
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
-        <LoginButton />
+        {user ? (
+          // Show user profile image if authenticated (replace src path as needed)
+          <img
+            src="/profile_avatar.png"
+            alt="User Profile"
+            className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
+            draggable="false"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onClick={() => {
+              signOut(auth);
+              router.replace("/");
+            }}
+          />
+        ) : (
+          <LoginButton />
+        )}
       </div>
 
       {/* Main content - CTA */}

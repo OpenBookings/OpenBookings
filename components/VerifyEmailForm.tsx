@@ -6,6 +6,7 @@ import { auth } from "@/lib/firebase/firebase"
 import {
   isSignInWithEmailLink,
   signInWithEmailLink,
+  onAuthStateChanged,
 } from "firebase/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,6 +71,24 @@ export function VerifyEmailForm() {
       // Clear stored email
       window.localStorage.removeItem("emailForSignIn")
 
+      // Wait for auth state to update
+      await new Promise<void>((resolve, reject) => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          unsubscribe()
+          if (user) {
+            resolve()
+          } else {
+            reject(new Error("Authentication state not updated"))
+          }
+        })
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          unsubscribe()
+          reject(new Error("Authentication state update timeout"))
+        }, 5000)
+      })
+
       // Get the ID token
       const idToken = await userCredential.user.getIdToken()
 
@@ -87,8 +106,9 @@ export function VerifyEmailForm() {
         // Continue anyway - user is authenticated
       }
 
-      // Redirect to dashboard or home
-      router.push("/")
+      // Clear query parameters and redirect to home
+      // Use replace to avoid adding to history and prevent redirect loops
+      router.replace("/")
     } catch (err: any) {
       console.error("Sign-in error:", err)
       if (err.code === "auth/invalid-action-code") {
