@@ -10,8 +10,7 @@ export async function sendMagicLink(email: string, url: string, firstName?: stri
     Content: {
       Template: {
         TemplateName: "Magic-Link",
-        TemplateData: JSON.
-        stringify({
+        TemplateData: JSON.stringify({
           magicLinkUrl: url
         })
       }

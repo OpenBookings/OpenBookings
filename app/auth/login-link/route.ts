@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       console.error("Failed to send email:", emailError)
       // Don't expose email service errors to client
       return NextResponse.json(
-        { error: "Failed to send email. Please try again later." },
+        { error: "Failed to send email. Error: " + emailError },
         { status: 500 }
       )
     }
