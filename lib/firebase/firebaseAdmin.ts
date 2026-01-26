@@ -23,26 +23,35 @@ if (!admin.apps.length) {
 }
 
 export const adminAuth = admin.auth()
-export const adminFirestore = admin.firestore()
 
-/**
- * Creates a Firebase magic link for passwordless authentication
- * @param email - User's email address
- * @param redirectUrl - URL to redirect to after verification (defaults to /auth/verify)
- * @returns The magic link URL
- */
-export async function createMagicLink(
-  email: string,
-  redirectUrl?: string
-): Promise<string> {
-
-  const url = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify`
-  console.log(url)
+export async function createMagicLink(email: string): Promise<string> {
+  // Get base URL and ensure it's properly formatted
+  let baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://openbookings.co"
+  // Remove trailing slash
+  baseUrl = baseUrl.replace(/\/$/, "")
+  
+  // Construct the action URL where Firebase will redirect after email verification
+  const actionUrl = `${baseUrl}/auth/verify`
+  console.log("Action URL:", actionUrl)
 
   const link = await adminAuth.generateSignInWithEmailLink(email, {
-    url,
+    url: actionUrl,
     handleCodeInApp: true,
   })
-
+  
+  // Fix: Firebase may use an incorrect base domain from authorized domains config
+  // Replace any incorrect base domain with the correct one from our environment
+  const correctBaseUrl = new URL(baseUrl)
+  const linkUrl = new URL(link)
+  
+  // If the hostname doesn't match our expected domain, fix it
+  if (linkUrl.hostname !== correctBaseUrl.hostname) {
+    linkUrl.hostname = correctBaseUrl.hostname
+    const fixedLink = linkUrl.toString()
+    console.log("Fixed link:", fixedLink)
+    return fixedLink
+  }
+  
+  console.log("Generated link:", link)
   return link
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { auth } from "@/lib/firebase/firebase"
 import {
   isSignInWithEmailLink,
@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input"
 
 export default function VerifyPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
