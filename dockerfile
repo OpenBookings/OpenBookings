@@ -34,18 +34,23 @@ ENV NODE_ENV=production
 # Cloud Run sets PORT automatically, but default to 8080
 ENV PORT=8080
 
-# Create non-root user
-RUN addgroup -g 1000 -S nodejs && \
-    adduser -S nextjs -u 1000
+# Create non-root user (handle case where group/user might already exist)
+# Get or create group with GID 1000, then create user with UID 1000
+RUN GROUP_NAME=$(getent group 1000 | cut -d: -f1) || GROUP_NAME="nodejs"; \
+    if [ -z "$GROUP_NAME" ] || [ "$GROUP_NAME" = "" ]; then \
+        addgroup -g 1000 -S nodejs && GROUP_NAME="nodejs"; \
+    fi; \
+    adduser -S nextjs -u 1000 2>/dev/null || true; \
+    adduser nextjs $GROUP_NAME 2>/dev/null || true
 
-# Copy only what we need
-COPY --from=builder --chown=nextjs:nodejs /app/package*.json ./
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copy only what we need (using numeric IDs for reliability)
+COPY --from=builder --chown=1000:1000 /app/package*.json ./
+COPY --from=builder --chown=1000:1000 /app/node_modules ./node_modules
+COPY --from=builder --chown=1000:1000 /app/.next ./.next
+COPY --from=builder --chown=1000:1000 /app/public ./public
 
-# Switch to non-root user
-USER nextjs
+# Switch to non-root user (using numeric UID for reliability)
+USER 1000
 
 # Cloud Run / ECS standard
 EXPOSE 8080
