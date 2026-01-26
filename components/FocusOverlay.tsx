@@ -40,7 +40,7 @@ export default function FocusOverlay({
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* backdrop */}
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-md"

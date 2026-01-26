@@ -4,6 +4,16 @@ steps:
     - build
     - '-t'
     - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
     - '.'
 
   - name: gcr.io/cloud-builders/docker
@@ -39,6 +49,8 @@ steps:
     - '--allow-unauthenticated'
     - '--revision-suffix'
     - '$COMMIT_SHA'
+    - '--update-env-vars'
+    - 'NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY},NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN},NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID},NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID},NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
     entrypoint: gcloud
 timeout: 1200s
 images:
