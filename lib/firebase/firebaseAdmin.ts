@@ -51,7 +51,6 @@ export async function createMagicLink(email: string): Promise<string> {
     console.log("Fixed link:", fixedLink)
     return fixedLink
   }
-  
-  console.log("Generated link:", link)
+
   return link
 }
