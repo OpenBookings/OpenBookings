@@ -7,7 +7,6 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
-import LoginButton from "@/components/LoginButton";
 
 import {
   InputGroup,
@@ -21,6 +20,7 @@ import {
   MagnifyingGlassIcon,
 } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
+import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 
 // Component to handle Firebase auth callback redirects
 function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: boolean) => void }) {
@@ -56,7 +56,6 @@ function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: b
         // User is authenticated, clear query params to prevent redirect loop
         router.replace("/");
         onRedirecting(false);
-        console.log("User is authenticated, clearing query params and staying on home");
         return;
       }
       
@@ -65,7 +64,6 @@ function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: b
       // Preserve all query parameters when redirecting
       const params = new URLSearchParams(searchParams.toString());
       router.replace(`/auth/verify?${params.toString()}`);
-      console.log("Redirecting to verify page");
       return;
     }
     onRedirecting(false);
@@ -171,7 +169,7 @@ export default function Home() {
             }}
           />
         ) : (
-          <LoginButton />
+          <CS_AuthForm />
         )}
       </div>
 

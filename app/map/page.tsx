@@ -1,4 +1,4 @@
-import GeneralMap from '@/components/General-Map'
+import GeneralMap from '@/components/GeneralMap'
 
 export default function MapPage() {
   return (

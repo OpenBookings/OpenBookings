@@ -32,7 +32,6 @@ export async function createMagicLink(email: string): Promise<string> {
   
   // Construct the action URL where Firebase will redirect after email verification
   const actionUrl = `${baseUrl}/auth/verify`
-  console.log("Action URL:", actionUrl)
 
   const link = await adminAuth.generateSignInWithEmailLink(email, {
     url: actionUrl,
@@ -48,7 +47,6 @@ export async function createMagicLink(email: string): Promise<string> {
   if (linkUrl.hostname !== correctBaseUrl.hostname) {
     linkUrl.hostname = correctBaseUrl.hostname
     const fixedLink = linkUrl.toString()
-    console.log("Fixed link:", fixedLink)
     return fixedLink
   }
 
