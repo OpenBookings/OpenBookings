@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://consent.cookiebot.com https://apis.google.com https://accounts.google.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://images.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com;
   font-src 'self';
@@ -22,9 +22,11 @@ const ContentSecurityPolicy = `
 const nextConfig: NextConfig = {
   async rewrites() {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    if (!projectId) return [];
-    // Firebase Auth OAuth popup/redirect lands on your domain at /__/auth/handler.
-    // Proxy that path to Firebase so the handler is served (avoids 404 on custom domain).
+    const useAuthProxy = process.env.NEXT_PUBLIC_FIREBASE_AUTH_PROXY === "true";
+    if (!projectId || !useAuthProxy) return [];
+    // When using custom domain for auth: proxy /__/auth/* to Firebase so the handler is served.
+    // If instead you use authDomain = PROJECT_ID.firebaseapp.com, set redirect URI to that in
+    // Google/Apple consoles and do NOT set NEXT_PUBLIC_FIREBASE_AUTH_PROXY.
     return [
       {
         source: "/__/auth/:path*",
