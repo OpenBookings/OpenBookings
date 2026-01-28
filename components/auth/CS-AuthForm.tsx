@@ -4,7 +4,7 @@ import { useState } from "react";
 import FocusOverlay from "@/components/FocusOverlay";
 import { SS_AuthForm } from "./SS-AuthForm";
 import { AuthFormFields } from "./AuthFormFields";
-import { ArrowRightIcon } from "lucide-react";
+import { Kbd } from "@/components/ui/kbd";
 
 export function CS_AuthForm() {
     const [openCSAuthForm, setOpenCSAuthForm] = useState(false);
@@ -26,7 +26,13 @@ export function CS_AuthForm() {
                 open={openCSAuthForm}
                 onClose={() => setOpenCSAuthForm(false)}
             >
-                <SS_AuthForm>
+                <SS_AuthForm
+                    cardAction={
+                        <div className="flex items-center gap-2">
+                            <Kbd className="text-white/70 border-white/30 bg-white/10">Esc</Kbd>
+                        </div>
+                    }
+                >
                     <AuthFormFields onSignInSuccess={() => setOpenCSAuthForm(false)} />
                 </SS_AuthForm>
             </FocusOverlay>

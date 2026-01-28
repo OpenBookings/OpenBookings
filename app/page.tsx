@@ -156,18 +156,34 @@ export default function Home() {
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
         {user ? (
-          // Show user profile image if authenticated (replace src path as needed)
-          <img
-            src="/profile_avatar.png"
-            alt="User Profile"
-            className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
-            draggable="false"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onClick={() => {
-              signOut(auth);
-              router.replace("/");
-            }}
-          />
+          // Show user profile image if authenticated. On hover, show user's email in a tooltip.
+          <div className="relative group flex items-center">
+            <img
+              src="/profile_avatar.png"
+              alt="User Profile"
+              className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
+              draggable="false"
+              style={{
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                MozUserSelect: 'none',
+                msUserSelect: 'none'
+              }}
+              onClick={() => {
+                signOut(auth);
+                router.replace("/");
+              }}
+              aria-describedby="profile-email-tooltip"
+            />
+            {/* Tooltip on hover */}
+            <div
+              id="profile-email-tooltip"
+              className="absolute right-1/2 top-full mt-2 z-30 min-w-max px-3 py-2 rounded-lg bg-black/90 text-white text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150"
+              role="tooltip"
+            >
+              {user.email}
+            </div>
+          </div>
         ) : (
           <CS_AuthForm />
         )}

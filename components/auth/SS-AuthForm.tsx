@@ -1,14 +1,22 @@
 import {
     Card,
+    CardAction,
     CardContent,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
 
-export function SS_AuthForm({ children }: { children: React.ReactNode }) {
+export function SS_AuthForm({
+    children,
+    cardAction,
+}: {
+    children: React.ReactNode;
+    cardAction?: React.ReactNode;
+}) {
     return (
-        <Card className="w-full max-w-sm">
+        <Card className="relative w-full max-w-sm">
             <CardHeader className="text-center flex flex-col items-center">
+                {cardAction ? <CardAction>{cardAction}</CardAction> : null}
                 <CardTitle className="flex flex-col items-center">
                     <img src="/Openbookings-logo-v2.svg" alt="OpenBookings" className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none" draggable="false" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} />
                     <div className="h-4"></div>

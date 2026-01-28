@@ -5,33 +5,37 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { auth } from "@/lib/firebase/firebase";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 
-function getGoogleErrorMessage(code: string): string {
-  switch (code) {
-    case "auth/popup-closed-by-user":
-      return "Sign-in was cancelled.";
-    case "auth/account-exists-with-different-credential":
-      return "An account already exists with this email. Try signing in with email link.";
-    case "auth/popup-blocked":
-      return "Popup was blocked. Please allow popups and try again.";
-    case "auth/cancelled-popup-request":
-      return "Sign-in was cancelled.";
-    case "auth/internal-error":
-      return "Enable Google under Firebase → Authentication → Sign-in method, and add this site in Authorized domains.";
-    case "auth/unauthorized-domain":
-      return "Add this site in Firebase → Authentication → Settings → Authorized domains.";
-    case "auth/operation-not-allowed":
-      return "Turn on Google in Firebase → Authentication → Sign-in method.";
-    default:
-      return "Sign-in failed. Please try again.";
-  }
+function getProviderErrorMessage(
+    code: string,
+    provider: "google" | "apple"
+): string {
+    const providerName = provider === "google" ? "Google" : "Apple";
+    switch (code) {
+        case "auth/popup-closed-by-user":
+            return "Sign-in was cancelled.";
+        case "auth/account-exists-with-different-credential":
+            return "An account already exists with this email. Try signing in with email link.";
+        case "auth/popup-blocked":
+            return "Popup was blocked. Please allow popups and try again.";
+        case "auth/cancelled-popup-request":
+            return "Sign-in was cancelled.";
+        case "auth/internal-error":
+            return `Enable ${providerName} under Firebase → Authentication → Sign-in method, and add this site in Authorized domains.`;
+        case "auth/unauthorized-domain":
+            return "Add this site in Firebase → Authentication → Settings → Authorized domains.";
+        case "auth/operation-not-allowed":
+            return `Turn on ${providerName} in Firebase → Authentication → Sign-in method.`;
+        default:
+            return "Sign-in failed. Please try again.";
+    }
 }
 
 export function AuthFormFields({
-  onSignInSuccess,
+    onSignInSuccess,
 }: {
-  onSignInSuccess?: () => void;
+    onSignInSuccess?: () => void;
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
@@ -40,6 +44,7 @@ export function AuthFormFields({
         text: string;
     } | null>(null);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [appleLoading, setAppleLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -89,8 +94,8 @@ export function AuthFormFields({
                 type: "error",
                 text: "Hmmm... try again.",
             });
-} finally {
-        setLoading(false);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -127,7 +132,7 @@ export function AuthFormFields({
             });
             setMessage({
                 type: "error",
-                text: typeof code === "string" ? getGoogleErrorMessage(code) : "Sign-in failed. Please try again.",
+                text: typeof code === "string" ? getProviderErrorMessage(code, "google") : "Sign-in failed. Please try again.",
             });
             setTimeout(() => setMessage(null), 5000);
         } finally {
@@ -135,21 +140,46 @@ export function AuthFormFields({
         }
     };
 
+    const handleAppleClick = async () => {
+        setAppleLoading(true);
+        setMessage(null);
+        try {
+            const provider = new OAuthProvider("apple.com");
+            provider.addScope("email");
+            provider.addScope("name");
+            const userCredential = await signInWithPopup(auth, provider);
+            const idToken = await userCredential.user.getIdToken();
+            const response = await fetch("/api/auth/bootstrap-user", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+            });
+            if (!response.ok) {
+                const body = await response.text();
+            }
+            onSignInSuccess?.();
+        } catch (err: unknown) {
+            const errObj = err != null && typeof err === "object" ? (err as Record<string, unknown>) : {};
+            const code = typeof errObj.code === "string" ? errObj.code : undefined;
+            console.error("[AuthFormFields] Apple sign-in: error", {
+                code,
+                keys: Object.keys(errObj),
+            });
+            setMessage({
+                type: "error",
+                text: typeof code === "string" ? getProviderErrorMessage(code, "apple") : "Sign-in failed. Please try again.",
+            });
+            setTimeout(() => setMessage(null), 5000);
+        } finally {
+            setAppleLoading(false);
+        }
+    };
+
     return (
         <>
-            {message && (
-                <p
-                    role="alert"
-                    className={[
-                        "w-full text-center text-sm px-2 py-1.5 rounded-md",
-                        message.type === "error"
-                            ? "bg-red-500/20 text-red-100"
-                            : "bg-green-500/20 text-green-100",
-                    ].join(" ")}
-                >
-                    {message.text}
-                </p>
-            )}
+
             <form className="w-full" onSubmit={handleSubmit}>
                 <div className="flex flex-col gap-3 w-full items-center">
                     <div className="grid gap-2 w-full">
@@ -169,6 +199,19 @@ export function AuthFormFields({
                     >
                         {loading ? "Sending..." : "Send Magic Link"}
                     </Button>
+                    {message && (
+                        <p
+                            role="alert"
+                            className={[
+                                "w-[50%] text-center text-sm px-2 py-1.5 rounded-md",
+                                message.type === "error"
+                                    ? "bg-red-500/20 text-red-100"
+                                    : "bg-green-500 text-green-100",
+                            ].join(" ")}
+                        >
+                            {message.text}
+                        </p>
+                    )}
                 </div>
             </form>
 
@@ -179,11 +222,13 @@ export function AuthFormFields({
             </div>
             <div className="flex flex-row w-full gap-3">
                 <Button
+                    type="button"
                     variant="outline"
                     className="flex-1 flex items-center justify-center p-2 h-12 min-w-13"
                     style={{ minWidth: "3.25rem" }}
                     aria-label="Sign in with Apple"
-                    onClick={() => {}}
+                    disabled={appleLoading}
+                    onClick={handleAppleClick}
                 >
                     <img
                         src="/apple_logo.svg"
