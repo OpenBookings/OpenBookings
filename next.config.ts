@@ -20,6 +20,18 @@ const ContentSecurityPolicy = `
 // ... existing code ...
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) return [];
+    // Firebase Auth OAuth popup/redirect lands on your domain at /__/auth/handler.
+    // Proxy that path to Firebase so the handler is served (avoids 404 on custom domain).
+    return [
+      {
+        source: "/__/auth/:path*",
+        destination: `https://${projectId}.firebaseapp.com/__/auth/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {
