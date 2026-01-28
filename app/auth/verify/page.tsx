@@ -1,4 +1,4 @@
-import { VerifyEmailForm } from "@/components/VerifyEmailForm"
+import { VerifyEmailForm } from "@/components/auth/VerifyEmailForm"
 
 /**
  * Server component for email verification page

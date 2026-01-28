@@ -7,7 +7,6 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import FocusOverlay from "@/components/FocusOverlay";
 import { Calendar05 } from "@/components/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
-import LoginButton from "@/components/LoginButton";
 
 import {
   InputGroup,
@@ -21,6 +20,7 @@ import {
   MagnifyingGlassIcon,
 } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
+import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 
 // Component to handle Firebase auth callback redirects
 function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: boolean) => void }) {
@@ -56,7 +56,6 @@ function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: b
         // User is authenticated, clear query params to prevent redirect loop
         router.replace("/");
         onRedirecting(false);
-        console.log("User is authenticated, clearing query params and staying on home");
         return;
       }
       
@@ -65,7 +64,6 @@ function AuthRedirectHandler({ onRedirecting }: { onRedirecting: (redirecting: b
       // Preserve all query parameters when redirecting
       const params = new URLSearchParams(searchParams.toString());
       router.replace(`/auth/verify?${params.toString()}`);
-      console.log("Redirecting to verify page");
       return;
     }
     onRedirecting(false);
@@ -158,20 +156,36 @@ export default function Home() {
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
         {user ? (
-          // Show user profile image if authenticated (replace src path as needed)
-          <img
-            src="/profile_avatar.png"
-            alt="User Profile"
-            className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
-            draggable="false"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onClick={() => {
-              signOut(auth);
-              router.replace("/");
-            }}
-          />
+          // Show user profile image if authenticated. On hover, show user's email in a tooltip.
+          <div className="relative group flex items-center">
+            <img
+              src="/profile_avatar.png"
+              alt="User Profile"
+              className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
+              draggable="false"
+              style={{
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                MozUserSelect: 'none',
+                msUserSelect: 'none'
+              }}
+              onClick={() => {
+                signOut(auth);
+                router.replace("/");
+              }}
+              aria-describedby="profile-email-tooltip"
+            />
+            {/* Tooltip on hover */}
+            <div
+              id="profile-email-tooltip"
+              className="absolute right-1/2 top-full mt-2 z-30 min-w-max px-3 py-2 rounded-lg bg-black/90 text-white text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150"
+              role="tooltip"
+            >
+              {user.email}
+            </div>
+          </div>
         ) : (
-          <LoginButton />
+          <CS_AuthForm />
         )}
       </div>
 
