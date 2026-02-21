@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Gloock } from "next/font/google";
 import "./globals.css";
+
+const gloock = Gloock({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-gloock",
+});
 
 export const metadata: Metadata = {
   title: "OpenBookings",
@@ -16,7 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${gloock.variable}`}>
+      <head />
       <body>
         {children}
         <Script

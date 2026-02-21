@@ -5,9 +5,9 @@ import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
 
 /**
  * POST /api/auth/login-link
- * 
- * Generates a Firebase magic link and sends it via AWS SES
- * 
+ *
+ * Generates a Firebase magic link and sends it via Postmark.
+ *
  * Request body: { email: string }
  * Response: { success: true } or error
  */
@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
       await sendMagicLink(normalizedEmail, magicLink)
     } catch (emailError) {
       console.error("Failed to send email:", emailError)
-      // Don't expose email service errors to client
+      // Don't expose email service errors to client (prevents enumeration)
       return NextResponse.json(
-        { error: "Failed to send email. Error: " + emailError },
+        { error: "Failed to send email" },
         { status: 500 }
       )
     }
