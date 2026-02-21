@@ -199,7 +199,7 @@ export default function Home() {
             ></div>
           </div>
           <div className="flex flex-col justify-center">
-            <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none text-gray-300">
+            <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none text-gray-300">
               Discover{" "}
               <span 
                 className="bg-clip-text text-transparent select-none text-glow text-stroke-hero"

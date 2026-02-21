@@ -24,8 +24,9 @@ These are embedded into the Next.js build and must be available during Docker bu
 - `_NEXT_PUBLIC_APP_URL` - Your application URL (e.g., `https://openbookings.co`)
 
 ### Runtime Variables (Optional)
-These are used by Firebase Admin SDK on the server:
+These are used by Firebase Admin SDK and Postmark on the server:
 
+- `POSTMARK_SERVER_TOKEN` - Postmark server API token (required for magic-link email sending)
 - `FIREBASE_SERVICE_ACCOUNT_KEY` - JSON string of Firebase service account (optional, uses Application Default Credentials if not set)
 - `FIREBASE_PROJECT_ID` - Firebase Project ID (if not using service account JSON)
 - `FIREBASE_CLIENT_EMAIL` - Service account email (if not using service account JSON)

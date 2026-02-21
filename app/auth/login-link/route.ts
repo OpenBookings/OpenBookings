@@ -5,9 +5,9 @@ import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
 
 /**
  * POST /api/auth/login-link
- * 
- * Generates a Firebase magic link and sends it via AWS SES
- * 
+ *
+ * Generates a Firebase magic link and sends it via Postmark.
+ *
  * Request body: { email: string }
  * Response: { success: true } or error
  */
