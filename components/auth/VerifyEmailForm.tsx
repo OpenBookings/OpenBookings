@@ -93,7 +93,7 @@ export function VerifyEmailForm() {
       const idToken = await userCredential.user.getIdToken()
 
       // Call backend to bootstrap user in Firestore
-      const response = await fetch("/app/auth/bootstrap-user", {
+      const response = await fetch("/auth/bootstrap-user", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

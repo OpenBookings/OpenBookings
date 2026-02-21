@@ -1,8 +1,8 @@
 import { ServerClient } from "postmark"
 
-const apiKey = process.env.POSTMARK_API_KEY
-if (!apiKey) {
-  console.warn("POSTMARK_API_KEY is not set; email sending will fail.")
+const token = process.env.POSTMARK_SERVER_TOKEN
+if (!token || token.trim() === "") {
+  throw new Error("POSTMARK_SERVER_TOKEN is required; set it in your environment.")
 }
 
-export const postmarkClient = new ServerClient(apiKey ?? "")
+export const postmarkClient = new ServerClient(token)
