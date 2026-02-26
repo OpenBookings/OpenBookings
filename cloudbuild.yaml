@@ -17,6 +17,14 @@ steps:
     - 'NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}'
     - '--build-arg'
     - 'NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
+    - '--build-arg'
+    - 'POSTMARK_API_KEY=${_POSTMARK_API_KEY}'
+    - '--build-arg'
+    - 'POSTMARK_SERVER_TOKEN=${_POSTMARK_SERVER_TOKEN}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID}'
+    - '--build-arg'
+    - 'NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY}'
     - '.'
 
   - name: gcr.io/cloud-builders/docker
