@@ -1,8 +1,19 @@
 import { ServerClient } from "postmark"
 
-const token = process.env.POSTMARK_API_KEY
-if (!token || token.trim() === "") {
-  throw new Error("POSTMARK_API_KEY is required; set it in your environment.")
-}
+let cachedClient: ServerClient | null = null
 
-export const postmarkClient = new ServerClient(token)
+export function getPostmarkClient() {
+  if (cachedClient) return cachedClient
+
+  const token =
+    process.env.POSTMARK_SERVER_TOKEN ?? process.env.POSTMARK_API_KEY ?? ""
+
+  if (!token || token.trim() === "") {
+    throw new Error(
+      "POSTMARK_SERVER_TOKEN or POSTMARK_API_KEY is required; set it in your environment."
+    )
+  }
+
+  cachedClient = new ServerClient(token)
+  return cachedClient
+}
