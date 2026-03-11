@@ -121,6 +121,28 @@
   }
 }
 
+/* Glassmorphism search box field — shared token for all search form fields */
+.search-box-field {
+  background-color: rgb(255 255 255 / 0.05);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  padding: 0.625rem; /* p-2.5 */
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.search-box-field:hover {
+  background-color: rgb(255 255 255 / 0.1);
+}
+
+@media (min-width: 640px) {
+  .search-box-field {
+    border-radius: var(--radius-xl); /* rounded-xl */
+    padding: 0.75rem; /* p-3 */
+  }
+}
+
 /* Custom scrollbar for search results */
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
@@ -360,6 +382,23 @@
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.8); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes heroFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-cta {
+  opacity: 0; /* so the animation controls fade-in */
+  animation: heroFadeIn 1.25s ease-out forwards;
+  animation-delay: 0.3s; /* optional small delay */
 }
 
 @media (max-width: 600px) {

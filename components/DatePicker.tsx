@@ -3,6 +3,7 @@
 import * as React from "react"
 import { type DateRange } from "react-day-picker"
 import { Calendar } from "@/components/ui/calendar"
+import { CardTitle } from "./ui/card"
 
 interface Calendar05Props {
   checkIn?: string
@@ -57,6 +58,10 @@ export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props)
   }
 
   return (
+    <div className="relative w-full space-y-2">
+      <CardTitle className="pl-4 text-xl font-semibold tracking-[0.16em] text-white/60 uppercase">
+        Check In & Out
+      </CardTitle>
     <Calendar
       mode="range"
       month={month}
@@ -66,5 +71,6 @@ export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props)
       numberOfMonths={2}
       className="rounded-lg border border-white/20 shadow-2xl bg-black/70 backdrop-blur-md p-4"
     />
+    </div>
   )
 }
