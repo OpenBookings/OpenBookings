@@ -7,6 +7,7 @@ import { searchClient, ALGOLIA_INDEX_NAME } from "@/lib/algolia";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MagnifyingGlassIcon } from "@/components/Icons";
+import { CardTitle } from "./ui/card";
 
 interface SearchBarProps {
   value: string;
@@ -122,7 +123,10 @@ function SearchBox({
   };
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full space-y-2">
+      <CardTitle className="pl-4 text-xl font-semibold tracking-[0.16em] text-white/60 uppercase">
+        Destination
+      </CardTitle>
       <form
         className={`flex items-center gap-2 rounded-lg border shadow-sm bg-black/70 backdrop-blur-md border-white/20 px-3 py-2 ${className}`}
         onSubmit={handleFormSubmit}
