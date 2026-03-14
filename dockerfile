@@ -3,7 +3,6 @@
 
     WORKDIR /app
     
-    # Build arguments
     ARG NEXT_PUBLIC_FIREBASE_API_KEY
     ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
@@ -11,10 +10,7 @@
     ARG NEXT_PUBLIC_APP_URL
     ARG NEXT_PUBLIC_MAPTILER_STYLE_ID
     ARG NEXT_PUBLIC_MAPTILER_API_KEY
-    ARG POSTMARK_API_KEY
-    ARG POSTMARK_SERVER_TOKEN
     
-    # Expose to build environment
     ENV NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY
     ENV NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     ENV NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID
@@ -22,17 +18,12 @@
     ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
     ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
     ENV NEXT_PUBLIC_MAPTILER_API_KEY=$NEXT_PUBLIC_MAPTILER_API_KEY
-    ENV POSTMARK_API_KEY=$POSTMARK_API_KEY
-    ENV POSTMARK_SERVER_TOKEN=$POSTMARK_SERVER_TOKEN
     
-    # Install deps
     COPY package*.json bun.lock ./
     RUN bun install --frozen-lockfile
     
-    # Copy source
     COPY . .
     
-    # Build app
     RUN bun run build
     
     
@@ -43,8 +34,17 @@
     
     ENV NODE_ENV=production
     
-    COPY --from=builder /app ./
+    # Create a non-root user and group
+    RUN addgroup --system --gid 1001 nodejs && \
+        adduser --system --uid 1001 --ingroup nodejs nextjs
+    
+    COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+    COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+    COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+    
+    # Switch to non-root user
+    USER nextjs
     
     EXPOSE 8080
     
-    CMD ["bun", "run", "start"]
+    CMD ["bun", "server.js"]

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import FocusOverlay from "@/components/FocusOverlay";
+import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { SS_AuthForm } from "./SS-AuthForm";
 import { AuthFormFields } from "./AuthFormFields";
 import { Kbd } from "@/components/ui/kbd";

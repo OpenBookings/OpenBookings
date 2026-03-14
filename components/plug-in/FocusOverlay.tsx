@@ -40,16 +40,18 @@ export default function FocusOverlay({
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-100 flex items-center justify-center">
       {/* backdrop */}
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-md"
         onClick={onClose}
       />
 
-      {/* focused content */}
-      <div className="relative z-10 w-full max-w-xl px-4">
-        {children}
+      {/* focused content - full-width wrapper so SearchBar/GuestSelector get room to breathe */}
+      <div className="relative z-10 w-full max-w-3xl px-6 sm:px-8">
+        <div className="w-full min-w-0">
+          {children}
+        </div>
       </div>
     </div>,
     document.body
