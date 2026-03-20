@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import posthog from "posthog-js"
 import { auth } from "@/lib/firebase/firebase"
 import {
   isSignInWithEmailLink,
@@ -106,11 +107,19 @@ export function VerifyEmailForm() {
         // Continue anyway - user is authenticated
       }
 
+      posthog.identify(userCredential.user.uid, {
+        email: userCredential.user.email ?? undefined,
+        provider: "magic_link",
+      })
+      posthog.capture("sign_in_completed", { provider: "magic_link" })
+
       // Clear query parameters and redirect to home
       // Use replace to avoid adding to history and prevent redirect loops
       router.replace("/")
     } catch (err: any) {
       console.error("Sign-in error:", err)
+      posthog.capture("sign_in_failed", { provider: "magic_link", error_code: err?.code })
+      posthog.captureException(err)
       if (err.code === "auth/invalid-action-code") {
         setError("This link has expired or already been used.")
       } else if (err.code === "auth/invalid-email") {

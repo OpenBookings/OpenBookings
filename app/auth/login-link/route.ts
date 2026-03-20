@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createMagicLink } from "@/lib/firebase/firebaseAdmin"
 import { sendMagicLink } from "@/lib/mailing/magic-link"
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
+import { getPostHogClient } from "@/lib/posthog-server"
 
 /**
  * POST /api/auth/login-link
@@ -85,6 +86,14 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    const posthog = getPostHogClient()
+    posthog.capture({
+      distinctId: normalizedEmail,
+      event: "magic_link_sent",
+      properties: { email: normalizedEmail },
+    })
+    await posthog.shutdown()
 
     // Always return success to prevent email enumeration
     return NextResponse.json({ success: true })
