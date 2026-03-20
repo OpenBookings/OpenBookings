@@ -20,6 +20,15 @@ const ContentSecurityPolicy = `
 const nextConfig: NextConfig = {
   output: "standalone",
 
+  // jwks-rsa (transitive dep of firebase-admin) requires jose@^4, but the
+  // project root has jose@^6, so Bun installs a nested jose@4 inside
+  // node_modules/jwks-rsa/node_modules/jose. @vercel/nft (used by Next.js
+  // standalone) can't statically trace dynamic require('jose') calls, so we
+  // must explicitly include it in the output trace.
+  outputFileTracingIncludes: {
+    "**/*": ["./node_modules/jwks-rsa/node_modules/jose/**/*"],
+  },
+
   allowedDevOrigins: ["127.0.0.1"],
 
   async rewrites() {
