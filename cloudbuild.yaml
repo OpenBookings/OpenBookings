@@ -30,6 +30,8 @@ steps:
       - 'NEXT_PUBLIC_POSTMARK_API_KEY=${_NEXT_PUBLIC_POSTMARK_API_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_POSTMARK_SERVER_TOKEN=${_NEXT_PUBLIC_POSTMARK_SERVER_TOKEN}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_DATABASE_URL=${_NEXT_PUBLIC_DATABASE_URL}'
       - '.'
 
   # ---------- Push ----------
