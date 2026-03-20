@@ -17,12 +17,13 @@ const ContentSecurityPolicy = `
   block-all-mixed-content;
 `.replace(/\s{2,}/g, " ").trim();
 
-// ... existing code ...
-
 const nextConfig: NextConfig = {
+  output: "standalone",
+
   async rewrites() {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const useAuthProxy = process.env.NEXT_PUBLIC_FIREBASE_AUTH_PROXY === "true";
+
     const firebaseRewrites =
       projectId && useAuthProxy
         ? [
@@ -45,16 +46,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
   skipTrailingSlashRedirect: true,
+
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=86400",
-          },
+          { key: "Strict-Transport-Security", value: "max-age=86400" },
           {
             key: "Cross-Origin-Opener-Policy",
             value: "same-origin-allow-popups",
