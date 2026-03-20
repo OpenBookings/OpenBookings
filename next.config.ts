@@ -6,7 +6,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https:;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.googleapis.com;
   worker-src 'self' blob:;
   frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com;
   frame-ancestors 'none';
@@ -19,6 +19,8 @@ const ContentSecurityPolicy = `
 
 const nextConfig: NextConfig = {
   output: "standalone",
+
+  allowedDevOrigins: ["127.0.0.1"],
 
   async rewrites() {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
