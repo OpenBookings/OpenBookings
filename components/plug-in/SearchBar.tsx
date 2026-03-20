@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import posthog from "posthog-js";
 import { InstantSearch, useSearchBox, useHits, Configure } from "react-instantsearch";
 import type { BaseHit } from "instantsearch.js";
 import { searchClient, ALGOLIA_INDEX_NAME } from "@/lib/algolia";
@@ -115,6 +116,7 @@ function SearchBox({
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
+    posthog.capture("destination_selected", { city: hit.city, country: hit.country });
     refine(displayValue);
     onChange(displayValue);
     lastSyncedValueRef.current = displayValue;

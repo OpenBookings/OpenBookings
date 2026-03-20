@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { HotelSearchInput, HotelSearchResult } from "@/types/hotel";
 import { query } from "@/lib/postgres/db";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 /** Parse and validate URL params into HotelSearchInput */
 function parseSearchParams(
@@ -276,6 +277,8 @@ function escapeHtml(s: string): string {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const { input, errors } = parseSearchParams(searchParams);
+  const distinctId =
+    request.headers.get("x-posthog-distinct-id") ?? "anonymous";
 
   const wantsJson =
     searchParams.get("format") === "json" ||
@@ -286,6 +289,22 @@ export async function GET(request: NextRequest) {
     results = await runQuery(input);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Database error";
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId,
+      event: "hotel_search_failed",
+      properties: {
+        error_message: message,
+        lat: input.lat,
+        lon: input.lon,
+        checkin: input.checkin,
+        checkout: input.checkout,
+        adults: input.adults,
+        children: input.children,
+        rooms: input.rooms,
+      },
+    });
+    await posthog.shutdown();
     if (wantsJson) {
       return NextResponse.json(
         { error: message, input, results: [] },
@@ -301,6 +320,23 @@ export async function GET(request: NextRequest) {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   }
+
+  const posthog = getPostHogClient();
+  posthog.capture({
+    distinctId,
+    event: "hotel_search_completed",
+    properties: {
+      result_count: results.length,
+      lat: input.lat,
+      lon: input.lon,
+      checkin: input.checkin,
+      checkout: input.checkout,
+      adults: input.adults,
+      children: input.children,
+      rooms: input.rooms,
+    },
+  });
+  await posthog.shutdown();
 
   if (wantsJson) {
     return NextResponse.json(

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { auth } from "@/lib/firebase/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
@@ -186,6 +187,8 @@ export default function Home() {
                   msUserSelect: "none",
                 }}
                 onClick={() => {
+                  posthog.capture("sign_out");
+                  posthog.reset();
                   signOut(auth);
                   router.replace("/");
                 }}
@@ -388,7 +391,19 @@ export default function Home() {
               </FocusOverlay>
 
               {/* CTA Button */}
-              <button className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-white/95 text-gray-900 rounded-lg sm:rounded-xl font-semibold hover:bg-white transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] text-sm sm:text-base">
+              <button
+                className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-white/95 text-gray-900 rounded-lg sm:rounded-xl font-semibold hover:bg-white transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] text-sm sm:text-base"
+                onClick={() => {
+                  posthog.capture("search_initiated", {
+                    destination,
+                    check_in: checkIn,
+                    check_out: checkOut,
+                    adults,
+                    children,
+                    rooms,
+                  });
+                }}
+              >
                 Find my trip
               </button>
             </div>

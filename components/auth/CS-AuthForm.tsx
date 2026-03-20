@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { SS_AuthForm } from "./SS-AuthForm";
 import { AuthFormFields } from "./AuthFormFields";
@@ -13,7 +14,10 @@ export function CS_AuthForm() {
         <>
             <button
                 type="button"
-                onClick={() => setOpenCSAuthForm(true)}
+                onClick={() => {
+                    setOpenCSAuthForm(true);
+                    posthog.capture("auth_form_opened");
+                }}
                 className="aspect-3/1 min-w-30 max-w-xs w-full bg-black/30 backdrop-blur-2xl rounded-lg sm:rounded-xl border border-white/20 shadow-2xl px-6 py-2 flex items-center justify-center"
                 style={{
                     // Ensures button keeps aspect ratio even with dynamic widths

@@ -6,7 +6,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https:;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https:;
   worker-src 'self' blob:;
   frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com;
   frame-ancestors 'none';
@@ -23,17 +23,29 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const useAuthProxy = process.env.NEXT_PUBLIC_FIREBASE_AUTH_PROXY === "true";
-    if (!projectId || !useAuthProxy) return [];
-    // When using custom domain for auth: proxy /__/auth/* to Firebase so the handler is served.
-    // If instead you use authDomain = PROJECT_ID.firebaseapp.com, set redirect URI to that in
-    // Google/Apple consoles and do NOT set NEXT_PUBLIC_FIREBASE_AUTH_PROXY.
+    const firebaseRewrites =
+      projectId && useAuthProxy
+        ? [
+            {
+              source: "/__/auth/:path*",
+              destination: `https://${projectId}.firebaseapp.com/__/auth/:path*`,
+            },
+          ]
+        : [];
+
     return [
+      ...firebaseRewrites,
       {
-        source: "/__/auth/:path*",
-        destination: `https://${projectId}.firebaseapp.com/__/auth/:path*`,
+        source: "/ingest/static/:path*",
+        destination: "https://eu-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://eu.i.posthog.com/:path*",
       },
     ];
   },
+  skipTrailingSlashRedirect: true,
   async headers() {
     return [
       {

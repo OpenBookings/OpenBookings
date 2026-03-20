@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -62,6 +63,8 @@ export function AuthFormFields({
         };
 
         try {
+            posthog.capture("magic_link_requested", { email });
+
             const response = await fetch("/auth/login-link", {
                 method: "POST",
                 headers: {
@@ -102,6 +105,7 @@ export function AuthFormFields({
     const handleGoogleClick = async () => {
         setGoogleLoading(true);
         setMessage(null);
+        posthog.capture("sign_in_google_clicked");
         try {
             const provider = new GoogleAuthProvider();
             const userCredential = await signInWithPopup(auth, provider);
@@ -116,6 +120,11 @@ export function AuthFormFields({
             if (!response.ok) {
                 const body = await response.text();
             }
+            posthog.identify(userCredential.user.uid, {
+                email: userCredential.user.email ?? undefined,
+                provider: "google",
+            });
+            posthog.capture("sign_in_completed", { provider: "google" });
             onSignInSuccess?.();
         } catch (err: unknown) {
             const errObj = err != null && typeof err === "object" ? (err as Record<string, unknown>) : {};
@@ -130,6 +139,7 @@ export function AuthFormFields({
                 customData,
                 keys: Object.keys(errObj),
             });
+            posthog.capture("sign_in_failed", { provider: "google", error_code: code });
             setMessage({
                 type: "error",
                 text: typeof code === "string" ? getProviderErrorMessage(code, "google") : "Sign-in failed. Please try again.",
@@ -143,6 +153,7 @@ export function AuthFormFields({
     const handleAppleClick = async () => {
         setAppleLoading(true);
         setMessage(null);
+        posthog.capture("sign_in_apple_clicked");
         try {
             const provider = new OAuthProvider("apple.com");
             provider.addScope("email");
@@ -159,6 +170,11 @@ export function AuthFormFields({
             if (!response.ok) {
                 const body = await response.text();
             }
+            posthog.identify(userCredential.user.uid, {
+                email: userCredential.user.email ?? undefined,
+                provider: "apple",
+            });
+            posthog.capture("sign_in_completed", { provider: "apple" });
             onSignInSuccess?.();
         } catch (err: unknown) {
             const errObj = err != null && typeof err === "object" ? (err as Record<string, unknown>) : {};
@@ -167,6 +183,7 @@ export function AuthFormFields({
                 code,
                 keys: Object.keys(errObj),
             });
+            posthog.capture("sign_in_failed", { provider: "apple", error_code: code });
             setMessage({
                 type: "error",
                 text: typeof code === "string" ? getProviderErrorMessage(code, "apple") : "Sign-in failed. Please try again.",
