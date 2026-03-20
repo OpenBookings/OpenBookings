@@ -89,7 +89,7 @@ export function GuestSelector({
   }
   
   return (
-    <div className="w-full max-w-sm space-y-2 text-white">
+    <div className="w-full min-w-0 max-w-lg mx-auto space-y-3 text-white">
       <CardTitle className="pl-4 text-xl font-semibold tracking-[0.16em] text-white/60 uppercase">
         Guests
       </CardTitle>

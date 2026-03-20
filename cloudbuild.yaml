@@ -1,4 +1,5 @@
 steps:
+  # ---------- Build ----------
   - name: gcr.io/cloud-builders/docker
     args:
       - build
@@ -7,7 +8,6 @@ steps:
       - '-t'
       - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
 
-      # Firebase
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}'
       - '--build-arg'
@@ -16,30 +16,21 @@ steps:
       - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID}'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}'
-
-      # App
       - '--build-arg'
       - 'NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
-
-      # Maps
       - '--build-arg'
       - 'NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID}'
       - '--build-arg'
       - 'NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY}'
-
-      # Postmark (CRITICAL)
-      - '--build-arg'
-      - 'POSTMARK_API_KEY=${_POSTMARK_API_KEY}'
-      - '--build-arg'
-      - 'POSTMARK_SERVER_TOKEN=${_POSTMARK_SERVER_TOKEN}'
-
       - '.'
 
+  # ---------- Push ----------
   - name: gcr.io/cloud-builders/docker
     args:
       - push
       - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
 
+  # ---------- Deploy ----------
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -55,17 +46,6 @@ steps:
       - '--port'
       - '8080'
       - '--allow-unauthenticated'
-      - '--update-env-vars'
-      - |
-        NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY},
-        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN},
-        NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID},
-        NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID},
-        NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL},
-        NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID},
-        NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY},
-        POSTMARK_API_KEY=${_POSTMARK_API_KEY},
-        POSTMARK_SERVER_TOKEN=${_POSTMARK_SERVER_TOKEN}
 
 timeout: 1200s
 

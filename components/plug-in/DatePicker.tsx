@@ -3,7 +3,7 @@
 import * as React from "react"
 import { type DateRange } from "react-day-picker"
 import { Calendar } from "@/components/ui/calendar"
-import { CardTitle } from "./ui/card"
+import { CardTitle } from "../ui/card"
 
 interface Calendar05Props {
   checkIn?: string
@@ -58,7 +58,7 @@ export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props)
   }
 
   return (
-    <div className="relative w-full space-y-2">
+    <div className="relative w-full min-w-0 max-w-lg mx-auto space-y-3">
       <CardTitle className="pl-4 text-xl font-semibold tracking-[0.16em] text-white/60 uppercase">
         Check In & Out
       </CardTitle>

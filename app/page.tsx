@@ -4,8 +4,8 @@ import { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth } from "@/lib/firebase/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import FocusOverlay from "@/components/FocusOverlay";
-import { Calendar05 } from "@/components/DatePicker";
+import FocusOverlay from "@/components/plug-in/FocusOverlay";
+import { Calendar05 } from "@/components/plug-in/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
 
 import {
@@ -13,9 +13,9 @@ import {
   PersonIcon,
   MagnifyingGlassIcon,
 } from "@/components/Icons";
-import { SearchBar } from "@/components/SearchBar";
+import { SearchBar } from "@/components/plug-in/SearchBar";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
-import { GuestSelector } from "@/components/GuestSelector";
+import { GuestSelector } from "@/components/plug-in/GuestSelector";
 
 // Component to handle Firebase auth callback redirects
 function AuthRedirectHandler({
@@ -303,6 +303,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Date Picker Overlay */}
               <FocusOverlay
                 open={openDatePicker}
                 onClose={() => setOpenDatePicker(false)}
@@ -366,6 +367,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Guests Selector Overlay */}
               <FocusOverlay
                 open={openGuestSelector}
                 onClose={() => setOpenGuestSelector(false)}
