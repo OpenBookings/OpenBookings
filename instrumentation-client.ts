@@ -2,7 +2,6 @@ import posthog from "posthog-js";
 
 const posthogToken = process.env.NEXT_PUBLIC_POSTHOG_KEY!;
 
-// Avoid initializing PostHog without a token; posthog-js warns loudly otherwise.
 if (posthogToken) {
   posthog.init(posthogToken, {
     api_host: "/ingest",
