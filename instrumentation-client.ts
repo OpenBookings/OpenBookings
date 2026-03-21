@@ -4,7 +4,7 @@ const posthogToken = process.env.NEXT_PUBLIC_POSTHOG_KEY!;
 
 if (posthogToken) {
   posthog.init(posthogToken, {
-    api_host: "/ingest",
+    api_host: "https://a.openbookings.co",
     ui_host: process.env.NEXT_PUBLIC_POSTHOG_HOST!,
     defaults: "2026-01-30",
     capture_exceptions: true,
