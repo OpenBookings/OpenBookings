@@ -238,7 +238,7 @@ export default function Home() {
               {/* Destination */}
               <div
                 className="search-box-field flex items-center gap-2 sm:gap-3 cursor-pointer"
-                onClick={() => setOpenSearchBar(true)}
+                onClick={() => { posthog.capture("destination_search_opened"); setOpenSearchBar(true); }}
               >
                 <MagnifyingGlassIcon />
                 <span
@@ -265,7 +265,7 @@ export default function Home() {
               {/* Date Picker - From and Till as one field */}
               <div
                 className="search-box-field cursor-pointer flex items-center gap-2 sm:gap-3"
-                onClick={() => setOpenDatePicker(true)}
+                onClick={() => { posthog.capture("date_picker_opened"); setOpenDatePicker(true); }}
               >
                 <CalendarIcon />
                 <div className="flex-1 flex items-center gap-2 sm:gap-3">
@@ -349,7 +349,7 @@ export default function Home() {
               {/* Guests Selector */}
               <div
                 className="search-box-field flex items-center gap-2 sm:gap-3 cursor-pointer"
-                onClick={() => setOpenGuestSelector(true)}
+                onClick={() => { posthog.capture("guest_selector_opened"); setOpenGuestSelector(true); }}
               >
                 <PersonIcon />
                 <div className="flex-1">

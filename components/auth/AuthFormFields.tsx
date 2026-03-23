@@ -63,7 +63,7 @@ export function AuthFormFields({
         };
 
         try {
-            posthog.capture("magic_link_requested", { email });
+            posthog.capture("magic_link_requested");
 
             const response = await fetch("/auth/login-link", {
                 method: "POST",
