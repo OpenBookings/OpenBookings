@@ -1,7 +1,7 @@
 "use client"
 
 import posthog from "posthog-js"
-import { PHProvider } from "posthog-js/react"
+import { PostHogProvider as PHProvider } from "posthog-js/react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, Suspense } from "react"
 
