@@ -6,7 +6,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://a.openbookings.co https://*.algolia.net;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://a.openbookings.co https://*.algolia.net https://eu.i.posthog.com;
   worker-src 'self' blob:;
   frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com;
   frame-ancestors 'none';
