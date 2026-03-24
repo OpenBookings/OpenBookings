@@ -2,11 +2,11 @@ import type { NextConfig } from "next";
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://*.openbookings.co https://eu-assets.i.posthog.com;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://apis.google.com https://accounts.google.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://*.cookieyes.com https://apis.google.com https://accounts.google.com https://*.algolia.net https://eu.i.posthog.com https://*.openbookings.co;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://*.cookieyes.com https://apis.google.com https://accounts.google.com https://*.algolia.net https://eu.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://us.posthog.com;
   worker-src 'self' blob:;
   frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com https://eu.posthog.com;
   frame-ancestors 'none';
