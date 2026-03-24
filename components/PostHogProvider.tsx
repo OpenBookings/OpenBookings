@@ -13,6 +13,7 @@ if (typeof window !== "undefined" && !posthog.__loaded) {
     capture_pageview: false,
     capture_exceptions: true,
   })
+  ;(window as any).posthog = posthog
 }
 
 function PostHogPageView() {
