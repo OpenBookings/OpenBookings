@@ -6,9 +6,9 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://accounts.google.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://*.cookieyes.com https://apis.google.com https://accounts.google.com https://*.algolia.net https://eu.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://eu.posthog.com;
+  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://*.cookieyes.com https://apis.google.com https://accounts.google.com https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com;
   worker-src 'self' blob:;
-  frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com https://eu.posthog.com;
+  frame-src 'self' https://cdn-cookieyes.com https://accounts.google.com https://*.firebaseapp.com https://*.posthog.com;
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
