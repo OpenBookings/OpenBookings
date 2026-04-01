@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Gloock } from "next/font/google";
 import { PostHogProvider } from "@/components/PostHogProvider";
-import "@/instrumentation-client";
 import "./globals.css";
 
 const gloock = Gloock({
