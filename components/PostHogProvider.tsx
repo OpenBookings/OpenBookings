@@ -75,11 +75,19 @@ function CookieYesPostHogBridge() {
 
     document.addEventListener("cookieyes_banner_loaded", onBannerLoaded)
     document.addEventListener("cookieyes_consent_update", onConsentUpdate)
+
+    // Sync immediately for returning visitors (getCkyConsent already available)
     syncPostHogFromCookieYesApi()
+
+    // Safety net: if cookieyes_banner_loaded fired before this effect mounted
+    // (possible on cached/fast loads) and getCkyConsent wasn't ready yet above,
+    // retry once the script has had time to fully initialize.
+    const timer = setTimeout(syncPostHogFromCookieYesApi, 500)
 
     return () => {
       document.removeEventListener("cookieyes_banner_loaded", onBannerLoaded)
       document.removeEventListener("cookieyes_consent_update", onConsentUpdate)
+      clearTimeout(timer)
     }
   }, [])
 
@@ -105,7 +113,6 @@ function PostHogPageView() {
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
-  console.log("PostHogProvider", posthog.__loaded)
   return (
     <PHProvider client={posthog}>
       <CookieYesPostHogBridge />
