@@ -28,14 +28,14 @@ export default function RootLayout({
     <html lang="en" className={`dark ${gloock.variable}`}>
       <head />
       <body>
-        <PostHogProvider>
-          {children}
-        </PostHogProvider>
         <Script
           id="cookieyes"
           src="https://cdn-cookieyes.com/client_data/b30e1d3caf278cdefa0819752c00f4f4/script.js"
           strategy="afterInteractive"
         />
+        <PostHogProvider>
+          {children}
+        </PostHogProvider>
       </body>
     </html>
   );
