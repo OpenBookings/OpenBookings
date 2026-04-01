@@ -10,33 +10,16 @@ const hotels: HotelCardData[] = [
     reviews: 312,
     price: 248,
     tags: ["Lake view", "Spa"],
-    image: "https://images.openbookings.co/luxury_hotel_room.webp",
-  },
-  {
-    id: 2,
-    name: "Hotel Palomar",
-    distance: "0.4 km from centre",
-    rating: 4.7,
-    reviews: 189,
-    price: 174,
-    tags: ["Canal side", "Breakfast"],
-    image: "https://images.openbookings.co/Test.png",
-  },
-  {
-    id: 3,
-    name: "Villa Serena",
-    distance: "3.8 km from centre",
-    rating: 4.8,
-    reviews: 427,
-    price: 319,
-    tags: ["Sea view", "Pool"],
-    image: "https://images.openbookings.co/Test.png",
+    images: [
+      "https://images.openbookings.co/luxury_hotel_room.webp",
+      "https://images.openbookings.co/Test.png",
+    ],
   },
 ];
 
 export default function DemoPage() {
   return (
-    <div className="min-h-screen bg-background px-10 py-20 pb-[100px] font-sans">
+    <div className="min-h-screen bg-foreground px-10 py-20 pb-[100px] font-sans">
       <div className="mx-auto max-w-[980px]">
         <Card className="mb-[60px] border-white/10 bg-card/40 shadow-md backdrop-blur-md">
           <CardHeader className="gap-1">

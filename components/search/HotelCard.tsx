@@ -1,6 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -24,7 +26,7 @@ function clipPointsWave(waveDepthPct: number) {
 
 const cardClip = `polygon(${clipPointsWave(WAVE_DEPTH_PCT)})`;
 
-/** Fills wave clip “valleys” (must match body). */
+/** Card + image block behind the wave clip (same fill in both places). */
 const CARD_BODY_BG = "rgba(18,17,26,0.82)";
 
 /** Single responsive width for card shell and image (content box drives 280:210 frame). */
@@ -41,14 +43,100 @@ export type HotelCardData = {
   reviews: number;
   price: number;
   tags: string[];
-  image: string;
+  /** When multiple URLs are provided, prev/next controls appear on image hover. */
+  images?: string[];
 };
 
+function HotelCardHeroImage({
+  gallery,
+  hotelName,
+}: {
+  gallery: string[];
+  hotelName: string;
+}) {
+  const [imageIndex, setImageIndex] = useState(0);
+  const hasGallery = gallery.length > 1;
+  const currentSrc = gallery[imageIndex] ?? gallery[0];
+
+  return (
+    <div
+      className="group/image relative w-full shrink-0"
+      style={
+        {
+          aspectRatio: IMAGE_ASPECT,
+          backgroundColor: CARD_BODY_BG,
+        } satisfies CSSProperties
+      }
+    >
+      <div
+        className="absolute inset-0"
+        style={
+          {
+            clipPath: cardClip,
+            WebkitClipPath: cardClip,
+          } satisfies CSSProperties
+        }
+      >
+        <img
+          src={currentSrc}
+          alt={hotelName}
+          className="block size-full object-cover object-[center_15%] transition-transform duration-600 ease-out group-hover:scale-105"
+        />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60px] bg-linear-to-b from-black/25 to-transparent" />
+      </div>
+
+      {hasGallery ? (
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            aria-label="Previous photo"
+            className={cn(
+              "absolute top-1/2 left-2 z-10 h-8 w-8 -translate-y-1/2 rounded-full border border-white/22 bg-white/14 text-white shadow-none backdrop-blur-sm",
+              "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
+              "group-hover/image:pointer-events-auto group-hover/image:opacity-100",
+              "focus-visible:pointer-events-auto focus-visible:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setImageIndex((i) => (i - 1 + gallery.length) % gallery.length);
+            }}
+          >
+            <ChevronLeft className="size-4 opacity-90" strokeWidth={2} aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            aria-label="Next photo"
+            className={cn(
+              "absolute top-1/2 right-2 z-10 h-8 w-8 -translate-y-1/2 rounded-full border border-white/22 bg-white/14 text-white shadow-none backdrop-blur-sm",
+              "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
+              "group-hover/image:pointer-events-auto group-hover/image:opacity-100",
+              "focus-visible:pointer-events-auto focus-visible:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setImageIndex((i) => (i + 1) % gallery.length);
+            }}
+          >
+            <ChevronRight className="size-4 opacity-90" strokeWidth={2} aria-hidden />
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function HotelCard({ hotel }: { hotel: HotelCardData }) {
+  const gallery =
+    hotel.images && hotel.images.length > 0 ? hotel.images : [];
+
   return (
     <Card
       className={cn(
-        "group relative w-(--hotel-card-w) cursor-pointer gap-0 overflow-hidden rounded-3xl border border-white/8 py-0 shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] transition-[transform,box-shadow] duration-300 ease-[cubic-bezier(0.34,1.4,0.64,1)] hover:shadow-[0_32px_64px_rgba(0,0,0,0.5),0_8px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "group relative w-(--hotel-card-w) cursor-pointer gap-0 overflow-hidden rounded-3xl border border-white/8 bg-transparent py-0 shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] transition-[transform,box-shadow] duration-600 ease-out hover:shadow-[0_32px_64px_rgba(0,0,0,0.5),0_8px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]",
       )}
       style={
         {
@@ -57,23 +145,7 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
         } satisfies CSSProperties
       }
     >
-      <div
-        className="relative w-full shrink-0"
-        style={
-          {
-            clipPath: cardClip,
-            WebkitClipPath: cardClip,
-            aspectRatio: IMAGE_ASPECT,
-          } satisfies CSSProperties
-        }
-      >
-        <img
-          src={hotel.image}
-          alt={hotel.name}
-          className="block size-full object-cover object-[center_15%] transition-transform duration-600 ease-out group-hover:scale-105"
-        />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[60px] bg-linear-to-b from-black/25 to-transparent" />
-      </div>
+      <HotelCardHeroImage key={hotel.id} gallery={gallery} hotelName={hotel.name} />
 
       <CardContent
         className="-mt-px px-[22px] pt-3.5 pb-5.5 backdrop-blur-xl"
