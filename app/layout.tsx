@@ -32,6 +32,7 @@ export default function RootLayout({
           id="cookieyes"
           src="https://cdn-cookieyes.com/client_data/b30e1d3caf278cdefa0819752c00f4f4/script.js"
           strategy="afterInteractive"
+          crossOrigin="anonymous"
         />
         <PostHogProvider>
           {children}
