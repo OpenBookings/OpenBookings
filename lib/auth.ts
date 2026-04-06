@@ -17,7 +17,9 @@ export const auth = betterAuth({
       },
       expiresIn: 60 * 15, // 15 minutes
     }),
-    dash()
+    dash({
+      apiKey: process.env.BETTER_AUTH_DASH_API_KEY!,
+    })
   ],
   socialProviders: {
     google: {
