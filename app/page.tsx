@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { auth } from "@/lib/firebase/firebase";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { authClient } from "@/lib/auth-client";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { Calendar05 } from "@/components/plug-in/DatePicker";
 import { getRandomBackgroundImage } from "@/lib/background";
@@ -17,60 +16,6 @@ import {
 import { SearchBar } from "@/components/plug-in/SearchBar";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 import { GuestSelector } from "@/components/plug-in/GuestSelector";
-
-// Component to handle Firebase auth callback redirects
-function AuthRedirectHandler({
-  onRedirecting,
-}: {
-  onRedirecting: (redirecting: boolean) => void;
-}) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [user, setUser] = useState<User | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
-
-  // Check authentication state
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthChecked(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    // Wait for auth state to be checked before processing redirects
-    if (!authChecked) {
-      return;
-    }
-
-    const oobCode = searchParams.get("oobCode");
-    const callback = searchParams.get("callback");
-    const mode = searchParams.get("mode");
-
-    // Check if this is a Firebase authentication callback
-    if (oobCode || (callback && mode)) {
-      // If user is already authenticated, clear the query params and stay on home
-      if (user) {
-        // User is authenticated, clear query params to prevent redirect loop
-        router.replace("/");
-        onRedirecting(false);
-        return;
-      }
-
-      // User not authenticated, redirect to verify page
-      onRedirecting(true);
-      // Preserve all query parameters when redirecting
-      const params = new URLSearchParams(searchParams.toString());
-      router.replace(`/auth/verify?${params.toString()}`);
-      return;
-    }
-    onRedirecting(false);
-  }, [searchParams, router, onRedirecting, user, authChecked]);
-
-  return null;
-}
 
 export default function Home() {
   const router = useRouter();
@@ -88,45 +33,24 @@ export default function Home() {
     url: string;
     name: string;
   } | null>(null);
-  const [isRedirecting, setIsRedirecting] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
 
-  // Track authentication state
+  const { data: session } = authClient.useSession();
+  const user = session?.user ?? null;
+
+  // Identify user in PostHog when session is available
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Stable callback for redirect handler
-  const handleRedirecting = useCallback((redirecting: boolean) => {
-    setIsRedirecting(redirecting);
-  }, []);
+    if (user) {
+      posthog.identify(user.id, { email: user.email });
+    }
+  }, [user?.id]);
 
   // Set random background only on client side to avoid hydration mismatch
   useEffect(() => {
     setBackgroundImage(getRandomBackgroundImage());
   }, []);
 
-  // Show loading state while redirecting
-  if (isRedirecting) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Redirecting...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
-      <Suspense fallback={null}>
-        <AuthRedirectHandler onRedirecting={handleRedirecting} />
-      </Suspense>
       <main className="min-h-screen text-white relative">
         {/* Background Image */}
         <div
@@ -186,10 +110,10 @@ export default function Home() {
                   MozUserSelect: "none",
                   msUserSelect: "none",
                 }}
-                onClick={() => {
+                onClick={async () => {
                   posthog.capture("sign_out");
                   posthog.reset();
-                  signOut(auth);
+                  await authClient.signOut();
                   router.replace("/");
                 }}
                 aria-describedby="profile-email-tooltip"
@@ -322,10 +246,7 @@ export default function Home() {
                       // Format date as YYYY-MM-DD in local timezone
                       const formatDate = (date: Date): string => {
                         const year = date.getFullYear();
-                        const month = String(date.getMonth() + 1).padStart(
-                          2,
-                          "0",
-                        );
+                        const month = String(date.getMonth() + 1).padStart(2, "0");
                         const day = String(date.getDate()).padStart(2, "0");
                         return `${year}-${month}-${day}`;
                       };
@@ -357,7 +278,7 @@ export default function Home() {
                     <span className="text-sm sm:text-base text-white font-medium">
                       {adults} {adults === 1 ? "Adult" : "Adults"}
                     </span>
-                    
+
                     {children > 0 && (
                       <span className="text-sm sm:text-base text-white/70">
                         • {children} {children === 1 ? "Child" : "Children"}

@@ -6,11 +6,11 @@ export function getPostmarkClient() {
   if (cachedClient) return cachedClient
 
   const token =
-    process.env.NEXT_PUBLIC_POSTMARK_SERVER_TOKEN ?? process.env.NEXT_PUBLIC_POSTMARK_API_KEY ?? ""
+    process.env.POSTMARK_SERVER_TOKEN ?? process.env.POSTMARK_API_KEY ?? ""
 
   if (!token || token.trim() === "") {
     throw new Error(
-      "NEXT_PUBLIC_POSTMARK_SERVER_TOKEN or NEXT_PUBLIC_POSTMARK_API_KEY is required; set it in your environment."
+      "POSTMARK_SERVER_TOKEN or POSTMARK_API_KEY is required; set it in your environment."
     )
   }
 

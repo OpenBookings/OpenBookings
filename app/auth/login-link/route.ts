@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createHash, randomUUID } from "crypto"
-import { createMagicLink } from "@/lib/firebase/firebaseAdmin"
-import { sendMagicLink } from "@/lib/mailing/magic-link"
+import { auth } from "@/lib/auth"
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
 import { getPostHogClient } from "@/lib/posthog-server"
 
@@ -40,9 +39,9 @@ function logEvent(event: string, data?: Record<string, unknown>) {
 }
 
 /**
- * POST /api/auth/login-link
+ * POST /auth/login-link
  *
- * Generates a Firebase magic link and sends it via Postmark.
+ * Generates a Better Auth magic link and sends it via Postmark.
  *
  * Request body: { email: string }
  * Response: { success: true } or error
@@ -50,7 +49,6 @@ function logEvent(event: string, data?: Record<string, unknown>) {
 export async function POST(request: NextRequest) {
   const requestId =
     request.headers.get("x-request-id") ??
-    // Node runtime always has crypto; for local correlation this is fine.
     randomUUID()
   const startedAt = Date.now()
   let stage = "start:request"
@@ -195,85 +193,56 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    stage = "create_magic_link"
-    // Generate magic link
-    logEvent("magic_link.create.start", {
+    stage = "send_magic_link"
+    // Trigger Better Auth magic link — this calls sendMagicLink (Postmark) internally
+    logEvent("magic_link.send.start", {
       requestId,
       stage,
       email: emailId,
-      appUrlPresent: Boolean(process.env.NEXT_PUBLIC_APP_URL),
-      appUrl: process.env.NEXT_PUBLIC_APP_URL?.trim() ? "set" : "missing",
+      appUrlPresent: Boolean(process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL),
     })
 
-    let magicLink: string
     try {
-      magicLink = await createMagicLink(normalizedEmail)
+      await auth.api.signInMagicLink({
+        body: {
+          email: normalizedEmail,
+          callbackURL: "/auth/verify",
+        },
+      })
     } catch (error) {
-      logEvent("magic_link.create.failed", {
+      logEvent("magic_link.send.failed", {
         requestId,
         stage,
         email: emailId,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
-        appUrl: process.env.NEXT_PUBLIC_APP_URL?.trim(),
       })
-      throw error
-    }
-
-    logEvent("magic_link.create.success", {
-      requestId,
-      stage,
-      email: emailId,
-      // Don't log the full URL (it can be long and may contain tokens).
-      magicLinkLength: magicLink.length,
-    })
-
-    stage = "send_magic_link"
-    // Send email
-    try {
-      await sendMagicLink(normalizedEmail, magicLink)
-    } catch (emailError) {
-      logEvent("magic_link.send.failed", {
-        requestId,
-        stage,
-        email: emailId,
-        postmarkTokenSet:
-          Boolean(process.env.NEXT_PUBLIC_POSTMARK_SERVER_TOKEN) ||
-          Boolean(process.env.NEXT_PUBLIC_POSTMARK_API_KEY),
-        error:
-          emailError instanceof Error ? emailError.message : String(emailError),
-        stack: emailError instanceof Error ? emailError.stack : undefined,
-      })
-      console.error("Failed to send email:", emailError)
-      // Don't expose email service errors to client (prevents enumeration)
+      console.error("Failed to send magic link:", error)
       return NextResponse.json(
         { error: "Failed to send email" },
         { status: 500 }
       )
     }
 
-    // Posthog should not turn a successful email send into a 500.
-    // If PostHog is misconfigured, we log it and continue.
+    logEvent("magic_link.send.success", {
+      requestId,
+      stage,
+      email: emailId,
+    })
+
+    // PostHog tracking — must not turn a successful send into a 500
     stage = "posthog.init"
     let posthog: ReturnType<typeof getPostHogClient> | null = null
     try {
       posthog = getPostHogClient()
-      logEvent("posthog.init.success", {
-        requestId,
-        stage,
-        posthogTokenSet: Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY),
-      })
     } catch (posthogInitError) {
       logEvent("posthog.init.failed", {
         requestId,
         stage,
-        email: emailId,
         error:
           posthogInitError instanceof Error
             ? posthogInitError.message
             : String(posthogInitError),
-        stack:
-          posthogInitError instanceof Error ? posthogInitError.stack : undefined,
       })
       console.error("Failed to init posthog client:", posthogInitError)
     }
@@ -286,22 +255,13 @@ export async function POST(request: NextRequest) {
           event: "magic_link_sent",
           properties: { email: normalizedEmail },
         })
-        logEvent("posthog.capture.queued", {
-          requestId,
-          stage,
-          email: emailId,
-        })
       } catch (posthogError) {
-        // If posthog is misconfigured, we still want to return success for the user.
-        // We keep the endpoint from turning an email-send success into a 500.
         logEvent("posthog.capture.failed", {
           requestId,
           stage,
           email: emailId,
           error:
             posthogError instanceof Error ? posthogError.message : String(posthogError),
-          stack:
-            posthogError instanceof Error ? posthogError.stack : undefined,
         })
         console.error("Failed to capture posthog event:", posthogError)
       }
@@ -309,25 +269,16 @@ export async function POST(request: NextRequest) {
       stage = "posthog.shutdown"
       try {
         await posthog.shutdown()
-        logEvent("posthog.shutdown.success", { requestId, stage })
       } catch (posthogShutdownError) {
         logEvent("posthog.shutdown.failed", {
           requestId,
           stage,
-          email: emailId,
           error:
             posthogShutdownError instanceof Error
               ? posthogShutdownError.message
               : String(posthogShutdownError),
-          stack:
-            posthogShutdownError instanceof Error
-              ? posthogShutdownError.stack
-              : undefined,
         })
-        console.error(
-          "Failed to shutdown posthog client:",
-          posthogShutdownError
-        )
+        console.error("Failed to shutdown posthog client:", posthogShutdownError)
       }
     }
 
