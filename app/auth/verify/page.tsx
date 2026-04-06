@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
  */
 export const dynamic = "force-dynamic"
 
-export default function VerifyPage() {
+function VerifyPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
@@ -69,5 +69,22 @@ export default function VerifyPage() {
         </Button>
       </div>
     </div>
+  )
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Signing you in...</p>
+          </div>
+        </div>
+      }
+    >
+      <VerifyPageContent />
+    </Suspense>
   )
 }
