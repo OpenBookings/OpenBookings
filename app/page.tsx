@@ -33,6 +33,7 @@ export default function Home() {
     url: string;
     name: string;
   } | null>(null);
+  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
 
   const { data: session } = authClient.useSession();
   const user = session?.user ?? null;
@@ -45,8 +46,49 @@ export default function Home() {
   }, [user?.id]);
 
   // Set random background only on client side to avoid hydration mismatch
+  // Persist selection in localStorage; cache image bytes in Cache API
   useEffect(() => {
-    setBackgroundImage(getRandomBackgroundImage());
+    const CACHE_NAME = "openbookings-backgrounds";
+
+    async function loadBackground() {
+      let bg: { url: string; name: string };
+
+      const stored = localStorage.getItem("openbookings_background");
+      if (stored) {
+        try {
+          bg = JSON.parse(stored);
+        } catch {
+          bg = getRandomBackgroundImage();
+          localStorage.setItem("openbookings_background", JSON.stringify(bg));
+        }
+      } else {
+        bg = getRandomBackgroundImage();
+        localStorage.setItem("openbookings_background", JSON.stringify(bg));
+      }
+
+      setBackgroundImage(bg);
+
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        let response = await cache.match(bg.url);
+        if (!response) {
+          await cache.add(bg.url);
+          response = await cache.match(bg.url);
+        }
+        if (response) {
+          const blob = await response.blob();
+          setBackgroundSrc(URL.createObjectURL(blob));
+          return;
+        }
+      } catch {
+        // Cache API unavailable (e.g. private browsing on some browsers)
+      }
+
+      // Fallback to direct URL
+      setBackgroundSrc(bg.url);
+    }
+
+    loadBackground();
   }, []);
 
   return (
@@ -56,8 +98,8 @@ export default function Home() {
         <div
           className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
           style={{
-            backgroundImage: backgroundImage
-              ? `url('${backgroundImage.url}')`
+            backgroundImage: backgroundSrc
+              ? `url('${backgroundSrc}')`
               : undefined,
           }}
         >
