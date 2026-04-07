@@ -31,5 +31,5 @@ export const auth = betterAuth({
       clientSecret: process.env.APPLE_CLIENT_SECRET!,
     },
   },
-  trustedOrigins: ["https://appleid.apple.com"], 
+  trustedOrigins: ["https://appleid.apple.com", "https://openbookings.co"], 
 })
