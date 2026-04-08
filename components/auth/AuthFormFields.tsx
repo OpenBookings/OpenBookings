@@ -34,7 +34,7 @@ export function AuthFormFields({
         try {
             posthog.capture("magic_link_requested");
 
-            const response = await fetch("/auth/login-link", {
+            const response = await fetch("/api/auth/login-link", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
