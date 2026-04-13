@@ -1,11 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import {
+    createContext,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 import posthog from "posthog-js";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
+
+export type AuthFormCardPhase = "idle" | "email_sent" | "social";
+
+type AuthFormPhaseContextValue = {
+    phase: AuthFormCardPhase;
+    setPhase: (phase: AuthFormCardPhase) => void;
+};
+
+const AuthFormPhaseContext = createContext<AuthFormPhaseContextValue | null>(
+    null,
+);
+
+export function AuthFormPhaseProvider({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
+    const [phase, setPhase] = useState<AuthFormCardPhase>("idle");
+    const value = useMemo(() => ({ phase, setPhase }), [phase]);
+    return (
+        <AuthFormPhaseContext.Provider value={value}>
+            {children}
+        </AuthFormPhaseContext.Provider>
+    );
+}
+
+/** Shown in the card header only while the main sign-in form is visible. */
+export function AuthFormWelcomeTitle() {
+    const ctx = useContext(AuthFormPhaseContext);
+    if (ctx && ctx.phase !== "idle") return null;
+    return (
+        <>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                Welcome
+            </h2>
+            <p className="text-white/90 font-medium">Sign in to OpenBookings</p>
+        </>
+    );
+}
 
 export function AuthFormFields({
     onSignInSuccess,
@@ -14,22 +59,36 @@ export function AuthFormFields({
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState<{
-        type: "success" | "error";
-        text: string;
-    } | null>(null);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [appleLoading, setAppleLoading] = useState(false);
+    const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+    const [sentEmail, setSentEmail] = useState<string | null>(null);
+    const [socialState, setSocialState] = useState<{
+        provider: "google" | "apple";
+        failed: boolean;
+    } | null>(null);
 
-    const setAndAutoClearMessage = (msg: { type: "success" | "error"; text: string }) => {
-        setMessage(msg);
-        setTimeout(() => setMessage(null), 3000);
+    const setCardPhase = useContext(AuthFormPhaseContext)?.setPhase;
+
+    useEffect(() => {
+        if (!setCardPhase) return;
+        if (sentEmail) setCardPhase("email_sent");
+        else if (socialState) setCardPhase("social");
+        else setCardPhase("idle");
+    }, [sentEmail, socialState, setCardPhase]);
+
+    const resetSocialState = () => {
+        setSocialState(null);
+        setGoogleLoading(false);
+        setAppleLoading(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setMessage(null);
+        setMagicLinkError(null);
+        setSentEmail(null);
+        resetSocialState();
 
         try {
             posthog.capture("magic_link_requested");
@@ -43,17 +102,14 @@ export function AuthFormFields({
             const data = await response.json();
 
             if (!response.ok) {
-                setAndAutoClearMessage({
-                    type: "error",
-                    text: data.error || "Hmmm... try again.",
-                });
+                setMagicLinkError(data.error || "Hmmm... try again.");
                 return;
             }
 
-            setAndAutoClearMessage({ type: "success", text: "Magic on its way!" });
+            setSentEmail(email);
             setEmail("");
         } catch {
-            setAndAutoClearMessage({ type: "error", text: "Hmmm... try again." });
+            setMagicLinkError("Hmmm... try again.");
         } finally {
             setLoading(false);
         }
@@ -61,41 +117,98 @@ export function AuthFormFields({
 
     const handleGoogleClick = async () => {
         setGoogleLoading(true);
-        setMessage(null);
+        setMagicLinkError(null);
+        setSentEmail(null);
         posthog.capture("sign_in_google_clicked");
         try {
-            await authClient.signIn.social({
+            const redirectPromise = authClient.signIn.social({
                 provider: "google",
                 callbackURL: "/",
             });
+            setSocialState({ provider: "google", failed: false });
+            await redirectPromise;
             // Page will redirect — onSignInSuccess called after redirect via session
         } catch (err: unknown) {
             const code = err instanceof Error ? err.message : String(err);
             posthog.capture("sign_in_failed", { provider: "google", error_code: code });
-            setMessage({ type: "error", text: "Sign-in failed. Please try again." });
-            setTimeout(() => setMessage(null), 5000);
+            setSocialState({ provider: "google", failed: true });
             setGoogleLoading(false);
         }
     };
 
     const handleAppleClick = async () => {
         setAppleLoading(true);
-        setMessage(null);
+        setMagicLinkError(null);
+        setSentEmail(null);
         posthog.capture("sign_in_apple_clicked");
         try {
-            await authClient.signIn.social({
+            const redirectPromise = authClient.signIn.social({
                 provider: "apple",
                 callbackURL: "/",
             });
+            setSocialState({ provider: "apple", failed: false });
+            await redirectPromise;
             // Page will redirect — onSignInSuccess called after redirect via session
         } catch (err: unknown) {
             const code = err instanceof Error ? err.message : String(err);
             posthog.capture("sign_in_failed", { provider: "apple", error_code: code });
-            setMessage({ type: "error", text: "Sign-in failed. Please try again." });
-            setTimeout(() => setMessage(null), 5000);
+            setSocialState({ provider: "apple", failed: true });
             setAppleLoading(false);
         }
     };
+
+    const providerLabel = socialState?.provider === "apple" ? "Apple" : "Google";
+
+    if (sentEmail) {
+        return (
+            <div className="w-full min-h-[238px] flex flex-col justify-center items-center text-center gap-3">
+                <h3 className="text-2xl font-semibold text-white">Email sent successfully</h3>
+                <p className="text-white/85 max-w-xs">
+                    Please check your inbox{sentEmail ? ` at ${sentEmail}` : ""}.
+                </p>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2"
+                    onClick={() => setSentEmail(null)}
+                >
+                    Use another email
+                </Button>
+            </div>
+        );
+    }
+
+    if (socialState) {
+        return (
+            <div className="w-full min-h-[238px] flex flex-col justify-center items-center text-center gap-3">
+                <h3 className="text-2xl font-semibold text-white">
+                    {socialState.failed ? `Failed to continue with ${providerLabel}` : `Redirecting you to ${providerLabel}`}
+                </h3>
+                <p className="text-white/85 max-w-xs">
+                    {socialState.failed
+                        ? "Failed? Try again."
+                        : "Complete sign-in in the next window."}
+                </p>
+                {socialState.failed ? (
+                    <div className="flex gap-2 mt-2">
+                        <Button
+                            type="button"
+                            onClick={
+                                socialState.provider === "google"
+                                    ? handleGoogleClick
+                                    : handleAppleClick
+                            }
+                        >
+                            Try Again
+                        </Button>
+                        <Button type="button" variant="outline" onClick={resetSocialState}>
+                            Back
+                        </Button>
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
 
     return (
         <>
@@ -118,19 +231,14 @@ export function AuthFormFields({
                     >
                         {loading ? "Sending..." : "Send Magic Link"}
                     </Button>
-                    {message && (
+                    {magicLinkError ? (
                         <p
                             role="alert"
-                            className={[
-                                "w-[50%] text-center text-sm px-2 py-1.5 rounded-md",
-                                message.type === "error"
-                                    ? "bg-red-500/20 text-red-100"
-                                    : "bg-green-500 text-green-100",
-                            ].join(" ")}
+                            className="w-[50%] text-center text-sm px-2 py-1.5 rounded-md bg-red-500/20 text-red-100"
                         >
-                            {message.text}
+                            {magicLinkError}
                         </p>
-                    )}
+                    ) : null}
                 </div>
             </form>
 

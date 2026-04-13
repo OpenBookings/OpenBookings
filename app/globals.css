@@ -112,15 +112,6 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
 /* Glassmorphism search box field — shared token for all search form fields */
 .search-box-field {
   background-color: rgb(255 255 255 / 0.05);
@@ -399,6 +390,56 @@
   opacity: 0; /* so the animation controls fade-in */
   animation: heroFadeIn 1.25s ease-out forwards;
   animation-delay: 0.3s; /* optional small delay */
+}
+
+@keyframes tags-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.tags-scroll {
+  animation: none;
+  will-change: transform;
+}
+
+.group:hover .tags-scroll,
+.group:focus-within .tags-scroll {
+  animation: tags-marquee 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tags-scroll {
+    animation: none !important;
+  }
+}
+
+@keyframes hotelNameRoll {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(calc(-1 * var(--hotel-name-overflow, 0px)));
+  }
+}
+
+.hotel-name-roll {
+  animation: hotelNameRoll var(--hotel-name-roll-duration, 8s) ease-in-out infinite alternate;
+  will-change: transform;
+  animation: none;
+  transform: translateX(0);
+}
+
+.group:hover .hotel-name-roll,
+.group:focus-within .hotel-name-roll {
+  animation: hotelNameRoll var(--hotel-name-roll-duration, 8s) ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotel-name-roll {
+    animation: none;
+  }
 }
 
 @media (max-width: 600px) {

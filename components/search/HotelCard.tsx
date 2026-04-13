@@ -2,29 +2,17 @@
 
 import type { CSSProperties } from "react";
 import { useState } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, Heart } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  MapPin,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-/** Wave bottom edge as % of image box height (scales with any aspect-ratio / clamp height). */
-const WAVE_DEPTH_PCT = 4.4;
-
-function clipPointsWave(waveDepthPct: number) {
-  const pts = ["0% 0%", "100% 0%"];
-  const steps = 60;
-  for (let i = steps; i >= 0; i--) {
-    const x = (i / steps) * 100;
-    const t = i / steps;
-    const waveOffsetPct = Math.sin(t * Math.PI) * waveDepthPct;
-    const yPct = 100 - waveOffsetPct;
-    pts.push(`${x}% ${yPct}%`);
-  }
-  return pts.join(", ");
-}
-
-const cardClip = `polygon(${clipPointsWave(WAVE_DEPTH_PCT)})`;
 
 /** Card + image block behind the wave clip (same fill in both places). */
 const CARD_BODY_BG = "rgba(18,17,26,0.82)";
@@ -33,25 +21,43 @@ const CARD_BODY_BG = "rgba(18,17,26,0.82)";
 const IMAGE_ASPECT = "280 / 210" as const;
 
 export type HotelCardData = {
-  id: number;
+  id: string;
   name: string;
   distance: string;
   rating: number;
   reviews: number;
   price: number;
   tags: string[];
-  /** When multiple URLs are provided, prev/next controls appear on image hover. */
-  images?: string[];
+  description: {
+    type: string;
+    bed: string;
+    size: string;
+  };
+  availability: number;
+  images: string[];
 };
+
+function buildHotelImageUrl(hotelId: string, image: string): string {
+  if (!image) return "";
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  if (image.startsWith("//")) {
+    return `https:${image}`;
+  }
+
+  const normalizedImagePath = image.replace(/^\/+/, "");
+  return `https://images.openbookings.co/${hotelId}/${normalizedImagePath}`;
+}
 
 function HotelCardHeroImage({
   gallery,
   hotelName,
-  showTopRatedBadge,
 }: {
   gallery: string[];
   hotelName: string;
-  showTopRatedBadge: boolean;
 }) {
   const [imageIndex, setImageIndex] = useState(0);
   const hasGallery = gallery.length > 1;
@@ -67,15 +73,7 @@ function HotelCardHeroImage({
         } satisfies CSSProperties
       }
     >
-      <div
-        className="absolute inset-0"
-        style={
-          {
-            clipPath: cardClip,
-            WebkitClipPath: cardClip,
-          } satisfies CSSProperties
-        }
-      >
+      <div className="absolute inset-0 overflow-hidden">
         <img
           src={currentSrc}
           alt={hotelName}
@@ -85,7 +83,7 @@ function HotelCardHeroImage({
       </div>
 
       {hasGallery ? (
-        <span className="pointer-events-none absolute right-3 bottom-3 z-10 inline-flex h-6 items-center rounded-full border border-white/22 bg-white/14 px-2.5 font-sans text-[10px] font-medium tracking-[0.08em] text-white backdrop-blur-sm">
+        <span className="pointer-events-none absolute left-3 bottom-3 z-10 inline-flex h-6 items-center rounded-full border border-white/22 bg-white/14 px-2.5 font-sans text-[10px] font-medium tracking-[0.08em] text-white backdrop-blur-sm">
           {imageIndex + 1} / {gallery.length}
         </span>
       ) : null}
@@ -136,9 +134,10 @@ function HotelCardHeroImage({
 
 export function HotelCard({ hotel }: { hotel: HotelCardData }) {
   const gallery =
-    hotel.images && hotel.images.length > 0 ? hotel.images : [];
-  const showTopRatedBadge = hotel.rating >= 4.8 && hotel.reviews >= 200;
-
+    hotel.images?.filter(Boolean).map((image) => buildHotelImageUrl(hotel.id, image)) ?? [];
+  const displayRating = Math.round(
+    Number.isFinite(hotel.rating) ? hotel.rating : 0,
+  );
   return (
     <Card
       className={cn(
@@ -154,92 +153,114 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
         key={hotel.id}
         gallery={gallery}
         hotelName={hotel.name}
-        showTopRatedBadge={showTopRatedBadge}
       />
 
       <CardContent
-        className="-mt-px px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)] backdrop-blur-xl"
+        className="-mt-px flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)] backdrop-blur-xl"
         style={{ backgroundColor: CARD_BODY_BG }}
       >
-        <h3 className="mb-[clamp(4px,1.6cqw,6px)] font-serif text-[clamp(1.1rem,7cqw,1.35rem)] leading-snug font-normal tracking-tight text-white/95">
-          {hotel.name}
-        </h3>
-
-        <p className="mb-[clamp(10px,3.8cqw,14px)] flex items-center gap-1.5 font-sans text-[clamp(12px,3.2cqw,13px)] tracking-wide text-white/38">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 10 10"
-            fill="none"
-            stroke="rgba(255,255,255,0.3)"
-            strokeWidth="1.6"
-            aria-hidden
-          >
-            <path d="M5 1a3 3 0 0 1 3 3c0 2-3 5-3 5S2 6 2 4a3 3 0 0 1 3-3z" />
-            <circle cx="5" cy="4" r="0.9" fill="rgba(255,255,255,0.3)" stroke="none" />
-          </svg>
-          {hotel.distance}
-        </p>
-
-        <div className="mb-[clamp(10px,3.8cqw,14px)] flex flex-wrap gap-[clamp(4px,1.4cqw,6px)]">
-          {hotel.tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex min-h-8 items-center rounded-full border border-[#C9A84C]/50 bg-[rgba(201,168,76,0.15)] px-[clamp(10px,3.2cqw,12px)] py-[clamp(2px,0.8cqw,3px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-semibold tracking-widest text-[#E6C97B] uppercase"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-
-        <div className="mb-[clamp(12px,4.3cqw,18px)] flex items-center gap-2">
-          <div className="flex gap-0.5" aria-hidden>
-            {[1, 2, 3, 4, 5].map((s) => (
-              <svg key={s} width="10" height="10" viewBox="0 0 12 12" aria-hidden>
-                <path
-                  d="M6 1l1.4 2.8L10.5 4.3l-2.25 2.2.53 3.1L6 8.15 3.22 9.6l.53-3.1L1.5 4.3l3.1-.5z"
-                  fill={s <= Math.round(hotel.rating) ? "#C4973A" : "rgba(255,255,255,0.12)"}
-                />
-              </svg>
-            ))}
-          </div>
-          <p className="font-sans text-[clamp(10.5px,3cqw,11.5px)] text-white/42">
-            <span>{hotel.rating}</span>
-            <span className="mx-2 text-white/65">|</span>
-            <button
-              type="button"
-              className="cursor-pointer text-white/46 underline-offset-2 transition-colors"
-            >
-              {hotel.reviews} reviews
-            </button>
-          </p>
-        </div>
-
-        <Separator className="mb-[clamp(12px,4.3cqw,18px)] h-px bg-linear-to-r from-white/10 to-transparent" />
-
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <span className="mb-1 block font-sans text-[clamp(10px,2.8cqw,11px)] tracking-widest text-white/26 uppercase">
-              from
-            </span>
-            <div className="flex items-baseline gap-1">
-              <span className="font-serif text-[clamp(24px,9cqw,32px)] leading-none tracking-tight text-white/95">
-                €{hotel.price}
-              </span>
-              <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-white/26">/night</span>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="relative mb-[clamp(4px,2.2cqw,8px)]">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0 flex-1 pr-3">
+                <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-tight tracking-tight text-white/97">
+                  <span className="line-clamp-2 wrap-break-word">{hotel.name}</span>
+                </h3>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/12">
+                <span className="text-white">{displayRating}</span>
+              </div>
             </div>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            className="h-auto rounded-xl border border-[#E0BE69]/70 bg-[#C9A84C] px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(9.5px,2.55cqw,10.5px)] font-semibold tracking-[0.07em] text-[#1A1408] uppercase transition-[transform,background-color,border-color] duration-200 hover:scale-[1.04] hover:border-[#E9C773] hover:bg-[#D6B35A]"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              Explore
-              <ArrowRight className="size-4" strokeWidth={2.1} aria-hidden />
+          <div className="mb-[clamp(14px,5.2cqw,20px)]">
+            <div
+              className="mb-[10px] flex items-center truncate font-sans text-[clamp(12.5px,3.3cqw,14px)] leading-snug"
+              style={{ color: "#686868" }}
+            >
+              <MapPin
+                aria-hidden
+                strokeWidth={1.6}
+                style={{ width: 13, height: 13, flexShrink: 0, marginRight: 4, opacity: 0.7 }}
+              />
+              <span className="truncate">{hotel.distance}</span>
+            </div>
+
+            <div
+              className="mb-[10px] flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide"
+              style={{ color: "#b0b0b0", maxHeight: "calc(2 * 1.4em)" }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                viewBox="0 0 16 16"
+                aria-hidden
+              >
+                <path d="M8.5 10c-.276 0-.5-.448-.5-1s.224-1 .5-1 .5.448.5 1-.224 1-.5 1" />
+                <path d="M10.828.122A.5.5 0 0 1 11 .5V1h.5A1.5 1.5 0 0 1 13 2.5V15h1.5a.5.5 0 0 1 0 1h-13a.5.5 0 0 1 0-1H3V1.5a.5.5 0 0 1 .43-.495l7-1a.5.5 0 0 1 .398.117M11.5 2H11v13h1V2.5a.5.5 0 0 0-.5-.5M4 1.934V15h6V1.077z" />
+              </svg>
+              <span>{hotel.description.type}</span>
+              <span aria-hidden className="mx-1 opacity-40">
+                ·
+              </span>
+              <span>{hotel.description.bed}</span>
+              <span aria-hidden className="mx-1 opacity-40">
+                ·
+              </span>
+              <span>{hotel.description.size}</span>
+            </div>
+
+            <div
+              className="mb-[5px] flex items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20"
+              style={{ color: "#b0b0b0", scrollbarWidth: "none" }}
+              tabIndex={0}
+              aria-label="Hotel amenities"
+            >
+              {hotel.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex min-h-8 items-center rounded-full border border-[#C9A84C]/50 bg-[rgba(201,168,76,0.15)] px-[clamp(10px,3.2cqw,12px)] py-[clamp(2px,0.8cqw,3px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-semibold tracking-widest whitespace-nowrap text-[#E6C97B] uppercase"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Separator className="mb-[clamp(12px,4.3cqw,18px)] h-px shrink-0 bg-linear-to-r from-white/10 to-transparent" />
+        <div className="flex shrink-0 items-end justify-between gap-3">
+          <div>
+            <span className="block font-sans text-[clamp(10px,2.8cqw,11px)] text-[rgba(255,255,255,0.52)] uppercase">
+              from
             </span>
-          </Button>
+            <div className="flex items-baseline gap-1">
+              <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none font-semibold tracking-tight text-white/95">
+                €{hotel.price}
+              </span>
+              <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-[rgba(255,255,255,0.52)]">
+                /night
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-white/12 flex items-center justify-center">
+              <Heart className="size-4 text-white" />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-auto rounded-xl border border-[#E0BE69]/70 bg-[#C9A84C] px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(9.5px,2.55cqw,10.5px)] font-semibold tracking-[0.07em] text-[#1A1408] uppercase transition-[transform,background-color,border-color] duration-200 hover:scale-[1.04] hover:border-[#E9C773] hover:bg-[#D6B35A]"
+            >
+              <span className="font-sans inline-flex items-center gap-1.5 text-white">
+                Explore
+                <ArrowRight className="size-4" strokeWidth={2.1} aria-hidden />
+              </span>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import posthog from "posthog-js";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { SS_AuthForm } from "./SS-AuthForm";
-import { AuthFormFields } from "./AuthFormFields";
+import { AuthFormFields, AuthFormPhaseProvider } from "./AuthFormFields";
 import { Kbd } from "@/components/ui/kbd";
 
 export function CS_AuthForm() {
@@ -30,15 +30,17 @@ export function CS_AuthForm() {
                 open={openCSAuthForm}
                 onClose={() => setOpenCSAuthForm(false)}
             >
-                <SS_AuthForm
-                    cardAction={
-                        <div className="flex items-center gap-2">
-                            <Kbd className="text-white/70 border-white/30 bg-white/10">Esc</Kbd>
-                        </div>
-                    }
-                >
-                    <AuthFormFields onSignInSuccess={() => setOpenCSAuthForm(false)} />
-                </SS_AuthForm>
+                <AuthFormPhaseProvider>
+                    <SS_AuthForm
+                        cardAction={
+                            <div className="flex items-center gap-2">
+                                <Kbd className="text-white/70 border-white/30 bg-white/10">Esc</Kbd>
+                            </div>
+                        }
+                    >
+                        <AuthFormFields onSignInSuccess={() => setOpenCSAuthForm(false)} />
+                    </SS_AuthForm>
+                </AuthFormPhaseProvider>
             </FocusOverlay>
         </>
     );
