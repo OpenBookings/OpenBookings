@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Gloock } from "next/font/google";
 import { PostHogProvider } from "@/components/PostHogProvider";
+import { CookieBanner } from "@/components/CookieBanner";
+import { CookieConsentProvider } from "@/hooks/useCookieConsent";
 import "./globals.css";
 
 const gloock = Gloock({
@@ -28,15 +29,12 @@ export default function RootLayout({
     <html lang="en" className={`dark ${gloock.variable}`}>
       <head />
       <body>
-        <Script
-          id="cookieyes"
-          src="https://cdn-cookieyes.com/client_data/b30e1d3caf278cdefa0819752c00f4f4/script.js"
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
-        />
-        <PostHogProvider>
-          {children}
-        </PostHogProvider>
+        <CookieConsentProvider>
+          <PostHogProvider>
+            <CookieBanner />
+            {children}
+          </PostHogProvider>
+        </CookieConsentProvider>
       </body>
     </html>
   );
