@@ -23,6 +23,7 @@ export function CookieConsentProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
+    console.log('[CookieConsent] Loaded stored consent state:', stored)
     if (stored === 'accepted' || stored === 'declined') {
       setConsent(stored)
     }

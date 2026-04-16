@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth"
-import { magicLink } from "better-auth/plugins"
+import { magicLink, organization } from "better-auth/plugins"
 import { dash } from "@better-auth/infra";
+
 import { Pool } from "pg"
 import { sendMagicLink } from "@/lib/mailing/magic-link"
 
@@ -19,7 +20,8 @@ export const auth = betterAuth({
     }),
     dash({
       apiKey: process.env.BETTER_AUTH_DASH_API_KEY!,
-    })
+    }),
+    organization()
   ],
   socialProviders: {
     google: {

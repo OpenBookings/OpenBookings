@@ -35,7 +35,7 @@ export default function Home() {
   } | null>(null);
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
 
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
 
   // Identify user in PostHog when session is available
@@ -138,7 +138,7 @@ export default function Home() {
 
         {/* Profile in top right corner */}
         <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
-          {user ? (
+          {sessionPending ? null : user ? (
             // Show user profile image if authenticated. On hover, show user's email in a tooltip.
             <div className="relative group flex items-center">
               <img
