@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Heart,
   MapPin,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +78,8 @@ function HotelCardHeroImage({
         <img
           src={currentSrc}
           alt={hotelName}
+          loading="lazy"
+          draggable="false"
           className="block size-full object-cover object-[center_15%] transition-transform duration-600 ease-out group-hover:scale-105"
         />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[60px] bg-linear-to-b from-black/25 to-transparent" />
@@ -164,20 +167,23 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1 pr-3">
                 <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-tight tracking-tight text-white/97">
-                  <span className="line-clamp-2 wrap-break-word">{hotel.name}</span>
+                  <span className="line-clamp-2 wrap-break-words">{hotel.name}</span>
                 </h3>
               </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/12">
-                <span className="text-white">{displayRating}</span>
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-white/12 px-2 py-1"
+                aria-label={`Rating: ${displayRating} out of 10, ${hotel.reviews} reviews`}
+              >
+                <Star className="size-3 fill-[#E6C97B] text-[#E6C97B]" aria-hidden />
+                <span className="font-sans text-sm font-semibold leading-none text-white">
+                  {displayRating}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="mb-[clamp(14px,5.2cqw,20px)]">
-            <div
-              className="mb-[10px] flex items-center truncate font-sans text-[clamp(12.5px,3.3cqw,14px)] leading-snug"
-              style={{ color: "#686868" }}
-            >
+            <div className="mb-2.5 flex items-center truncate font-sans text-[clamp(12.5px,3.3cqw,14px)] leading-snug text-white/42">
               <MapPin
                 aria-hidden
                 strokeWidth={1.6}
@@ -186,10 +192,7 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
               <span className="truncate">{hotel.distance}</span>
             </div>
 
-            <div
-              className="mb-[10px] flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide"
-              style={{ color: "#b0b0b0", maxHeight: "calc(2 * 1.4em)" }}
-            >
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide text-white/70" style={{ maxHeight: "calc(2 * 1.4em)" }}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
@@ -213,8 +216,7 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
             </div>
 
             <div
-              className="mb-[5px] flex items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20"
-              style={{ color: "#b0b0b0", scrollbarWidth: "none" }}
+              className="mb-1.5 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug text-white/70 [scrollbar-width:none]"
               tabIndex={0}
               aria-label="Hotel amenities"
             >
@@ -247,18 +249,20 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-white/12 flex items-center justify-center">
-              <Heart className="size-4 text-white" />
-            </div>
+            <button
+              type="button"
+              aria-label="Save to wishlist"
+              className="flex size-8 items-center justify-center rounded-full bg-white/12 transition-colors duration-200 hover:bg-white/20"
+            >
+              <Heart className="size-4 text-white" aria-hidden />
+            </button>
             <Button
               type="button"
               size="sm"
-              className="h-auto rounded-xl border border-[#E0BE69]/70 bg-[#C9A84C] px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(9.5px,2.55cqw,10.5px)] font-semibold tracking-[0.07em] text-[#1A1408] uppercase transition-[transform,background-color,border-color] duration-200 hover:scale-[1.04] hover:border-[#E9C773] hover:bg-[#D6B35A]"
+              className="h-auto rounded-xl border border-[#E0BE69]/70 bg-[#C9A84C] px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(9.5px,2.55cqw,10.5px)] font-semibold tracking-[0.07em] text-white uppercase transition-[transform,background-color,border-color] duration-200 hover:scale-[1.04] hover:border-[#E9C773] hover:bg-[#D6B35A]"
             >
-              <span className="font-sans inline-flex items-center gap-1.5 text-white">
-                Explore
-                <ArrowRight className="size-4" strokeWidth={2.1} aria-hidden />
-              </span>
+              Explore
+              <ArrowRight className="size-4" strokeWidth={2.1} aria-hidden />
             </Button>
           </div>
         </div>

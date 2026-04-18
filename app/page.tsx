@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
@@ -17,6 +17,16 @@ import { SearchBar } from "@/components/plug-in/SearchBar";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 import { GuestSelector } from "@/components/plug-in/GuestSelector";
 
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  ATTEMPTS_EXCEEDED: "Too many sign-in attempts. Please request a new magic link.",
+  INVALID_TOKEN: "This sign-in link has expired or already been used.",
+  TOKEN_NOT_FOUND: "Invalid sign-in link. Please request a new one.",
+  EXPIRED_TOKEN: "This sign-in link has expired. Please request a new one.",
+  USER_NOT_FOUND: "No account found. Please sign up first.",
+  USER_BANNED: "Your account has been suspended. Please contact support.",
+  SOCIAL_ACCOUNT_ALREADY_LINKED: "This account is already linked to another user.",
+};
+
 export default function Home() {
   const router = useRouter();
   const [checkIn, setCheckIn] = useState("");
@@ -25,6 +35,7 @@ export default function Home() {
   const [children, setChildren] = useState(0);
   const [rooms, setRooms] = useState(1);
   const [destination, setDestination] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
@@ -37,6 +48,19 @@ export default function Home() {
 
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
+
+  // Read auth error from URL on mount, then clean the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (error) {
+      const msg = AUTH_ERROR_MESSAGES[error] ?? "Sign-in failed. Please try again.";
+      startTransition(() => setAuthError(msg));
+      posthog.capture("auth_error", { error_code: error });
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Identify user in PostHog when session is available
   useEffect(() => {
@@ -137,7 +161,17 @@ export default function Home() {
         </div>
 
         {/* Profile in top right corner */}
-        <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 sm:gap-3">
+        <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-col items-end gap-2">
+          {authError && (
+            <div
+              role="alert"
+              className="text-red-200 text-xs bg-black/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-red-400/40 max-w-xs text-right cursor-pointer"
+              onClick={() => setAuthError(null)}
+            >
+              {authError}
+            </div>
+          )}
+          <div className="flex flex-row items-center gap-2 sm:gap-3">
           {sessionPending ? null : user ? (
             // Show user profile image if authenticated. On hover, show user's email in a tooltip.
             <div className="relative group flex items-center">
@@ -172,6 +206,7 @@ export default function Home() {
           ) : (
             <CS_AuthForm />
           )}
+          </div>
         </div>
 
         {/* Main content - CTA */}
