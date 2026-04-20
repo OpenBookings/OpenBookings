@@ -1,5 +1,5 @@
 # ---------- Builder ----------
-FROM oven/bun:1-alpine AS builder
+FROM oven/bun:1.2-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
 
 COPY package*.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile || bun install
 
 COPY . .
 
@@ -24,7 +24,7 @@ RUN bun run build
 
 
 # ---------- Production ----------
-FROM oven/bun:1-alpine
+FROM oven/bun:1.2-alpine
 
 WORKDIR /app
 

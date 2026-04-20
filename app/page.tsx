@@ -45,6 +45,8 @@ export default function Home() {
     name: string;
   } | null>(null);
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [cookiesEnabled, setCookiesEnabled] = useState<boolean | null>(null);
 
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
@@ -68,6 +70,10 @@ export default function Home() {
       posthog.identify(user.id, { email: user.email });
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    setCookiesEnabled(navigator.cookieEnabled);
+  }, []);
 
   // Set random background only on client side to avoid hydration mismatch
   // Persist selection in localStorage; cache image bytes in Cache API
@@ -173,35 +179,67 @@ export default function Home() {
           )}
           <div className="flex flex-row items-center gap-2 sm:gap-3">
           {sessionPending ? null : user ? (
-            // Show user profile image if authenticated. On hover, show user's email in a tooltip.
-            <div className="relative group flex items-center">
-              <img
-                src="/profile_avatar.png"
-                alt="User Profile"
-                className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
-                draggable="false"
-                style={{
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                  MozUserSelect: "none",
-                  msUserSelect: "none",
-                }}
-                onClick={async () => {
-                  posthog.capture("sign_out");
-                  posthog.reset();
-                  await authClient.signOut();
-                  router.replace("/");
-                }}
-                aria-describedby="profile-email-tooltip"
-              />
-              {/* Tooltip on hover */}
-              <div
-                id="profile-email-tooltip"
-                className="absolute right-1/2 top-full mt-2 z-30 min-w-max px-3 py-2 rounded-lg bg-black/90 text-white text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150"
-                role="tooltip"
+            <div
+              className="relative flex items-center"
+              onMouseEnter={() => setProfileMenuOpen(true)}
+              onMouseLeave={() => setProfileMenuOpen(false)}
+            >
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((prev) => !prev)}
+                className="rounded-full"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+                aria-label="Open profile menu"
               >
-                {user.email}
-              </div>
+                <img
+                  src="/profile_avatar.png"
+                  alt="User Profile"
+                  className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
+                  draggable="false"
+                  style={{
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    MozUserSelect: "none",
+                    msUserSelect: "none",
+                  }}
+                />
+              </button>
+              {profileMenuOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 z-30 min-w-64 rounded-xl border border-white/15 bg-black/90 backdrop-blur-sm p-3 shadow-xl select-none"
+                  role="menu"
+                >
+                  <div className="text-[11px] uppercase tracking-wide text-white/50">
+                    Signed in as
+                  </div>
+                  <div className="mt-1 break-all text-sm text-white/90">{user.email}</div>
+                  <div className="mt-3 text-[11px] uppercase tracking-wide text-white/50">
+                    Cookies
+                  </div>
+                  <div className="mt-1 text-sm text-white/90">
+                    {cookiesEnabled === null
+                      ? "Checking..."
+                      : cookiesEnabled
+                        ? "Enabled"
+                        : "Disabled"}
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-4 w-full rounded-lg border border-white/20 px-3 py-2 text-left text-sm font-medium text-white/90 hover:bg-white/10 transition-colors"
+                    role="menuitem"
+                    onClick={async () => {
+                      posthog.capture("sign_out");
+                      posthog.reset();
+                      await authClient.signOut();
+                      setProfileMenuOpen(false);
+                      router.replace("/");
+                    }}
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <CS_AuthForm />
