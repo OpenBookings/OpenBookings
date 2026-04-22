@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, startTransition } from "react";
+import { useState, useEffect, useRef, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
@@ -47,6 +47,7 @@ export default function Home() {
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [cookiesEnabled, setCookiesEnabled] = useState<boolean | null>(null);
+  const profileMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
@@ -75,25 +76,33 @@ export default function Home() {
     setCookiesEnabled(navigator.cookieEnabled);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (profileMenuCloseTimeoutRef.current) {
+        clearTimeout(profileMenuCloseTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Set random background only on client side to avoid hydration mismatch
   // Persist selection in localStorage; cache image bytes in Cache API
   useEffect(() => {
-    const CACHE_NAME = "openbookings-backgrounds";
+    const CACHE_NAME = "ob_backgrounds";
 
     async function loadBackground() {
       let bg: { url: string; name: string };
 
-      const stored = localStorage.getItem("openbookings_background");
+      const stored = localStorage.getItem(CACHE_NAME);
       if (stored) {
         try {
           bg = JSON.parse(stored);
         } catch {
           bg = getRandomBackgroundImage();
-          localStorage.setItem("openbookings_background", JSON.stringify(bg));
+          localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
         }
       } else {
         bg = getRandomBackgroundImage();
-        localStorage.setItem("openbookings_background", JSON.stringify(bg));
+        localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
       }
 
       setBackgroundImage(bg);
@@ -120,6 +129,24 @@ export default function Home() {
 
     loadBackground();
   }, []);
+
+  const openProfileMenu = () => {
+    if (profileMenuCloseTimeoutRef.current) {
+      clearTimeout(profileMenuCloseTimeoutRef.current);
+      profileMenuCloseTimeoutRef.current = null;
+    }
+    setProfileMenuOpen(true);
+  };
+
+  const closeProfileMenuWithDelay = () => {
+    if (profileMenuCloseTimeoutRef.current) {
+      clearTimeout(profileMenuCloseTimeoutRef.current);
+    }
+    profileMenuCloseTimeoutRef.current = setTimeout(() => {
+      setProfileMenuOpen(false);
+      profileMenuCloseTimeoutRef.current = null;
+    }, 220);
+  };
 
   return (
     <>
@@ -181,8 +208,8 @@ export default function Home() {
           {sessionPending ? null : user ? (
             <div
               className="relative flex items-center"
-              onMouseEnter={() => setProfileMenuOpen(true)}
-              onMouseLeave={() => setProfileMenuOpen(false)}
+              onMouseEnter={openProfileMenu}
+              onMouseLeave={closeProfileMenuWithDelay}
             >
               <button
                 type="button"

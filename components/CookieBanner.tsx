@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useCookieConsent } from '@/hooks/useCookieConsent'
 
 export function CookieBanner() {
-  const { consent, accept, decline } = useCookieConsent()
+  const { consent, loaded, accept, decline } = useCookieConsent()
   const [isEU, setIsEU] = useState(false)
 
   useEffect(() => {
@@ -13,7 +13,7 @@ export function CookieBanner() {
     setIsEU(tz.startsWith('Europe/'))
   }, [])
 
-  if (!isEU || consent !== null) return null
+  if (!loaded || !isEU || consent !== null) return null
 
   return (
     <div className="fixed bottom-4 left-4 z-50 max-w-sm rounded-xl border border-white/10 bg-neutral-900 p-4 shadow-lg">
