@@ -40,6 +40,7 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 --ingroup nodejs nextjs
 
+RUN mkdir -p ./apps/host/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/host/public ./apps/host/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/host/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/host/.next/static ./apps/host/.next/static
