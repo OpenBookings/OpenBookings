@@ -4,8 +4,53 @@
   "workspaces": {
     "": {
       "name": "OpenBookings",
+      "devDependencies": {
+        "turbo": "^2",
+      },
+    },
+    "apps/host": {
+      "name": "@openbookings/host",
+      "version": "0.1.0",
       "dependencies": {
-        "@better-auth/infra": "^0.1.13",
+        "@openbookings/auth": "workspace:*",
+        "@openbookings/db": "workspace:*",
+        "@radix-ui/react-label": "^2.1.8",
+        "@radix-ui/react-separator": "^1.1.8",
+        "@radix-ui/react-slot": "^1.2.4",
+        "better-auth": "^1.5.6",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "lucide-react": "^0.562.0",
+        "next": "16.2.4",
+        "pg": "^8.20.0",
+        "postcss": "^8.5.6",
+        "posthog-js": "^1.362.0",
+        "posthog-node": "^5.28.4",
+        "postmark": "^4.0.7",
+        "react": "19.2.5",
+        "react-dom": "19.2.5",
+        "tailwind-merge": "^3.4.0",
+      },
+      "devDependencies": {
+        "@openbookings/config": "workspace:*",
+        "@tailwindcss/postcss": "^4.1.18",
+        "@types/node": "^22",
+        "@types/pg": "^8.18.0",
+        "@types/react": "19.2.14",
+        "@types/react-dom": "19.2.3",
+        "eslint": "^9",
+        "eslint-config-next": "16.2.4",
+        "tailwindcss": "^4.1.18",
+        "tw-animate-css": "^1.4.0",
+        "typescript": "^5",
+      },
+    },
+    "apps/web": {
+      "name": "@openbookings/web",
+      "version": "0.1.0",
+      "dependencies": {
+        "@openbookings/auth": "workspace:*",
+        "@openbookings/db": "workspace:*",
         "@radix-ui/react-label": "^2.1.8",
         "@radix-ui/react-separator": "^1.1.8",
         "@radix-ui/react-slot": "^1.2.4",
@@ -13,6 +58,7 @@
         "better-auth": "^1.5.6",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
+        "instantsearch.js": "^4",
         "lucide-react": "^0.562.0",
         "maplibre-gl": "^5.15.0",
         "next": "16.2.4",
@@ -29,6 +75,7 @@
         "tailwind-merge": "^3.4.0",
       },
       "devDependencies": {
+        "@openbookings/config": "workspace:*",
         "@tailwindcss/postcss": "^4.1.18",
         "@types/node": "^22",
         "@types/pg": "^8.18.0",
@@ -41,10 +88,34 @@
         "typescript": "^5",
       },
     },
-  },
-  "overrides": {
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
+    "packages/auth": {
+      "name": "@openbookings/auth",
+      "version": "0.0.0",
+      "dependencies": {
+        "@better-auth/infra": "^0.1.13",
+        "better-auth": "^1.5.6",
+        "pg": "^8.20.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.18.0",
+        "typescript": "^5",
+      },
+    },
+    "packages/config": {
+      "name": "@openbookings/config",
+      "version": "0.0.0",
+    },
+    "packages/db": {
+      "name": "@openbookings/db",
+      "version": "0.0.0",
+      "dependencies": {
+        "pg": "^8.20.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.18.0",
+        "typescript": "^5",
+      },
+    },
   },
   "packages": {
     "@algolia/abtesting": ["@algolia/abtesting@1.15.2", "", { "dependencies": { "@algolia/client-common": "5.49.2", "@algolia/requester-browser-xhr": "5.49.2", "@algolia/requester-fetch": "5.49.2", "@algolia/requester-node-http": "5.49.2" } }, "sha512-rF7vRVE61E0QORw8e2NNdnttcl3jmFMWS9B4hhdga12COe+lMa26bQLfcBn/Nbp9/AF/8gXdaRCPsVns3CnjsA=="],
@@ -283,6 +354,16 @@
 
     "@nolyfill/is-core-module": ["@nolyfill/is-core-module@1.0.39", "", {}, "sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA=="],
 
+    "@openbookings/auth": ["@openbookings/auth@workspace:packages/auth"],
+
+    "@openbookings/config": ["@openbookings/config@workspace:packages/config"],
+
+    "@openbookings/db": ["@openbookings/db@workspace:packages/db"],
+
+    "@openbookings/host": ["@openbookings/host@workspace:apps/host"],
+
+    "@openbookings/web": ["@openbookings/web@workspace:apps/web"],
+
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
     "@opentelemetry/api-logs": ["@opentelemetry/api-logs@0.208.0", "", { "dependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-CjruKY9V6NMssL/T1kAFgzosF1v9o6oeN+aX5JB/C/xPNtmgIJqcXHG7fA82Ou1zCpWGl4lROQUKwUNE1pMCyg=="],
@@ -376,6 +457,18 @@
     "@tailwindcss/oxide-win32-x64-msvc": ["@tailwindcss/oxide-win32-x64-msvc@4.2.2", "", { "os": "win32", "cpu": "x64" }, "sha512-1T/37VvI7WyH66b+vqHj/cLwnCxt7Qt3WFu5Q8hk65aOvlwAhs7rAp1VkulBJw/N4tMirXjVnylTR72uI0HGcA=="],
 
     "@tailwindcss/postcss": ["@tailwindcss/postcss@4.2.2", "", { "dependencies": { "@alloc/quick-lru": "^5.2.0", "@tailwindcss/node": "4.2.2", "@tailwindcss/oxide": "4.2.2", "postcss": "^8.5.6", "tailwindcss": "4.2.2" } }, "sha512-n4goKQbW8RVXIbNKRB/45LzyUqN451deQK0nzIeauVEqjlI49slUlgKYJM2QyUzap/PcpnS7kzSUmPb1sCRvYQ=="],
+
+    "@turbo/darwin-64": ["@turbo/darwin-64@2.9.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-X/56SnVXIQZBLKwniGTwEQTGmtE5brSACnKMBWpY3YafuxVYefrC2acamfjgxP7BG5w3I+6jf0UrLoSzgPcSJg=="],
+
+    "@turbo/darwin-arm64": ["@turbo/darwin-arm64@2.9.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-aalBeSl4agT/QtYGDyf/XLajedWzUC9Vg/pm/YO6QQ93vkQ91Vz5uK1ta5RbVRDozQSz4njxUNqRNmOXDzW+qw=="],
+
+    "@turbo/linux-64": ["@turbo/linux-64@2.9.6", "", { "os": "linux", "cpu": "x64" }, "sha512-YKi05jnNHaD7vevgYwahpzGwbsNNTwzU2c7VZdmdFm7+cGDP4oREUWSsainiMfRqjRuolQxBwRn8wf1jmu+YZA=="],
+
+    "@turbo/linux-arm64": ["@turbo/linux-arm64@2.9.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-02o/ZS69cOYEDczXvOB2xmyrtzjQ2hVFtWZK1iqxXUfzMmTjZK4UumrfNnjckSg+gqeBfnPRHa0NstA173Ik3g=="],
+
+    "@turbo/windows-64": ["@turbo/windows-64@2.9.6", "", { "os": "win32", "cpu": "x64" }, "sha512-wVdQjvnBI15wB6JrA+43CtUtagjIMmX6XYO758oZHAsCNSxqRlJtdyujih0D8OCnwCRWiGWGI63zAxR0hO6s9g=="],
+
+    "@turbo/windows-arm64": ["@turbo/windows-arm64@2.9.6", "", { "os": "win32", "cpu": "arm64" }, "sha512-1XUUyWW0W6FTSqGEhU8RHVqb2wP1SPkr7hIvBlMEwH9jr+sJQK5kqeosLJ/QaUv4ecSAd1ZhIrLoW7qslAzT4A=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 
@@ -1158,6 +1251,8 @@
     "tsconfig-paths": ["tsconfig-paths@3.15.0", "", { "dependencies": { "@types/json5": "^0.0.29", "json5": "^1.0.2", "minimist": "^1.2.6", "strip-bom": "^3.0.0" } }, "sha512-2Ac2RgzDe/cn48GvOe3M+o82pEFewD3UPbyoUHHdKasHwJKjds4fLXWf/Ux5kATBKN20oaFGu+jbElp1pos0mg=="],
 
     "tslib": ["tslib@2.8.1", "", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
+
+    "turbo": ["turbo@2.9.6", "", { "optionalDependencies": { "@turbo/darwin-64": "2.9.6", "@turbo/darwin-arm64": "2.9.6", "@turbo/linux-64": "2.9.6", "@turbo/linux-arm64": "2.9.6", "@turbo/windows-64": "2.9.6", "@turbo/windows-arm64": "2.9.6" }, "bin": { "turbo": "bin/turbo" } }, "sha512-+v2QJey7ZUeUiuigkU+uFfklvNUyPI2VO2vBpMYJA+a1hKFLFiKtUYlRHdb3P9CrAvMzi0upbjI4WT+zKtqkBg=="],
 
     "tw-animate-css": ["tw-animate-css@1.4.0", "", {}, "sha512-7bziOlRqH0hJx80h/3mbicLW7o8qLsH5+RaLR2t+OHM3D0JlWGODQKQ4cxbK7WlvmUxpcj6Kgu6EKqjrGFe3QQ=="],
 

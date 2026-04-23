@@ -1,9 +1,10 @@
-node_modules
-.next
+**/node_modules
+**/.next
 .git
 .gitignore
-Dockerfile
-dockerfile
-README.md
-.env
-.env.*
+**/Dockerfile
+**/*.md
+**/.env
+**/.env.*
+**/.DS_Store
+**/tsconfig.tsbuildinfo

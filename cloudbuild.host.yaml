@@ -4,16 +4,12 @@ steps:
     args:
       - build
       - '-f'
-      - apps/web/Dockerfile
+      - apps/host/Dockerfile
       - '-t'
       - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
 
       - '--build-arg'
       - 'NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID}'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_POSTHOG_KEY=${_NEXT_PUBLIC_POSTHOG_KEY}'
       - '--build-arg'
@@ -40,7 +36,7 @@ steps:
       - '--platform'
       - $_PLATFORM
       - '--port'
-      - '8080'
+      - '8081'
       - '--allow-unauthenticated'
 
 timeout: 1200s
