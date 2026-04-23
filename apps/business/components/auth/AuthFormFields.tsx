@@ -8,6 +8,7 @@ import {
     useState,
 } from "react";
 import posthog from "posthog-js";
+import { ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -45,30 +46,35 @@ export function AuthFormWelcomeTitle() {
     return (
         <>
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                Welcome
+                Business Portal
             </h2>
-            <p className="text-white/90 font-medium">Sign in to OpenBookings</p>
         </>
     );
 }
 
 export function AuthFormFields({
     onSignInSuccess,
+    initialError,
 }: {
     onSignInSuccess?: () => void;
+    initialError?: string | null;
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
-    const [appleLoading, setAppleLoading] = useState(false);
+    const [microsoftLoading, setMicrosoftLoading] = useState(false);
     const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
     const [sentEmail, setSentEmail] = useState<string | null>(null);
     const [socialState, setSocialState] = useState<{
-        provider: "google" | "apple";
+        provider: "google" | "microsoft";
         failed: boolean;
     } | null>(null);
 
     const setCardPhase = useContext(AuthFormPhaseContext)?.setPhase;
+
+    useEffect(() => {
+        if (initialError) setMagicLinkError(initialError);
+    }, [initialError]);
 
     useEffect(() => {
         if (!setCardPhase) return;
@@ -80,7 +86,7 @@ export function AuthFormFields({
     const resetSocialState = () => {
         setSocialState(null);
         setGoogleLoading(false);
-        setAppleLoading(false);
+        setMicrosoftLoading(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -127,7 +133,6 @@ export function AuthFormFields({
             });
             setSocialState({ provider: "google", failed: false });
             await redirectPromise;
-            // Page will redirect — onSignInSuccess called after redirect via session
         } catch (err: unknown) {
             const code = err instanceof Error ? err.message : String(err);
             posthog.capture("sign_in_failed", { provider: "google", error_code: code });
@@ -136,28 +141,27 @@ export function AuthFormFields({
         }
     };
 
-    const handleAppleClick = async () => {
-        setAppleLoading(true);
+    const handleMicrosoftClick = async () => {
+        setMicrosoftLoading(true);
         setMagicLinkError(null);
         setSentEmail(null);
-        posthog.capture("sign_in_apple_clicked");
+        posthog.capture("sign_in_microsoft_clicked");
         try {
             const redirectPromise = authClient.signIn.social({
-                provider: "apple",
+                provider: "microsoft",
                 callbackURL: "/",
             });
-            setSocialState({ provider: "apple", failed: false });
+            setSocialState({ provider: "microsoft", failed: false });
             await redirectPromise;
-            // Page will redirect — onSignInSuccess called after redirect via session
         } catch (err: unknown) {
             const code = err instanceof Error ? err.message : String(err);
-            posthog.capture("sign_in_failed", { provider: "apple", error_code: code });
-            setSocialState({ provider: "apple", failed: true });
-            setAppleLoading(false);
+            posthog.capture("sign_in_failed", { provider: "microsoft", error_code: code });
+            setSocialState({ provider: "microsoft", failed: true });
+            setMicrosoftLoading(false);
         }
     };
 
-    const providerLabel = socialState?.provider === "apple" ? "Apple" : "Google";
+    const providerLabel = socialState?.provider === "microsoft" ? "Microsoft" : "Google";
 
     if (sentEmail) {
         return (
@@ -194,7 +198,7 @@ export function AuthFormFields({
                             onClick={
                                 socialState.provider === "google"
                                     ? handleGoogleClick
-                                    : handleAppleClick
+                                    : handleMicrosoftClick
                             }
                         >
                             Try Again
@@ -211,8 +215,8 @@ export function AuthFormFields({
     return (
         <>
             <form className="w-full" onSubmit={handleSubmit}>
-                <div className="flex flex-col gap-3 w-full items-center">
-                    <div className="grid gap-2 w-full">
+                <div className="flex flex-col gap-3 w-full">
+                    <div className="flex gap-2 w-full">
                         <Input
                             id="email"
                             type="email"
@@ -220,19 +224,23 @@ export function AuthFormFields({
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            className="flex-1 h-10"
                         />
+                        <Button
+                            type="submit"
+                            disabled={loading}
+                            size="icon"
+                            className="h-10 w-10 shrink-0 bg-white/95 hover:bg-white text-gray-900 shadow-md hover:shadow-lg transition-all hover:scale-[1.04] active:scale-[0.97]"
+                            aria-label="Send magic link"
+                        >
+                            <ArrowRight className="w-4 h-4" />
+                        </Button>
                     </div>
-                    <Button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full px-4 py-3 sm:px-6 sm:py-4 text-gray-900 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] text-sm sm:text-base bg-white/95 hover:bg-white"
-                    >
-                        {loading ? "Sending..." : "Send Magic Link"}
-                    </Button>
+              
                     {magicLinkError ? (
                         <p
                             role="alert"
-                            className="w-[50%] text-center text-sm px-2 py-1.5 rounded-md bg-red-500/20 text-red-100"
+                            className="w-full text-center text-sm px-2 py-1.5 rounded-md bg-red-500/20 text-red-100"
                         >
                             {magicLinkError}
                         </p>
@@ -245,39 +253,37 @@ export function AuthFormFields({
                 <span className="text-white/80 text-sm font-medium">or</span>
                 <Separator className="flex-1 mx-0 bg-white/40" />
             </div>
-            <div className="flex flex-row w-full gap-3">
+
+            <div className="flex flex-col w-full gap-3">
                 <Button
                     type="button"
                     variant="outline"
-                    className="flex-1 flex items-center justify-center p-2 h-12 min-w-13"
-                    style={{ minWidth: "3.25rem" }}
-                    aria-label="Sign in with Apple"
-                    disabled={appleLoading}
-                    onClick={handleAppleClick}
-                >
-                    <img
-                        src="/apple_logo.svg"
-                        alt="Apple"
-                        className="w-6 h-6"
-                        style={{ filter: "invert(1) grayscale(1) brightness(2)" }}
-                        draggable="false"
-                    />
-                </Button>
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 flex items-center justify-center p-2 h-12 min-w-13"
-                    style={{ minWidth: "3.25rem" }}
-                    aria-label="Sign in with Google"
+                    className="w-full flex items-center justify-center gap-3 h-11"
                     disabled={googleLoading}
                     onClick={handleGoogleClick}
                 >
                     <img
                         src="/google_logo.svg"
-                        alt="Google"
-                        className="w-6 h-6"
+                        alt=""
+                        className="w-5 h-5 shrink-0"
                         draggable="false"
                     />
+                    <span>{googleLoading ? "Redirecting..." : "Sign in with Google"}</span>
+                </Button>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full flex items-center justify-center gap-3 h-11"
+                    disabled={microsoftLoading}
+                    onClick={handleMicrosoftClick}
+                >
+                    <img
+                        src="/microsoft_logo.png"
+                        alt=""
+                        className="w-5 h-5 shrink-0"
+                        draggable="false"
+                    />
+                    <span>{microsoftLoading ? "Redirecting..." : "Sign in with Microsoft"}</span>
                 </Button>
             </div>
         </>

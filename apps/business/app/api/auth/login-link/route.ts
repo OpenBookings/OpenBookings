@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
+import { queryOne } from "@openbookings/db";
 import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function POST(request: NextRequest) {
@@ -49,12 +50,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Block sign-in attempts from private accounts before sending the link
+  try {
+    const existingUser = await queryOne<{ account_type: string | null }>(
+      `SELECT account_type FROM "user" WHERE email = $1`,
+      [normalizedEmail]
+    );
+    if (existingUser?.account_type && existingUser.account_type !== "business") {
+      return NextResponse.json(
+        { error: "This email address is associated with a private account. Please retry with a business email." },
+        { status: 403 }
+      );
+    }
+  } catch {
+    // If the DB check fails, allow the request through — auth will enforce it
+  }
+
   try {
     await auth.api.signInMagicLink({
       headers: request.headers,
       body: {
         email: normalizedEmail,
-        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://host.openbookings.co"}/`,
+        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://business.openbookings.co"}/`,
       },
     });
   } catch (err) {
@@ -66,7 +83,7 @@ export async function POST(request: NextRequest) {
     const posthog = getPostHogClient();
     posthog.capture({
       distinctId: normalizedEmail,
-      event: "host_magic_link_sent",
+      event:"business_magic_link_sent",
       properties: { email: normalizedEmail },
     });
     await posthog.shutdown();

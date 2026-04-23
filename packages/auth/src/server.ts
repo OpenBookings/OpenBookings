@@ -14,6 +14,13 @@ export type AuthServerConfig = {
   googleClientSecret?: string;
   appleClientId?: string;
   appleClientSecret?: string;
+  microsoftClientId?: string;
+  microsoftClientSecret?: string;
+  /**
+   * When set, new users are created with this account_type, and sign-in is
+   * blocked for users whose account_type is explicitly different.
+   */
+  accountType?: string;
 };
 
 export function createAuth(config: AuthServerConfig) {
@@ -34,20 +41,30 @@ export function createAuth(config: AuthServerConfig) {
     socialProviders: {
       ...(config.googleClientId && config.googleClientSecret
         ? {
-            google: {
-              clientId: config.googleClientId,
-              clientSecret: config.googleClientSecret,
-            },
-          }
+          google: {
+            clientId: config.googleClientId,
+            clientSecret: config.googleClientSecret,
+          },
+        }
         : {}),
       ...(config.appleClientId && config.appleClientSecret
         ? {
-            apple: {
-              clientId: config.appleClientId,
-              clientSecret: config.appleClientSecret,
-            },
-          }
+          apple: {
+            clientId: config.appleClientId,
+            clientSecret: config.appleClientSecret,
+          },
+        }
         : {}),
+      ...(config.microsoftClientId && config.microsoftClientSecret
+        ? {
+          microsoft: {
+            clientId: config.microsoftClientId,
+            clientSecret: config.microsoftClientSecret,
+            tenantId: 'common',
+            authority: "https://login.microsoftonline.com",
+            prompt: "select_account",
+          },
+        } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
   });
