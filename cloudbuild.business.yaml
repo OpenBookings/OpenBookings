@@ -4,7 +4,7 @@ steps:
     args:
       - build
       - '-f'
-      - apps/host/Dockerfile
+      - apps/business/Dockerfile
       - '-t'
       - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
 

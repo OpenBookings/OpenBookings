@@ -8,8 +8,8 @@
         "turbo": "^2",
       },
     },
-    "apps/host": {
-      "name": "@openbookings/host",
+    "apps/business": {
+      "name": "@openbookings/business",
       "version": "0.1.0",
       "dependencies": {
         "@openbookings/auth": "workspace:*",
@@ -366,11 +366,11 @@
 
     "@openbookings/auth": ["@openbookings/auth@workspace:packages/auth"],
 
+    "@openbookings/business": ["@openbookings/business@workspace:apps/business"],
+
     "@openbookings/config": ["@openbookings/config@workspace:packages/config"],
 
     "@openbookings/db": ["@openbookings/db@workspace:packages/db"],
-
-    "@openbookings/host": ["@openbookings/host@workspace:apps/host"],
 
     "@openbookings/mailing": ["@openbookings/mailing@workspace:packages/mailing"],
 
