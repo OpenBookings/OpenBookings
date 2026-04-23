@@ -1,4 +1,4 @@
-import { getPostmarkClient } from "@/lib/mailing/postmark";
+import { getPostmarkClient } from "@openbookings/mailing";
 
 const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
 const FROM_ADDRESS =

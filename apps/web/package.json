@@ -11,6 +11,7 @@
   "dependencies": {
     "@openbookings/auth": "workspace:*",
     "@openbookings/db": "workspace:*",
+    "@openbookings/mailing": "workspace:*",
     "better-auth": "^1.5.6",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.8",
@@ -26,7 +27,6 @@
     "postcss": "^8.5.6",
     "posthog-js": "^1.362.0",
     "posthog-node": "^5.28.4",
-    "postmark": "^4.0.7",
     "react": "19.2.5",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.5",

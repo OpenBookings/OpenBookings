@@ -19,6 +19,7 @@ COPY package.json bun.lock turbo.json ./
 COPY packages/config/package.json ./packages/config/package.json
 COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/mailing/package.json ./packages/mailing/package.json
 COPY apps/host/package.json ./apps/host/package.json
 
 RUN bun install --frozen-lockfile || bun install

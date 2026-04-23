@@ -14,6 +14,7 @@
       "dependencies": {
         "@openbookings/auth": "workspace:*",
         "@openbookings/db": "workspace:*",
+        "@openbookings/mailing": "workspace:*",
         "@radix-ui/react-label": "^2.1.8",
         "@radix-ui/react-separator": "^1.1.8",
         "@radix-ui/react-slot": "^1.2.4",
@@ -26,7 +27,6 @@
         "postcss": "^8.5.6",
         "posthog-js": "^1.362.0",
         "posthog-node": "^5.28.4",
-        "postmark": "^4.0.7",
         "react": "19.2.5",
         "react-dom": "19.2.5",
         "tailwind-merge": "^3.4.0",
@@ -51,6 +51,7 @@
       "dependencies": {
         "@openbookings/auth": "workspace:*",
         "@openbookings/db": "workspace:*",
+        "@openbookings/mailing": "workspace:*",
         "@radix-ui/react-label": "^2.1.8",
         "@radix-ui/react-separator": "^1.1.8",
         "@radix-ui/react-slot": "^1.2.4",
@@ -67,7 +68,6 @@
         "postcss": "^8.5.6",
         "posthog-js": "^1.362.0",
         "posthog-node": "^5.28.4",
-        "postmark": "^4.0.7",
         "react": "19.2.5",
         "react-day-picker": "^9.13.0",
         "react-dom": "19.2.5",
@@ -113,6 +113,16 @@
       },
       "devDependencies": {
         "@types/pg": "^8.18.0",
+        "typescript": "^5",
+      },
+    },
+    "packages/mailing": {
+      "name": "@openbookings/mailing",
+      "version": "0.0.0",
+      "dependencies": {
+        "postmark": "^4.0.7",
+      },
+      "devDependencies": {
         "typescript": "^5",
       },
     },
@@ -361,6 +371,8 @@
     "@openbookings/db": ["@openbookings/db@workspace:packages/db"],
 
     "@openbookings/host": ["@openbookings/host@workspace:apps/host"],
+
+    "@openbookings/mailing": ["@openbookings/mailing@workspace:packages/mailing"],
 
     "@openbookings/web": ["@openbookings/web@workspace:apps/web"],
 

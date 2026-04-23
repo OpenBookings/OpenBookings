@@ -1,0 +1,14 @@
+{
+  "name": "@openbookings/mailing",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "postmark": "^4.0.7"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

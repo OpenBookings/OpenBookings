@@ -52,9 +52,13 @@ export async function POST(request: NextRequest) {
   try {
     await auth.api.signInMagicLink({
       headers: request.headers,
-      body: { email: normalizedEmail, callbackURL: "/" },
+      body: {
+        email: normalizedEmail,
+        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"}/`,
+      },
     })
-  } catch {
+  } catch (err) {
+    console.error("[login-link] signInMagicLink failed:", err)
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 })
   }
 

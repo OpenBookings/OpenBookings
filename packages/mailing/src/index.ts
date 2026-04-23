@@ -2,7 +2,7 @@ import { ServerClient } from "postmark";
 
 let cachedClient: ServerClient | null = null;
 
-export function getPostmarkClient() {
+export function getPostmarkClient(): ServerClient {
   if (cachedClient) return cachedClient;
 
   const token =
