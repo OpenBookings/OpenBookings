@@ -1,5 +1,3 @@
-import puppeteer from 'puppeteer'
-
 export interface SignerDetails {
     legalCompanyName: string
     fullName: string
@@ -40,15 +38,20 @@ export async function handleExport(
         .replaceAll('{{REPRESENTATIVE_NAME}}', signerDetails.fullName)
         .replaceAll('{{REPRESENTATIVE_TITLE}}', signerDetails.roleTitle)
         .replaceAll('{{DATE_OF_SIGNATURE}}', signerDetails.signedAt)
+        
+    const GOTENBERG_URL = process.env.GOTENBERG_URL
 
-    const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
+    const form = new FormData()
+    form.append('files', new Blob([html], { type: 'text/html' }), 'index.html')
+
+    const res2 = await fetch(`${GOTENBERG_URL}/forms/chromium/convert/html`, {
+        method: 'POST',
+        body: form,
     })
 
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    const pdf = await page.pdf({ format: 'A4', printBackground: true })
-    await browser.close()
-    return pdf
+    if (!res2.ok) {
+        throw new Error(`Gotenberg PDF generation failed: ${res2.status}`)
+    }
+
+    return new Uint8Array(await res2.arrayBuffer())
 }

@@ -41,8 +41,6 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 --ingroup nodejs nextjs
 
-RUN apk add --no-cache chromium
-
 RUN mkdir -p ./apps/business/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/business/public ./apps/business/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/business/.next/standalone ./
