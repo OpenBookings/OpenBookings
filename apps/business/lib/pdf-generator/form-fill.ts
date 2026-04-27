@@ -1,32 +1,54 @@
-import { PDFDocument } from 'pdf-lib'
-import { z } from 'zod'
+import puppeteer from 'puppeteer'
 
-const FormParamsSchema = z.object({
-    type: z.enum(['partner-agreement', 'dpa']),
-    version: z.string().regex(/^v\d+(\.\d+)*$/, 'Version must be in format v1 or v1.2'),
-})
+export interface SignerDetails {
+    legalCompanyName: string
+    fullName: string
+    roleTitle: string
+    signedAt: string
+}
 
-const CDN_BASE = 'https://cdn.openbookings.co'
+export async function handleExport(
+    docId: 'partner-agreement' | 'dpa',
+    signerDetails: SignerDetails,
+): Promise<Uint8Array> {
+    const INTERNAL_DPA_URL = process.env.DPA_URL
+    const INTERNAL_PA_URL = process.env.PA_URL
 
-export async function handleExport(type: string, version: string): Promise<Uint8Array> {
-    const { type: safeType, version: safeVersion } = FormParamsSchema.parse({ type, version })
+    let templateUrl: string | undefined
 
-    const formUrl = new URL(`/${safeType}/${safeVersion}.pdf`, CDN_BASE).toString()
-
-    const response = await fetch(formUrl)
-    if (!response.ok) {
-        throw new Error(`Failed to fetch form template: ${response.status}`)
+    if (docId === 'partner-agreement') {
+        templateUrl = INTERNAL_PA_URL
+    } else if (docId === 'dpa') {
+        templateUrl = INTERNAL_DPA_URL
+    } else {
+        throw new Error('Cannot process requested document')
     }
 
-    const formPdfBytes = await response.arrayBuffer()
+    if (!templateUrl) {
+        throw new Error('Template URL is not defined')
+    }
 
-    const pdfDoc = await PDFDocument.load(formPdfBytes)
+    const res = await fetch(templateUrl as string)
+    if (!res.ok) {
+        throw new Error(`Failed to fetch template: ${res.status} ${templateUrl}`)
+    }
 
-    const form = pdfDoc.getForm()
-    form.getTextField('legal_company_name').setText("Hello World")
-    form.getTextField('full_name_signee').setText("Maxime Soede")
-    form.getTextField('role_title').setText("Front Office Manager")
-    form.flatten()
+    const template = await res.text()
 
-    return pdfDoc.save()
+    const html = template
+        .replaceAll('{{COMPANY_NAME}}', signerDetails.legalCompanyName)
+        .replaceAll('{{REPRESENTATIVE_NAME}}', signerDetails.fullName)
+        .replaceAll('{{REPRESENTATIVE_TITLE}}', signerDetails.roleTitle)
+        .replaceAll('{{DATE_OF_SIGNATURE}}', signerDetails.signedAt)
+
+    const browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    const pdf = await page.pdf({ format: 'A4', printBackground: true })
+    await browser.close()
+    return pdf
 }

@@ -102,5 +102,18 @@ export async function downloadLegalDocument(
   docId: "partner-agreement" | "dpa"
 ): Promise<Uint8Array> {
   await getSession();
-  return handleExport(docId, "v1");
+
+  const stepData = await loadStepData();
+  const legal = stepData["legal-n-boring"];
+  if (!legal) throw new Error("No legal data found");
+
+  const signature = docId === "partner-agreement" ? legal.partnerAgreement : legal.dpa;
+  if (!signature) throw new Error(`Document ${docId} has not been signed`);
+
+  return handleExport(docId, {
+    legalCompanyName: legal.legalCompanyName,
+    fullName: legal.fullName,
+    roleTitle: legal.roleTitle,
+    signedAt: signature.signedAt,
+  });
 }

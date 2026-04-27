@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { InfoIcon, CheckCircle2Icon, XIcon, Signature, Download } from "lucide-react";
+import { InfoIcon, CheckCircle2Icon, XIcon, Signature, Download, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -270,7 +270,11 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
                       "bg-blue-500/10 border-blue-500/25 text-blue-400/50 font-bold cursor-pointer disabled:opacity-50"
                     )}
                   >
-                    <Download className="size-[18px]" />
+                    {downloadingDoc === doc.id ? (
+                      <Loader2 className="size-[18px] animate-spin" />
+                    ) : (
+                      <Download className="size-[18px]" />
+                    )}
                   </button>
                 ) : (
                   <button
