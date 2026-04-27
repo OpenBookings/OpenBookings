@@ -5,9 +5,10 @@ const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com;
+  img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com;
+  worker-src blob:;
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
