@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { CookieBanner } from "@/components/CookieBanner";
 import { CookieConsentProvider } from "@/hooks/useCookieConsent";
+import { DeviceGate } from "@/components/DeviceGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,6 +24,7 @@ export default function RootLayout({
       <body>
         <CookieConsentProvider>
           <PostHogProvider>
+            <DeviceGate />
             <CookieBanner />
             {children}
           </PostHogProvider>

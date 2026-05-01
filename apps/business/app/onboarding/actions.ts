@@ -10,8 +10,8 @@ export interface LegalNBoringData {
   legalCompanyName: string;
   fullName: string;
   roleTitle: string;
-  partnerAgreement?: { signedAt: string; signerIp: string };
-  dpa?: { signedAt: string; signerIp: string };
+  partnerAgreement?: { signedAt: string; signerIp: string; downloadedAt?: string; downloadedFilename?: string };
+  dpa?: { signedAt: string; signerIp: string; downloadedAt?: string; downloadedFilename?: string };
 }
 
 export interface CoreInfoData {
@@ -97,10 +97,48 @@ export async function signLegalDocument(
   await saveStepData("legal-n-boring", updated);
 }
 
+/** Record that the signed PDF was downloaded, including the filename used. */
+export async function trackLegalDocumentDownload(
+  docId: "partner-agreement" | "dpa",
+  filename: string
+): Promise<void> {
+  await getSession();
+
+  const stepData = await loadStepData();
+  const legal = stepData["legal-n-boring"];
+  if (!legal) return;
+
+  const key = docId === "partner-agreement" ? "partnerAgreement" : "dpa";
+  const existing = legal[key];
+  if (!existing) return;
+
+  const updated: LegalNBoringData = {
+    ...legal,
+    [key]: { ...existing, downloadedAt: new Date().toISOString(), downloadedFilename: filename },
+  };
+
+  await saveStepData("legal-n-boring", updated);
+}
+
+const DOC_LABELS: Record<"partner-agreement" | "dpa", string> = {                              
+    "partner-agreement": "PartnerAgreement",                                             
+    dpa: "DPA",                                                            
+  };   
+
+function buildFilename(legalCompanyName: string, docId: "partner-agreement" | "dpa"): string {
+  const now = new Date();
+  const currentTime = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+  const company = legalCompanyName
+    .trim()
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .replace(/\s+/g, "");
+  return `${company}_${DOC_LABELS[docId]}_${currentTime}.pdf`;
+}
+
 /** Generate and return a filled PDF for a signed legal document. */
 export async function downloadLegalDocument(
   docId: "partner-agreement" | "dpa"
-): Promise<Uint8Array> {
+): Promise<{ bytes: Uint8Array; filename: string }> {
   await getSession();
 
   const stepData = await loadStepData();
@@ -110,10 +148,12 @@ export async function downloadLegalDocument(
   const signature = docId === "partner-agreement" ? legal.partnerAgreement : legal.dpa;
   if (!signature) throw new Error(`Document ${docId} has not been signed`);
 
-  return handleExport(docId, {
+  const bytes = await handleExport(docId, {
     legalCompanyName: legal.legalCompanyName,
     fullName: legal.fullName,
     roleTitle: legal.roleTitle,
     signedAt: signature.signedAt,
   });
+
+  return { bytes, filename: buildFilename(legal.legalCompanyName, docId) };
 }

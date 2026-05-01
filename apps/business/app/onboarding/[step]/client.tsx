@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { HOST_STEPS } from "../steps";
 import { CoreInfoStep, type CoreInfoValues } from "./_steps/core-info";
 import { LegalNBoringStep, type LegalNBoringValues } from "./_steps/legal-n-boring";
+import { AddTeamsStep, type AddTeamsValues } from "./_steps/add-teams";
 import { saveStepData } from "../actions";
 import type { CoreInfoData, LegalNBoringData } from "../actions";
 
@@ -18,6 +19,10 @@ const EMPTY_CORE_INFO: CoreInfoValues = {
   coordinates: null,
   photos: [],
   houseRulesText: "",
+};
+
+const EMPTY_TEAMS: AddTeamsValues = {
+  teams: [],
 };
 
 const EMPTY_LEGAL: LegalNBoringValues = {
@@ -58,6 +63,7 @@ export function OnboardingStepClient({ initialCoreInfo, initialLegal }: Props) {
   const [coreInfo, setCoreInfo] = useState<CoreInfoValues>(() =>
     toCoreInfoValues(initialCoreInfo)
   );
+  const [teams, setTeams] = useState<AddTeamsValues>(EMPTY_TEAMS);
   const [legal, setLegal] = useState<LegalNBoringValues>(() =>
     toLegalValues(initialLegal)
   );
@@ -84,6 +90,9 @@ export function OnboardingStepClient({ initialCoreInfo, initialLegal }: Props) {
         const { photos: _photos, ...serializable } = coreInfo;
         await saveStepData("core-info", serializable);
       }
+      if (currentSlug === "add-teams") {
+        await saveStepData("add-teams", teams);
+      }
 
       const nextIndex = currentIndex + 1;
       if (nextIndex < HOST_STEPS.length) {
@@ -106,11 +115,17 @@ export function OnboardingStepClient({ initialCoreInfo, initialLegal }: Props) {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto pr-1 min-h-0 flex flex-col justify-center">
+      <div className="flex-1 overflow-y-auto min-h-0 mt-6">
         {currentSlug === "core-info" && (
           <CoreInfoStep
             values={coreInfo}
             onChange={(partial) => setCoreInfo((prev) => ({ ...prev, ...partial }))}
+          />
+        )}
+        {currentSlug === "add-teams" && (
+          <AddTeamsStep
+            values={teams}
+            onChange={(partial) => setTeams((prev) => ({ ...prev, ...partial }))}
           />
         )}
         {currentSlug === "legal-n-boring" && (

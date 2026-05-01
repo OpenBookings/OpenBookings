@@ -5,7 +5,7 @@ import { InfoIcon, CheckCircle2Icon, XIcon, Signature, Download, Loader2 } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { signLegalDocument, downloadLegalDocument } from "../../actions";
+import { signLegalDocument, downloadLegalDocument, trackLegalDocumentDownload } from "../../actions";
 
 export interface LegalNBoringValues {
   legalCompanyName: string;
@@ -118,14 +118,15 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
     setDownloadingDoc(docId);
     startTransition(async () => {
       try {
-        const bytes = await downloadLegalDocument(docId);
+        const { bytes, filename } = await downloadLegalDocument(docId);
         const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${docId}.pdf`;
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
+        await trackLegalDocumentDownload(docId, filename);
       } finally {
         setDownloadingDoc(null);
       }

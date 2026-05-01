@@ -13,7 +13,6 @@ const PRIVATE_ACCOUNT_MESSAGE =
 
 export default function Home() {
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
-  const [splashPhase, setSplashPhase] = useState<"show" | "fading" | "done">("show");
   const [authError, setAuthError] = useState<string | null>(null);
 
   const router = useRouter();
@@ -77,16 +76,6 @@ export default function Home() {
     loadBackground();
   }, []);
 
-  useEffect(() => {
-    if (sessionPending) return;
-    const fadeTimer = setTimeout(() => setSplashPhase("fading"), 1800);
-    const doneTimer = setTimeout(() => setSplashPhase("done"), 2550);
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(doneTimer);
-    };
-  }, [sessionPending]);
-
   return (
     <main className="fixed inset-0 min-h-screen bg-background">
       <div
@@ -104,33 +93,9 @@ export default function Home() {
         />
       </div>
 
-      {/* Splash screen */}
-      {splashPhase !== "done" && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-700"
-          style={{
-            opacity: splashPhase === "fading" ? 0 : 1,
-            background: "rgba(0,0,0,0.55)",
-            backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-          }}
-        >
-          <img
-            src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
-            alt="OpenBookings"
-            className="h-14 sm:h-16 w-auto select-none pointer-events-none"
-            draggable="false"
-          />
-          <p className="mt-6 text-white/90 text-3xl font-medium tracking-wide text-center px-6">
-            Business Portal
-          </p>
-        </div>
-      )}
-
       {/* Login card — fades in as splash fades out */}
       <div
         className="relative z-10 flex items-center justify-center min-h-screen w-full backdrop-blur-xl transition-opacity duration-500"
-        style={{ opacity: splashPhase === "done" ? 1 : 0 }}
       >
         <AuthFormPhaseProvider>
           <SS_AuthForm>

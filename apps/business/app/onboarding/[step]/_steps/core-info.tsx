@@ -345,7 +345,7 @@ export function CoreInfoStep({ values, onChange }: CoreInfoStepProps) {
             </Label>
             <Input
               id="displayName"
-              placeholder="e.g. The Grand Harbour Hotel"
+              placeholder="Display Name (e.g. Grand Hotel)"
               value={values.displayName}
               onChange={(e) => onChange({ displayName: e.target.value })}
               className="text-white/80"
