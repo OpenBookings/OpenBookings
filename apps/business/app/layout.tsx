@@ -1,9 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { CookieBanner } from "@/components/CookieBanner";
 import { CookieConsentProvider } from "@/hooks/useCookieConsent";
 import { DeviceGate } from "@/components/DeviceGate";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "OpenBookings Business",

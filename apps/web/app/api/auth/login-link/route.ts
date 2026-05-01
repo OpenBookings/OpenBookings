@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       headers: request.headers,
       body: {
         email: normalizedEmail,
-        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"}/`,
+        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"}`,
       },
     })
   } catch (err) {
