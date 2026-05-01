@@ -17,7 +17,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
   const currentIndex = HOST_STEPS.indexOf(currentSlug as typeof HOST_STEPS[number]);
 
   return (
-    <main className="h-screen bg-[#0d0f12] flex overflow-hidden">
+    <main className="h-dvh bg-[#0d0f12] flex overflow-hidden">
       {/* Left sidebar — 1/4 */}
       <aside className="w-1/4 flex flex-col p-10">
         <div className="flex-1 flex flex-col items-center justify-center gap-16">
