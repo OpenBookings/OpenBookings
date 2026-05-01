@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 
 import { SS_AuthForm } from "@/components/auth/SS-AuthForm";
 import { AuthFormFields, AuthFormPhaseProvider } from "@/components/auth/AuthFormFields";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 const PRIVATE_ACCOUNT_MESSAGE =
   "This email address is associated with a private account. Please retry with a business email.";
@@ -78,6 +79,9 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 min-h-screen bg-background">
+      {/* Auth loading splash — fades out once session check resolves */}
+      <AuthLoadingScreen visible={sessionPending} />
+
       <div
         className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat z-0"
         style={{
@@ -96,6 +100,7 @@ export default function Home() {
       {/* Login card — fades in as splash fades out */}
       <div
         className="relative z-10 flex items-center justify-center min-h-screen w-full backdrop-blur-xl transition-opacity duration-500"
+        style={{ opacity: sessionPending ? 0 : 1 }}
       >
         <AuthFormPhaseProvider>
           <SS_AuthForm>
