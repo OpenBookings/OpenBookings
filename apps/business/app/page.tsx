@@ -1,123 +1,83 @@
-"use client"
+import Link from "next/link";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { getRandomBackgroundImage } from "@/lib/background";
-import { authClient } from "@/lib/auth-client";
-
-import { SS_AuthForm } from "@/components/auth/SS-AuthForm";
-import { AuthFormFields, AuthFormPhaseProvider } from "@/components/auth/AuthFormFields";
-import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
-
-const PRIVATE_ACCOUNT_MESSAGE =
-  "This email address is associated with a private account. Please retry with a business email.";
-
-export default function Home() {
-  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [sessionReady, setSessionReady] = useState(false);
-
-  const router = useRouter();
-  const { data: session, isPending: sessionPending } = authClient.useSession();
-
-  // sessionPending is false on the server (no fetch), so we can't use it directly
-  // as the overlay trigger. Instead, sessionReady starts false on both server and
-  // client, and only flips true once the client confirms the check is done.
-  useEffect(() => {
-    if (!sessionPending) {
-      setSessionReady(true);
-    }
-  }, [sessionPending]);
-
-  useEffect(() => {
-    if (session?.user) {
-      const timeout = setTimeout(() => {
-        router.replace("/onboarding");
-      }, 1500);
-      return () => clearTimeout(timeout);
-    }
-  }, [session, router]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("error") === "private_account") {
-      setAuthError(PRIVATE_ACCOUNT_MESSAGE);
-      window.history.replaceState({}, "", "/");
-    }
-  }, []);
-
-  useEffect(() => {
-    const CACHE_NAME = "ob_backgrounds";
-
-    async function loadBackground() {
-      let bg: { url: string; name: string };
-
-      const stored = localStorage.getItem(CACHE_NAME);
-      if (stored) {
-        try {
-          bg = JSON.parse(stored);
-        } catch {
-          bg = getRandomBackgroundImage();
-          localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-        }
-      } else {
-        bg = getRandomBackgroundImage();
-        localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-      }
-
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        let response = await cache.match(bg.url);
-        if (!response) {
-          await cache.add(bg.url);
-          response = await cache.match(bg.url);
-        }
-        if (response) {
-          const blob = await response.blob();
-          setBackgroundSrc(URL.createObjectURL(blob));
-          return;
-        }
-      } catch {
-        // Cache API unavailable (e.g. private browsing on some browsers)
-      }
-
-      setBackgroundSrc(bg.url);
-    }
-
-    loadBackground();
-  }, []);
-
+export default function MarketingPage() {
   return (
-    <main className="fixed inset-0 min-h-screen bg-background">
-      {/* Auth loading splash — fades out once session check resolves */}
-      <AuthLoadingScreen visible={!sessionReady} />
-
-      <div
-        className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat z-0"
-        style={{
-          backgroundImage: backgroundSrc ? `url('${backgroundSrc}')` : undefined,
-        }}
-      >
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0) 100%)",
-          }}
+    <div className="min-h-screen bg-[#0d0f12] text-white flex flex-col">
+      {/* Header */}
+      <header className="flex items-center justify-between px-10 py-6">
+        <img
+          src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
+          alt="OpenBookings"
+          className="h-8 w-auto select-none pointer-events-none"
+          draggable={false}
         />
-      </div>
+        <Link
+          href="/login"
+          className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+        >
+          Sign in →
+        </Link>
+      </header>
 
-      {/* Login card — fades in as splash fades out */}
-      <div
-        className="relative z-10 flex items-center justify-center min-h-screen w-full backdrop-blur-xl transition-opacity duration-500"
-        style={{ opacity: sessionReady ? 1 : 0 }}
-      >
-        <AuthFormPhaseProvider>
-          <SS_AuthForm>
-            <AuthFormFields initialError={authError} />
-          </SS_AuthForm>
-        </AuthFormPhaseProvider>
-      </div>
-    </main>
+      {/* Hero */}
+      <main className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24">
+        <p className="text-xs font-semibold uppercase tracking-widest text-blue-400/80 mb-4">
+          Business Portal
+        </p>
+        <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight max-w-3xl leading-tight">
+          Run your property with confidence
+        </h1>
+        <p className="mt-6 text-lg text-white/50 max-w-xl leading-relaxed">
+          OpenBookings gives hospitality teams the tools to manage bookings,
+          onboard staff, and grow their business — all in one place.
+        </p>
+        <Link
+          href="/login"
+          className="mt-10 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 transition-colors text-white font-medium text-sm px-6 py-3 rounded-xl"
+        >
+          Get started
+          <span aria-hidden>→</span>
+        </Link>
+
+        {/* Feature highlights */}
+        <div className="mt-24 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl w-full text-left">
+          {[
+            {
+              title: "Onboarding made easy",
+              body: "A guided setup gets your property, rooms, and team live in minutes.",
+            },
+            {
+              title: "Team management",
+              body: "Invite staff, assign roles, and keep everyone on the same page.",
+            },
+            {
+              title: "Built for hospitality",
+              body: "Designed around the real workflows of hotels and short-stay properties.",
+            },
+          ].map((f) => (
+            <div
+              key={f.title}
+              className="bg-white/3 border border-white/8 rounded-2xl p-6"
+            >
+              <h3 className="text-sm font-semibold text-white mb-2">{f.title}</h3>
+              <p className="text-sm text-white/40 leading-relaxed">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-10 py-6 flex items-center justify-between border-t border-white/8">
+        <p className="text-xs text-white/25">
+          © {new Date().getFullYear()} OpenBookings
+        </p>
+        <a
+          href="mailto:support@openbookings.co"
+          className="text-xs text-blue-400 hover:underline underline-offset-2"
+        >
+          support@openbookings.co
+        </a>
+      </footer>
+    </div>
   );
 }

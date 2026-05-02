@@ -7,32 +7,34 @@ import { authClient } from "@/lib/auth-client";
 
 import { SS_AuthForm } from "@/components/auth/SS-AuthForm";
 import { AuthFormFields, AuthFormPhaseProvider } from "@/components/auth/AuthFormFields";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 const PRIVATE_ACCOUNT_MESSAGE =
   "This email address is associated with a private account. Please retry with a business email.";
 
-export default function Home() {
+export default function LoginPage() {
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
-
   const [authError, setAuthError] = useState<string | null>(null);
 
   const router = useRouter();
   const { data: session, isPending: sessionPending } = authClient.useSession();
 
+  // Only reveal the login form once we've confirmed there is no active session.
+  // While pending OR while a session exists (redirect in progress), keep the
+  // splash visible so the login page never flashes through.
+  const showLogin = !sessionPending && !session?.user;
+
   useEffect(() => {
-    if (session?.user) {
-      const timeout = setTimeout(() => {
-        router.replace("/onboarding");
-      }, 1500);
-      return () => clearTimeout(timeout);
+    if (!sessionPending && session?.user) {
+      router.replace("/onboarding");
     }
-  }, [session, router]);
+  }, [session, sessionPending, router]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("error") === "private_account") {
       setAuthError(PRIVATE_ACCOUNT_MESSAGE);
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", "/login");
     }
   }, []);
 
@@ -79,6 +81,9 @@ export default function Home() {
 
   return (
     <main className="fixed inset-0 min-h-screen bg-background">
+      {/* Auth loading splash — hidden only once we confirm no active session */}
+      <AuthLoadingScreen visible={!showLogin} />
+
       <div
         className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat z-0"
         style={{
@@ -94,9 +99,10 @@ export default function Home() {
         />
       </div>
 
-      {/* Login card — fades in as splash fades out */}
+      {/* Login card — fades in only when confirmed unauthenticated */}
       <div
         className="relative z-10 flex items-center justify-center min-h-screen w-full backdrop-blur-xl transition-opacity duration-500"
+        style={{ opacity: showLogin ? 1 : 0 }}
       >
         <AuthFormPhaseProvider>
           <SS_AuthForm>
