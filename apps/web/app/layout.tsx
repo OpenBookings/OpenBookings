@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Gloock } from "next/font/google";
-import { PostHogProvider } from "@/components/PostHogProvider";
+import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
 import { CookieBanner } from "@/components/CookieBanner";
-import { CookieConsentProvider } from "@/hooks/useCookieConsent";
 import "./globals.css";
 
 const gloock = Gloock({

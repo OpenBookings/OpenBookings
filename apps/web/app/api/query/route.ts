@@ -2,7 +2,7 @@ import type { HotelSearchInput } from "@/types/hotel";
 import { query } from "@openbookings/db";
 import { resolveSearchResults } from "@/app/api/query/calculator";
 import type { RoomRow } from "@/app/api/query/calculator";
-import { getPostHogClient } from "@/lib/posthog-server";
+import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
 
 /** Parse and validate URL params into HotelSearchInput */

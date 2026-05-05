@@ -14,5 +14,9 @@
   },
   "devDependencies": {
     "turbo": "^2"
+  },
+  "dependencies": {
+    "posthog-js": "^1.372.8",
+    "posthog-node": "^5.33.2"
   }
 }

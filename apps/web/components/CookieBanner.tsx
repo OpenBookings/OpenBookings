@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useCookieConsent } from '@/hooks/useCookieConsent'
+import { useCookieConsent } from '@openbookings/analytics/client'
 
 export function CookieBanner() {
   const { consent, loaded, accept, decline } = useCookieConsent()

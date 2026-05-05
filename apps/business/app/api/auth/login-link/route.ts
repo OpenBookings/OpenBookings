@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { queryOne } from "@openbookings/db";
-import { getPostHogClient } from "@/lib/posthog-server";
+import { getPostHogClient } from "@openbookings/analytics/server";
 
 export async function POST(request: NextRequest) {
   let body: unknown;

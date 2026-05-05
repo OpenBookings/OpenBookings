@@ -19,6 +19,7 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@openbookings/analytics"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
 

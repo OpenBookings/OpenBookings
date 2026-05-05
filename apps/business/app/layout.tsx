@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { PostHogProvider } from "@/components/PostHogProvider";
+import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
 import { CookieBanner } from "@/components/CookieBanner";
-import { CookieConsentProvider } from "@/hooks/useCookieConsent";
 import { DeviceGate } from "@/components/DeviceGate";
 import "./globals.css";
 

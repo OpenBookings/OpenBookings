@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
@@ -25,8 +26,6 @@
     "next-themes": "^0.4.6",
     "pg": "^8.20.0",
     "postcss": "^8.5.6",
-    "posthog-js": "^1.362.0",
-    "posthog-node": "^5.28.4",
     "react": "19.2.5",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.5",
