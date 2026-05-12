@@ -11,13 +11,14 @@ export interface LegalNBoringValues {
   legalCompanyName: string;
   fullName: string;
   roleTitle: string;
+  vatNumber: string;
+  cocNumber: string;
   partnerAgreementSignedAt: string | null;
   dpaSignedAt: string | null;
 }
 
 const DOCUMENTS = [
   { id: "partner-agreement" as const, label: "Partner Agreement" },
-  { id: "dpa" as const, label: "Data Processing Agreement" },
 ];
 
 type DocumentId = (typeof DOCUMENTS)[number]["id"];
@@ -42,7 +43,7 @@ function SignModal({
   isPending,
 }: SignModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ob-sidebar/80 backdrop-blur-sm">
       <div className="bg-[#13161b] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl flex flex-col gap-6">
         <div className="flex items-start justify-between">
           <div>
@@ -94,9 +95,65 @@ function SignModal({
             type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className="flex-1 h-10 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-sm text-white font-medium transition-colors"
+            className="flex-1 h-10 rounded-lg bg-ob-brand hover:bg-ob-brand-light disabled:opacity-60 text-sm text-white font-medium transition-colors"
           >
             {isPending ? "Signing…" : "Sign Document"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface DownloadModalProps {
+  onDownload: () => void;
+  onClose: () => void;
+  isDownloading: boolean;
+}
+
+function DownloadModal({ onDownload, onClose, isDownloading }: DownloadModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ob-sidebar/80 backdrop-blur-sm">
+      <div className="bg-[#13161b] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl flex flex-col gap-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Partner Agreement</h2>
+            <p className="text-sm text-white/40 mt-1">Your document is signed and on file</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 transition-colors"
+          >
+            <XIcon className="size-5" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-lg bg-green-500/8 border border-green-500/20 px-4 py-3.5">
+          <CheckCircle2Icon className="size-5 text-green-400/70 shrink-0" />
+          <span className="text-sm text-white/60">Signed & sent — agreement is legally binding</span>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 h-10 rounded-lg border border-white/10 text-sm text-white/50 hover:bg-white/5 transition-colors"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={isDownloading}
+            className="flex-1 h-10 rounded-lg bg-ob-brand hover:bg-ob-brand-light disabled:opacity-60 text-sm text-white font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            {isDownloading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {isDownloading ? "Downloading…" : "Download Copy"}
           </button>
         </div>
       </div>
@@ -111,6 +168,7 @@ interface LegalNBoringStepProps {
 
 export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
   const [signingDoc, setSigningDoc] = useState<DocumentId | null>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [downloadingDoc, setDownloadingDoc] = useState<DocumentId | null>(null);
 
@@ -136,7 +194,10 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
   const anySigned = Boolean(values.partnerAgreementSignedAt || values.dpaSignedAt);
 
   const fieldsComplete =
-    values.legalCompanyName.trim() && values.fullName.trim() && values.roleTitle.trim();
+    values.legalCompanyName.trim() &&
+    values.fullName.trim() &&
+    values.roleTitle.trim() &&
+    values.vatNumber.trim();
 
   function handleSignClick(docId: DocumentId) {
     if (!fieldsComplete) return;
@@ -150,6 +211,8 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
         legalCompanyName: values.legalCompanyName,
         fullName: values.fullName,
         roleTitle: values.roleTitle,
+        vatNumber: values.vatNumber,
+        cocNumber: values.cocNumber || undefined,
       });
       const key =
         signingDoc === "partner-agreement" ? "partnerAgreementSignedAt" : "dpaSignedAt";
@@ -162,11 +225,11 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
 
   return (
     <>
-      <div className="flex flex-col gap-6 max-w-lg">
+      <div className="flex flex-col gap-6 max-w-lg mx-auto">
         {/* Signer details */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label className="text-white/70 text-xs font-medium uppercase tracking-wide">
+            <Label className="text-white/45 text-[11px] font-semibold uppercase tracking-[0.12em]">
               Legal Company Name <span className="text-destructive text-xl">*</span>
             </Label>
             <Input
@@ -180,7 +243,7 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-white/70 text-xs font-medium uppercase tracking-wide">
+              <Label className="text-white/45 text-[11px] font-semibold uppercase tracking-[0.12em]">
                 Full Name <span className="text-destructive text-xl">*</span>
               </Label>
               <Input
@@ -192,7 +255,7 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label className="text-white/70 text-xs font-medium uppercase tracking-wide">
+              <Label className="text-white/45 text-[11px] font-semibold uppercase tracking-[0.12em]">
                 Role / Title <span className="text-destructive text-xl">*</span>
               </Label>
               <Input
@@ -204,103 +267,71 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-white/45 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                VAT Number <span className="text-destructive text-xl">*</span>
+              </Label>
+              <Input
+                placeholder="e.g. NL123456789B01"
+                value={values.vatNumber}
+                onChange={(e) => onChange({ vatNumber: e.target.value })}
+                disabled={anySigned}
+                className={cn("text-white/80", anySigned && "opacity-50 cursor-not-allowed")}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-white/45 text-[11px] font-semibold uppercase tracking-[0.12em]">
+                CoC Number <span className="text-transparent text-xl">*</span>
+              </Label>
+              <Input
+                placeholder="e.g. 12345678"
+                value={values.cocNumber}
+                onChange={(e) => onChange({ cocNumber: e.target.value })}
+                disabled={anySigned}
+                className={cn("text-white/80", anySigned && "opacity-50 cursor-not-allowed")}
+              />
+            </div>
+          </div>
         </div>
 
         {/* IP notice */}
-        <div className="flex gap-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3">
-          <InfoIcon className="mt-0.5 size-4 shrink-0 text-blue-400/70" />
+        <div className="flex gap-3 rounded-lg border border-ob-brand/20 bg-ob-brand/5 px-4 py-3">
+          <InfoIcon className="mt-0.5 size-4 shrink-0 text-ob-brand-light/70" />
           <p className="text-sm text-white/50 leading-relaxed">
-            Your <span className="text-white/70 font-medium">IP address</span> will be captured
-            at the time of signature and stored as part of the legally binding record.
+            Your <span className="text-white/70 font-medium">IP address</span> is recorded at the moment of signing and stored as part of the legally binding record. You can download a signed copy of each document after signing.
           </p>
         </div>
 
-        <div className="h-4" />
-
-
-        {/* Documents */}
-        <div className="flex flex-col gap-3">
-          <Label className="text-white/70 text-xs font-medium uppercase tracking-wide">
-            Documents to Sign
-            <span className="text-destructive ml-0.5 text-xl">*</span>
-          </Label>
-
-          {DOCUMENTS.map((doc) => {
-            const signedAt =
-              doc.id === "partner-agreement"
-                ? values.partnerAgreementSignedAt
-                : values.dpaSignedAt;
-            const isSigned = Boolean(signedAt);
-
-            return (
-              <div key={doc.id} className="flex items-center gap-3">
-                {/* Document pill */}
-                <div
-                  className={cn(
-                    "flex-1 flex items-center px-5 h-14 rounded-full border transition-colors",
-                    isSigned
-                      ? "bg-green-500/8 border-green-500/25"
-                      : "bg-white/4 border-white/8"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "text-sm font-large font-bold",
-                      isSigned ? "text-white/80" : "text-white/70"
-                    )}
-                  >
-                    {doc.label}
-                  </span>
-                  {isSigned && (
-                    <span className="ml-auto flex items-center gap-1.5 text-xs text-green-400/70">
-                      <CheckCircle2Icon className="size-3.5" />
-                      Signed
-                    </span>
-                  )}
-                </div>
-
-                {/* Sign button */}
-                {isSigned ? (
-                  <button
-                    type="button"
-                    title="Download signed document"
-                    disabled={downloadingDoc === doc.id || isPending}
-                    onClick={() => handleDownload(doc.id)}
-                    className={cn(
-                      "size-14 rounded-full border flex items-center justify-center transition-colors shrink-0",
-                      "bg-blue-500/10 border-blue-500/25 text-blue-400/50 font-bold cursor-pointer disabled:opacity-50"
-                    )}
-                  >
-                    {downloadingDoc === doc.id ? (
-                      <Loader2 className="size-[18px] animate-spin" />
-                    ) : (
-                      <Download className="size-[18px]" />
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    title={
-                      !fieldsComplete
-                        ? "Fill in your details above first"
-                        : "Sign document"
-                    }
-                    disabled={!fieldsComplete}
-                    onClick={() => handleSignClick(doc.id)}
-                    className={cn(
-                      "size-14 rounded-full border flex items-center justify-center transition-colors shrink-0",
-                      fieldsComplete
-                        ? "bg-white/4 border-blue-500/40 hover:bg-blue-500/8 hover:border-blue-500/25 text-blue-400 cursor-pointer"
-                        : "bg-white/2 border-white/5 text-white/15 cursor-not-allowed"
-                    )}
-                  >
-                    <Signature className="size-[18px]" />
-                  </button>
-                )}
-
-              </div>
-            );
-          })}
+        {/* Sign CTA */}
+        <div className="mt-4">
+          {values.partnerAgreementSignedAt ? (
+            <button
+              type="button"
+              onClick={() => setShowDownloadModal(true)}
+              className="w-full h-14 rounded-full bg-green-500/10 border border-green-500/25 flex items-center justify-center gap-2.5 text-sm font-medium text-green-400/80 transition-colors hover:bg-green-500/15 cursor-pointer"
+            >
+              <CheckCircle2Icon className="size-4" />
+              Signed & Sent
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!fieldsComplete}
+              onClick={() => handleSignClick("partner-agreement")}
+              title={!fieldsComplete ? "Fill in your details above first" : undefined}
+              className={cn(
+                "w-full h-14 rounded-full border flex items-center justify-center gap-2.5 text-sm font-medium transition-colors",
+                fieldsComplete
+                  ? "bg-ob-brand hover:bg-ob-brand-light border-ob-brand text-white cursor-pointer"
+                  : "bg-white/2 border-white/5 text-white/20 cursor-not-allowed"
+              )}
+            >
+              <Signature className="size-4" />
+              Sign the Partner Agreement
+            </button>
+          )}
         </div>
       </div>
 
@@ -313,6 +344,14 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
           onConfirm={confirmSign}
           onCancel={() => setSigningDoc(null)}
           isPending={isPending}
+        />
+      )}
+
+      {showDownloadModal && (
+        <DownloadModal
+          onDownload={() => handleDownload("partner-agreement")}
+          onClose={() => setShowDownloadModal(false)}
+          isDownloading={downloadingDoc === "partner-agreement"}
         />
       )}
     </>

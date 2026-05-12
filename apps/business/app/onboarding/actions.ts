@@ -6,27 +6,53 @@ import { headers } from "next/headers";
 import type { HostStep } from "./steps";
 import { handleExport } from "@/lib/pdf-generator/form-fill";
 
+export interface LegalSignatureRecord {
+  signedAt: string;
+  signerIp: string;
+  downloadedAt?: string;
+  downloadedFilename?: string;
+}
+
+export interface LegalAttemptRecord {
+  resetAt: string;
+  legalCompanyName: string;
+  fullName: string;
+  roleTitle: string;
+  vatNumber?: string;
+  cocNumber?: string;
+  partnerAgreement?: LegalSignatureRecord;
+  dpa?: LegalSignatureRecord;
+}
+
 export interface LegalNBoringData {
   legalCompanyName: string;
   fullName: string;
   roleTitle: string;
-  partnerAgreement?: { signedAt: string; signerIp: string; downloadedAt?: string; downloadedFilename?: string };
-  dpa?: { signedAt: string; signerIp: string; downloadedAt?: string; downloadedFilename?: string };
+  vatNumber: string;
+  cocNumber?: string;
+  partnerAgreement?: LegalSignatureRecord;
+  dpa?: LegalSignatureRecord;
+  previousAttempts?: LegalAttemptRecord[];
 }
 
-export interface CoreInfoData {
+export interface CoreInfoTextData {
   displayName: string;
+  tagline: string;
   description: string;
+  houseRulesText: string;
+}
+
+export interface CoreInfoLocationData {
   streetAddress: string;
   city: string;
   country: string;
   postalCode: string;
   coordinates: [number, number] | null;
-  houseRulesText: string;
 }
 
 type StepData = {
-  "core-info"?: CoreInfoData;
+  "core-info-text"?: CoreInfoTextData;
+  "core-info-location"?: CoreInfoLocationData;
   "legal-n-boring"?: LegalNBoringData;
   [key: string]: unknown;
 };
@@ -72,7 +98,7 @@ export async function loadStepData(): Promise<StepData> {
 /** Record a legal document signature. Captures the signer's IP server-side. */
 export async function signLegalDocument(
   docId: "partner-agreement" | "dpa",
-  signerDetails: { legalCompanyName: string; fullName: string; roleTitle: string }
+  signerDetails: { legalCompanyName: string; fullName: string; roleTitle: string; vatNumber: string; cocNumber?: string }
 ): Promise<void> {
   await getSession();
   const hdrs = await headers();
@@ -115,6 +141,35 @@ export async function trackLegalDocumentDownload(
   const updated: LegalNBoringData = {
     ...legal,
     [key]: { ...existing, downloadedAt: new Date().toISOString(), downloadedFilename: filename },
+  };
+
+  await saveStepData("legal-n-boring", updated);
+}
+
+/** Archive current legal data as a previous attempt and clear the active fields. */
+export async function resetLegalData(): Promise<void> {
+  await getSession();
+
+  const stepData = await loadStepData();
+  const legal = stepData["legal-n-boring"];
+
+  const attempt: LegalAttemptRecord = {
+    resetAt: new Date().toISOString(),
+    legalCompanyName: legal?.legalCompanyName ?? "",
+    fullName: legal?.fullName ?? "",
+    roleTitle: legal?.roleTitle ?? "",
+    vatNumber: legal?.vatNumber,
+    cocNumber: legal?.cocNumber,
+    ...(legal?.partnerAgreement && { partnerAgreement: legal.partnerAgreement }),
+    ...(legal?.dpa && { dpa: legal.dpa }),
+  };
+
+  const updated: LegalNBoringData = {
+    legalCompanyName: "",
+    fullName: "",
+    roleTitle: "",
+    vatNumber: "",
+    previousAttempts: [...(legal?.previousAttempts ?? []), attempt],
   };
 
   await saveStepData("legal-n-boring", updated);

@@ -6,7 +6,8 @@ export default async function OnboardingStepPage() {
 
   return (
     <OnboardingStepClient
-      initialCoreInfo={stepData["core-info"]}
+      initialCoreInfoText={stepData["core-info-text"]}
+      initialCoreInfoLocation={stepData["core-info-location"]}
       initialLegal={stepData["legal-n-boring"]}
     />
   );

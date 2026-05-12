@@ -34,8 +34,14 @@
   --sidebar-accent-foreground: oklch(0.9848 0 0);
   --sidebar-border: oklch(0.2741 0.0055 286.0329);
   --sidebar-ring: oklch(0.7119 0.0129 286.0684);
+  /* OpenBookings brand colors */
+  --ob-brand: oklch(62% 0.21 268);
+  --ob-brand-light: oklch(67% 0.20 268);
+  --ob-sidebar: oklch(10.5% 0.008 262);
+
   --font-sans: Libre Franklin, ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-gloock), serif;
+  --font-allura: var(--font-allura), cursive;
   --font-mono: monospace;
   --radius: 0.5rem;
   --shadow-x: 0rem;
@@ -92,6 +98,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* OpenBookings brand */
+  --color-ob-brand: var(--ob-brand);
+  --color-ob-brand-light: var(--ob-brand-light);
+  --color-ob-sidebar: var(--ob-sidebar);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -447,13 +458,22 @@
     padding: 2rem;
     gap: 1.5rem;
   }
-  
+
   .main-title {
     font-size: 2.2rem;
   }
-  
+
   .button {
     padding: 0.9rem 2rem;
     font-size: 1rem;
+  }
+}
+
+@layer base {
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
   }
 }
