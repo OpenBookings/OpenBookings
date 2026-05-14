@@ -14,6 +14,12 @@ steps:
       - 'NEXT_PUBLIC_POSTHOG_KEY=${_NEXT_PUBLIC_POSTHOG_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_POSTHOG_HOST=${_NEXT_PUBLIC_POSTHOG_HOST}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_COOKIE_VERSION=${_NEXT_PUBLIC_COOKIE_VERSION}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID}'
       - '.'
 
   # ---------- Push ----------
