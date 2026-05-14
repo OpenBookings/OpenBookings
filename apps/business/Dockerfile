@@ -18,6 +18,11 @@ ENV NEXT_PUBLIC_COOKIE_VERSION=$NEXT_PUBLIC_COOKIE_VERSION
 ENV NEXT_PUBLIC_MAPTILER_API_KEY=$NEXT_PUBLIC_MAPTILER_API_KEY
 ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
 
+RUN echo "=== MapTiler debug ===" && \
+    echo "NEXT_PUBLIC_MAPTILER_API_KEY=${NEXT_PUBLIC_MAPTILER_API_KEY}" && \
+    echo "NEXT_PUBLIC_MAPTILER_STYLE_ID=${NEXT_PUBLIC_MAPTILER_STYLE_ID}" && \
+    echo "======================"
+
 # Copy workspace manifests for layer caching
 COPY package.json bun.lock turbo.json ./
 COPY packages/config/package.json ./packages/config/package.json
