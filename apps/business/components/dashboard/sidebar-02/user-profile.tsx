@@ -1,7 +1,6 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
-import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   SidebarMenu,
