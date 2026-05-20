@@ -1,4 +1,4 @@
-import { betterAuth, APIError } from "better-auth";
+import { betterAuth, APIError, type User, type Session } from "better-auth";
 import { magicLink, organization } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
@@ -16,10 +16,14 @@ export type AuthServerConfig = {
   appleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  /**
+   * When set, new users are created with this account_type, and sign-in is
+   * blocked for users whose account_type is explicitly different.
+   */
   accountType?: string;
 };
 
-function buildAuth(config: AuthServerConfig) {
+export function createAuth(config: AuthServerConfig) {
   const pool = new Pool({ connectionString: config.databaseUrl });
 
   return betterAuth({
@@ -39,14 +43,14 @@ function buildAuth(config: AuthServerConfig) {
       ? {
           user: {
             create: {
-              before: async (user) => ({
+              before: async (user: User & Record<string, unknown>) => ({
                 data: { ...user, account_type: config.accountType },
               }),
             },
           },
           session: {
             create: {
-              before: async (session) => {
+              before: async (session: Session & Record<string, unknown>) => {
                 const result = await pool.query<{ account_type: string | null }>(
                   `SELECT account_type FROM "user" WHERE id = $1`,
                   [session.userId],
@@ -101,19 +105,5 @@ function buildAuth(config: AuthServerConfig) {
         } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
-  });
-}
-
-export type AuthInstance = ReturnType<typeof buildAuth>;
-
-export function createAuth(config: AuthServerConfig): AuthInstance {
-  let _instance: AuthInstance | undefined;
-
-  return new Proxy({} as AuthInstance, {
-    get(_, prop) {
-      if (!_instance) _instance = buildAuth(config);
-      const value = Reflect.get(_instance, prop as string);
-      return typeof value === "function" ? value.bind(_instance) : value;
-    },
   });
 }
