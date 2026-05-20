@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@openbookings/analytics": "workspace:*",
+    "@openbookings/stripe": "workspace:*",
     "@openbookings/auth": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",

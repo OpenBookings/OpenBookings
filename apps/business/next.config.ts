@@ -3,11 +3,11 @@ import path from "path";
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://connect-js.stripe.com https://js.stripe.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com sha256-0hAheEzaMe6uXIKV4EehS9pu1am1lj/KnnzrOYqckXk=;
+  img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com;
   worker-src blob:;
   frame-ancestors 'none';
   object-src 'none';
@@ -15,6 +15,7 @@ const ContentSecurityPolicy = `
   form-action 'self';
   upgrade-insecure-requests;
   block-all-mixed-content;
+  frame-src 'self' https://connect-js.stripe.com https://js.stripe.com;
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
