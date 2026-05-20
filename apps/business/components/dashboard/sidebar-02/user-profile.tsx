@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   SidebarMenu,
   SidebarMenuItem,
-  SidebarMenuButton,
 } from "@/components/ui/sidebar";
 
 export function UserProfile() {
