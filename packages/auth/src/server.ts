@@ -16,10 +16,6 @@ export type AuthServerConfig = {
   appleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
-  /**
-   * When set, new users are created with this account_type, and sign-in is
-   * blocked for users whose account_type is explicitly different.
-   */
   accountType?: string;
 };
 
@@ -116,7 +112,8 @@ export function createAuth(config: AuthServerConfig): AuthInstance {
   return new Proxy({} as AuthInstance, {
     get(_, prop) {
       if (!_instance) _instance = buildAuth(config);
-      return Reflect.get(_instance, prop as string);
+      const value = Reflect.get(_instance, prop as string);
+      return typeof value === "function" ? value.bind(_instance) : value;
     },
   });
 }
