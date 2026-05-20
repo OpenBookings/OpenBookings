@@ -6,7 +6,9 @@ import { HOST_STEPS } from "../steps";
 import { CoreInfoTextStep, type CoreInfoTextValues } from "./_steps/core-info-text";
 import { CoreInfoLocationStep, type CoreInfoLocationValues } from "./_steps/core-info-location";
 import { LegalNBoringStep, type LegalNBoringValues } from "./_steps/legal-n-boring";
-import { saveStepData } from "../actions";
+import { StripeConnectStep } from "./_steps/stripe";
+import { VerifyStep } from "./_steps/verify";
+import { saveStepData, provisionStripeAccount } from "../actions";
 import type { CoreInfoTextData, CoreInfoLocationData, LegalNBoringData } from "../actions";
 
 const EMPTY_TEXT: CoreInfoTextValues = {
@@ -110,6 +112,9 @@ export function OnboardingStepClient({ initialCoreInfoText, initialCoreInfoLocat
       if (currentSlug === "core-info-location") {
         await saveStepData("core-info-location", coreInfoLocation);
       }
+      if (currentSlug === "legal-n-boring") {
+        await provisionStripeAccount();
+      }
       const nextIndex = currentIndex + 1;
       if (nextIndex < HOST_STEPS.length) {
         router.push(`/onboarding/${HOST_STEPS[nextIndex]}`);
@@ -149,6 +154,12 @@ export function OnboardingStepClient({ initialCoreInfoText, initialCoreInfoLocat
             onChange={(partial) => setLegal((prev) => ({ ...prev, ...partial }))}
           />
         )}
+        {currentSlug === "stripe-connect" && (
+          <StripeConnectStep onComplete={() => router.push("/onboarding/verify")} />
+        )}
+        {currentSlug === "verify" && (
+          <VerifyStep />
+        )}
       </div>
 
       <div className="fixed bottom-0 inset-x-0 bg-[#0d0f12]">
@@ -167,13 +178,15 @@ export function OnboardingStepClient({ initialCoreInfoText, initialCoreInfoLocat
         <p className="text-xs text-white/25 select-none">Progress saved after each step</p>
 
         <div>
-          <button
-            disabled={isPending || isNextDisabled()}
-            className="bg-ob-brand hover:bg-ob-brand-light disabled:opacity-50 text-white text-sm font-medium px-8 py-2.5 rounded-lg transition-colors"
-            onClick={handleNext}
-          >
-            {isPending ? "Saving…" : currentIndex === HOST_STEPS.length - 1 ? "Finish" : "Next"}
-          </button>
+          {currentSlug !== "stripe-connect" && currentSlug !== "verify" && (
+            <button
+              disabled={isPending || isNextDisabled()}
+              className="bg-ob-brand hover:bg-ob-brand-light disabled:opacity-50 text-white text-sm font-medium px-8 py-2.5 rounded-lg transition-colors"
+              onClick={handleNext}
+            >
+              {isPending ? "Saving…" : currentIndex === HOST_STEPS.length - 1 ? "Finish" : "Next"}
+            </button>
+          )}
         </div>
       </div>
       </div>

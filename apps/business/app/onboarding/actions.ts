@@ -5,6 +5,7 @@ import { query, queryOne } from "@openbookings/db";
 import { headers } from "next/headers";
 import type { HostStep } from "./steps";
 import { handleExport } from "@/lib/pdf-generator/form-fill";
+import { createConnectAccount } from "@openbookings/stripe";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -188,6 +189,57 @@ function buildFilename(legalCompanyName: string, docId: "partner-agreement" | "d
     .replace(/[^a-zA-Z0-9\s]/g, "")
     .replace(/\s+/g, "");
   return `${company}_${DOC_LABELS[docId]}_${currentTime}.pdf`;
+}
+
+/** Create a Stripe Connect account for the host (idempotent — skips if already provisioned). */
+export async function provisionStripeAccount(): Promise<string> {
+  const session = await getSession();
+  const userId = session.user.id;
+
+  const existingRow = await queryOne<{ stripe_account_id: string | null }>(
+    `SELECT step_data->>'stripe_account_id' AS stripe_account_id FROM host_onboarding WHERE user_id = $1`,
+    [userId]
+  );
+  if (existingRow?.stripe_account_id) return existingRow.stripe_account_id;
+
+  const stepData = await loadStepData();
+  const legal = stepData["legal-n-boring"];
+  const location = stepData["core-info-location"];
+
+  if (!legal) throw new Error("Legal step data is missing");
+  if (!location) throw new Error("Location step data is missing");
+
+  const accountId = await createConnectAccount({
+    email: session.user.email,
+    legalCompanyName: legal.legalCompanyName,
+    fullName: legal.fullName,
+    roleTitle: legal.roleTitle,
+    vatNumber: legal.vatNumber,
+    cocNumber: legal.cocNumber ?? "",
+    city: location.city,
+    country: location.country || "NL",
+    postalCode: location.postalCode,
+    streetAddress: location.streetAddress,
+  });
+
+  await query(
+    `INSERT INTO host_onboarding (user_id, completed_steps, step_data)
+     VALUES ($1, ARRAY[]::text[], jsonb_build_object('stripe_account_id', $2::text))
+     ON CONFLICT (user_id) DO UPDATE SET
+       step_data = host_onboarding.step_data || jsonb_build_object('stripe_account_id', $2::text)`,
+    [userId, accountId]
+  );
+
+  return accountId;
+}
+
+/** Mark onboarding as complete for the current user. */
+export async function completeOnboarding(): Promise<void> {
+  const session = await getSession();
+  await query(
+    `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
+    [session.user.id]
+  );
 }
 
 /** Generate and return a filled PDF for a signed legal document. */
