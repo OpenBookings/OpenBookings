@@ -1,9 +1,22 @@
+import { auth } from "@/lib/auth";
+import { queryOne } from "@openbookings/db";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/sidebar-02/app-sidebar";
 import Stats03 from "@/components/dashboard/stats-03";
 import Table05 from "@/components/dashboard/table-05";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/login");
+
+  const row = await queryOne<{ onboarding_completed_at: string | null }>(
+    `SELECT onboarding_completed_at FROM host_onboarding WHERE user_id = $1`,
+    [session.user.id]
+  );
+  if (!row?.onboarding_completed_at) redirect("/onboarding");
+
   return (
     <SidebarProvider>
       <div className="relative flex h-dvh w-full overflow-hidden">

@@ -3,6 +3,7 @@ export const HOST_STEPS = [
   'core-info-location',
   'legal-n-boring',
   'stripe-connect',
+  'verify',
 ] as const
 
 export type HostStep = typeof HOST_STEPS[number]
@@ -12,6 +13,7 @@ export const STEP_GROUPS = [
   { label: 'Core Information', steps: ['core-info-text', 'core-info-location'] as const },
   { label: 'Legal-n-Boring', steps: ['legal-n-boring'] as const },
   { label: 'Stripe Connect',   steps: ['stripe-connect'] as const },
+  { label: 'Verification',     steps: ['verify'] as const },
 ] as const
 
 export const STEP_SUB_LABELS: Record<HostStep, string> = {
@@ -19,13 +21,15 @@ export const STEP_SUB_LABELS: Record<HostStep, string> = {
   'core-info-location': 'Location',
   'legal-n-boring':     'Legal-n-Boring',
   'stripe-connect':     'Stripe Connect',
+  'verify':             'Verification',
 }
 
 export const STEP_TITLES: Record<HostStep, string> = {
   'core-info-text':     'Tell us about your property',
   'core-info-location': 'Where is your property located?',
   'legal-n-boring':     'Legal & agreements',
-  'stripe-connect':     'Set up payments',
+  'stripe-connect':     'Set up Stripe',
+  'verify':             'Almost there',
 }
 
 export const STEP_SUBTITLES: Record<HostStep, string> = {
@@ -33,4 +37,5 @@ export const STEP_SUBTITLES: Record<HostStep, string> = {
   'core-info-location': 'We use this to show your property on the map.',
   'legal-n-boring':     'We need a few details before you can start accepting bookings.',
   'stripe-connect':     'Connect your Stripe account to receive payouts.',
+  'verify':             "We're verifying your Stripe account before you go live.",
 }
