@@ -23,7 +23,7 @@ export type AuthServerConfig = {
   accountType?: string;
 };
 
-export function createAuth(config: AuthServerConfig) {
+function buildAuth(config: AuthServerConfig) {
   const pool = new Pool({ connectionString: config.databaseUrl });
 
   return betterAuth({
@@ -105,5 +105,18 @@ export function createAuth(config: AuthServerConfig) {
         } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
+  });
+}
+
+export type AuthInstance = ReturnType<typeof buildAuth>;
+
+export function createAuth(config: AuthServerConfig): AuthInstance {
+  let _instance: AuthInstance | undefined;
+
+  return new Proxy({} as AuthInstance, {
+    get(_, prop) {
+      if (!_instance) _instance = buildAuth(config);
+      return Reflect.get(_instance, prop as string);
+    },
   });
 }
