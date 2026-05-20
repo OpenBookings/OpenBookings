@@ -38,10 +38,6 @@ export function UserProfile() {
             <span className="truncate text-xs text-muted-foreground">{email}</span>
           </div>
         </div>
-        <SidebarMenuButton onClick={handleLogout} className="mt-1 w-full">
-          <LogOut className="size-4" />
-          <span>Log out</span>
-        </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
   );
