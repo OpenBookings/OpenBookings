@@ -18,6 +18,8 @@ steps:
       - 'NEXT_PUBLIC_POSTHOG_KEY=${_NEXT_PUBLIC_POSTHOG_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_POSTHOG_HOST=${_NEXT_PUBLIC_POSTHOG_HOST}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}'
       - '.'
 
   # ---------- Push ----------

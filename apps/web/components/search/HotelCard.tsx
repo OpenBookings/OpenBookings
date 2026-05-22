@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowRight,
   ChevronLeft,
@@ -15,8 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-/** Card + image block behind the wave clip (same fill in both places). */
-const CARD_BODY_BG = "rgba(18,17,26,0.82)";
+const CARD_BODY_BG = "rgba(0,0,0,0.70)";
 
 /** Hero image aspect — keeps image height locked to the same width as the card. */
 const IMAGE_ASPECT = "280 / 210" as const;
@@ -135,6 +135,42 @@ function HotelCardHeroImage({
   );
 }
 
+function TruncatedName({ name }: { name: string }) {
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handleMouseEnter = () => {
+    const el = spanRef.current;
+    if (el && el.scrollWidth > el.clientWidth) {
+      const rect = el.getBoundingClientRect();
+      setPos({ x: rect.left, y: rect.bottom + 6 });
+    }
+  };
+
+  return (
+    <>
+      <span
+        ref={spanRef}
+        className="truncate block"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setPos(null)}
+      >
+        {name}
+      </span>
+      {pos &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999] max-w-[280px] rounded-lg border border-white/20 bg-[rgba(18,18,18,0.96)] px-3 py-2 font-serif text-sm font-bold leading-snug text-white shadow-2xl backdrop-blur-md"
+            style={{ left: pos.x, top: pos.y }}
+          >
+            {name}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function HotelCard({ hotel }: { hotel: HotelCardData }) {
   const gallery =
     hotel.images?.filter(Boolean).map((image) => buildHotelImageUrl(hotel.id, image)) ?? [];
@@ -144,7 +180,7 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
   return (
     <Card
       className={cn(
-        "group relative h-full w-full min-w-0 cursor-pointer gap-0 overflow-hidden rounded-3xl border border-white/8 bg-transparent py-0 @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] transition-[transform,box-shadow] duration-600 ease-out hover:shadow-[0_32px_64px_rgba(0,0,0,0.5),0_8px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "group relative h-full w-full min-w-0 cursor-pointer gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
       )}
       style={
         {
@@ -167,11 +203,11 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1 pr-3">
                 <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-tight tracking-tight text-white/97">
-                  <span className="line-clamp-2 wrap-break-words">{hotel.name}</span>
+                  <TruncatedName name={hotel.name} />
                 </h3>
               </div>
               <div
-                className="flex shrink-0 items-center gap-1 rounded-lg bg-white/12 px-2 py-1"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-1"
                 aria-label={`Rating: ${displayRating} out of 10, ${hotel.reviews} reviews`}
               >
                 <Star className="size-3 fill-[#E6C97B] text-[#E6C97B]" aria-hidden />
@@ -216,14 +252,14 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
             </div>
 
             <div
-              className="mb-1.5 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden whitespace-nowrap font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug text-white/70 [scrollbar-width:none]"
-              tabIndex={0}
+              className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1.5 overflow-hidden"
               aria-label="Hotel amenities"
+              style={{ maxHeight: "3.25rem" }}
             >
               {hotel.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex min-h-8 items-center rounded-full border border-[#C9A84C]/50 bg-[rgba(201,168,76,0.15)] px-[clamp(10px,3.2cqw,12px)] py-[clamp(2px,0.8cqw,3px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-semibold tracking-widest whitespace-nowrap text-[#E6C97B] uppercase"
+                  className="inline-flex items-center rounded-lg border border-white/15 bg-white/10 px-[clamp(8px,2.8cqw,11px)] py-[clamp(2px,0.8cqw,4px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-medium tracking-[0.08em] whitespace-nowrap text-white/60 uppercase"
                 >
                   {tag}
                 </span>
@@ -252,17 +288,17 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
             <button
               type="button"
               aria-label="Save to wishlist"
-              className="flex size-8 items-center justify-center rounded-full bg-white/12 transition-colors duration-200 hover:bg-white/20"
+              className="flex size-8 items-center justify-center rounded-full border border-white/20 bg-white/10 transition-colors duration-200 hover:bg-white/20"
             >
               <Heart className="size-4 text-white" aria-hidden />
             </button>
             <Button
               type="button"
               size="sm"
-              className="h-auto rounded-xl border border-[#E0BE69]/70 bg-[#C9A84C] px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(9.5px,2.55cqw,10.5px)] font-semibold tracking-[0.07em] text-white uppercase transition-[transform,background-color,border-color] duration-200 hover:scale-[1.04] hover:border-[#E9C773] hover:bg-[#D6B35A]"
+              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none backdrop-blur-sm transition-all duration-200 hover:scale-[1.02] hover:bg-white/20 active:scale-[0.98]"
+         
             >
               Explore
-              <ArrowRight className="size-4" strokeWidth={2.1} aria-hidden />
             </Button>
           </div>
         </div>
