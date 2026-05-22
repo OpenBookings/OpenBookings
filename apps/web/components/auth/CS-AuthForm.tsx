@@ -24,7 +24,7 @@ export function CS_AuthForm() {
                     height: "auto",
                 }}
             >
-                <span className="text-base sm:text-lg font-normal whitespace-nowrap">Get Started</span>
+                <span className="text-base sm:text-lg font-normal whitespace-nowrap text-white">Get Started</span>
             </button>
             <FocusOverlay
                 open={openCSAuthForm}
