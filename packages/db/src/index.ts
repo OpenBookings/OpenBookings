@@ -1,16 +1,21 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionType = process.env.ENV_TYPE;
+
+const connectionString =
+  connectionType === "dev"
+    ? process.env.DEV_DATABASE_URL
+    : process.env.DATABASE_URL;
 
 const pool =
-  connectionString ?
-    new Pool({
-      connectionString,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    })
-  : null;
+  connectionString
+    ? new Pool({
+        connectionString,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      })
+    : null;
 
 /** Get the shared Postgres pool. Throws if DATABASE_URL is not set. */
 export function getPool(): Pool {

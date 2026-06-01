@@ -102,17 +102,17 @@ function SearchPageInner() {
     async function loadBackground() {
       let bg: { url: string; name: string };
 
-      const stored = localStorage.getItem("openbookings_background");
+      const stored = localStorage.getItem("ob_backgrounds");
       if (stored) {
         try {
           bg = JSON.parse(stored);
         } catch {
           bg = getRandomBackgroundImage();
-          localStorage.setItem("openbookings_background", JSON.stringify(bg));
+          localStorage.setItem("ob_backgrounds", JSON.stringify(bg));
         }
       } else {
         bg = getRandomBackgroundImage();
-        localStorage.setItem("openbookings_background", JSON.stringify(bg));
+        localStorage.setItem("ob_backgrounds", JSON.stringify(bg));
       }
 
       try {
