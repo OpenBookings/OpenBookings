@@ -77,7 +77,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
       </div>
 
       {/* Profile in top right corner */}
-      <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-col items-end gap-2">
+      <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-col items-end justify-center gap-2">
         {authError && (
           <div
             role="alert"
@@ -105,7 +105,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
                 <img
                   src="/profile_avatar.png"
                   alt="User Profile"
-                  className="h-12 w-12 rounded-full object-cover border border-white/20 shadow"
+                  className="h-6 sm:h-10 md:h-14 rounded-full object-cover border border-white/20 shadow"
                   draggable="false"
                   style={{
                     userSelect: "none",
