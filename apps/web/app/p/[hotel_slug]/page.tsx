@@ -1,14 +1,12 @@
 "use client";
 
-import { use, useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, Wifi, BedDouble, ConciergeBell, Sparkles } from "lucide-react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, Wifi, BedDouble, ConciergeBell, Sparkles, Star, Check, Building2, Heart } from "lucide-react";
 import { Nav } from "@/components/nav";
-import { HotelCard, type HotelCardData } from "@/components/search/HotelCard";
+import { type HotelCardData } from "@/components/search/HotelCard";
 import type { HotelPageData } from "@/app/api/query/pr/route";
-
-import { MapPinIcon, SearchIcon, PlusIcon, MinusIcon } from "lucide-react";
-import { Map, MapMarker, MarkerContent} from "@/components/ui/map";
+import { Map, MapMarker, MarkerContent } from "@/components/ui/map";
 
 const ROOM_CARDS: HotelCardData[] = [
   {
@@ -39,38 +37,6 @@ const ROOM_CARDS: HotelCardData[] = [
     images: ["Jumeirah.avif"],
     description: {
       type: "Deluxe",
-      bed: "1 King Bed",
-      size: "100 m²",
-    },
-  },
-  {
-    id: "0095782c-bea6-4097-86a5-bb632c824046",
-    name: "Amsterdam Grand Hotel",
-    slug: "amsterdam-grand-hotel",
-    distance: "1.2 Kilometers to City Center",
-    rating: 9.3,
-    reviews: 987,
-    price: 128,
-    tags: ["Amsterdam", "Pride Voucher", "Butler", "High-end Luxury", "Member Discount"],
-    images: ["Jumeirah.avif"],
-    description: {
-      type: "Standard",
-      bed: "1 King Bed",
-      size: "100 m²",
-    },
-  },
-  {
-    id: "0095782c-bea6-4097-86a5-bb632c824046",
-    name: "Amsterdam Grand Hotel",
-    slug: "amsterdam-grand-hotel",
-    distance: "1.2 Kilometers to City Center",
-    rating: 9.3,
-    reviews: 987,
-    price: 128,
-    tags: ["Amsterdam", "Pride Voucher", "Butler", "High-end Luxury", "Member Discount"],
-    images: ["Jumeirah.avif"],
-    description: {
-      type: "Standard",
       bed: "1 King Bed",
       size: "100 m²",
     },
@@ -140,8 +106,8 @@ function AmenitiesGroupBento() {
           <div
             key={group.id}
             className={[
-              "group rounded-2xl border border-white/8 bg-white/[0.02] p-7 flex flex-col gap-7",
-              "hover:border-white/[0.13] hover:bg-white/[0.04] transition-all",
+              "group rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7",
+              "hover:border-white/13 hover:bg-white/4 transition-all",
               group.wide ? "sm:col-span-2 lg:col-span-2" : "",
             ].join(" ")}
           >
@@ -179,24 +145,60 @@ const HIGHLIGHTS = [
   { icon: Plane, label: "Marina di Campo Airport", distance: "18 km" },
 ];
 
-const CARD_WIDTH = 340;
-const SPREAD = 200;
-const ROTATE_Y = 42;
-const CAROUSEL_HEIGHT = 500;
+const slideVariants = {
+  enter: (d: number) => ({ x: d > 0 ? "100%" : "-100%", opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (d: number) => ({ x: d > 0 ? "-60%" : "60%", opacity: 0, scale: 0.96 }),
+};
 
-function RoomsCoverflowCarousel({ rooms }: { rooms: HotelCardData[] }) {
+function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
   const count = rooms.length;
   const [activeIndex, setActiveIndex] = useState(0);
-  
-  const prev = useCallback(
-    () => setActiveIndex((i) => (i - 1 + count) % count),
-    [count],
-  );
+  const [imageIndex, setImageIndex] = useState(0);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [liked, setLiked] = useState<Set<number>>(new Set());
+  const [dir, setDir] = useState(1);
+  const [hovered, setHovered] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
 
-  const next = useCallback(
-    () => setActiveIndex((i) => (i + 1) % count),
-    [count],
-  );
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { threshold: 0.3 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const room = rooms[activeIndex];
+  const imageCount = room.images.length;
+
+  const prevImage = useCallback(() => setImageIndex((i) => (i - 1 + imageCount) % imageCount), [imageCount]);
+  const nextImage = useCallback(() => setImageIndex((i) => (i + 1) % imageCount), [imageCount]);
+
+  const navigate = useCallback((idx: number) => {
+    setDir(idx > activeIndex ? 1 : -1);
+    setActiveIndex(idx);
+    setImageIndex(0);
+  }, [activeIndex]);
+
+  const prev = useCallback(() => navigate((activeIndex - 1 + count) % count), [navigate, activeIndex, count]);
+  const next = useCallback(() => navigate((activeIndex + 1) % count), [navigate, activeIndex, count]);
+
+  useEffect(() => {
+    if (hovered || !visible) return;
+    const id = setTimeout(() => {
+      if (imageIndex < imageCount - 1) {
+        setImageIndex((i) => i + 1);
+      } else {
+        next();
+      }
+    }, 3000);
+    return () => clearTimeout(id);
+  }, [hovered, visible, imageIndex, imageCount, next]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -207,50 +209,208 @@ function RoomsCoverflowCarousel({ rooms }: { rooms: HotelCardData[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [prev, next]);
 
-  return (
-    <div className="select-none">
-      {/* Coverflow stage */}
-      <div
-        className="relative mx-auto overflow-visible"
-        style={{ height: CAROUSEL_HEIGHT, perspective: "1400px" }}
-      >
-        {rooms.map((room, i) => {
-          const offset = i - activeIndex;
-          const absOffset = Math.abs(offset);
-          const isActive = offset === 0;
-          const isVisible = absOffset <= 2;
+  const toggleLike = useCallback(() => {
+    setLiked((prev) => {
+      const s = new Set(prev);
+      if (s.has(activeIndex)) s.delete(activeIndex);
+      else s.add(activeIndex);
+      return s;
+    });
+  }, [activeIndex]);
 
-          return (
+  return (
+    <div className="flex flex-col select-none">
+      {/* Card stage */}
+      <div className="px-4 sm:px-8 md:px-[8%] lg:px-[10%] py-[3%]">
+        <div
+          ref={stageRef}
+          className="relative rounded-3xl overflow-hidden bg-white/4"
+          style={{ height: "min(72vh, 680px)" }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          <AnimatePresence custom={dir} mode="wait">
             <motion.div
-              key={room.id}
-              className="absolute top-0 cursor-pointer"
-              style={{
-                width: CARD_WIDTH,
-                left: `calc(50% - ${CARD_WIDTH / 2}px)`,
-                zIndex: rooms.length - absOffset,
-                pointerEvents: isVisible ? "auto" : "none",
-              }}
-              animate={{
-                x: offset * SPREAD,
-                rotateY: Math.sign(offset) * -Math.min(absOffset * ROTATE_Y, ROTATE_Y + (absOffset - 1) * 8),
-                scale: isActive ? 1 : Math.max(0.72, 0.84 - (absOffset - 1) * 0.08),
-                // opacity: isActive ? 1 : Math.max(0, 0.55 - (absOffset - 1) * 0.22),
-                filter: isActive
-                  ? "brightness(1) blur(0px)"
-                  : `brightness(${Math.max(0.55, 0.7 - (absOffset - 1) * 0.15)}) blur(${absOffset * 2.5}px)`,
-              }}
-              transition={{ type: "spring", stiffness: 280, damping: 32, mass: 0.9 }}
-              onClick={() => !isActive && setActiveIndex(i)}
-              whileHover={!isActive ? { opacity: 0.75, scale: Math.max(0.76, 0.88 - (absOffset - 1) * 0.08) } : undefined}
+              key={activeIndex}
+              custom={dir}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ type: "tween", duration: 0.48, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute inset-0"
             >
-              <HotelCard hotel={room} />
+              {/* Background image with cross-fade on image change */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={imageIndex}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.55 }}
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url('https://images.openbookings.co/${room.id}/${room.images[imageIndex]}')` }}
+                />
+              </AnimatePresence>
+
+              {/* Gradient overlays */}
+              <div className="absolute inset-0 bg-linear-to-r from-black/45 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-black/15" />
+
+              {/* Image selector — bottom left */}
+              {imageCount > 1 && (
+                <div className="absolute bottom-6 left-7 flex items-center gap-3 z-10">
+                  <button
+                    type="button"
+                    aria-label="Previous image"
+                    onClick={prevImage}
+                    className="flex size-7 items-center justify-center rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white/65 hover:text-white hover:bg-black/55 transition-colors"
+                  >
+                    <ChevronLeft className="size-3.5" strokeWidth={2} />
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {room.images.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-label={`Image ${i + 1}`}
+                        onClick={() => setImageIndex(i)}
+                        className={`rounded-full transition-all duration-300 ${
+                          i === imageIndex
+                            ? "w-6 h-1.5 bg-white"
+                            : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Next image"
+                    onClick={nextImage}
+                    className="flex size-7 items-center justify-center rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white/65 hover:text-white hover:bg-black/55 transition-colors"
+                  >
+                    <ChevronRight className="size-3.5" strokeWidth={2} />
+                  </button>
+                </div>
+              )}
+
+              {/* ── Info panel ── */}
+              <AnimatePresence>
+                {panelOpen ? (
+                  <motion.div
+                    key="panel"
+                    initial={{ opacity: 0, x: 32 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 32 }}
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                    className="absolute top-5 right-5 bottom-5 w-[min(28%,296px)] bg-black/28 backdrop-blur-2xl rounded-2xl border border-white/12 flex flex-col overflow-hidden"
+                  >
+                    {/* Collapse button */}
+                    <button
+                      type="button"
+                      aria-label="Collapse info"
+                      onClick={() => setPanelOpen(false)}
+                      className="absolute top-3.5 right-3.5 size-7 flex items-center justify-center rounded-full bg-white/8 border border-white/10 text-white/40 hover:text-white/75 transition-colors z-10"
+                    >
+                      <ChevronRight className="size-3.5" strokeWidth={2} />
+                    </button>
+
+                    {/* Scrollable content */}
+                    <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-5 [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10">
+                      {/* Name + type */}
+                      <div className="pr-8">
+                        <p className="text-xs uppercase tracking-[0.2em] text-white/35 mb-1.5">
+                          {room.description.type}
+                        </p>
+                        <h3 className="font-serif text-2xl sm:text-[1.7rem] text-white leading-snug">
+                          {room.name}
+                        </h3>
+                      </div>
+
+                      {/* Stats grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-white/5 rounded-xl p-3 border border-white/6">
+                          <p className="text-xs text-white/35 mb-1">Bed</p>
+                          <p className="text-sm text-white/80 font-medium leading-snug">{room.description.bed}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-3 border border-white/6">
+                          <p className="text-xs text-white/35 mb-1">Size</p>
+                          <p className="text-sm text-white/80 font-medium">{room.description.size}</p>
+                        </div>
+                      </div>
+
+                      {/* Highlights */}
+                      <div className="flex flex-col gap-2.5">
+                        <p className="text-xs uppercase tracking-[0.15em] text-white/30">Highlights</p>
+                        {room.tags.slice(0, 5).map((tag) => (
+                          <div key={tag} className="flex items-center gap-2.5">
+                            <Check className="size-3 text-white/35 shrink-0" strokeWidth={2.5} />
+                            <span className="text-sm text-white/65">{tag}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Footer: price + actions */}
+                    <div className="px-5 pt-4 pb-5 border-t border-white/8 flex flex-col gap-3 shrink-0">
+                      <div>
+                        <p className="text-xs text-white/35">From</p>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="font-serif text-3xl text-white">€{room.price}</span>
+                          <span className="text-sm text-white/35">/ night</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          aria-label="Like this room"
+                          onClick={toggleLike}
+                          className={`size-11 flex items-center justify-center rounded-xl border transition-all ${
+                            liked.has(activeIndex)
+                              ? "bg-red-500/15 border-red-500/25 text-red-400"
+                              : "bg-white/5 border-white/10 text-white/45 hover:text-white/75"
+                          }`}
+                        >
+                          <Heart
+                            className={`size-4 transition-all ${liked.has(activeIndex) ? "fill-current" : ""}`}
+                            strokeWidth={1.8}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex-1 h-11 bg-white text-black font-semibold text-sm rounded-xl hover:bg-white/90 transition-colors"
+                        >
+                          Book
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  /* Info icon — collapsed state */
+                  <motion.button
+                    key="info-btn"
+                    type="button"
+                    aria-label="Show room info"
+                    initial={{ opacity: 0, scale: 0.75 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.75 }}
+                    transition={{ duration: 0.2 }}
+                    onClick={() => setPanelOpen(true)}
+                    className="absolute bottom-6 right-6 size-11 flex items-center justify-center rounded-full bg-black/35 backdrop-blur-xl border border-white/15 text-white/70 hover:text-white hover:bg-black/50 transition-colors z-10"
+                  >
+                    <span className="font-serif italic text-xl font-light leading-none select-none pb-px">i</span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </motion.div>
-          );
-        })}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Navigation */}
-      <div className="flex items-center justify-center gap-6 mt-10">
+      <div className="flex items-center justify-center gap-6 py-6 shrink-0">
         <button
           type="button"
           aria-label="Previous room"
@@ -267,14 +427,11 @@ function RoomsCoverflowCarousel({ rooms }: { rooms: HotelCardData[] }) {
               key={i}
               type="button"
               aria-label={`Go to room ${i + 1}`}
-              onClick={() => setActiveIndex(i)}
+              onClick={() => navigate(i)}
               className="relative flex size-6 items-center justify-center"
             >
               <motion.span
-                animate={{
-                  width: i === activeIndex ? 20 : 6,
-                  opacity: i === activeIndex ? 1 : 0.35,
-                }}
+                animate={{ width: i === activeIndex ? 20 : 6, opacity: i === activeIndex ? 1 : 0.35 }}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className="block h-1.5 rounded-full bg-white"
               />
@@ -307,32 +464,17 @@ export default function HotelPage({
 
   const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
   const MTStyleKey = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
-  function getMaptilerUrl({ lng, lat, zoom = 14, width = 640, height = 400 }: { 
-    lng: number, lat: number, zoom?: number, width?: number, height?: number 
-  }) {
-    return `https://api.maptiler.com/maps/${MTStyleKey}/static/${lng},${lat},${zoom}/${width}x${height}@2x.png?key=${maptilerKey}&markers=${lng},${lat}`;
-  }
-
-  const coordinates = (hero && typeof hero.lat === "number" && typeof hero.lon === "number")
-    ? [hero.lat, hero.lon]
-    : null;
 
   useEffect(() => {
     fetch(`/api/query/pr?slug=${encodeURIComponent(hotel_slug)}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data: HotelPageData | null) => setHero(data))
-      .catch(() => {});
+      .catch(() => { });
   }, [hotel_slug]);
-
-  const MapURL =
-    hero && typeof hero.lon === "number" && typeof hero.lat === "number"
-      ? getMaptilerUrl({ lng: hero.lon, lat: hero.lat })
-      : null;
 
   return (
     <div className="bg-[#0a0a0a] text-white">
       <Nav authError={authError} onDismissAuthError={() => setAuthError(null)} />
-
       {/* ── Section 1: Hero — exactly one viewport tall ── */}
       <section className="relative h-screen overflow-hidden">
         <div
@@ -387,50 +529,81 @@ export default function HotelPage({
       </section>
 
       {/* ── Section 2: Overview ── */}
-      <section className="px-4 sm:px-8 md:px-24 py-28 sm:py-36 max-w-7xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6">Overview</p>
-        <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-10 max-w-3xl">
+      <section className="px-4 sm:px-8 md:px-24 py-28 sm:py-36 max-w-6xl mx-auto">
+        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
+        <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center whitespace-nowrap">
           Where stillness meets the sea
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 text-white/60 text-lg leading-relaxed">
-          <p>
-            Nestled along a secluded coastline, {hero?.name} is a sanctuary built for those who seek
-            beauty without compromise. Every surface, every view, every moment has been considered
-            with quiet precision.
-          </p>
-          <p>
-            Guests arrive to discover that luxury here is not loud — it is the sound of water at
-            dusk, a perfectly rested morning, and a team that anticipates before you ask. This is
-            your home for as long as you choose to stay.
-          </p>
+        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start">
+          {/* Highlights sidebar */}
+          <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7">
+            {/* Key info */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+              <span className="font-serif text-3xl text-white">8.9</span>
+                <div className="flex flex-col items-start">
+                  <span className="text-sm text-white/65">Excellent</span>
+                  <span className="text-xs text-white/35">324 reviews</span>
+                </div>
+              </div>
+            </div>
+       
+
+            <div className="border-t border-white/6" />
+
+            {/* Recent review */}
+            <div className="flex flex-col gap-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Recent Review</p>
+              <blockquote className="text-sm text-white/55 leading-relaxed italic">
+                &ldquo;The most breathtaking sunsets I have ever experienced. Every detail was considered — from the thread count to the scent of the towels. We will return.&rdquo;
+              </blockquote>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/30">— Maria K., May 2025</span>
+                <span className="flex items-center gap-1 bg-blue-500/12 text-blue-400 text-sm font-semibold rounded-lg px-2.5 py-1 border border-blue-500/15">
+                  9.4
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Description text */}
+          <div className="flex flex-col gap-8 text-white/60 text-lg leading-relaxed pt-2">
+            <p>
+              Nestled along a secluded coastline, {hero?.name} is a sanctuary built for those who seek
+              beauty without compromise. Every surface, every view, every moment has been considered
+              with quiet precision. Guests arrive to discover that luxury here is not loud — it is the sound of water at
+              dusk, a perfectly rested morning, and a team that anticipates before you ask. This is
+              your home for as long as you choose to stay.
+            </p>
+          </div>
         </div>
       </section>
 
       {/* ── Section 3: Rooms ── */}
-      <section className="bg-white/3 border-t border-white/6 py-16 sm:py-24 overflow-hidden">
-        <div className="max-w-7xl mx-auto">
-          <div className="px-4 sm:px-8 md:px-24 mb-14">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6">Accommodations</p>
-            <h2 className="font-serif text-4xl sm:text-5xl">Rooms &amp; Suites</h2>
-          </div>
-          <RoomsCoverflowCarousel rooms={ROOM_CARDS} />
+      <section className="bg-white/3 border-t border-white/6 flex flex-col pt-10 pb-4">
+        <div className="text-center px-4 mb-6 shrink-0">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">Accommodations</p>
+          <h2 className="font-serif text-4xl sm:text-5xl">Rooms &amp; Suites</h2>
         </div>
+        <RoomsCarousel rooms={ROOM_CARDS} />
       </section>
+ 
 
       {/* ── Section 4: Amenities ── */}
       <section className="px-4 sm:px-8 md:px-24 py-28 sm:py-36 max-w-7xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6">Facilities</p>
-        <h2 className="font-serif text-4xl sm:text-5xl mb-14">Amenities</h2>
+        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Facilities</p>
+        <h2 className="font-serif text-4xl sm:text-5xl mb-14 text-center">Amenities</h2>
         <AmenitiesGroupBento />
       </section>
 
       {/* ── Section 5: Location ── */}
       <section className="bg-white/3 border-t border-white/6 py-28 sm:py-36">
         <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6">Find us</p>
-          <h2 className="font-serif text-4xl sm:text-5xl mb-10">Location</h2>
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Find us</p>
+          <h2 className="font-serif text-4xl sm:text-5xl mb-10 text-center">Location</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 items-stretch md:h-80 overflow-hidden">
             <div className="flex flex-col text-white/60 text-lg leading-relaxed">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-4">About</p>
               <p>
                 Situated just 20 minutes from the international airport, yet a world apart from
                 the ordinary. Our address is one of the region&apos;s best-kept secrets.
@@ -448,34 +621,34 @@ export default function HotelPage({
                   <p>57037 Portoferraio, Italy</p>
                 </div>
               </div>
-         
+
             </div>
             {/* Map */}
             <div className="h-full min-h-64 rounded-2xl overflow-hidden border border-white/8">
-            {typeof hero?.lon === "number" && typeof hero?.lat === "number" && (
-              <div className="relative w-full h-full pointer-events-none select-none">
-                <Map
-                  styles={maptilerKey && MTStyleKey ? {
-                    dark: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
-                    light: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
-                  } : undefined}
-                  center={[hero.lon, hero.lat]}
-                  zoom={14}
-                  attributionControl={false}
-                  interactive={false}
-                >
-                  <MapMarker longitude={hero.lon} latitude={hero.lat}>
-                    <MarkerContent>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 24 30" fill="none">
-                        <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 21 9 21s9-14.25 9-21c0-4.97-4.03-9-9-9z" fill="oklch(62% 0.21 268)"/>
-                        <circle cx="12" cy="9" r="3.5" fill="white"/>
-                      </svg>
-                    </MarkerContent>
-                  </MapMarker>
-                </Map>
-              </div>
-         
-            )}
+              {typeof hero?.lon === "number" && typeof hero?.lat === "number" && (
+                <div className="relative w-full h-full pointer-events-none select-none">
+                  <Map
+                    styles={maptilerKey && MTStyleKey ? {
+                      dark: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
+                      light: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
+                    } : undefined}
+                    center={[hero.lon, hero.lat]}
+                    zoom={14}
+                    attributionControl={false}
+                    interactive={false}
+                  >
+                    <MapMarker longitude={hero.lon} latitude={hero.lat}>
+                      <MarkerContent>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 24 30" fill="none">
+                          <path d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 21 9 21s9-14.25 9-21c0-4.97-4.03-9-9-9z" fill="oklch(62% 0.21 268)" />
+                          <circle cx="12" cy="9" r="3.5" fill="white" />
+                        </svg>
+                      </MarkerContent>
+                    </MapMarker>
+                  </Map>
+                </div>
+
+              )}
             </div>
             {/* Highlights */}
             <div className="flex flex-col min-h-0">
