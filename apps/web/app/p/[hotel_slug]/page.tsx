@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, Wifi, BedDouble, ConciergeBell, Sparkles, Star, Check, Building2, Heart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, BedDouble, ConciergeBell, Sparkles, Check, Heart, Dumbbell, Leaf, Flame, Wine, Car, Anchor, Images, X } from "lucide-react";
 import { Nav } from "@/components/nav";
 import { type HotelCardData } from "@/components/search/HotelCard";
 import type { HotelPageData } from "@/app/api/query/pr/route";
@@ -59,80 +59,34 @@ const ROOM_CARDS: HotelCardData[] = [
   },
 ];
 
-const AMENITY_GROUPS = [
-  {
-    id: "recreation",
-    label: "Recreation",
-    icon: Waves,
-    wide: true,
-    items: ["Infinity Pool", "Private Beach", "Fitness Centre", "Yoga Terrace", "Tennis Court", "Water Sports"],
-  },
-  {
-    id: "wellness",
-    label: "Wellness",
-    icon: Sparkles,
-    wide: false,
-    items: ["Spa & Wellness", "Turkish Bath", "Aromatherapy", "Sauna"],
-  },
-  {
-    id: "dining",
-    label: "Dining",
-    icon: Utensils,
-    wide: false,
-    items: ["Fine Dining", "Rooftop Bar", "In-Room Dining", "Private Chef"],
-  },
-  {
-    id: "room",
-    label: "Room",
-    icon: BedDouble,
-    wide: false,
-    items: ["King Bed", "Rain Shower", "Mini Bar", "Espresso Machine", "Pillow Menu"],
-  },
-  {
-    id: "services",
-    label: "Services",
-    icon: ConciergeBell,
-    wide: false,
-    items: ["Concierge 24h", "Airport Transfer", "Yacht Charter", "Butler Service"],
-  },
+const AMENITIES = [
+  { icon: Waves, label: "Infinity Pool" },
+  { icon: Waves, label: "Private Beach" },
+  { icon: Dumbbell, label: "Fitness Centre" },
+  { icon: Leaf, label: "Yoga Terrace" },
+  { icon: Sparkles, label: "Spa & Wellness" },
+  { icon: Flame, label: "Turkish Bath" },
+  { icon: Utensils, label: "Fine Dining" },
+  { icon: Wine, label: "Rooftop Bar" },
+  { icon: ConciergeBell, label: "Concierge 24h" },
+  { icon: Car, label: "Airport Transfer" },
+  { icon: Anchor, label: "Yacht Charter" },
+  { icon: ConciergeBell, label: "Butler Service" },
+  { icon: BedDouble, label: "King Bed" },
+  { icon: BedDouble, label: "Rain Shower" },
+  { icon: BedDouble, label: "Mini Bar" },
+  { icon: Coffee, label: "Espresso Machine" },
+  { icon: BedDouble, label: "Pillow Menu" },
+  { icon: Leaf, label: "Aromatherapy" },
+  { icon: Flame, label: "Sauna" },
+  { icon: Utensils, label: "In-Room Dining" },
+  { icon: Utensils, label: "Private Chef" },
+  { icon: Waves, label: "Tennis Court" },
+  { icon: Waves, label: "Water Sports" },
 ];
 
-function AmenitiesGroupBento() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {AMENITY_GROUPS.map((group) => {
-        const Icon = group.icon;
-        return (
-          <div
-            key={group.id}
-            className={[
-              "group rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7",
-              "hover:border-white/13 hover:bg-white/4 transition-all",
-              group.wide ? "sm:col-span-2 lg:col-span-2" : "",
-            ].join(" ")}
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-white/6 text-white/35 group-hover:text-white/55 transition-colors">
-                <Icon className="size-4" strokeWidth={1.5} />
-              </span>
-              <span className="text-sm uppercase tracking-[0.15em] text-white/45 group-hover:text-white/65 transition-colors font-medium">
-                {group.label}
-              </span>
-            </div>
-            <div className={`grid gap-x-6 gap-y-3 ${group.wide ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-1"}`}>
-              {group.items.map((item) => (
-                <div key={item} className="flex items-center gap-3">
-                  <span className="size-1 rounded-full bg-white/20 shrink-0" />
-                  <span className="text-sm text-white/55 group-hover:text-white/70 transition-colors">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+const AMENITIES_PREVIEW = 10;
+const PILLS_PER_ROW = 5;
 
 const HIGHLIGHTS = [
   { icon: Waves, label: "Private Beach", distance: "50 m" },
@@ -144,6 +98,184 @@ const HIGHLIGHTS = [
   { icon: Train, label: "Portoferraio Pier", distance: "2.1 km" },
   { icon: Plane, label: "Marina di Campo Airport", distance: "18 km" },
 ];
+
+function GalleryDialog({ images, initialIndex, onClose }: { images: string[]; initialIndex: number; onClose: () => void }) {
+  const [current, setCurrent] = useState(initialIndex);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setCurrent((i) => (i - 1 + images.length) % images.length);
+      if (e.key === "ArrowRight") setCurrent((i) => (i + 1) % images.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [images.length, onClose]);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.22 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md"
+        onClick={onClose}
+      >
+        <button
+          type="button"
+          aria-label="Close gallery"
+          onClick={onClose}
+          className="absolute top-5 right-5 size-10 flex items-center justify-center rounded-full bg-white/10 border border-white/15 text-white/60 hover:text-white hover:bg-white/20 transition-colors z-10"
+        >
+          <X className="size-5" strokeWidth={1.8} />
+        </button>
+
+        <div className="relative flex items-center justify-center w-full h-full px-16" onClick={(e) => e.stopPropagation()}>
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={current}
+              src={images[current]}
+              alt={`Gallery image ${current + 1}`}
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="max-h-[82vh] max-w-full object-contain rounded-xl shadow-2xl select-none"
+              draggable={false}
+            />
+          </AnimatePresence>
+
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Previous image"
+                onClick={() => setCurrent((i) => (i - 1 + images.length) % images.length)}
+                className="absolute left-4 size-11 flex items-center justify-center rounded-full bg-black/40 border border-white/15 text-white/60 hover:text-white hover:bg-black/60 transition-colors"
+              >
+                <ChevronLeft className="size-5" strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                aria-label="Next image"
+                onClick={() => setCurrent((i) => (i + 1) % images.length)}
+                className="absolute right-4 size-11 flex items-center justify-center rounded-full bg-black/40 border border-white/15 text-white/60 hover:text-white hover:bg-black/60 transition-colors"
+              >
+                <ChevronRight className="size-5" strokeWidth={1.8} />
+              </button>
+            </>
+          )}
+
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Go to image ${i + 1}`}
+                onClick={() => setCurrent(i)}
+                className={`rounded-full transition-all duration-300 ${i === current ? "w-5 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/35 hover:bg-white/60"}`}
+              />
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function GalleryBar({ images }: { images: string[] }) {
+  const [paused, setPaused] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogIndex, setDialogIndex] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  if (!images.length) return null;
+
+  // Duplicate enough times to fill a seamless loop
+  const repeated = [...images, ...images, ...images, ...images];
+
+  // Fixed scroll speed regardless of image count (px/s)
+  const SCROLL_SPEED = 60;
+  const itemWidth = 195 + 8; // tile width + gap-2
+  const scrollDistance = images.length * 2 * itemWidth; // -50% of 4× set
+  const scrollDuration = scrollDistance / SCROLL_SPEED;
+
+  const openDialog = (index: number) => {
+    setDialogIndex(index % images.length);
+    setDialogOpen(true);
+  };
+
+  return (
+    <>
+      <div
+        className="relative w-full overflow-hidden"
+        style={{ height: 130 }}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+      >
+        {/* Scrolling track */}
+        <div
+          ref={trackRef}
+          className="flex gap-2 absolute left-0 top-0 h-full"
+          style={{
+            animation: `gallery-scroll ${scrollDuration}s linear infinite`,
+            animationPlayState: paused ? "paused" : "running",
+            width: "max-content",
+          }}
+        >
+          {repeated.map((url, i) => (
+            <div
+              key={i}
+              className="relative h-full shrink-0 cursor-pointer overflow-hidden rounded-lg"
+              style={{ width: 195 }}
+              onClick={() => openDialog(i)}
+            >
+              <img
+                src={url}
+                alt={`Property image ${(i % images.length) + 1}`}
+                className="w-full h-full object-cover"
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Hover overlay */}
+        {paused && (
+          <div
+            className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer backdrop-blur-sm"
+            onClick={() => openDialog(0)}
+          >
+            <div className="flex items-center gap-3 bg-black/55 backdrop-blur-md rounded-full px-6 py-3 text-white pointer-events-none select-none">
+              <Images className="size-5" strokeWidth={1.6} />
+              <span className="text-lg font-medium tracking-wide">View images</span>
+            </div>
+          </div>
+        )}
+
+        {/* Edge fade masks */}
+        <div className="absolute inset-y-0 left-0 w-20 bg-linear-to-r from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+        <div className="absolute inset-y-0 right-0 w-20 bg-linear-to-l from-[#0a0a0a] to-transparent pointer-events-none z-10" />
+      </div>
+
+      <style>{`
+        @keyframes gallery-scroll {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+      `}</style>
+
+      {dialogOpen && (
+        <GalleryDialog
+          images={images}
+          initialIndex={dialogIndex}
+          onClose={() => setDialogOpen(false)}
+        />
+      )}
+    </>
+  );
+}
 
 const slideVariants = {
   enter: (d: number) => ({ x: d > 0 ? "100%" : "-100%", opacity: 0 }),
@@ -238,7 +370,15 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
               animate="center"
               exit="exit"
               transition={{ type: "tween", duration: 0.48, ease: [0.32, 0.72, 0, 1] }}
-              className="absolute inset-0"
+              className="absolute inset-0 cursor-grab active:cursor-grabbing"
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.12}
+              dragMomentum={false}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -55) next();
+                else if (info.offset.x > 55) prev();
+              }}
             >
               {/* Background image with cross-fade on image change */}
               <AnimatePresence mode="wait">
@@ -259,7 +399,7 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
 
               {/* Image selector — bottom left */}
               {imageCount > 1 && (
-                <div className="absolute bottom-6 left-7 flex items-center gap-3 z-10">
+                <div className="absolute bottom-6 left-7 flex items-center gap-3 z-10" onPointerDown={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     aria-label="Previous image"
@@ -306,6 +446,7 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
                     exit={{ opacity: 0, x: 32 }}
                     transition={{ duration: 0.28, ease: "easeOut" }}
                     className="absolute top-5 right-5 bottom-5 w-[min(28%,296px)] bg-black/28 backdrop-blur-2xl rounded-2xl border border-white/12 flex flex-col overflow-hidden"
+                  onPointerDown={(e) => e.stopPropagation()}
                   >
                     {/* Collapse button */}
                     <button
@@ -461,6 +602,7 @@ export default function HotelPage({
   const { hotel_slug } = use(params);
   const [authError, setAuthError] = useState<string | null>(null);
   const [hero, setHero] = useState<HotelPageData | null>(null);
+  const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
 
   const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
   const MTStyleKey = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
@@ -476,7 +618,7 @@ export default function HotelPage({
     <div className="bg-[#0a0a0a] text-white">
       <Nav authError={authError} onDismissAuthError={() => setAuthError(null)} />
       {/* ── Section 1: Hero — exactly one viewport tall ── */}
-      <section className="relative h-screen overflow-hidden">
+      <section className="relative h-screen overflow-hidden bg-[#0a0a0a]">
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url('${hero?.hero_image_url}')` }}
@@ -528,30 +670,37 @@ export default function HotelPage({
         </div>
       </section>
 
+      {/* ── Gallery bar ── */}
+      {hero?.gallery_images?.length ? (
+        <div className="py-4 bg-[#0a0a0a]">
+          <GalleryBar images={hero.gallery_images} />
+        </div>
+      ) : null}
+
       {/* ── Section 2: Overview ── */}
-      <section className="px-4 sm:px-8 md:px-24 py-28 sm:py-36 max-w-6xl mx-auto">
+      <section className="bg-[#111111]">
+        <div className="px-4 sm:px-8 md:px-24 py-16 sm:py-20 max-w-6xl mx-auto">
         <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
         <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center whitespace-nowrap">
           Where stillness meets the sea
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start">
-          {/* Highlights sidebar */}
+
+        {/* Review score + short intro */}
+        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start mb-14">
+          {/* Review score */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7">
-            {/* Key info */}
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
-              <span className="font-serif text-3xl text-white">8.9</span>
+                <span className="font-serif text-3xl text-white">8.9</span>
                 <div className="flex flex-col items-start">
                   <span className="text-sm text-white/65">Excellent</span>
                   <span className="text-xs text-white/35">324 reviews</span>
                 </div>
               </div>
             </div>
-       
 
             <div className="border-t border-white/6" />
 
-            {/* Recent review */}
             <div className="flex flex-col gap-4">
               <p className="text-xs uppercase tracking-[0.18em] text-white/30">Recent Review</p>
               <blockquote className="text-sm text-white/55 leading-relaxed italic">
@@ -566,7 +715,7 @@ export default function HotelPage({
             </div>
           </div>
 
-          {/* Description text */}
+          {/* Short intro */}
           <div className="flex flex-col gap-8 text-white/60 text-lg leading-relaxed pt-2">
             <p>
               Nestled along a secluded coastline, {hero?.name} is a sanctuary built for those who seek
@@ -577,10 +726,59 @@ export default function HotelPage({
             </p>
           </div>
         </div>
+
+        {/* Separator */}
+        <div className="border-t border-white/8 mb-8" />
+
+        {/* Amenities — card rows */}
+        <div className="flex flex-col gap-3">
+          {(() => {
+            const overflow = !amenitiesExpanded && AMENITIES.length > AMENITIES_PREVIEW;
+            const sliceEnd = overflow ? AMENITIES_PREVIEW - 1 : AMENITIES.length;
+            const visible = AMENITIES.slice(0, sliceEnd);
+            const rows: typeof AMENITIES[] = [];
+            for (let i = 0; i < visible.length; i += PILLS_PER_ROW) {
+              rows.push(visible.slice(i, i + PILLS_PER_ROW));
+            }
+            // Append overflow card to last row
+            if (overflow) rows[rows.length - 1] = [...rows[rows.length - 1], null as unknown as typeof AMENITIES[number]];
+            const remaining = AMENITIES.length - sliceEnd;
+
+            return rows.map((row, ri) => (
+              <div key={ri} className="flex gap-3">
+                {row.map((amenity) => {
+                  if (!amenity) {
+                    return (
+                      <button
+                        key="overflow"
+                        type="button"
+                        onClick={()=> null}
+                        className="flex items-center justify-center gap-3 px-4 py-4 rounded-xl border border-white/8 bg-white/3 flex-1 min-w-0 hover:bg-white/6 hover:border-white/14 transition-colors group"
+                      >
+                        <span className="text-sm font-semibold text-white/60 group-hover:text-white/80 transition-colors">+{remaining} more</span>
+                      </button>
+                    );
+                  }
+                  const { icon: Icon, label } = amenity;
+                  return (
+                    <div
+                      key={label}
+                      className="flex items-center gap-3 px-4 py-4 rounded-xl border border-white/8 bg-white/3 flex-1 min-w-0"
+                    >
+                      <Icon className="size-5 text-white/45 shrink-0" strokeWidth={1.5} />
+                      <span className="text-sm text-white/60 truncate">{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ));
+          })()}
+        </div>
+        </div>
       </section>
 
       {/* ── Section 3: Rooms ── */}
-      <section className="bg-white/3 border-t border-white/6 flex flex-col pt-10 pb-4">
+      <section className="bg-[#0a0a0a] border-t border-white/6 flex flex-col pt-10 pb-4">
         <div className="text-center px-4 mb-6 shrink-0">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">Accommodations</p>
           <h2 className="font-serif text-4xl sm:text-5xl">Rooms &amp; Suites</h2>
@@ -589,15 +787,8 @@ export default function HotelPage({
       </section>
  
 
-      {/* ── Section 4: Amenities ── */}
-      <section className="px-4 sm:px-8 md:px-24 py-28 sm:py-36 max-w-7xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Facilities</p>
-        <h2 className="font-serif text-4xl sm:text-5xl mb-14 text-center">Amenities</h2>
-        <AmenitiesGroupBento />
-      </section>
-
-      {/* ── Section 5: Location ── */}
-      <section className="bg-white/3 border-t border-white/6 py-28 sm:py-36">
+      {/* ── Section 4: Location ── */}
+      <section className="bg-[#111111] border-t border-white/6 py-28 sm:py-36">
         <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Find us</p>
           <h2 className="font-serif text-4xl sm:text-5xl mb-10 text-center">Location</h2>
@@ -674,8 +865,9 @@ export default function HotelPage({
         </div>
       </section>
 
-      {/* ── Section 6: Book CTA ── */}
-      <section className="px-4 sm:px-8 md:px-20 py-28 max-w-7xl mx-auto">
+      {/* ── Section 5: Book CTA ── */}
+      <section className="bg-[#0a0a0a] border-t border-white/6">
+        <div className="px-4 sm:px-8 md:px-20 py-28 max-w-7xl mx-auto">
         {/* Logos row — collaboration style */}
         <div className="flex items-center justify-center gap-8 mb-8">
           {hero?.logo_image_url ? (
@@ -710,10 +902,11 @@ export default function HotelPage({
             Book Now
           </button>
         </div>
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/6 px-4 sm:px-8 md:px-24 py-10 max-w-7xl mx-auto flex items-center justify-between text-white/30 text-sm">
+      <footer className="bg-[#0a0a0a] border-t border-white/6 px-4 sm:px-8 md:px-24 py-10 max-w-7xl mx-auto flex items-center justify-between text-white/30 text-sm">
         <span>{hero?.name}</span>
         <span>© {new Date().getFullYear()} OpenBookings</span>
       </footer>

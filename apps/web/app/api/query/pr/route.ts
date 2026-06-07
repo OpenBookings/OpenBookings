@@ -39,7 +39,7 @@ const HERO_SQL = `
         FROM property_images pi2
         WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo')
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC
-        LIMIT 4
+        LIMIT 20
       ) pi
     ) AS gallery_images
   FROM properties p
