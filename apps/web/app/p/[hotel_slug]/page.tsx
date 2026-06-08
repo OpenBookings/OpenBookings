@@ -2,11 +2,12 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, BedDouble, ConciergeBell, Sparkles, Check, Heart, Dumbbell, Leaf, Flame, Wine, Car, Anchor, Images, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, BedDouble, ConciergeBell, Sparkles, Check, Heart, Dumbbell, Leaf, Flame, Wine, Car, Anchor, Images, X, LogIn, LogOut, XCircle, CreditCard, Baby, Dog, AlertCircle, Clock } from "lucide-react";
 import { Nav } from "@/components/nav";
 import { type HotelCardData } from "@/components/search/HotelCard";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import { Map, MapMarker, MarkerContent } from "@/components/ui/map";
+import FocusOverlay from "@/components/plug-in/FocusOverlay";
 
 const ROOM_CARDS: HotelCardData[] = [
   {
@@ -222,6 +223,8 @@ function GalleryBar({ images }: { images: string[] }) {
             animation: `gallery-scroll ${scrollDuration}s linear infinite`,
             animationPlayState: paused ? "paused" : "running",
             width: "max-content",
+            filter: paused ? "blur(7px) brightness(0.6)" : undefined,
+            transition: "filter 0.25s ease",
           }}
         >
           {repeated.map((url, i) => (
@@ -244,7 +247,7 @@ function GalleryBar({ images }: { images: string[] }) {
         {/* Hover overlay */}
         {paused && (
           <div
-            className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer backdrop-blur-sm"
+            className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer"
             onClick={() => openDialog(0)}
           >
             <div className="flex items-center gap-3 bg-black/55 backdrop-blur-md rounded-full px-6 py-3 text-white pointer-events-none select-none">
@@ -416,11 +419,10 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
                         type="button"
                         aria-label={`Image ${i + 1}`}
                         onClick={() => setImageIndex(i)}
-                        className={`rounded-full transition-all duration-300 ${
-                          i === imageIndex
-                            ? "w-6 h-1.5 bg-white"
-                            : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
-                        }`}
+                        className={`rounded-full transition-all duration-300 ${i === imageIndex
+                          ? "w-6 h-1.5 bg-white"
+                          : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
+                          }`}
                       />
                     ))}
                   </div>
@@ -446,7 +448,7 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
                     exit={{ opacity: 0, x: 32 }}
                     transition={{ duration: 0.28, ease: "easeOut" }}
                     className="absolute top-5 right-5 bottom-5 w-[min(28%,296px)] bg-black/28 backdrop-blur-2xl rounded-2xl border border-white/12 flex flex-col overflow-hidden"
-                  onPointerDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     {/* Collapse button */}
                     <button
@@ -488,7 +490,7 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
                         {room.tags.slice(0, 5).map((tag) => (
                           <div key={tag} className="flex items-center gap-2.5">
                             <Check className="size-3 text-white/35 shrink-0" strokeWidth={2.5} />
-                            <span className="text-sm text-white/65">{tag}</span>
+                            <span className="text-sm text-white/75">{tag}</span>
                           </div>
                         ))}
                       </div>
@@ -508,11 +510,10 @@ function RoomsCarousel({ rooms }: { rooms: HotelCardData[] }) {
                           type="button"
                           aria-label="Like this room"
                           onClick={toggleLike}
-                          className={`size-11 flex items-center justify-center rounded-xl border transition-all ${
-                            liked.has(activeIndex)
-                              ? "bg-red-500/15 border-red-500/25 text-red-400"
-                              : "bg-white/5 border-white/10 text-white/45 hover:text-white/75"
-                          }`}
+                          className={`size-11 flex items-center justify-center rounded-xl border transition-all ${liked.has(activeIndex)
+                            ? "bg-red-500/15 border-red-500/25 text-red-400"
+                            : "bg-white/5 border-white/10 text-white/45 hover:text-white/75"
+                            }`}
                         >
                           <Heart
                             className={`size-4 transition-all ${liked.has(activeIndex) ? "fill-current" : ""}`}
@@ -603,6 +604,8 @@ export default function HotelPage({
   const [authError, setAuthError] = useState<string | null>(null);
   const [hero, setHero] = useState<HotelPageData | null>(null);
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
+  const [amenitiesOverlayOpen, setAmenitiesOverlayOpen] = useState(false);
+  const [businessDetailsOpen, setBusinessDetailsOpen] = useState(false);
 
   const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
   const MTStyleKey = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
@@ -678,114 +681,290 @@ export default function HotelPage({
       ) : null}
 
       {/* ── Section 2: Overview ── */}
-      <section className="bg-[#111111]">
+      <section className="bg-[#0a0a0a]">
         <div className="px-4 sm:px-8 md:px-24 py-16 sm:py-20 max-w-6xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
-        <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center whitespace-nowrap">
-          Where stillness meets the sea
-        </h2>
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
+          <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center whitespace-nowrap">
+            Where stillness meets the sea
+          </h2>
 
-        {/* Review score + short intro */}
-        <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start mb-14">
-          {/* Review score */}
-          <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <span className="font-serif text-3xl text-white">8.9</span>
-                <div className="flex flex-col items-start">
-                  <span className="text-sm text-white/65">Excellent</span>
-                  <span className="text-xs text-white/35">324 reviews</span>
+          {/* Review score + short intro */}
+          <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start mb-14">
+            {/* Review score */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-7">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="font-serif text-3xl text-white">8.9</span>
+                  <div className="flex flex-col items-start">
+                    <span className="text-sm text-white/65">Excellent</span>
+                    <span className="text-xs text-white/35">324 reviews</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/6" />
+
+              <div className="flex flex-col gap-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/30">Recent Review</p>
+                <blockquote className="text-sm text-white/70 leading-relaxed italic">
+                  &ldquo;The most breathtaking sunsets I have ever experienced. Every detail was considered — from the thread count to the scent of the towels. We will return.&rdquo;
+                </blockquote>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-white/30">— Maria K., May 2025</span>
+                  <span className="flex items-center gap-1 bg-blue-500/12 text-blue-400 text-sm font-semibold rounded-lg px-2.5 py-1 border border-blue-500/15">
+                    9.4
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-white/6" />
-
-            <div className="flex flex-col gap-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Recent Review</p>
-              <blockquote className="text-sm text-white/55 leading-relaxed italic">
-                &ldquo;The most breathtaking sunsets I have ever experienced. Every detail was considered — from the thread count to the scent of the towels. We will return.&rdquo;
-              </blockquote>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/30">— Maria K., May 2025</span>
-                <span className="flex items-center gap-1 bg-blue-500/12 text-blue-400 text-sm font-semibold rounded-lg px-2.5 py-1 border border-blue-500/15">
-                  9.4
-                </span>
-              </div>
+            {/* Short intro */}
+            <div className="flex flex-col gap-8 text-white/75 text-lg leading-relaxed pt-2">
+              <p>
+                Nestled along a secluded coastline, {hero?.name} is a sanctuary built for those who seek
+                beauty without compromise. Every surface, every view, every moment has been considered
+                with quiet precision. Guests arrive to discover that luxury here is not loud — it is the sound of water at
+                dusk, a perfectly rested morning, and a team that anticipates before you ask. This is
+                your home for as long as you choose to stay.
+              </p>
             </div>
           </div>
 
-          {/* Short intro */}
-          <div className="flex flex-col gap-8 text-white/60 text-lg leading-relaxed pt-2">
-            <p>
-              Nestled along a secluded coastline, {hero?.name} is a sanctuary built for those who seek
-              beauty without compromise. Every surface, every view, every moment has been considered
-              with quiet precision. Guests arrive to discover that luxury here is not loud — it is the sound of water at
-              dusk, a perfectly rested morning, and a team that anticipates before you ask. This is
-              your home for as long as you choose to stay.
-            </p>
-          </div>
-        </div>
+          {/* Separator */}
+          <div className="border-t border-white/8 mb-8" />
 
-        {/* Separator */}
-        <div className="border-t border-white/8 mb-8" />
+          {/* Amenities — card rows */}
+          <div className="flex flex-col gap-3">
+            {(() => {
+              const overflow = !amenitiesExpanded && AMENITIES.length > AMENITIES_PREVIEW;
+              const sliceEnd = overflow ? AMENITIES_PREVIEW : AMENITIES.length;
+              const visible = AMENITIES.slice(0, sliceEnd);
+              const rows: typeof AMENITIES[] = [];
+              for (let i = 0; i < visible.length; i += PILLS_PER_ROW) {
+                rows.push(visible.slice(i, i + PILLS_PER_ROW));
+              }
+              const remaining = AMENITIES.length - sliceEnd;
 
-        {/* Amenities — card rows */}
-        <div className="flex flex-col gap-3">
-          {(() => {
-            const overflow = !amenitiesExpanded && AMENITIES.length > AMENITIES_PREVIEW;
-            const sliceEnd = overflow ? AMENITIES_PREVIEW - 1 : AMENITIES.length;
-            const visible = AMENITIES.slice(0, sliceEnd);
-            const rows: typeof AMENITIES[] = [];
-            for (let i = 0; i < visible.length; i += PILLS_PER_ROW) {
-              rows.push(visible.slice(i, i + PILLS_PER_ROW));
-            }
-            // Append overflow card to last row
-            if (overflow) rows[rows.length - 1] = [...rows[rows.length - 1], null as unknown as typeof AMENITIES[number]];
-            const remaining = AMENITIES.length - sliceEnd;
-
-            return rows.map((row, ri) => (
-              <div key={ri} className="flex gap-3">
-                {row.map((amenity) => {
-                  if (!amenity) {
-                    return (
-                      <button
-                        key="overflow"
-                        type="button"
-                        onClick={()=> null}
-                        className="flex items-center justify-center gap-3 px-4 py-4 rounded-xl border border-white/8 bg-white/3 flex-1 min-w-0 hover:bg-white/6 hover:border-white/14 transition-colors group"
-                      >
-                        <span className="text-sm font-semibold text-white/60 group-hover:text-white/80 transition-colors">+{remaining} more</span>
-                      </button>
-                    );
-                  }
-                  const { icon: Icon, label } = amenity;
-                  return (
-                    <div
-                      key={label}
-                      className="flex items-center gap-3 px-4 py-4 rounded-xl border border-white/8 bg-white/3 flex-1 min-w-0"
-                    >
-                      <Icon className="size-5 text-white/45 shrink-0" strokeWidth={1.5} />
-                      <span className="text-sm text-white/60 truncate">{label}</span>
+              return (
+                <>
+                  {rows.map((row, ri) => (
+                    <div key={ri} className="flex gap-3">
+                      {row.map((amenity) => {
+                        const { icon: Icon, label } = amenity;
+                        return (
+                          <div
+                            key={label}
+                            className="flex items-center gap-3 px-4 py-4 rounded-xl border border-white/8 bg-white/3 flex-1 min-w-0"
+                          >
+                            <Icon className="size-5 text-white/45 shrink-0" strokeWidth={1.5} />
+                            <span className="text-sm text-white/70 truncate">{label}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            ));
-          })()}
-        </div>
+                  ))}
+                  {overflow && (
+                    <button
+                      type="button"
+                      onClick={() => setAmenitiesOverlayOpen(true)}
+                      className="mt-1 self-center text-xs uppercase tracking-[0.18em] text-white/50 hover:text-white/75 transition-colors"
+                    >
+                      +{remaining} more amenities
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </div>
       </section>
 
       {/* ── Section 3: Rooms ── */}
-      <section className="bg-[#0a0a0a] border-t border-white/6 flex flex-col pt-10 pb-4">
+      <section className="bg-[#111111] border-t border-white/6 flex flex-col pt-10 pb-4">
         <div className="text-center px-4 mb-6 shrink-0">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">Accommodations</p>
           <h2 className="font-serif text-4xl sm:text-5xl">Rooms &amp; Suites</h2>
         </div>
         <RoomsCarousel rooms={ROOM_CARDS} />
       </section>
- 
+
+
+
+
+      {/* ── Section 5: House Rules ── */}
+      <section className="bg-[#0a0a0a] border-t border-white/6 py-28 sm:py-36">
+        <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Policies</p>
+          <h2 className="font-serif text-4xl sm:text-5xl mb-16 text-center">House Rules</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            {/* Check-in / Check-out */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Arrival &amp; Departure</p>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/40">
+                    <LogIn className="size-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-sm text-white/80 font-medium mb-0.5">Check-in</p>
+                    <p className="text-sm text-white/65">From 15:00 — Early check-in subject to availability</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/40">
+                    <LogOut className="size-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-sm text-white/80 font-medium mb-0.5">Check-out</p>
+                    <p className="text-sm text-white/65">Until 12:00 — Late check-out available on request</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/40">
+                    <Clock className="size-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-sm text-white/80 font-medium mb-0.5">Reception</p>
+                    <p className="text-sm text-white/65">24-hour front desk — no check-in cut-off</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Cancellation & Prepayment */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Cancellation &amp; Prepayment</p>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/40">
+                    <XCircle className="size-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-sm text-white/80 font-medium mb-0.5">Free Cancellation</p>
+                    <p className="text-sm text-white/65">Cancel up to 7 days before arrival at no charge. Cancellations within 7 days incur the first night&apos;s charge.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/8 text-white/40">
+                    <CreditCard className="size-4" strokeWidth={1.6} />
+                  </span>
+                  <div>
+                    <p className="text-sm text-white/80 font-medium mb-0.5">Prepayment</p>
+                    <p className="text-sm text-white/65">Required to secure your booking. Full authorization needed before arrival.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-12">
+            {/* Children & Beds */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Children &amp; Beds</p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <Baby className="size-4 shrink-0 text-white/35" strokeWidth={1.6} />
+                  <p className="text-sm text-white/65">Children of all ages welcome</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <BedDouble className="size-4 shrink-0 text-white/35" strokeWidth={1.6} />
+                  <p className="text-sm text-white/65">Cots available on request — free of charge</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <BedDouble className="size-4 shrink-0 text-white/35" strokeWidth={1.6} />
+                  <p className="text-sm text-white/65">Extra beds available — €60 per night</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Methods */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Payment Methods</p>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { src: "https://cdn.openbookings.co/media/visa.png", alt: "Visa" },
+                  { src: "https://cdn.openbookings.co/media/mastercard.png", alt: "Mastercard" },
+                  { src: "https://cdn.openbookings.co/media/amex.svg", alt: "American Express" },
+                  { src: "https://cdn.openbookings.co/media/wero-1.svg", alt: "Wero" },
+                  { src: "https://cdn.openbookings.co/media/applepay.svg", alt: "Apple Pay" },
+                ].map(({ src, alt }) => (
+                  <div key={alt} className="flex items-center justify-center h-9 w-16 rounded-lg bg-white/6 border border-white/10">
+                    <img src={src} alt={alt} className="h-5 w-10 object-contain" draggable={false} />
+                  </div>
+                ))}
+                {/* Cash — hotel-only, not a card */}
+                <div className="group relative flex items-center justify-center h-9 w-16 rounded-lg bg-white/6 border border-white/10" style={{ cursor: "help" }}>
+                  <span className="text-xs font-medium text-white/55 tracking-wide border-b border-dashed border-white/30">Cash</span>
+                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[180px] rounded-lg bg-[#1a1a1a] border border-white/12 px-3 py-2 text-xs text-white/70 leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20 text-center">
+                    Payment method only available at the hotel
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Other */}
+            <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30">Other</p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="size-4 shrink-0 text-white/35" strokeWidth={1.6} />
+                  <p className="text-sm text-white/65">Minimum check-in age: 18 years</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Dog className="size-4 shrink-0 text-white/35" strokeWidth={1.6} />
+                  <p className="text-sm text-white/65">Pets not allowed</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fine Print */}
+          <div className="rounded-2xl border border-white/8 bg-white/2 p-7">
+            <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-5">The Not-So-Small Print</p>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2.5 text-sm text-white/60 leading-relaxed">
+              {[
+                "A security deposit of €500 is required upon arrival and will be fully refunded within 7 days of check-out, subject to room inspection.",
+                "Government-issued photo ID and a valid credit card are required at check-in. Guests must be at least 18 years old.",
+                "Quiet hours are observed between 22:00 and 08:00. Events and gatherings require prior written approval from management.",
+                "The property reserves the right to pre-authorise the provided credit card prior to arrival. Rates displayed are inclusive of applicable taxes and service charges.",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2.5">
+                  <span className="mt-1.5 size-1 rounded-full bg-white/25 shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="border-t border-white/6 mt-6 pt-6">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-3">Legal information</p>
+              <p className="text-sm text-white/60 leading-relaxed">
+                OpenBookings acts as Online Travel Agent and payment intermediary on behalf of {hero?.name ?? "this property"}.
+                <br />Your reservation is a direct contract with {hero?.name ?? "this property"}. {" "}
+                <button
+                  type="button"
+                  onClick={() => setBusinessDetailsOpen(true)}
+                  className="text-white/45 hover:text-white/70 transition-colors underline underline-offset-3 decoration-white/20 hover:decoration-white/45"
+                >
+                  View business details →
+                </button>
+              </p>
+            </div>
+
+            <div className="border-t border-white/6 mt-6 pt-5 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+              <a
+                href="https://openbookings.co"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-white/45 hover:text-white/70 transition-colors underline underline-offset-3 decoration-white/20 hover:decoration-white/45"
+              >
+                Cancellation policy →
+              </a>
+              
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ── Section 4: Location ── */}
       <section className="bg-[#111111] border-t border-white/6 py-28 sm:py-36">
@@ -793,7 +972,7 @@ export default function HotelPage({
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Find us</p>
           <h2 className="font-serif text-4xl sm:text-5xl mb-10 text-center">Location</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 items-stretch md:h-80 overflow-hidden">
-            <div className="flex flex-col text-white/60 text-lg leading-relaxed">
+            <div className="flex flex-col text-white/75 text-lg leading-relaxed">
               <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-4">About</p>
               <p>
                 Situated just 20 minutes from the international airport, yet a world apart from
@@ -807,7 +986,7 @@ export default function HotelPage({
                 >
                   <Navigation className="size-4" strokeWidth={1.6} />
                 </button>
-                <div className="space-y-1 text-white/40 text-sm">
+                <div className="space-y-1 text-white/60 text-sm">
                   <p>Via della Quiete 1</p>
                   <p>57037 Portoferraio, Italy</p>
                 </div>
@@ -853,7 +1032,7 @@ export default function HotelPage({
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/6 text-white/40 group-hover:text-white/60 transition-colors">
                       <Icon className="size-3.5" strokeWidth={1.6} />
                     </span>
-                    <span className="flex-1 text-sm text-white/70 group-hover:text-white/90 transition-colors truncate">
+                    <span className="flex-1 text-sm text-white/80 group-hover:text-white transition-colors truncate">
                       {label}
                     </span>
                     <span className="text-xs text-white/30 shrink-0 tabular-nums">{distance}</span>
@@ -865,43 +1044,43 @@ export default function HotelPage({
         </div>
       </section>
 
-      {/* ── Section 5: Book CTA ── */}
+      {/* ── Section 6: Book CTA ── */}
       <section className="bg-[#0a0a0a] border-t border-white/6">
         <div className="px-4 sm:px-8 md:px-20 py-28 max-w-7xl mx-auto">
-        {/* Logos row — collaboration style */}
-        <div className="flex items-center justify-center gap-8 mb-8">
-          {hero?.logo_image_url ? (
+          {/* Logos row — collaboration style */}
+          <div className="flex items-center justify-center gap-8 mb-8">
+            {hero?.logo_image_url ? (
+              <img
+                src={hero.logo_image_url}
+                alt={`${hero.name} logo`}
+                className="h-auto w-28 object-contain"
+              />
+            ) : (
+              <span className="text-white/70 text-base font-medium tracking-wide">{hero?.name}</span>
+            )}
+            <span className="flex items-center justify-center h-14 text-white/20 text-3xl font-thin select-none leading-none">×</span>
             <img
-              src={hero.logo_image_url}
-              alt={`${hero.name} logo`}
+              src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
+              alt="OpenBookings"
               className="h-auto w-28 object-contain"
             />
-          ) : (
-            <span className="text-white/70 text-base font-medium tracking-wide">{hero?.name}</span>
-          )}
-          <span className="flex items-center justify-center h-14 text-white/20 text-3xl font-thin select-none leading-none">×</span>
-          <img
-            src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
-            alt="OpenBookings"
-            className="h-auto w-28 object-contain"
-          />
-        </div>
+          </div>
 
-        <div className="max-w-xl mx-auto mt-10 pb-10 border-t border-white/6"></div>
+          <div className="max-w-xl mx-auto mt-10 pb-10 border-t border-white/6"></div>
 
-        {/* CTA */}
-        <div className="text-center ">
-          <h2 className="font-serif text-5xl sm:text-6xl md:text-7xl mb-6">Ready to arrive?</h2>
-          <p className="text-white/50 text-xl mb-12 max-w-lg mx-auto">
-            Reserve your stay at {hero?.name} and let us take care of the rest.
-          </p>
-          <button
-            type="button"
-            className="bg-white text-black font-semibold text-lg px-10 py-4 rounded-xl hover:bg-white/90 transition-colors"
-          >
-            Book Now
-          </button>
-        </div>
+          {/* CTA */}
+          <div className="text-center ">
+            <h2 className="font-serif text-5xl sm:text-6xl md:text-7xl mb-6">Ready to arrive?</h2>
+            <p className="text-white/70 text-xl mb-12 max-w-lg mx-auto">
+              Reserve your stay at {hero?.name} and let us take care of the rest.
+            </p>
+            <button
+              type="button"
+              className="bg-white text-black font-semibold text-lg px-10 py-4 rounded-xl hover:bg-white/90 transition-colors"
+            >
+              Book Now
+            </button>
+          </div>
         </div>
       </section>
 
@@ -910,6 +1089,101 @@ export default function HotelPage({
         <span>{hero?.name}</span>
         <span>© {new Date().getFullYear()} OpenBookings</span>
       </footer>
+
+      {/* Amenities overlay */}
+      <FocusOverlay open={amenitiesOverlayOpen} onClose={() => setAmenitiesOverlayOpen(false)}>
+        <div className="bg-[#111] border border-white/10 rounded-2xl p-8 max-h-[80vh] overflow-y-auto [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10]">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-1">All Amenities</p>
+              <h2 className="font-serif text-2xl sm:text-3xl text-white">What&rsquo;s included</h2>
+            </div>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setAmenitiesOverlayOpen(false)}
+              className="size-9 flex items-center justify-center rounded-full bg-white/6 border border-white/10 text-white/40 hover:text-white/70 transition-colors shrink-0"
+            >
+              <X className="size-4" strokeWidth={1.8} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/6 rounded-xl overflow-hidden border border-white/6">
+            {[...AMENITIES].sort((a, b) => a.label.localeCompare(b.label)).map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-3 px-5 py-3.5 bg-[#111]">
+                <Icon className="size-4 text-white/40 shrink-0" strokeWidth={1.5} />
+                <span className="text-sm text-white/75">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </FocusOverlay>
+
+      {/* Business details overlay */}
+      <FocusOverlay open={businessDetailsOpen} onClose={() => setBusinessDetailsOpen(false)}>
+        <div className="bg-[#111] border border-white/10 rounded-2xl p-8 max-h-[80vh] overflow-y-auto [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10]">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Business Details</p>
+              <h2 className="font-serif text-3xl sm:text-4xl text-white leading-tight">{hero?.name ?? "Property"}</h2>
+            </div>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setBusinessDetailsOpen(false)}
+              className="size-9 flex items-center justify-center rounded-full bg-white/6 border border-white/10 text-white/40 hover:text-white/70 transition-colors shrink-0 mt-1"
+            >
+              <X className="size-4" strokeWidth={1.8} />
+            </button>
+          </div>
+
+          <p className="text-sm text-white/60 leading-relaxed mb-8 border-b border-white/8 pb-8">
+            OpenBookings acts as Online Travel Agent and payment intermediary on behalf of this property.
+            Your reservation is a direct contract with the property operator listed below. The operator
+            is responsible for the delivery of services described on this listing and is registered with the
+            relevant local trade authority.
+          </p>
+
+          <div className="relative group mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 transition-[filter] duration-300 group-hover:blur-none blur-sm select-none group-hover:select-auto">
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Legal name</p>
+                <p className="text-sm text-white/80 font-medium">{hero?.name ?? "—"}</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Address</p>
+                <p className="text-sm text-white/80">Via della Quiete 1</p>
+                <p className="text-sm text-white/80">57037 Portoferraio, Italy</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Email</p>
+                <p className="text-sm text-white/80">reservations@{hero?.name?.toLowerCase().replace(/\s+/g, "") ?? "property"}.com</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Phone</p>
+                <p className="text-sm text-white/80">+39 0565 944 111</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Company registration</p>
+                <p className="text-sm text-white/80 font-mono tracking-wide">IT 03847210491</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">VAT number</p>
+                <p className="text-sm text-white/80 font-mono tracking-wide">REA LI-92847</p>
+              </div>
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 group-hover:opacity-0">
+              <span className="text-xs uppercase tracking-[0.18em] text-white/45">Hover to show</span>
+            </div>
+          </div>
+
+          <div className="border-t border-white/8 pt-6">
+            <p className="text-xs text-white/30 leading-relaxed">
+              This information is provided for transparency purposes. OpenBookings verifies operator registrations at the time of onboarding. For disputes or complaints, contact us at{" "}
+              <span className="text-white/50">support@openbookings.co</span>.
+            </p>
+          </div>
+        </div>
+      </FocusOverlay>
     </div>
   );
 }
