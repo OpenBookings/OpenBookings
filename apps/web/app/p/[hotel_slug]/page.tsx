@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, BedDouble, ConciergeBell, Sparkles, Check, Heart, Dumbbell, Leaf, Flame, Wine, Car, Anchor, Images, X, LogIn, LogOut, XCircle, CreditCard, Baby, Dog, AlertCircle, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Coffee, Utensils, Landmark, Waves, ShoppingBag, TreePine, Train, Plane, Navigation, BedDouble, ConciergeBell, Sparkles, Check, Heart, Dumbbell, Leaf, Flame, Wine, Car, Anchor, Images, X, LogIn, LogOut, XCircle, CreditCard, Baby, Dog, AlertCircle, Clock, Droplets, ChefHat, Trophy } from "lucide-react";
 import { Nav } from "@/components/nav";
 import { type HotelCardData } from "@/components/search/HotelCard";
 import type { HotelPageData } from "@/app/api/query/pr/route";
@@ -60,34 +60,147 @@ const ROOM_CARDS: HotelCardData[] = [
   },
 ];
 
-const AMENITIES = [
-  { icon: Waves, label: "Infinity Pool" },
-  { icon: Waves, label: "Private Beach" },
-  { icon: Dumbbell, label: "Fitness Centre" },
-  { icon: Leaf, label: "Yoga Terrace" },
-  { icon: Sparkles, label: "Spa & Wellness" },
-  { icon: Flame, label: "Turkish Bath" },
-  { icon: Utensils, label: "Fine Dining" },
-  { icon: Wine, label: "Rooftop Bar" },
-  { icon: ConciergeBell, label: "Concierge 24h" },
-  { icon: Car, label: "Airport Transfer" },
-  { icon: Anchor, label: "Yacht Charter" },
-  { icon: ConciergeBell, label: "Butler Service" },
-  { icon: BedDouble, label: "King Bed" },
-  { icon: BedDouble, label: "Rain Shower" },
-  { icon: BedDouble, label: "Mini Bar" },
-  { icon: Coffee, label: "Espresso Machine" },
-  { icon: BedDouble, label: "Pillow Menu" },
-  { icon: Leaf, label: "Aromatherapy" },
-  { icon: Flame, label: "Sauna" },
-  { icon: Utensils, label: "In-Room Dining" },
-  { icon: Utensils, label: "Private Chef" },
-  { icon: Waves, label: "Tennis Court" },
-  { icon: Waves, label: "Water Sports" },
+const AMENITY_CATEGORIES = [
+  {
+    label: "Room & Comfort",
+    items: [
+      { icon: BedDouble, label: "king bed" },
+      { icon: Droplets, label: "rain shower" },
+      { icon: Coffee, label: "espresso machine" },
+      { icon: Wine, label: "mini bar" },
+      { icon: BedDouble, label: "pillow menu" },
+      { icon: Leaf, label: "aromatherapy" },
+    ],
+  },
+  {
+    label: "Dining",
+    items: [
+      { icon: Utensils, label: "fine dining" },
+      { icon: Wine, label: "rooftop bar" },
+      { icon: Utensils, label: "in-room dining" },
+      { icon: ChefHat, label: "private chef" },
+    ],
+  },
+  {
+    label: "Wellness & Sport",
+    items: [
+      { icon: Dumbbell, label: "fitness centre" },
+      { icon: Leaf, label: "yoga terrace" },
+      { icon: Sparkles, label: "spa & wellness" },
+      { icon: Flame, label: "turkish bath" },
+      { icon: Flame, label: "sauna" },
+    ],
+  },
+  {
+    label: "Pool & Outdoors",
+    items: [
+      { icon: Waves, label: "infinity pool" },
+      { icon: Waves, label: "private beach" },
+      { icon: Trophy, label: "tennis court" },
+      { icon: Anchor, label: "water sports" },
+    ],
+  },
+  {
+    label: "Services",
+    items: [
+      { icon: ConciergeBell, label: "concierge 24h" },
+      { icon: Car, label: "airport transfer" },
+      { icon: Anchor, label: "yacht charter" },
+      { icon: ConciergeBell, label: "butler service" },
+    ],
+  },
 ];
+
+const AMENITIES = AMENITY_CATEGORIES.flatMap((c) => c.items);
 
 const AMENITIES_PREVIEW = 10;
 const PILLS_PER_ROW = 5;
+
+const NAV_SECTIONS = [
+  { id: "overview", label: "Overview" },
+  { id: "rooms", label: "Rooms" },
+  { id: "policies", label: "Policies" },
+  { id: "location", label: "Location" },
+  { id: "book", label: "Footnote" },
+] as const;
+
+function ScrollSpy() {
+  const [active, setActive] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const THRESHOLD = window.innerHeight * 0.35;
+
+    const update = () => {
+      const hero = document.getElementById("hero");
+      if (hero) {
+        setVisible(hero.getBoundingClientRect().bottom < window.innerHeight * 0.1);
+      }
+
+      let current: string | null = null;
+      for (const { id } of NAV_SECTIONS) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= THRESHOLD) current = id;
+      }
+      setActive(current);
+    };
+
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.nav
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 12 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="fixed left-5 top-1/2 -translate-y-1/2 z-40 flex-col items-start gap-3 hidden md:flex"
+          aria-label="Page sections"
+        >
+          {NAV_SECTIONS.map(({ id, label }) => {
+            const isActive = active === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => scrollTo(id)}
+                className="group flex items-center gap-2.5"
+                aria-label={`Go to ${label}`}
+              >
+                <span
+                  className={`block rounded-full transition-all duration-300 ${
+                    isActive
+                      ? "w-5 h-1.5 bg-white"
+                      : "w-1.5 h-1.5 bg-white/30 group-hover:bg-white/55"
+                  }`}
+                />
+                <span
+                  className={`text-xs tracking-[0.12em] uppercase transition-all duration-200 ${
+                    isActive
+                      ? "text-white/70 opacity-100"
+                      : "text-white/0 group-hover:text-white/50 opacity-0 group-hover:opacity-100"
+                  }`}
+                  style={{ transitionProperty: "opacity, color" }}
+                >
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </motion.nav>
+      )}
+    </AnimatePresence>
+  );
+}
 
 const HIGHLIGHTS = [
   { icon: Waves, label: "Private Beach", distance: "50 m" },
@@ -620,8 +733,9 @@ export default function HotelPage({
   return (
     <div className="bg-[#0a0a0a] text-white">
       <Nav authError={authError} onDismissAuthError={() => setAuthError(null)} />
+      <ScrollSpy />
       {/* ── Section 1: Hero — exactly one viewport tall ── */}
-      <section className="relative h-screen overflow-hidden bg-[#0a0a0a]">
+      <section id="hero" className="relative h-screen overflow-hidden bg-[#0a0a0a]">
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url('${hero?.hero_image_url}')` }}
@@ -681,7 +795,7 @@ export default function HotelPage({
       ) : null}
 
       {/* ── Section 2: Overview ── */}
-      <section className="bg-[#0a0a0a]">
+      <section id="overview" className="bg-[#0a0a0a]">
         <div className="px-4 sm:px-8 md:px-24 py-16 sm:py-20 max-w-6xl mx-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
           <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center whitespace-nowrap">
@@ -780,7 +894,7 @@ export default function HotelPage({
       </section>
 
       {/* ── Section 3: Rooms ── */}
-      <section className="bg-[#111111] border-t border-white/6 flex flex-col pt-10 pb-4">
+      <section id="rooms" className="bg-[#111111] border-t border-white/6 flex flex-col pt-10 pb-4">
         <div className="text-center px-4 mb-6 shrink-0">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">Accommodations</p>
           <h2 className="font-serif text-4xl sm:text-5xl">Rooms &amp; Suites</h2>
@@ -792,7 +906,7 @@ export default function HotelPage({
 
 
       {/* ── Section 5: House Rules ── */}
-      <section className="bg-[#0a0a0a] border-t border-white/6 py-28 sm:py-36">
+      <section id="policies" className="bg-[#0a0a0a] border-t border-white/6 py-28 sm:py-36">
         <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Policies</p>
           <h2 className="font-serif text-4xl sm:text-5xl mb-16 text-center">House Rules</h2>
@@ -967,7 +1081,7 @@ export default function HotelPage({
       </section>
 
       {/* ── Section 4: Location ── */}
-      <section className="bg-[#111111] border-t border-white/6 py-28 sm:py-36">
+      <section id="location" className="bg-[#111111] border-t border-white/6 py-28 sm:py-36">
         <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
           <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Find us</p>
           <h2 className="font-serif text-4xl sm:text-5xl mb-10 text-center">Location</h2>
@@ -1045,7 +1159,7 @@ export default function HotelPage({
       </section>
 
       {/* ── Section 6: Book CTA ── */}
-      <section className="bg-[#0a0a0a] border-t border-white/6">
+      <section id="book" className="bg-[#0a0a0a] border-t border-white/6">
         <div className="px-4 sm:px-8 md:px-20 py-28 max-w-7xl mx-auto">
           {/* Logos row — collaboration style */}
           <div className="flex items-center justify-center gap-8 mb-8">
@@ -1092,26 +1206,39 @@ export default function HotelPage({
 
       {/* Amenities overlay */}
       <FocusOverlay open={amenitiesOverlayOpen} onClose={() => setAmenitiesOverlayOpen(false)}>
-        <div className="bg-[#111] border border-white/10 rounded-2xl p-8 max-h-[80vh] overflow-y-auto [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10]">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-1">All Amenities</p>
-              <h2 className="font-serif text-2xl sm:text-3xl text-white">What&rsquo;s included</h2>
-            </div>
+        <div
+          className="bg-[#0f0f0e] border border-white/[0.07] rounded-2xl flex flex-col overflow-hidden"
+          style={{ width: "min(640px, 92vw)", maxHeight: "82vh" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-8 pt-7 pb-6 shrink-0">
+            <h2 className="font-serif text-2xl text-white tracking-tight">All Amenities</h2>
             <button
               type="button"
               aria-label="Close"
               onClick={() => setAmenitiesOverlayOpen(false)}
-              className="size-9 flex items-center justify-center rounded-full bg-white/6 border border-white/10 text-white/40 hover:text-white/70 transition-colors shrink-0"
+              className="size-7 flex items-center justify-center text-white/25 hover:text-white/55 transition-colors"
             >
-              <X className="size-4" strokeWidth={1.8} />
+              <X className="size-4" strokeWidth={1.5} />
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/6 rounded-xl overflow-hidden border border-white/6">
-            {[...AMENITIES].sort((a, b) => a.label.localeCompare(b.label)).map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-3 px-5 py-3.5 bg-[#111]">
-                <Icon className="size-4 text-white/40 shrink-0" strokeWidth={1.5} />
-                <span className="text-sm text-white/75">{label}</span>
+
+          {/* Categories */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-8 [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10]">
+            {AMENITY_CATEGORIES.map((category, ci) => (
+              <div key={category.label}>
+                {ci > 0 && <div className="border-t border-white/5.5" />}
+                <div className="py-6">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mb-5">{category.label}</p>
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                    {category.items.map(({ icon: Icon, label }) => (
+                      <div key={label} className="flex items-center gap-2.5 min-w-0">
+                        <Icon className="size-[15px] text-white/22 shrink-0" strokeWidth={1.4} />
+                        <span className="text-[13px] text-white/60 truncate">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
