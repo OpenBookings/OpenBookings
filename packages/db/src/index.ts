@@ -7,15 +7,27 @@ const connectionString =
     ? process.env.DEV_DATABASE_URL
     : process.env.DATABASE_URL;
 
-const pool =
-  connectionString
-    ? new Pool({
-        connectionString,
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
-      })
-    : null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __pgPool: Pool | null | undefined;
+}
+
+function createPool(): Pool | null {
+  if (!connectionString) return null;
+  return new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 10000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+  });
+}
+
+const pool: Pool | null = globalThis.__pgPool ?? createPool();
+if (process.env.NODE_ENV !== "production") {
+  globalThis.__pgPool = pool;
+}
 
 /** Get the shared Postgres pool. Throws if DATABASE_URL is not set. */
 export function getPool(): Pool {
