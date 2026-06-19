@@ -7,7 +7,7 @@ export interface HotelPageData {
   subtitle: string | null;
   hero_image_url: string | null;
   logo_image_url: string | null;
-  gallery_images: string[];
+  gallery_images: { url: string; alt_text: string | null }[];
   lat: number;
   lon: number;
 }
@@ -33,9 +33,9 @@ const HERO_SQL = `
       LIMIT 1
     ) AS logo_image_url,
     (
-      SELECT COALESCE(json_agg(pi.url ORDER BY pi.sort_order ASC, pi.created_at ASC), '[]'::json)
+      SELECT COALESCE(json_agg(json_build_object('url', pi.url, 'alt_text', pi.alt_text) ORDER BY pi.sort_order ASC, pi.created_at ASC), '[]'::json)
       FROM (
-        SELECT pi2.url, pi2.sort_order, pi2.created_at
+        SELECT pi2.url, pi2.alt_text, pi2.sort_order, pi2.created_at
         FROM property_images pi2
         WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo')
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC

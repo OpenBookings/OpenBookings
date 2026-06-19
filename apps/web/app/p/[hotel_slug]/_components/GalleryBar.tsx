@@ -4,12 +4,14 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Images, X, ChevronLeft, ChevronRight } from "lucide-react";
 
+type GalleryImage = { url: string; alt_text: string | null };
+
 function GalleryDialog({
   images,
   initialIndex,
   onClose,
 }: {
-  images: string[];
+  images: GalleryImage[];
   initialIndex: number;
   onClose: () => void;
 }) {
@@ -24,6 +26,8 @@ function GalleryDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [images.length, onClose]);
+
+  const { url, alt_text } = images[current];
 
   return (
     <AnimatePresence>
@@ -45,19 +49,34 @@ function GalleryDialog({
         </button>
 
         <div
-          className="relative flex items-center justify-center w-full h-full px-16"
+          className="relative flex flex-col items-center justify-center w-full h-full px-16 gap-4"
           onClick={(e) => e.stopPropagation()}
         >
           <AnimatePresence mode="wait">
+            {alt_text && (
+              <motion.p
+                key={`title-${current}`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="text-white text-base font-medium tracking-wide text-center max-w-lg"
+              >
+                {alt_text}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence mode="wait">
             <motion.img
               key={current}
-              src={images[current]}
-              alt={`Gallery image ${current + 1}`}
+              src={url}
+              alt={alt_text ?? `Gallery image ${current + 1}`}
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.28, ease: "easeOut" }}
-              className="max-h-[82vh] max-w-full object-contain rounded-xl shadow-2xl select-none"
+              className="max-h-[78vh] max-w-full object-contain rounded-xl shadow-2xl select-none"
               draggable={false}
             />
           </AnimatePresence>
@@ -105,7 +124,7 @@ function GalleryDialog({
 const SCROLL_SPEED = 60; // px/s
 const ITEM_WIDTH = 195 + 8; // tile + gap
 
-export function GalleryBar({ images }: { images: string[] }) {
+export function GalleryBar({ images }: { images: GalleryImage[] }) {
   const [paused, setPaused] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogIndex, setDialogIndex] = useState(0);
@@ -141,7 +160,7 @@ export function GalleryBar({ images }: { images: string[] }) {
             transition: "filter 0.25s ease",
           }}
         >
-          {repeated.map((url, i) => (
+          {repeated.map((img, i) => (
             <div
               key={i}
               className="relative h-full shrink-0 cursor-pointer overflow-hidden rounded-lg"
@@ -149,8 +168,8 @@ export function GalleryBar({ images }: { images: string[] }) {
               onClick={() => openDialog(i)}
             >
               <img
-                src={url}
-                alt={`Property image ${(i % images.length) + 1}`}
+                src={img.url}
+                alt={img.alt_text ?? `Property image ${(i % images.length) + 1}`}
                 className="w-full h-full object-cover"
                 draggable={false}
               />
