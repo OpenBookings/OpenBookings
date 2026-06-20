@@ -1,4 +1,4 @@
-import { getPostmarkClient } from "@openbookings/mailing";
+import { getEmailClient, loadTemplate } from "@openbookings/mailing";
 
 const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
 const FROM_ADDRESS =
@@ -9,14 +9,10 @@ export async function sendMagicLink(
   url: string,
   _firstName?: string
 ) {
-  const postmarkClient = getPostmarkClient();
-
-  await postmarkClient.sendEmailWithTemplate({
-    From: FROM_ADDRESS,
-    To: email,
-    TemplateAlias: "code-your-own",
-    TemplateModel: {
-      magicLinkUrl: url,
-    },
-  });
+  await getEmailClient()
+    .from(FROM_ADDRESS)
+    .to(email)
+    .subject("Your sign-in link for OpenBookings")
+    .html(loadTemplate("magic-link", { magicLinkUrl: url }))
+    .send();
 }
