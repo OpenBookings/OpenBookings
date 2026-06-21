@@ -9,7 +9,12 @@ export const auth = createAuth({
   secret: process.env.BETTER_AUTH_SECRET!,
   databaseUrl: process.env.DATABASE_URL!,
   sendMagicLink,
-  trustedOrigins: ["https://appleid.apple.com", "https://openbookings.co"],
+  trustedOrigins: [
+    "https://appleid.apple.com",
+    "https://openbookings.co",
+    "http://localhost:3000",
+    "http://localhost:8080",
+  ],
   dashApiKey: process.env.BETTER_AUTH_DASH_API_KEY,
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,

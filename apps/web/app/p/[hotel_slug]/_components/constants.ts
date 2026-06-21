@@ -39,6 +39,7 @@ export type DbRatePlan = {
   currency: string;
   is_refundable: boolean;
   cancellation_policy: string | null;
+  meal_plan: string | null;
 };
 
 export type DbRoom = {
@@ -48,6 +49,7 @@ export type DbRoom = {
   room_type: string | null;
   bed_type: string | null;
   size_sqm: number | null;
+  max_occupancy: number | null;
   images: string[];
   rate_plans: DbRatePlan[];
   tags: string[];
