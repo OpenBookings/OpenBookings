@@ -46,3 +46,8 @@ next-env.d.ts
 .claude/*
 /apps/web/sql
 *.xml
+
+# Claude Design
+.design-sync
+.ds-sync
+ds-bundle
