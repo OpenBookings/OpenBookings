@@ -13,6 +13,8 @@ export const auth = createAuth({
     "https://appleid.apple.com",
     "https://business.openbookings.co",
     "https://openbookings.co",
+    "http://localhost:3000",
+    "http://localhost:8080",
   ],
   dashApiKey: process.env.BETTER_AUTH_DASH_API_KEY,
   googleClientId: process.env.GOOGLE_CLIENT_ID_BUSINESS,
