@@ -13,6 +13,6 @@ export async function sendMagicLink(
     .from(FROM_ADDRESS)
     .to(email)
     .subject("Your sign-in link for OpenBookings")
-    .html(loadTemplate("magic-link", { magicLinkUrl: url }))
+    .html(loadTemplate("magic-link", { magicLinkUrl: url, email }))
     .send();
 }
