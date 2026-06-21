@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronLeft, ChevronRight, Calendar, Users, Minus, Plus, Info, Heart,
+  ChevronLeft, ChevronRight, Calendar, Users, Minus, Plus, Heart,
 } from "lucide-react";
 import type { DbRoom, DbRatePlan } from "./constants";
 
@@ -265,7 +265,7 @@ function RoomsCarousel({ rooms, activeIndex, onNavigate, liked, onToggleLike, on
 
   return (
     <div className="flex flex-col select-none">
-      <div className="px-4 sm:px-8 md:px-[8%] lg:px-[10%] py-[3%]">
+      <div className="px-4 sm:px-8 md:px-12 py-6 max-w-6xl mx-auto w-full">
         <div
           ref={stageRef}
           className="relative rounded-3xl overflow-hidden bg-white/4"
@@ -375,33 +375,42 @@ function RoomsCarousel({ rooms, activeIndex, onNavigate, liked, onToggleLike, on
 
 // ── Rate card ─────────────────────────────────────────────────────────────────
 
-function RateCard({ rate, qty, onQtyChange }: { rate: DbRatePlan; qty: number; onQtyChange: (v: number) => void }) {
+function RateCard({ rate, maxOccupancy, qty, onQtyChange }: { rate: DbRatePlan; maxOccupancy: number | null; qty: number; onQtyChange: (v: number) => void }) {
   const cancellationText = rate.cancellation_policy ?? (rate.is_refundable ? "Free cancellation" : "Non-refundable");
 
   return (
-    <div className="bg-white/3 rounded-2xl border border-white/8 p-5 flex flex-col gap-4 relative">
-      <button
-        type="button"
-        aria-label="Rate info"
-        className="absolute top-3.5 right-3.5 size-5 rounded-full border border-white/12 flex items-center justify-center text-white/25 hover:text-white/55 transition-colors"
-      >
-        <Info className="size-2.5" strokeWidth={2} />
-      </button>
-
-      <div className="flex flex-col items-center gap-2.5 pt-1">
-        <div className="size-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center">
-          <Users className="size-4 text-white/50" strokeWidth={1.5} />
+    <div className="bg-black/28 backdrop-blur-2xl rounded-2xl border border-white/12 p-5 flex flex-col gap-3.5">
+      {/* People + rate name */}
+      <div className="flex flex-col items-center gap-2 pt-1">
+        <div className="relative">
+          <div className="size-10 rounded-full bg-white/8 border border-white/10 flex items-center justify-center">
+            <Users className="size-4 text-white/50" strokeWidth={1.5} />
+          </div>
+          {maxOccupancy != null && (
+            <span className="absolute -bottom-1 -right-1 size-4 rounded-full bg-white/12 border border-white/15 flex items-center justify-center text-[9px] text-white/60 font-medium tabular-nums leading-none">
+              {maxOccupancy}
+            </span>
+          )}
         </div>
-        <div className="text-center">
-          <p className="font-semibold text-white/90 text-sm leading-snug">{rate.name}</p>
-        </div>
+        <p className="font-semibold text-white/90 text-sm text-center leading-snug">{rate.name}</p>
       </div>
 
-      <p className={`text-xs text-center leading-snug ${rate.is_refundable ? "text-emerald-400/75" : "text-red-400/75"}`}>
+      {/* Meal plan */}
+      {rate.meal_plan && (
+        <div className="flex justify-center">
+          <span className="px-2.5 py-1 text-[11px] rounded-full border border-white/10 bg-white/5 text-white/50 leading-none">
+            {rate.meal_plan}
+          </span>
+        </div>
+      )}
+
+      {/* Cancellation */}
+      <p className={`text-[11px] text-center leading-snug mt-auto ${rate.is_refundable ? "text-emerald-400/70" : "text-red-400/70"}`}>
         {cancellationText}
       </p>
 
-      <div className="border-t border-white/6 pt-3.5 flex items-end justify-between">
+      {/* Price + stepper */}
+      <div className="border-t border-white/8 pt-3.5 flex items-end justify-between">
         <div>
           <div className="flex items-baseline gap-0.5">
             <span className="font-serif text-2xl text-white">€{rate.bar}</span>
@@ -438,17 +447,12 @@ type RatesViewProps = {
   rooms: DbRoom[];
   activeIndex: number;
   onNavigate: (i: number) => void;
-  liked: Set<number>;
-  onToggleLike: () => void;
-  onViewRates: () => void;
 };
 
-function RatesView({ rooms, activeIndex, onNavigate, liked, onToggleLike, onViewRates }: RatesViewProps) {
+function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
   const count = rooms.length;
   const room = rooms[activeIndex];
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-
-  const totalRooms = Object.values(quantities).reduce((a, b) => a + b, 0);
 
   const setQty = useCallback((id: string, val: number) => {
     if (val < 0) return;
@@ -457,24 +461,29 @@ function RatesView({ rooms, activeIndex, onNavigate, liked, onToggleLike, onView
 
   return (
     <div className="flex flex-col select-none">
-      <div className="px-4 sm:px-8 md:px-[8%] lg:px-[10%] py-[3%]">
+      <div className="px-4 sm:px-8 md:px-12 py-6 max-w-6xl mx-auto w-full">
+        {/* Transparent container — sits over the blurred image from RoomsCarousel */}
         <div
-          className="relative rounded-3xl overflow-hidden border border-white/6"
+          className="relative rounded-3xl overflow-hidden"
           style={{ height: "min(72vh, 680px)" }}
         >
-          <div className="absolute inset-0 overflow-y-auto p-5 [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10">
-            <div className="grid grid-cols-2 gap-4">
+          {/* Tiles: pushed right of the sidebar (left-5 + sidebar width + gap) */}
+          <div
+            className="absolute inset-0 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-px [&::-webkit-scrollbar-thumb]:bg-white/10"
+            style={{ paddingLeft: "calc(min(28%, 296px) + 2.5rem)", paddingTop: "1.25rem", paddingRight: "1.25rem", paddingBottom: "1.25rem" }}
+          >
+            <div className="grid gap-3.5 h-full" style={{ gridAutoFlow: "column", gridAutoColumns: "180px", gridTemplateRows: "1fr" }}>
               {room.rate_plans.map((rate) => (
                 <RateCard
                   key={rate.id}
                   rate={rate}
+                  maxOccupancy={room.max_occupancy}
                   qty={quantities[rate.id] ?? 0}
                   onQtyChange={(v) => setQty(rate.id, v)}
                 />
               ))}
             </div>
           </div>
-
         </div>
       </div>
 
@@ -552,7 +561,6 @@ export function RoomsSection({ rooms }: { rooms: DbRoom[] }) {
             rooms={rooms}
             activeIndex={activeIndex}
             onNavigate={setActiveIndex}
-            {...sharedSidebarProps}
           />
         </motion.div>
       </div>

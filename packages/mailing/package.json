@@ -6,9 +6,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "postmark": "^4.0.7"
+    "lettermint": "^2.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "typescript": "^5"
   }
 }

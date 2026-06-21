@@ -24,7 +24,7 @@ const HERO_SQL = `
       SELECT pi.url
       FROM property_images pi
       WHERE pi.property_id = p.id
-      ORDER BY pi.sort_order ASC, pi.created_at ASC
+      ORDER BY (CASE WHEN pi.group = 'hero-image' THEN 0 ELSE 1 END) ASC, pi.sort_order ASC, pi.created_at ASC
       LIMIT 1
     ) AS hero_image_url,
     (
@@ -38,7 +38,7 @@ const HERO_SQL = `
       FROM (
         SELECT pi2.url, pi2.alt_text, pi2.sort_order, pi2.created_at
         FROM property_images pi2
-        WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo')
+        WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo' AND pi2.group != 'hero-image')
         ORDER BY pi2.sort_order ASC, pi2.created_at ASC
         LIMIT 20
       ) pi
@@ -65,6 +65,7 @@ const ROOMS_SQL = `
     r.room_type,
     r.bed_type,
     r.size_sqm,
+    r.max_adults,
     COALESCE(
       (SELECT json_agg(ri.url ORDER BY ri.sort_order ASC, ri.created_at ASC)
        FROM room_images ri WHERE ri.room_id = r.id),
@@ -77,7 +78,8 @@ const ROOMS_SQL = `
         'bar', rp.bar,
         'currency', rp.currency,
         'is_refundable', rp.is_refundable,
-        'cancellation_policy', rp.cancellation_policy
+        'cancellation_policy', rp.cancellation_policy,
+        'meal_plan', 'Breakfast included'
       ) ORDER BY rp.bar ASC)
       FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true),
       '[]'::json
