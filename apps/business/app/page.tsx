@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link";
 
 export default function MarketingPage() {
@@ -64,6 +66,18 @@ export default function MarketingPage() {
             </div>
           ))}
         </div>
+
+
+        <button
+          type="button"
+          className="mt-12 text-red-500 underline hover:text-red-700 transition-colors text-xs"
+          onClick={() => {
+            // Simulate a runtime error
+            throw new Error("Test error triggered by developer");
+          }}
+        >
+          Trigger test error
+        </button>
       </main>
 
       {/* Footer */}
