@@ -20,6 +20,10 @@ steps:
       - 'NEXT_PUBLIC_MAPTILER_API_KEY=${_NEXT_PUBLIC_MAPTILER_API_KEY}'
       - '--build-arg'
       - 'NEXT_PUBLIC_MAPTILER_STYLE_ID=${_NEXT_PUBLIC_MAPTILER_STYLE_ID}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_SENTRY_DSN=${_NEXT_PUBLIC_SENTRY_DSN}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}'
       - '.'
 
   # ---------- Push ----------

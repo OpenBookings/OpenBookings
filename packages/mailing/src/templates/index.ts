@@ -1,139 +1,109 @@
 export const templates: Record<string, string> = {
   "magic-link": `<!doctype html>
-<html>
-  <body>
-    <div
-      style='background-color:#1a1a1a;color:#03124A;font-family:Avenir, "Avenir Next LT Pro", Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif;font-size:16px;font-weight:400;letter-spacing:0.15008px;line-height:1.5;margin:0;padding:32px 0;min-height:100%;width:100%'
-    >
-      <table
-        align="center"
-        width="100%"
-        style="margin:0 auto;max-width:600px;background-color:#1a1a1a"
-        role="presentation"
-        cellspacing="0"
-        cellpadding="0"
-        border="0"
-      >
-        <tbody>
-          <tr style="width:100%">
-            <td>
-              <div style="padding:24px 24px 0px 24px;text-align:center">
-                <img
-                  alt=""
-                  src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
-                  height="128"
-                  style="height:128px;outline:none;border:none;text-decoration:none;vertical-align:middle;display:inline-block;max-width:100%"
-                />
-              </div>
-              <h1
-                style="color:#F0EDE8;font-weight:bold;text-align:center;margin:0;font-size:32px;padding:0px 24px 0px 24px"
-              >
-                OpenBookings
-              </h1>
-              <h3
-                style="color:#797979;font-weight:bold;text-align:center;margin:0;font-size:20px;padding:0px 24px 0px 24px"
-              >
-                Quick, Easy and Open-Source
-              </h3>
-              <div style="padding:16px 24px 16px 24px">
-                <h2
-                  style="color:#F0EDE8;font-weight:bold;text-align:center;margin:0;font-size:24px;padding:16px 24px 0px 24px"
-                >
-                  Here&#x27;s your magic link 🔗
-                </h2>
-                <div
-                  style="color:#F0EDE8;font-size:18px;font-weight:normal;text-align:center;padding:0px 24px 0px 24px"
-                >
-                  Someone (hopefully you) asked to sign in to OpenBookings.
-                </div>
-                <div
-                  style="color:#F0EDE8;font-size:18px;font-weight:normal;text-align:center;padding:0px 24px 0px 24px"
-                >
-                  Here you go:
-                </div>
-                <div style="text-align:center;padding:16px 24px 16px 24px">
-                  <a
-                    href="{{magicLinkUrl}}"
-                    style="color:#000000;font-size:21px;font-weight:bold;background-color:#ffe4b8;border-radius:4px;display:inline-block;padding:16px 32px;text-decoration:none"
-                    target="_blank"
-                    ><span
-                      ><!--[if mso
-                        ]><i
-                          style="letter-spacing: 32px;mso-font-width:-100%;mso-text-raise:48"
-                          hidden
-                          >&nbsp;</i
-                        ><!
-                      [endif]--></span
-                    ><span>Welcome Back!</span
-                    ><span
-                      ><!--[if mso
-                        ]><i
-                          style="letter-spacing: 32px;mso-font-width:-100%"
-                          hidden
-                          >&nbsp;</i
-                        ><!
-                      [endif]--></span
-                    ></a
-                  >
-                </div>
-                <div
-                  style="color:#F0EDE8;font-weight:normal;text-align:center;padding:0px 24px 0px 24px"
-                >
-                  That&#x27;s it. Seriously, just click it.
-                </div>
-                <div style="padding:16px 72px 16px 72px">
-                  <hr
-                    style="width:100%;border:none;border-top:1px solid #CCCCCC;margin:0"
-                  />
-                </div>
-                <div
-                  style="color:#F0EDE8;font-weight:normal;text-align:center;padding:16px 24px 0px 24px"
-                >
-                  If the button&#x27;s being weird, paste this into your
-                  browser:
-                </div>
-                <div
-                  style="color:#f4f4f4;font-weight:normal;text-align:center;padding:0px 24px 16px 24px"
-                >
-                  {{magicLinkUrl}}
-                </div>
-                <div
-                  style="color:#F0EDE8;font-weight:normal;text-align:center;padding:16px 24px 0px 24px"
-                >
-                  Wasn&#x27;t you? Just ignore this.
-                </div>
-                <div
-                  style="color:#F0EDE8;font-weight:normal;text-align:center;padding:0px 24px 16px 24px"
-                >
-                  The link expires in 15 minutes anyway.
-                </div>
-              </div>
-              <div style="padding:16px 72px 16px 72px">
-                <hr
-                  style="width:100%;border:none;border-top:1px solid #CCCCCC;margin:0"
-                />
-              </div>
-              <div
-                style='color:#ffffff;font-size:12px;font-family:"Nimbus Mono PS", "Courier New", "Cutive Mono", monospace;font-weight:normal;text-align:center;padding:16px 24px 0px 24px'
-              >
-                Roy here, reading all replies!
-              </div>
-              <div
-                style='color:#ffffff;font-size:12px;font-family:"Nimbus Mono PS", "Courier New", "Cutive Mono", monospace;font-weight:normal;text-align:center;padding:0px 24px 16px 24px'
-              >
-                Especially those sent at 2AM from a hotel lobby.
-              </div>
-              <div
-                style='color:#ffffff;font-size:12px;font-family:"Nimbus Mono PS", "Courier New", "Cutive Mono", monospace;font-weight:normal;text-align:center;padding:0px 24px 16px 24px'
-              >
-                Legally, and Boring: OpenBookings BV, [address], the
-                Netherlands.
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Sign in to OpenBookings</title>
+    <style>
+      @media only screen and (max-width: 600px) {
+        .ob-wrapper { padding: 0 !important; }
+        .ob-card { border-radius: 0 !important; }
+        .ob-header { padding: 22px 20px !important; }
+        .ob-body { padding: 40px 24px 36px !important; }
+        .ob-footer { padding: 18px 24px 26px !important; }
+        .ob-headline { font-size: 34px !important; line-height: 1.1 !important; }
+        .ob-subtext { margin-bottom: 36px !important; }
+        .ob-logo { max-width: 100px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background-color:#111111;">
+    <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="background-color:#111111;">
+      <tr>
+        <td align="center" class="ob-wrapper" style="padding:40px 16px;">
+
+          <!-- Card -->
+          <table class="ob-card" width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="max-width:560px;background-color:#1A1A1A;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
+
+            <!-- Header -->
+            <tr>
+              <td class="ob-header" align="center" style="padding:28px 40px 8px;">
+                <img class="ob-logo" src="https://cdn.openbookings.co/Openbookings-logo-v2.png" alt="OpenBookings" style="display:block;max-width:116px;width:100%;height:auto;" />
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td class="ob-body" style="padding:32px 40px 48px;text-align:center;">
+
+                <h1 class="ob-headline" style="font-family:Didot,'Big Caslon','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;font-weight:400;font-size:40px;line-height:1.08;color:#F0F0F0;margin:0 0 16px;letter-spacing:-0.01em;">
+                  Your magic key.
+                </h1>
+
+                <p class="ob-subtext" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#888888;margin:0 auto 44px;max-width:320px;">
+                  Works once and vanishes in 15&nbsp;minutes &mdash; no pressure, but maybe don't make tea first.
+                </p>
+
+                <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#555555;margin:0 0 8px;">
+                  Signing in as
+                </p>
+                <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#AAAAAA;margin:0 0 32px;letter-spacing:0.01em;">
+                  {{email}}
+                </p>
+
+                <!-- CTA -->
+                <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="margin-bottom:28px;">
+                  <tr>
+                    <td>
+                      <a href="{{magicLinkUrl}}" target="_blank" style="display:block;background-color:#FFFFFF;color:#111111;text-align:center;padding:18px 32px;border-radius:7px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:500;letter-spacing:0.02em;text-decoration:none;">Sign in &#x2192;</a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Fallback URL -->
+                <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation">
+                  <tr>
+                    <td style="background-color:#111111;border-radius:6px;padding:12px 14px;border:1px solid rgba(255,255,255,0.06);text-align:left;">
+                      <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#555555;margin:0 0 6px;">Or copy this link</p>
+                      <p style="font-family:'Courier New',Courier,monospace;font-size:11px;color:#777777;margin:0;word-break:break-all;line-height:1.75;">{{magicLinkUrl}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td class="ob-footer" style="padding:18px 40px 26px;text-align:center;">
+                <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#666666;line-height:1.65;margin:0;">
+                  Not you? Ignore this, your account is untouched.
+                </p>
+              </td>
+            </tr>
+
+          </table>
+
+          <!-- Below-card byline -->
+          <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="max-width:560px;">
+            <tr>
+              <td style="padding:28px 40px 4px;text-align:center;font-family:'Nimbus Mono PS','Courier New',monospace;font-size:12px;line-height:1.6;color:#888888;">
+                Got a question? Roy here, reads all replies.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:6px 40px 0;text-align:center;font-family:'Nimbus Mono PS','Courier New',monospace;font-size:11px;line-height:1.6;color:#444444;">
+                Legally &amp; Boring: OpenBookings BV, [address], the Netherlands.
+              </td>
+            </tr>
+          </table>
+     
+
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`,
 };
