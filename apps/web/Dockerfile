@@ -1,6 +1,8 @@
 # ---------- Builder ----------
 FROM oven/bun:1.3-alpine AS builder
 
+RUN apk add --no-cache openssl=3.5.7-r0
+
 WORKDIR /app
 
 ARG NEXT_PUBLIC_APP_URL
@@ -42,6 +44,8 @@ RUN cd apps/web && bun run build
 
 # ---------- Production ----------
 FROM oven/bun:1.3-alpine
+
+RUN apk add --no-cache openssl=3.5.7-r0
 
 WORKDIR /app
 
