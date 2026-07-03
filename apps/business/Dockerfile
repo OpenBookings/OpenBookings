@@ -28,6 +28,7 @@ COPY package.json bun.lock turbo.json ./
 COPY packages/config/package.json ./packages/config/package.json
 COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
+COPY packages/authz/package.json ./packages/authz/package.json
 COPY packages/mailing/package.json ./packages/mailing/package.json
 COPY packages/analytics/package.json ./packages/analytics/package.json
 COPY packages/stripe/package.json ./packages/stripe/package.json
