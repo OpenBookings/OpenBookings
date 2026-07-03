@@ -442,6 +442,50 @@ function RateCard({ rate, maxOccupancy, qty, onQtyChange }: { rate: DbRatePlan; 
 }
 
 // ── Rates view ────────────────────────────────────────────────────────────────
+// Rate cards are laid out in rows sized to the available width rather than a
+// fixed grid. Given a column count, items are split as evenly as possible
+// across the minimum number of rows — so 4 cards form a 2x2, 6 form a 3x2,
+// and 5 form a 3-over-2 with the shorter row centered underneath.
+
+const RATE_CARD_WIDTH = 190;
+const RATE_CARD_GAP = 14; // px, matches gap-3.5
+const MIN_RATE_COLUMNS = 1;
+const MAX_RATE_COLUMNS = 4;
+
+function distributeIntoRows<T>(items: T[], columns: number): T[][] {
+  if (items.length === 0) return [];
+  const rows = Math.ceil(items.length / Math.max(1, columns));
+  const base = Math.floor(items.length / rows);
+  const remainder = items.length % rows;
+
+  const result: T[][] = [];
+  let cursor = 0;
+  for (let row = 0; row < rows; row++) {
+    const size = base + (row < remainder ? 1 : 0);
+    result.push(items.slice(cursor, cursor + size));
+    cursor += size;
+  }
+  return result;
+}
+
+function useAvailableColumns(cardWidth: number, gap: number, min: number, max: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(max);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      const fit = Math.floor((width + gap) / (cardWidth + gap));
+      setColumns(Math.min(max, Math.max(min, fit)));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cardWidth, gap, min, max]);
+
+  return { ref, columns };
+}
 
 type RatesViewProps = {
   rooms: DbRoom[];
@@ -453,11 +497,14 @@ function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
   const count = rooms.length;
   const room = rooms[activeIndex];
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const { ref: gridRef, columns } = useAvailableColumns(RATE_CARD_WIDTH, RATE_CARD_GAP, MIN_RATE_COLUMNS, MAX_RATE_COLUMNS);
 
   const setQty = useCallback((id: string, val: number) => {
     if (val < 0) return;
     setQuantities((q) => ({ ...q, [id]: val }));
   }, []);
+
+  const rows = distributeIntoRows(room.rate_plans, columns);
 
   return (
     <div className="flex flex-col select-none">
@@ -469,18 +516,24 @@ function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
         >
           {/* Tiles: pushed right of the sidebar (left-5 + sidebar width + gap) */}
           <div
-            className="absolute inset-0 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:h-px [&::-webkit-scrollbar-thumb]:bg-white/10"
+            ref={gridRef}
+            className="absolute inset-0 overflow-y-auto [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10"
             style={{ paddingLeft: "calc(min(28%, 296px) + 2.5rem)", paddingTop: "1.25rem", paddingRight: "1.25rem", paddingBottom: "1.25rem" }}
           >
-            <div className="grid gap-3.5 h-full" style={{ gridAutoFlow: "column", gridAutoColumns: "180px", gridTemplateRows: "1fr" }}>
-              {room.rate_plans.map((rate) => (
-                <RateCard
-                  key={rate.id}
-                  rate={rate}
-                  maxOccupancy={room.max_occupancy}
-                  qty={quantities[rate.id] ?? 0}
-                  onQtyChange={(v) => setQty(rate.id, v)}
-                />
+            <div className="flex flex-col gap-3.5 min-h-full justify-center">
+              {rows.map((row, i) => (
+                <div key={i} className="flex gap-3.5 justify-center">
+                  {row.map((rate) => (
+                    <div key={rate.id} style={{ width: RATE_CARD_WIDTH }} className="shrink-0 flex">
+                      <RateCard
+                        rate={rate}
+                        maxOccupancy={room.max_occupancy}
+                        qty={quantities[rate.id] ?? 0}
+                        onQtyChange={(v) => setQty(rate.id, v)}
+                      />
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           </div>

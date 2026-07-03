@@ -20,4 +20,5 @@ export const auth = createAuth({
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   appleClientId: process.env.APPLE_CLIENT_ID,
   appleClientSecret: process.env.APPLE_CLIENT_SECRET,
+  accountType: "private",
 });

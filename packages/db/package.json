@@ -5,11 +5,19 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
+    "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
+    "db:push": "bun --env-file=../../.env.local drizzle-kit push",
+    "db:studio": "bun --env-file=../../.env.local drizzle-kit studio"
+  },
   "dependencies": {
+    "drizzle-orm": "^1.0.0-rc.4",
     "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/pg": "^8.18.0",
+    "drizzle-kit": "^1.0.0-rc.4",
     "typescript": "^5"
   }
 }

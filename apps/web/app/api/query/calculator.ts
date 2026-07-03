@@ -35,6 +35,7 @@ export interface RoomRow {
   hotel_slug: string
   city: string
   country: string
+  hero_image_url: string | null
   room_id: string
   room_name: string
   room_description: string
