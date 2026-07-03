@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
+import { queryOne } from "@openbookings/db"
 import { getPostHogClient } from "@openbookings/analytics/server"
 
 export async function POST(request: NextRequest) {
@@ -47,6 +48,22 @@ export async function POST(request: NextRequest) {
       { error: "Too many requests from this IP. Please try again later.", resetTime: ipRateLimit.resetTime },
       { status: 429 }
     )
+  }
+
+  // Block sign-in attempts from business accounts before sending the link
+  try {
+    const existingUser = await queryOne<{ account_type: string | null }>(
+      `SELECT account_type FROM "user" WHERE email = $1`,
+      [normalizedEmail]
+    )
+    if (existingUser?.account_type && existingUser.account_type !== "private") {
+      return NextResponse.json(
+        { error: "This email address is associated with a business account. Please sign in at business.openbookings.co instead." },
+        { status: 403 }
+      )
+    }
+  } catch {
+    // If the DB check fails, allow the request through — auth will enforce it
   }
 
   try {

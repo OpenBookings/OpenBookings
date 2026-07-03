@@ -1,5 +1,5 @@
 import type { HotelSearchInput } from "@/types/hotel";
-import { query } from "@openbookings/db";
+import { getDb, sql } from "@openbookings/db";
 import { resolveSearchResults } from "@/app/api/query/calculator";
 import type { RoomRow } from "@/app/api/query/calculator";
 import { getPostHogClient } from "@openbookings/analytics/server";
@@ -72,18 +72,26 @@ function parseSearchParams(
   return { input, errors };
 }
 
-const HOTEL_SEARCH_SQL = `
+function buildHotelSearchQuery(
+  lat: number,
+  lon: number,
+  checkin: string,
+  checkout: string,
+  adults: number,
+  children: number
+) {
+  return sql`
 -- ─────────────────────────────────────────────
 -- Inputs
 -- ─────────────────────────────────────────────
 WITH user_input AS (
   SELECT
-    $1::float AS lat,
-    $2::float AS lng,
-    $3::date  AS arrival,
-    $4::date  AS departure,
-    $5::int   AS adults,
-    $6::int   AS children
+    ${lat}::float AS lat,
+    ${lon}::float AS lng,
+    ${checkin}::date  AS arrival,
+    ${checkout}::date AS departure,
+    ${adults}::int   AS adults,
+    ${children}::int   AS children
 ),
 
 -- ─────────────────────────────────────────────
@@ -107,6 +115,13 @@ candidate_rooms AS (
     p.slug           AS hotel_slug,
     p.city,
     p.country,
+    (
+      SELECT pi.url
+      FROM property_images pi
+      WHERE pi.property_id = p.id
+      ORDER BY (CASE WHEN pi.group = 'hero-image' THEN 0 ELSE 1 END) ASC, pi.sort_order ASC, pi.created_at ASC
+      LIMIT 1
+    )                AS hero_image_url,
     r.id             AS room_id,
     r.name           AS room_name,
     r.description    AS room_description,
@@ -218,6 +233,7 @@ SELECT
   cr.hotel_slug,
   cr.city,
   cr.country,
+  cr.hero_image_url,
   cr.room_id,
   cr.room_name,
   cr.room_description,
@@ -241,18 +257,15 @@ JOIN room_nights rn
 LEFT JOIN room_modifiers rm
   ON rm.rate_plan_id = cr.rate_plan_id;
 `;
+}
 
 async function runSearch(input: HotelSearchInput) {
   const children = input.children ?? 0
 
-  const rows = await query<RoomRow>(HOTEL_SEARCH_SQL, [
-    input.lat,
-    input.lon,
-    input.checkin,
-    input.checkout,
-    input.adults,
-    children,
-  ])
+  const result = await getDb().execute(
+    buildHotelSearchQuery(input.lat, input.lon, input.checkin, input.checkout, input.adults, children)
+  )
+  const rows = result.rows as unknown as RoomRow[]
 
   const roomRows = rows.map(row => ({
     ...row,

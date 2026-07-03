@@ -13,15 +13,13 @@ import { cn } from "@/lib/utils";
 
 interface RoomImage {
   id: string;
-  gcsKey: string;
+  url: string;
 }
 
 interface Props {
   roomId: string;
   existingImages?: RoomImage[];
 }
-
-const GCS_BASE = `https://storage.googleapis.com/${process.env.NEXT_PUBLIC_GCS_BUCKET_NAME}`;
 
 function createUppy(roomId: string) {
   const uppy = new Uppy<Meta, Body>({
@@ -83,8 +81,8 @@ export function RoomImageUploader({ roomId, existingImages = [] }: Props) {
     });
     if (!res.ok) return;
 
-    const data = (await res.json()) as { id: string; gcsKey: string };
-    setConfirmedImages((prev) => [...prev, { id: data.id, gcsKey: data.gcsKey }]);
+    const data = (await res.json()) as { id: string; url: string };
+    setConfirmedImages((prev) => [...prev, { id: data.id, url: data.url }]);
     uppy.removeFile(file.id);
   });
 
@@ -119,7 +117,7 @@ export function RoomImageUploader({ roomId, existingImages = [] }: Props) {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={img.id}
-              src={`${GCS_BASE}/${img.gcsKey}`}
+              src={img.url}
               alt=""
               className="aspect-square w-full rounded-md object-cover"
             />

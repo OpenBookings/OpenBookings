@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { query } from "@openbookings/db";
+import { userOwnsRoom } from "@openbookings/authz";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/sidebar-02/app-sidebar";
 import { RoomImageUploader } from "@/components/upload/RoomImageUploader";
@@ -18,8 +19,10 @@ export default async function RoomUploadPage({ params }: PageProps) {
 
   const { roomId } = await params;
 
-  const existingImages = await query<{ id: string; gcs_key: string }>(
-    `SELECT id, gcs_key FROM room_images WHERE room_id = $1 ORDER BY sort_order`,
+  if (!(await userOwnsRoom(session, roomId))) notFound();
+
+  const existingImages = await query<{ id: string; url: string }>(
+    `SELECT id, url FROM room_images WHERE room_id = $1 ORDER BY sort_order`,
     [roomId]
   );
 
@@ -56,10 +59,7 @@ export default async function RoomUploadPage({ params }: PageProps) {
                 </p>
                 <RoomImageUploader
                   roomId={roomId}
-                  existingImages={existingImages.map((img) => ({
-                    id: img.id,
-                    gcsKey: img.gcs_key,
-                  }))}
+                  existingImages={existingImages}
                 />
               </div>
             </div>

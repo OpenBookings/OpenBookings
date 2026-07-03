@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { queryOne, query } from "@openbookings/db";
+import { getDb, sql } from "@openbookings/db";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import type { DbAmenityCategory, DbRoom } from "./_components/constants";
 
@@ -13,7 +13,8 @@ import { PoliciesSection }  from "./_components/PoliciesSection";
 import { LocationSection }  from "./_components/LocationSection";
 import { FootnoteSection }  from "./_components/FootnoteSection";
 
-const HERO_SQL = `
+function buildHeroQuery(slug: string) {
+  return sql`
   SELECT
     p.id,
     p.name,
@@ -44,20 +45,24 @@ const HERO_SQL = `
       ) pi
     ) AS gallery_images
   FROM properties p
-  WHERE p.slug = $1
+  WHERE p.slug = ${slug}
   LIMIT 1
 `;
+}
 
-const AMENITIES_SQL = `
+function buildAmenitiesQuery(slug: string) {
+  return sql`
   SELECT a.label, a.icon, a.category, a.sort_order
   FROM amenities a
   JOIN property_amenities pa ON pa.amenity_id = a.id
   JOIN properties p ON p.id = pa.property_id
-  WHERE p.slug = $1
+  WHERE p.slug = ${slug}
   ORDER BY a.category, a.sort_order, a.label
 `;
+}
 
-const ROOMS_SQL = `
+function buildRoomsQuery(slug: string) {
+  return sql`
   SELECT
     r.id,
     r.name,
@@ -92,9 +97,10 @@ const ROOMS_SQL = `
     ) AS tags
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE p.slug = $1 AND r.is_active = true
+  WHERE p.slug = ${slug} AND r.is_active = true
   ORDER BY r.name
 `;
+}
 
 export default async function HotelPage({
   params,
@@ -104,11 +110,16 @@ export default async function HotelPage({
   const { hotel_slug } = await params;
   const slug = hotel_slug.toLowerCase();
 
-  const [hotel, rawAmenities, rooms] = await Promise.all([
-    queryOne<HotelPageData>(HERO_SQL, [slug]),
-    query<{ label: string; icon: string; category: string; sort_order: number }>(AMENITIES_SQL, [slug]),
-    query<DbRoom>(ROOMS_SQL, [slug]),
+  const db = getDb();
+  const [heroResult, amenitiesResult, roomsResult] = await Promise.all([
+    db.execute(buildHeroQuery(slug)),
+    db.execute(buildAmenitiesQuery(slug)),
+    db.execute(buildRoomsQuery(slug)),
   ]);
+
+  const hotel = (heroResult.rows[0] as unknown as HotelPageData) ?? null;
+  const rawAmenities = amenitiesResult.rows as unknown as { label: string; icon: string; category: string; sort_order: number }[];
+  const rooms = roomsResult.rows as unknown as DbRoom[];
 
   if (!hotel) notFound();
 

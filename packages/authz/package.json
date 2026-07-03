@@ -1,0 +1,17 @@
+{
+  "name": "@openbookings/authz",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@openbookings/db": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

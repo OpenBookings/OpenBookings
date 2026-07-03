@@ -1,4 +1,4 @@
-import { queryOne } from "@openbookings/db";
+import { getDb, sql } from "@openbookings/db";
 import { NextRequest, NextResponse } from "next/server";
 
 export interface HotelPageData {
@@ -12,7 +12,8 @@ export interface HotelPageData {
   lon: number;
 }
 
-const HERO_SQL = `
+function buildHeroQuery(slug: string) {
+  return sql`
   SELECT
     p.id,
     p.name,
@@ -43,9 +44,10 @@ const HERO_SQL = `
       ) pi
     ) AS gallery_images
   FROM properties p
-  WHERE p.slug = $1
+  WHERE p.slug = ${slug}
   LIMIT 1
 `;
+}
 
 export async function GET(request: NextRequest) {
   let slug = request.nextUrl.searchParams.get("slug");
@@ -58,7 +60,8 @@ export async function GET(request: NextRequest) {
 
   let row: HotelPageData | null;
   try {
-    row = await queryOne<HotelPageData>(HERO_SQL, [slug]);
+    const result = await getDb().execute(buildHeroQuery(slug));
+    row = (result.rows[0] as unknown as HotelPageData) ?? null;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Database error";
     return NextResponse.json({ error: message }, { status: 500 });
