@@ -65,7 +65,9 @@ export default withSentryConfig(nextConfig, {
 
   tunnelRoute: "/monitoring",
 
-  automaticVercelMonitors: true,
+  webpack: {
+    automaticVercelMonitors: true,
+  },
 
   bundleSizeOptimizations: {
     excludeDebugStatements: true,

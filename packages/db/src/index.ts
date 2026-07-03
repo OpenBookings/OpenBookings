@@ -1,4 +1,10 @@
 import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "./schema";
+
+export { schema };
+export * from "./schema";
+export { sql } from "drizzle-orm";
 
 const connectionType = process.env.ENV_TYPE;
 
@@ -54,4 +60,19 @@ export async function queryOne<T = unknown>(
 ): Promise<T | null> {
   const rows = await query<T>(text, values);
   return rows[0] ?? null;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __drizzleDb: ReturnType<typeof drizzle> | null | undefined;
+}
+
+/** Get the shared Drizzle client. Throws if DATABASE_URL is not set. */
+export function getDb() {
+  if (globalThis.__drizzleDb) return globalThis.__drizzleDb;
+  const instance = drizzle({ client: getPool() });
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.__drizzleDb = instance;
+  }
+  return instance;
 }

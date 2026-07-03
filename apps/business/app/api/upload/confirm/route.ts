@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
+import { userOwnsRoom } from "@openbookings/authz";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 
@@ -25,6 +26,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid roomId" }, { status: 400 });
   }
 
+  if (!(await userOwnsRoom(session, roomId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const url = `https://storage.googleapis.com/${process.env.GCS_BUCKET_NAME}/${gcsKey}`;
+
   const maxRow = await queryOne<{ max_order: number | null }>(
     `SELECT MAX(sort_order) AS max_order FROM room_images WHERE room_id = $1`,
     [roomId]
@@ -33,10 +40,10 @@ export async function POST(req: Request) {
 
   const id = randomUUID();
   await query(
-    `INSERT INTO room_images (id, room_id, gcs_key, sort_order, uploaded_at)
-     VALUES ($1, $2, $3, $4, NOW())`,
-    [id, roomId, gcsKey, sortOrder]
+    `INSERT INTO room_images (id, room_id, url, sort_order)
+     VALUES ($1, $2, $3, $4)`,
+    [id, roomId, url, sortOrder]
   );
 
-  return NextResponse.json({ id, gcsKey });
+  return NextResponse.json({ id, url });
 }

@@ -13,6 +13,7 @@
     "@sentry/nextjs": "^10.59.0",
     "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
+    "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/stripe": "workspace:*",

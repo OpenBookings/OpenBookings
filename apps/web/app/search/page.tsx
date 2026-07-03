@@ -8,56 +8,45 @@ import { getRandomBackgroundImage } from "@/lib/background";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
-const hotels: HotelCardData[] = [
-  {
-    id: "3104936b-2dd8-4de0-9a86-1aa5dd8f2b53",
-    name: "Jumeirah Capri Palace",
-    slug: "jumeirah-capri-palace",
-    distance: "1.2 Kilometers to City Center",
-    rating: 8.0,
-    reviews: 324,
-    price: 248,
-    tags: ["Lake View", "Free Wi-Fi", "Incl. Breakfast", "Free Cancellation", "Wellness"],
-    images: ["Jumeirah.avif", "Jumeirah-1.avif", "Jumeirah-2.avif"],
+/** Shape returned by GET /api/query — see resolveSearchResults() in app/api/query/calculator.ts */
+interface HotelSearchApiResult {
+  hotel_id: string;
+  hotel_name: string;
+  hotel_slug: string;
+  city: string;
+  country: string;
+  hero_image_url: string | null;
+  room_name: string;
+  room_description: string;
+  currency: string;
+  is_refundable: boolean;
+  total_price: number;
+  nights: { date: string }[];
+}
+
+function mapToHotelCardData(result: HotelSearchApiResult): HotelCardData {
+  const nightCount = result.nights.length || 1;
+  const tags = [result.city, result.country, result.is_refundable ? "Free Cancellation" : "Non-refundable"].filter(
+    Boolean,
+  );
+
+  return {
+    id: result.hotel_id,
+    name: result.hotel_name,
+    slug: result.hotel_slug,
+    distance: `${result.city}, ${result.country}`,
+    rating: 0,
+    reviews: 0,
+    price: Math.round(result.total_price / nightCount),
+    tags,
+    images: result.hero_image_url ? [result.hero_image_url] : [],
     description: {
-      type: "Suite",
-      bed: "1 King Bed",
-      size: "100 m²",
+      type: result.room_name,
+      bed: "",
+      size: "",
     },
-  },
-  {
-    id: "0083243e-4ba1-471a-bbda-c8140c4a8998",
-    name: "Hotel de la Paix",
-    slug: "hotel-de-la-paix",
-    distance: "1.2 Kilometers to City Center",
-    rating: 7.8,
-    reviews: 654,
-    price: 323,
-    tags: ["Paris", "Luxury", "Incl. Dinner", "Eiffeltower View", "Rain Shower"],
-    images: ["Jumeirah.avif"],
-    description: {
-      type: "Deluxe",
-      bed: "1 King Bed",
-      size: "100 m²",
-    },
-  },
-  {
-    id: "0095782c-bea6-4097-86a5-bb632c824046",
-    name: "Amsterdam Grand Hotel",
-    slug: "amsterdam-grand-hotel",
-    distance: "1.2 Kilometers to City Center",
-    rating: 9.3,
-    reviews: 987,
-    price: 128,
-    tags: ["Amsterdam", "Pride Voucher", "Butler", "High-end Luxury", "Member Discount"],
-    images: ["Jumeirah.avif"],
-    description: {
-      type: "Standard",
-      bed: "1 King Bed",
-      size: "100 m²",
-    },
-  },
-];
+  };
+}
 
 function SearchPageInner() {
   const router = useRouter();
@@ -71,6 +60,8 @@ function SearchPageInner() {
     adults: Number(searchParams.get("adults") ?? 2),
     children: Number(searchParams.get("children") ?? 0),
     rooms: Number(searchParams.get("rooms") ?? 1),
+    lat: searchParams.get("lat"),
+    lon: searchParams.get("lon"),
   }), []);
 
   const [destination, setDestination] = useState(committed.destination);
@@ -86,7 +77,61 @@ function SearchPageInner() {
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
 
   const [authError, setAuthError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState("top");  
+  const [sortBy, setSortBy] = useState("top");
+
+  const [hotels, setHotels] = useState<HotelCardData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
+      setHotels([]);
+      setSearchError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function runSearch() {
+      setIsLoading(true);
+      setSearchError(null);
+      try {
+        const params = new URLSearchParams({
+          lat: committed.lat as string,
+          lon: committed.lon as string,
+          checkin: committed.checkIn,
+          checkout: committed.checkOut,
+          adults: String(committed.adults),
+          children: String(committed.children),
+          rooms: String(committed.rooms),
+        });
+        const res = await fetch(`/api/query?${params.toString()}`, { signal: controller.signal });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ?? `Search failed (${res.status})`);
+        }
+        const results: HotelSearchApiResult[] = await res.json();
+        setHotels(results.map(mapToHotelCardData));
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setSearchError(err instanceof Error ? err.message : "Search failed");
+        setHotels([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    runSearch();
+    return () => controller.abort();
+  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms]);
+
+  const sortedHotels = useMemo(() => {
+    const list = [...hotels];
+    if (sortBy === "price_asc") return list.sort((a, b) => a.price - b.price);
+    if (sortBy === "price_desc") return list.sort((a, b) => b.price - a.price);
+    if (sortBy === "rating") return list.sort((a, b) => b.rating - a.rating);
+    return list;
+  }, [hotels, sortBy]);
 
   const isDirty =
     destination !== committed.destination ||
@@ -145,6 +190,12 @@ function SearchPageInner() {
     if (adults) params.set("adults", adults.toString());
     if (childCount) params.set("children", childCount.toString());
     if (rooms) params.set("rooms", rooms.toString());
+    // No destination geocoding UI yet — carry the previously resolved
+    // coordinates through so an unchanged destination keeps returning results.
+    if (destination === committed.destination && committed.lat && committed.lon) {
+      params.set("lat", committed.lat);
+      params.set("lon", committed.lon);
+    }
 
     const searchUrl = `/search?${params.toString()}`;
     router.push(searchUrl);
@@ -195,9 +246,17 @@ function SearchPageInner() {
           {/* Results bar */}
           <div className="flex items-center justify-between mb-6 mt-3 ml-3 mr-3">
             <p className="font-sans text-sm text-white/60">
-              We found{" "}
-              <span className="font-semibold text-white/90">{hotels.length}</span>{" "}
-              places that fit your search
+              {isLoading ? (
+                "Searching…"
+              ) : searchError ? (
+                <span className="text-red-300">{searchError}</span>
+              ) : (
+                <>
+                  We found{" "}
+                  <span className="font-semibold text-white/90">{sortedHotels.length}</span>{" "}
+                  places that fit your search
+                </>
+              )}
             </p>
             <div className="flex items-center gap-2">
               <button className="flex h-9 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 font-sans text-sm text-white/80 backdrop-blur-sm transition-colors hover:bg-white/15">
@@ -221,11 +280,19 @@ function SearchPageInner() {
 
         {/* Hotel cards */}
         <div className="relative z-10 mx-auto max-w-5xl w-full">
-          <div className="grid grid-cols-1 gap-8 items-start md:grid-cols-2 lg:grid-cols-3">
-            {hotels.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
-            ))}
-          </div>
+          {!isLoading && !searchError && sortedHotels.length === 0 ? (
+            <p className="text-center font-sans text-sm text-white/60">
+              {committed.lat && committed.lon
+                ? "No hotels matched your search. Try different dates or guest counts."
+                : "Search for a destination to see available hotels."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-8 items-start md:grid-cols-2 lg:grid-cols-3">
+              {sortedHotels.map((hotel) => (
+                <HotelCard key={hotel.id} hotel={hotel} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
