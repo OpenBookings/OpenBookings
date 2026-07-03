@@ -14,7 +14,7 @@
     "test": "bun test packages"
   },
   "devDependencies": {
-    "turbo": "^2"
+    "turbo": "^2.10.2"
   },
   "dependencies": {
     "posthog-js": "^1.372.8",
