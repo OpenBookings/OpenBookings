@@ -1,14 +1,11 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { queryOne } from "@openbookings/db";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function OnboardingRouter() {
-  const session = await auth.api.getSession({ headers: await headers() });
-
-  if (!session) {
-    redirect("/login");
-  }
+  // proxy.ts already guarantees a valid, business-typed session for every
+  // request under /onboarding/*, so this only needs the user id.
+  const session = await getServerSession();
 
   const row = await queryOne<{
     completed_steps: string[];
@@ -19,7 +16,7 @@ export default async function OnboardingRouter() {
             onboarding_completed_at,
             step_data->>'stripe_account_id' AS stripe_account_id
      FROM host_onboarding WHERE user_id = $1`,
-    [session.user.id]
+    [session!.user.id]
   );
 
   if (row?.onboarding_completed_at) {

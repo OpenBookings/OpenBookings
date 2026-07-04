@@ -1,5 +1,7 @@
 import { createAuth } from "@openbookings/auth/server";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
+import { cache } from "react";
+import { headers } from "next/headers";
 
 export const auth = createAuth({
   baseURL:
@@ -22,4 +24,15 @@ export const auth = createAuth({
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
   accountType: "business",
+});
+
+/**
+ * Single source of truth for the current request's session on the server.
+ * Wrapped in React's request-scoped cache so every server component/action
+ * in the same render sees the exact same session, instead of each call site
+ * hitting better-auth's cookie cache/DB independently and risking a
+ * momentary disagreement between them.
+ */
+export const getServerSession = cache(async () => {
+  return auth.api.getSession({ headers: await headers() });
 });

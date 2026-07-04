@@ -154,9 +154,7 @@ export function OnboardingStepClient({ initialCoreInfoText, initialCoreInfoLocat
             onChange={(partial) => setLegal((prev) => ({ ...prev, ...partial }))}
           />
         )}
-        {currentSlug === "stripe-connect" && (
-          <StripeConnectStep onComplete={() => router.push("/onboarding/verify")} />
-        )}
+        {currentSlug === "stripe-connect" && <StripeConnectStep />}
         {currentSlug === "verify" && (
           <VerifyStep />
         )}

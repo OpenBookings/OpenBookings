@@ -1,4 +1,4 @@
-import { createAccountSession } from '@openbookings/stripe';
+import { createAccountLink } from '@openbookings/stripe';
 import { auth } from '@/lib/auth';
 import { queryOne } from '@openbookings/db';
 import { NextResponse } from 'next/server';
@@ -13,6 +13,11 @@ export async function POST(req: Request) {
   );
   if (!row?.stripe_account_id) return NextResponse.json({ error: 'No Stripe account' }, { status: 400 });
 
-  const clientSecret = await createAccountSession(row.stripe_account_id);
-  return NextResponse.json({ client_secret: clientSecret });
+  const origin = new URL(req.url).origin;
+  const url = await createAccountLink(row.stripe_account_id, {
+    refreshUrl: `${origin}/onboarding/stripe-connect`,
+    returnUrl: `${origin}/onboarding/verify`,
+  });
+
+  return NextResponse.json({ url });
 }

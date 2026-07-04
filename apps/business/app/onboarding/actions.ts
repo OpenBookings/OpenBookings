@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { headers } from "next/headers";
 import type { HostStep } from "./steps";
@@ -59,7 +59,7 @@ type StepData = {
 };
 
 async function getSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getServerSession();
   if (!session) throw new Error("Unauthenticated");
   return session;
 }
