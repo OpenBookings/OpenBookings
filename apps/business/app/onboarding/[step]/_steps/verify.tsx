@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { loadConnectAndInitialize, type StripeConnectInstance } from "@stripe/connect-js";
-import { ConnectAccountOnboarding, ConnectComponentsProvider } from "@stripe/react-connect-js";
 import { completeOnboarding } from "../../actions";
 
 interface OnboardingStatus {
@@ -19,36 +17,6 @@ interface OnboardingStatus {
   onboardingCompleted: boolean;
 }
 
-const STRIPE_APPEARANCE = {
-  variables: {
-    colorPrimary: "#0085FF",
-    colorText: "#C9CED8",
-    colorBackground: "rgba(0,0,0,0)",
-    buttonSecondaryColorBackground: "#2B3039",
-    buttonSecondaryColorText: "#C9CED8",
-    colorSecondaryText: "#8C99AD",
-    actionSecondaryColorText: "#C9CED8",
-    actionSecondaryTextDecorationColor: "#C9CED8",
-    colorBorder: "#2B3039",
-    colorDanger: "#F23154",
-    badgeNeutralColorBackground: "#1B1E25",
-    badgeNeutralColorBorder: "#2B3039",
-    badgeNeutralColorText: "#8C99AD",
-    badgeSuccessColorBackground: "#152207",
-    badgeSuccessColorBorder: "#20360C",
-    badgeSuccessColorText: "#3EAE20",
-    badgeWarningColorBackground: "#400A00",
-    badgeWarningColorBorder: "#5F1400",
-    badgeWarningColorText: "#F27400",
-    badgeDangerColorBackground: "#420320",
-    badgeDangerColorBorder: "#61092D",
-    badgeDangerColorText: "#F46B7D",
-    offsetBackgroundColor: "rgba(0,0,0,0)",
-    formBackgroundColor: "rgba(0,0,0,0)",
-    overlayBackdropColor: "rgba(0,0,0,0.5)",
-  },
-};
-
 const fetcher = (url: string) =>
   fetch(url).then((r) => {
     if (!r.ok) throw new Error("Failed to fetch status");
@@ -57,11 +25,12 @@ const fetcher = (url: string) =>
 
 export function VerifyStep() {
   const router = useRouter();
-  const { data, mutate } = useSWR<OnboardingStatus>("/api/onboarding/status", fetcher, {
+  const { data } = useSWR<OnboardingStatus>("/api/onboarding/status", fetcher, {
     refreshInterval: 5000,
   });
 
-  const [instance, setInstance] = useState<StripeConnectInstance | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const completingRef = useRef(false);
 
   // Redirect to the right step if preconditions not met
@@ -80,26 +49,22 @@ export function VerifyStep() {
     }
   }, [data, router]);
 
-  // Initialise Connect instance when we know there are requirements to collect
-  useEffect(() => {
-    if (!data?.stripe || data.stripe.currentlyDue.length === 0) return;
-    if (instance) return;
-
-    const stripeConnect = loadConnectAndInitialize({
-      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
-      fetchClientSecret: async () => {
-        const res = await fetch("/api/stripe/account-session", { method: "POST" });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error((body as { error?: string }).error ?? "Failed to create account session");
-        }
-        const { client_secret } = await res.json() as { client_secret: string };
-        return client_secret;
-      },
-      appearance: STRIPE_APPEARANCE,
-    });
-    setInstance(stripeConnect);
-  }, [data, instance]);
+  async function handleContinue() {
+    setError(null);
+    setIsPending(true);
+    try {
+      const res = await fetch("/api/stripe/account-link", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Failed to start Stripe onboarding");
+      }
+      const { url } = await res.json() as { url: string };
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start Stripe onboarding");
+      setIsPending(false);
+    }
+  }
 
   if (!data) {
     return (
@@ -111,23 +76,22 @@ export function VerifyStep() {
 
   const { stripe } = data;
 
-  // Requirements still outstanding — show embedded onboarding
-  if (stripe && stripe.currentlyDue.length > 0 && instance) {
-    return (
-      <ConnectComponentsProvider connectInstance={instance}>
-        <ConnectAccountOnboarding
-          onExit={() => { setInstance(null); mutate(); }}
-          collectionOptions={{ fields: "eventually_due" }}
-        />
-      </ConnectComponentsProvider>
-    );
-  }
-
-  // Requirements outstanding but instance not ready yet
+  // Requirements still outstanding — send them back to hosted onboarding
   if (stripe && stripe.currentlyDue.length > 0) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="size-5 rounded-full border-2 border-ob-brand border-t-transparent animate-spin" />
+      <div className="flex flex-col items-center gap-4 py-12 text-center">
+        <h2 className="text-lg font-semibold text-white">A few more details are needed</h2>
+        <p className="text-sm text-white/45 max-w-sm">
+          Stripe still needs some information from you before you can start accepting bookings.
+        </p>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <button
+          disabled={isPending}
+          className="bg-ob-brand hover:bg-ob-brand-light disabled:opacity-50 text-white text-sm font-medium px-8 py-2.5 rounded-lg transition-colors"
+          onClick={handleContinue}
+        >
+          {isPending ? "Redirecting…" : "Continue to Stripe"}
+        </button>
       </div>
     );
   }
