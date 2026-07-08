@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Gloock, Allura, Libre_Franklin } from "next/font/google";
+import { Gloock, Allura, Libre_Franklin, Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
 import { CookieBanner } from "@/components/CookieBanner";
 import { DeviceGate } from "@/components/DeviceGate";
@@ -26,6 +26,21 @@ const allura = Allura({
   display: "swap",
 });
 
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-cormorant",
+  display: "swap",
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -45,7 +60,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${libreFranklin.variable} ${gloock.variable}`}>
+    <html
+      lang="en"
+      className={`${libreFranklin.variable} ${gloock.variable} ${allura.variable} ${cormorant.variable} ${dmSans.variable}`}
+    >
       <head />
       <body>
         <CookieConsentProvider>
