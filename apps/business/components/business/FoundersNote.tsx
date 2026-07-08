@@ -53,19 +53,19 @@ export function FoundersNote() {
                 that sounds less like a marketplace and more like infrastructure — that&apos;s exactly the
                 point.
               </p>
-              <div className="flex items-center gap-6 pt-6 sm:gap-8">
+              <div className="flex items-end pt-2">
                 <Image
                   src="/founder.png"
                   alt="Wouter van der Wal, founder of OpenBookings"
                   width={176}
                   height={176}
-                  className="size-24 shrink-0 sm:size-28"
+                  className="shrink-0"
                 />
                 <div>
-                  <div className="font-(family-name:--font-allura,cursive) text-[38px] leading-none text-white/85">
+                  <div className="font-(family-name:--font-allura,cursive) text-[38px] leading-none text-white/85 pb-1">
                     Wouter
                   </div>
-                  <div className="mt-2 text-[12px] tracking-[0.05em] text-white/45">
+                  <div className="text-[12px] text-white/45 pb-1">
                     Founder, OpenBookings
                   </div>
                 </div>
