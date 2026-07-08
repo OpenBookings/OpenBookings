@@ -31,8 +31,7 @@ const faqs = [
   },
   {
     question: "Am I locked in?",
-    answer:
-      "No. There's no long-term contract and no exit fee. You own your data and can export it at any time. If we stop deserving your bookings, you can leave with everything.",
+    answer: "No fixed term — we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours and can be exported at any time, while guest data cannot be bulk exported in line with GDPR requirements and the Partner Agreement.",
   },
 ];
 

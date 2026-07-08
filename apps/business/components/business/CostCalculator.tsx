@@ -2,9 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { animate } from "framer-motion";
-import { Card } from "@/components/ui/card";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 
 const OB_RATE = 0.045;
 const STRIPE_RATE = 0.015;
@@ -88,6 +85,7 @@ export function CostCalculator() {
       onChange: setRateText,
       prefix: "€",
       suffix: "/ night",
+      width: "w-16",
     },
     {
       id: "calc-bookings",
@@ -96,6 +94,7 @@ export function CostCalculator() {
       onChange: setBookingsText,
       prefix: null,
       suffix: "bookings",
+      width: "w-16",
     },
     {
       id: "calc-stay",
@@ -104,113 +103,122 @@ export function CostCalculator() {
       onChange: setStayText,
       prefix: null,
       suffix: "nights",
+      width: "w-12",
     },
   ];
 
   return (
     <section id="calculator" className="border-t border-white/5 bg-[#080808] px-6 py-24 sm:px-16 sm:py-[120px]">
       <div className="mx-auto max-w-[1100px]">
-        <div className="mb-[18px] text-center text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
-          Your Numbers
-        </div>
-        <h2 className="mb-16 text-center font-(family-name:--font-cormorant) text-[40px] leading-[1.04] font-bold tracking-[-1px] text-white sm:mb-20 sm:text-[62px] sm:tracking-[-1.5px]">
-          What would you keep?
-        </h2>
+        <div className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-24">
+          {/* Left — your three numbers */}
+          <div>
+            <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
+              Your Numbers
+            </div>
+            <h2 className="mb-8 font-(family-name:--font-cormorant) text-[44px] leading-[1.04] font-bold tracking-[-1px] text-white sm:text-[62px] sm:tracking-[-1.5px]">
+              What would
+              <br />
+              you keep?
+            </h2>
+            <p className="mb-12 max-w-[48ch] text-[15px] leading-[1.8] text-white/46">
+              Three numbers about your property. Change any of them and watch the year&apos;s
+              commissions recalculate — ours next to the platforms you&apos;d be leaving.
+            </p>
 
-        <Card className="overflow-hidden rounded-[20px] py-0">
-          <div className="grid lg:grid-cols-[360px_minmax(0,1fr)]">
-            {/* Inputs */}
-            <div className="border-b border-border p-8 sm:p-10 lg:border-r lg:border-b-0">
-              <FieldGroup>
-                {fields.map((f) => (
-                  <Field key={f.id}>
-                    <FieldLabel htmlFor={f.id}>{f.label}</FieldLabel>
-                    <InputGroup>
-                      {f.prefix && (
-                        <InputGroupAddon align="inline-start">
-                          <InputGroupText>{f.prefix}</InputGroupText>
-                        </InputGroupAddon>
-                      )}
-                      <InputGroupInput
-                        id={f.id}
-                        inputMode="decimal"
-                        value={f.value}
-                        onChange={(e) => f.onChange(e.target.value)}
-                        onBlur={commit}
-                        onKeyDown={(e) => e.key === "Enter" && commit()}
-                      />
-                      <InputGroupAddon align="inline-end">
-                        <InputGroupText>{f.suffix}</InputGroupText>
-                      </InputGroupAddon>
-                    </InputGroup>
-                  </Field>
-                ))}
-              </FieldGroup>
-              <p className="mt-8 border-t border-border pt-6 text-[13px] leading-[1.7] text-muted-foreground">
-                {eur.format(annualRevenue)} in booking revenue per year, across{" "}
-                {annualBookings.toLocaleString("en-IE")} bookings.
-              </p>
+            <div>
+              {fields.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-baseline justify-between gap-6 border-t border-white/6 py-5 last:border-b"
+                >
+                  <label htmlFor={f.id} className="text-[14px] text-white/60">
+                    {f.label}
+                  </label>
+                  <div className="flex items-baseline gap-2">
+                    {f.prefix && <span className="text-[14px] text-white/28">{f.prefix}</span>}
+                    <input
+                      id={f.id}
+                      inputMode="decimal"
+                      value={f.value}
+                      onChange={(e) => f.onChange(e.target.value)}
+                      onBlur={commit}
+                      onKeyDown={(e) => e.key === "Enter" && commit()}
+                      className={`${f.width} border-b border-white/20 bg-transparent pb-1 text-right text-[17px] font-medium tracking-[-0.01em] text-white tabular-nums transition-colors outline-none hover:border-white/35 focus:border-[#00C8A8]`}
+                    />
+                    <span className="w-16 text-[12px] text-white/28">{f.suffix}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {/* Results */}
-            <div className="flex flex-col justify-between p-8 sm:p-10">
-              <div>
-                <div className="mb-7 text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
+            <p className="mt-6 text-[13px] leading-[1.7] text-white/30">
+              That&apos;s <span className="text-white/60 tabular-nums">{eur.format(annualRevenue)}</span> in
+              booking revenue per year, across{" "}
+              <span className="text-white/60 tabular-nums">{annualBookings.toLocaleString("en-IE")}</span>{" "}
+              bookings.
+            </p>
+          </div>
+
+          {/* Right — the year's commissions, set like a payout statement */}
+          <div className="lg:pt-24">
+            <div className="rounded-2xl border border-white/8 bg-[#0f1115] p-7 sm:p-9">
+              <div className="mb-7 flex items-baseline justify-between">
+                <span className="text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
                   Commission per year
-                </div>
-                <div className="flex flex-col gap-6">
-                  {rows.map((row) => (
-                    <div key={row.name}>
-                      <div className="mb-2 flex items-baseline justify-between gap-4">
-                        <span className={`text-[14px] ${row.highlight ? "font-medium text-white" : "text-white/45"}`}>
-                          {row.name}
-                        </span>
-                        <span
-                          className={`text-[15px] tracking-[-0.01em] tabular-nums ${
-                            row.highlight ? "font-semibold text-[#00C8A8]" : "text-white/45"
-                          }`}
-                        >
-                          {eur.format(row.cost)}
-                          <span className="ml-1.5 text-[11px] font-normal text-white/25">{row.pct.toFixed(1)}%</span>
-                        </span>
-                      </div>
-                      <div className="h-[7px] overflow-hidden rounded-full bg-white/5">
-                        <div
-                          className={`h-full rounded-full transition-[width] duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                            row.highlight ? "bg-[#00C8A8]" : "bg-white/18"
-                          }`}
-                          style={{ width: `${Math.max((row.cost / maxCost) * 100, 1.5)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                </span>
+                <span className="text-[11px] text-white/25">incl. payment processing</span>
               </div>
 
-              <div className="mt-10 border-t border-border pt-7">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <CountUpEuro
-                    value={saved}
-                    className="font-(family-name:--font-cormorant) text-[38px] leading-none font-bold tracking-[-1px] text-white tabular-nums sm:text-[46px]"
-                  />
-                  <span className="text-[14px] text-white/45">
-                    saved on commissions every year, compared with Booking.com.
-                  </span>
-                </div>
-                <p className="mt-3 text-[13px] text-white/30">
-                  That&apos;s about <span className="text-[#00C8A8] tabular-nums">{freeNights.toLocaleString("en-IE")}</span>{" "}
+              <div className="flex flex-col gap-6">
+                {rows.map((row) => (
+                  <div key={row.name}>
+                    <div className="mb-2 flex items-baseline justify-between gap-4">
+                      <span className={`text-[14px] ${row.highlight ? "font-medium text-white" : "text-white/40"}`}>
+                        {row.name}
+                      </span>
+                      <span
+                        className={`text-[15px] tracking-[-0.01em] tabular-nums ${
+                          row.highlight ? "font-semibold text-[#00C8A8]" : "text-white/40"
+                        }`}
+                      >
+                        {eur.format(row.cost)}
+                        <span className="ml-1.5 text-[11px] font-normal text-white/25">{row.pct.toFixed(1)}%</span>
+                      </span>
+                    </div>
+                    <div className="h-[6px] overflow-hidden rounded-full bg-white/5">
+                      <div
+                        className={`h-full rounded-full transition-[width] duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                          row.highlight ? "bg-[#00C8A8]" : "bg-white/15"
+                        }`}
+                        style={{ width: `${Math.max((row.cost / maxCost) * 100, 1.5)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-7 border-t border-white/8 pt-6">
+                <div className="mb-1 text-[14px] font-medium text-white">You keep</div>
+                <CountUpEuro
+                  value={saved}
+                  className="font-(family-name:--font-cormorant) text-[42px] leading-none font-bold tracking-[-1px] text-[#00C8A8] tabular-nums"
+                />
+                <p className="mt-3 text-[13px] leading-[1.7] text-white/40">
+                  more than with Booking.com, every year — about{" "}
+                  <span className="text-white/70 tabular-nums">{freeNights.toLocaleString("en-IE")}</span>{" "}
                   {freeNights === 1 ? "night" : "nights"} of revenue at your own rate.
                 </p>
               </div>
             </div>
-          </div>
-        </Card>
 
-        <p className="mx-auto mt-5 max-w-[75ch] text-center text-[11px] leading-[1.7] text-white/22">
-          Competitor figures are typical published commission rates and vary by market and agreement.
-          OpenBookings cost includes Stripe processing (1.5% + €0.25 per booking, standard EEA cards),
-          passed through with no markup.
-        </p>
+            <p className="mt-4 px-1 text-[11px] leading-[1.7] text-white/22">
+              Competitor figures are typical published commission rates and vary by market and agreement.
+              OpenBookings cost includes Stripe processing (1.5% + €0.25 per booking, standard EEA cards),
+              passed through with no markup.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );
