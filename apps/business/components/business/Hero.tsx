@@ -4,7 +4,7 @@ export function Hero() {
   return (
     <section
       id="hero"
-      className="relative overflow-hidden flex min-h-[88vh] flex-col items-center px-16 pt-24 text-center"
+      className="relative overflow-hidden flex min-h-svh flex-col items-center px-16 pt-24 text-center"
       style={{
         background:
           "radial-gradient(ellipse 80% 60% at 50% 40%, rgba(88,64,224,0.1) 0%, transparent 60%), radial-gradient(ellipse 60% 50% at 20% 80%, rgba(0,200,168,0.06) 0%, transparent 55%), #0d1117",
@@ -17,7 +17,7 @@ export function Hero() {
         stay locked to the text regardless of what renders above or below
         (e.g. the dashboard mockup's height changing).
       */}
-      <div className="relative flex w-full items-center justify-center" style={{ height: 760 }}>
+      <div className="relative flex w-full flex-1 items-center justify-center" style={{ minHeight: 700 }}>
         {/*
           Orbital rings + floating nodes.
 
@@ -156,21 +156,6 @@ export function Hero() {
             </Link>
           </div>
         </div>
-      </div>
-
-      {/* Trust strip — the bridge into the Mechanism section */}
-      <div className="relative z-2 mx-auto mb-14 flex flex-wrap items-center justify-center gap-x-0 gap-y-2 rounded-full border border-white/8 bg-white/2 px-4 py-3 sm:px-6">
-        {[
-          "4.5% flat commission",
-          "Open-source core",
-          "EU data residency",
-          "No pay-to-rank",
-        ].map((item, i) => (
-          <span key={item} className="flex items-center">
-            {i > 0 && <span className="mx-3 hidden h-[3px] w-[3px] rounded-full bg-white/20 sm:mx-4 sm:block" />}
-            <span className="px-2 text-[12px] tracking-[0.01em] text-white/45 sm:px-0 sm:text-[13px]">{item}</span>
-          </span>
-        ))}
       </div>
     </section>
   );

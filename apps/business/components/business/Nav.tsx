@@ -53,13 +53,10 @@ export function Nav() {
         {blurLayers.map(({ blur, mask }) => (
           <div key={blur} className={`absolute inset-0 ${blur} ${mask}`} />
         ))}
-        <div className="absolute inset-0 bg-white/[0.03] [mask-image:linear-gradient(to_bottom,black_0%,transparent_100%)]" />
+        <div className="absolute inset-0 bg-white/3 mask-[linear-gradient(to_bottom,black_0%,transparent_100%)]" />
       </div>
       <div className="flex items-center gap-[11px]">
-        <Image src="/OB-LOGO-LIGHT.png" alt="OpenBookings Business" width={100} height={100} />
-        <span className="text-[15px] font-medium tracking-[-0.02em] text-white">
-          OpenBookings <span className="text-white/38">Business</span>
-        </span>
+        <img src="/OB-LIGHT-WORDMARK.png" alt="OpenBookings Business" className="h-10 w-auto" />
       </div>
       <div className="flex items-center gap-2.5">
         <Link
