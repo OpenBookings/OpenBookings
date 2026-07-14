@@ -23,7 +23,7 @@ export function UserProfile() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <div className="flex items-center gap-3 px-2 py-2">
+        <div className="flex items-center gap-3 px-2 py-2 transition-[gap,padding] duration-300 ease-in-out group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0">
           <img
             src={
               name
@@ -33,7 +33,7 @@ export function UserProfile() {
             alt="avatar"
             className="size-8 shrink-0 rounded-full object-cover"
           />
-          <div className="flex flex-col flex-1 min-w-0 text-left text-sm leading-tight">
+          <div className="flex flex-1 flex-col min-w-0 overflow-hidden text-left text-sm leading-tight whitespace-nowrap transition-[opacity,width] duration-300 ease-in-out group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:opacity-0">
             <span className="truncate font-medium">{name || "—"}</span>
             <span className="truncate text-xs text-muted-foreground">{email}</span>
           </div>

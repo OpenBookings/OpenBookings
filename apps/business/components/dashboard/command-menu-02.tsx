@@ -3,24 +3,24 @@
 import {
   IconArrowRight,
   IconAt,
-  IconCopy,
+  IconBuilding,
+  IconCalendarEvent,
   IconDeviceDesktop,
-  IconDownload,
-  IconFile,
   IconFileSearch,
-  IconKeyboard,
-  IconLink,
+  IconLogin,
   IconLogout,
   IconMessage,
-  IconPencil,
   IconPlus,
-  IconSend,
   IconSettings,
-  IconTemplate,
-  IconUser,
-  IconUsers,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type CommandMenuAction,
+  commandMenuGroups,
+  searchReservations,
+} from "@/components/dashboard/command-menu-data";
+import type { MockReservationStatus } from "@/components/dashboard/mock-reservations";
 import {
   Command,
   CommandEmpty,
@@ -37,6 +37,35 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
+
+// Resolves the string icon names used in the JSON config to components.
+const iconRegistry: Record<string, React.ComponentType<{ className?: string }>> = {
+  "arrow-right": IconArrowRight,
+  at: IconAt,
+  building: IconBuilding,
+  "device-desktop": IconDeviceDesktop,
+  "file-search": IconFileSearch,
+  login: IconLogin,
+  logout: IconLogout,
+  message: IconMessage,
+  plus: IconPlus,
+  settings: IconSettings,
+};
+
+const statusLabels: Record<MockReservationStatus, string> = {
+  confirmed: "Confirmed",
+  checked_in: "In house",
+  checked_out: "Checked out",
+  pending: "Pending",
+};
+
+const statusDotClasses: Record<MockReservationStatus, string> = {
+  confirmed: "bg-emerald-500",
+  checked_in: "bg-blue-500",
+  checked_out: "bg-muted-foreground",
+  pending: "bg-amber-500",
+};
 
 type CommandMenu02Props = {
   open?: boolean;
@@ -44,6 +73,7 @@ type CommandMenu02Props = {
 };
 
 export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMenu02Props = {}) {
+  const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
@@ -69,6 +99,19 @@ export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMen
     return () => document.removeEventListener("keydown", down);
   }, [open, setOpen]);
 
+  const reservationResults = useMemo(
+    () => searchReservations(inputValue),
+    [inputValue]
+  );
+
+  const runAction = useCallback((action: CommandMenuAction) => {
+    setOpen(false);
+    if (action.type === "navigate" && action.href !== "#") {
+      router.push(action.href);
+    }
+    // "command" actions are not wired up yet; they only close the menu.
+  }, [router, setOpen]);
+
   return (
     <>
       <Dialog onOpenChange={setOpen} open={open}>
@@ -87,7 +130,7 @@ export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMen
               <CommandInput
                 className="h-10 text-[15px]"
                 onValueChange={setInputValue}
-                placeholder="What do you need?"
+                placeholder="Search reservations or type a command..."
                 value={inputValue}
               />
               <button
@@ -102,287 +145,87 @@ export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMen
             <CommandList className="max-h-[400px] py-2">
               <CommandEmpty>No results found.</CommandEmpty>
 
-              <CommandGroup>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconSettings aria-hidden />
-                  Account Settings...
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>,</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconUser aria-hidden />
-                  Switch Workspace...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconLogout aria-hidden />
-                  Log Out
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>Q</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-              </CommandGroup>
+              {reservationResults.length > 0 && (
+                <CommandGroup heading="Reservations">
+                  {reservationResults.map((reservation) => (
+                    <CommandItem
+                      className="mx-2 rounded-lg py-2.5"
+                      key={reservation.id}
+                      onSelect={() =>
+                        runAction({
+                          type: "navigate",
+                          href: `/dashboard/reservations/${reservation.id}`,
+                        })
+                      }
+                      value={`${reservation.id} ${reservation.guestName}`}
+                    >
+                      <IconCalendarEvent aria-hidden />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">
+                          <strong className="font-semibold">
+                            {reservation.guestName}
+                          </strong>
+                          <span className="text-muted-foreground">
+                            &nbsp;· {reservation.id}
+                          </span>
+                        </span>
+                        <span className="truncate text-muted-foreground text-xs">
+                          {reservation.roomName} · {reservation.checkInDate} →{" "}
+                          {reservation.checkOutDate}
+                        </span>
+                      </span>
+                      <span className="ml-auto flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            statusDotClasses[reservation.status]
+                          )}
+                        />
+                        {statusLabels[reservation.status]}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
 
-              <CommandGroup heading="Documents">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
+              {commandMenuGroups.map((group, groupIndex) => (
+                <CommandGroup
+                  heading={group.heading}
+                  key={group.heading ?? groupIndex}
                 >
-                  <IconFile aria-hidden />
-                  Search Documents...
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>F</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconPlus aria-hidden />
-                  Create New Document...
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>N</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconFile aria-hidden />
-                  Upload Document...
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>U</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Signing">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconSend aria-hidden />
-                  Request Signature...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconPencil aria-hidden />
-                  Sign a Document...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconUsers aria-hidden />
-                  Bulk Send for Signature...
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Templates">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconTemplate aria-hidden />
-                  Search Templates...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconPlus aria-hidden />
-                  Create New Template...
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="General">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconDeviceDesktop aria-hidden />
-                  Change Theme...
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>T</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconCopy aria-hidden />
-                  Copy Current URL
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>⇧</Kbd>
-                    <Kbd>C</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Navigation">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;<strong className="font-semibold">Inbox</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">Action Required</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">
-                      Waiting for Others
-                    </strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">Completed</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;<strong className="font-semibold">Drafts</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">Templates</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">Archive</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;<strong className="font-semibold">Trash</strong>
-                  </span>
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconArrowRight aria-hidden />
-                  <span>
-                    Go to&nbsp;
-                    <strong className="font-semibold">Settings</strong>
-                  </span>
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Quick Actions">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconLink aria-hidden />
-                  Copy Signing Link
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconDownload aria-hidden />
-                  Download Document
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Help">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconFileSearch aria-hidden />
-                  Search Help Center...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconMessage aria-hidden />
-                  Send Feedback...
-                </CommandItem>
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconAt aria-hidden />
-                  Contact Support
-                </CommandItem>
-              </CommandGroup>
-
-              <CommandGroup heading="Keyboard Shortcuts">
-                <CommandItem
-                  className="mx-2 rounded-lg py-2.5"
-                  onSelect={() => setOpen(false)}
-                >
-                  <IconKeyboard aria-hidden />
-                  View Keyboard Shortcuts
-                  <KbdGroup className="ml-auto">
-                    <Kbd>⌘</Kbd>
-                    <Kbd>/</Kbd>
-                  </KbdGroup>
-                </CommandItem>
-              </CommandGroup>
+                  {group.items.map((item) => {
+                    const Icon = iconRegistry[item.icon] ?? IconArrowRight;
+                    return (
+                      <CommandItem
+                        className="mx-2 rounded-lg py-2.5"
+                        key={item.label}
+                        keywords={item.keywords}
+                        onSelect={() => runAction(item.action)}
+                      >
+                        <Icon aria-hidden />
+                        {item.label.startsWith("Go to ") ? (
+                          <span>
+                            Go to&nbsp;
+                            <strong className="font-semibold">
+                              {item.label.slice("Go to ".length)}
+                            </strong>
+                          </span>
+                        ) : (
+                          item.label
+                        )}
+                        {item.shortcut && (
+                          <KbdGroup className="ml-auto">
+                            {item.shortcut.map((key) => (
+                              <Kbd key={key}>{key}</Kbd>
+                            ))}
+                          </KbdGroup>
+                        )}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))}
             </CommandList>
           </Command>
         </DialogContent>

@@ -8,9 +8,10 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 import { UserProfile } from "@/components/dashboard/sidebar-02/user-profile";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Building2,
   CalendarDays,
@@ -28,13 +29,13 @@ const dashboardRoutes: Route[] = [
   {
     id: "overview",
     title: "Overview",
-    icon: <LayoutDashboard className="size-4" />,
+    icon: <LayoutDashboard className="size-4 text-red-400" />,
     link: "/dashboard",
   },
   {
     id: "rates",
     title: "Rates & Availability",
-    icon: <Tag className="size-4" />,
+    icon: <Tag className="size-4 text-orange-400" />,
     link: "#",
     subs: [
       { title: "Calendar", link: "#"},
@@ -45,7 +46,7 @@ const dashboardRoutes: Route[] = [
   {
     id: "reservations",
     title: "Reservations",
-    icon: <CalendarDays className="size-4" />,
+    icon: <CalendarDays className="size-4 text-amber-400" />,
     link: "#",
     subs: [
       { title: "All Reservations", link: "#"},
@@ -55,7 +56,7 @@ const dashboardRoutes: Route[] = [
   {
     id: "property",
     title: "Property",
-    icon: <Building2 className="size-4" />,
+    icon: <Building2 className="size-4 text-emerald-400" />,
     link: "#",
     subs: [
       { title: "Details", link: "#"},
@@ -67,7 +68,7 @@ const dashboardRoutes: Route[] = [
   {
     id: "finance",
     title: "Finance",
-    icon: <HandCoins className="size-4" />,
+    icon: <HandCoins className="size-4 text-cyan-400" />,
     link: "#",
     subs: [
       { title: "Payouts", link: "#"},
@@ -79,7 +80,7 @@ const dashboardRoutes: Route[] = [
   {
     id: "analytics",
     title: "Analytics",
-    icon: <TrendingUp className="size-4" />,
+    icon: <TrendingUp className="size-4 text-blue-400" />,
     link: "#",
     subs: [
       { title: "Overview", link: "#", },
@@ -90,7 +91,7 @@ const dashboardRoutes: Route[] = [
   {
     id: "massages",
     title: "Messages",
-    icon: <MessageCircle className="size-4" />,
+    icon: <MessageCircle className="size-4 text-violet-400" />,
     link: "#",
   },
 ];
@@ -103,43 +104,67 @@ export function DashboardSidebar() {
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader
         className={cn(
-          "flex md:pt-3.5",
+          "relative flex h-(--header-height)",
           isCollapsed
-            ? "flex-row items-center justify-between gap-y-4 md:flex-col md:items-start md:justify-start"
-            : "flex-row items-center justify-between"
+            ? "flex-row items-center justify-between gap-2 md:flex-col md:items-center md:justify-center"
+            : "flex-row items-center justify-center"
         )}
       >
-        <a href="/dashboard" className="flex items-center gap-2">
-          {isCollapsed ? (
-            <img
-              src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
-              alt="OpenBookings"
-              className="h-7 w-auto select-none pointer-events-none"
-              draggable={false}
-            />
-          ) : (
-            <img
-              src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
-              alt="OpenBookings"
-              className="h-7 w-auto select-none pointer-events-none"
-              draggable={false}
-            />
+        <a
+          href="/dashboard"
+          className={cn(
+            "relative flex h-7 items-center overflow-hidden",
+            isCollapsed
+              ? "md:justify-center"
+              : "absolute left-1/2 -translate-x-1/2"
           )}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {isCollapsed ? (
+              <></>
+            ) : (
+              <motion.div
+                key="logo-expanded"
+                className="flex items-center gap-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: "easeInOut" }}
+              >
+                <img
+                  src="https://images.openbookings.co/44ca5796-7461-488a-9613-be71394d4aaa/logo.svg"
+                  alt=""
+                  className="h-7 w-auto select-none pointer-events-none"
+                  draggable={false}
+                />
+                <span className="text-muted-foreground select-none">&times;</span>
+                <img
+                  src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
+                  alt="OpenBookings"
+                  className="h-7 w-auto select-none pointer-events-none"
+                  draggable={false}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </a>
 
         <motion.div
           key={isCollapsed ? "header-collapsed" : "header-expanded"}
           className={cn(
             "flex items-center gap-2",
-            isCollapsed ? "flex-row md:flex-col-reverse" : "flex-row"
+            isCollapsed
+              ? "flex-row md:flex-col-reverse"
+              : "flex-row absolute right-0"
           )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
         >
           <SidebarTrigger />
         </motion.div>
       </SidebarHeader>
+      <Separator />
       <SidebarContent className="gap-4 px-2 py-4">
         <DashboardNavigation routes={dashboardRoutes} />
       </SidebarContent>
