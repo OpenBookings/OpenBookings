@@ -25,7 +25,7 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
           </div>
           <div className="flex gap-16">
             <div>
-              <div className="mb-4 text-[11px] font-medium tracking-[0.1em] text-white/28 uppercase">Product</div>
+              <div className="mb-4 text-[11px] font-medium tracking-widest text-white/28 uppercase">Product</div>
               <div className="flex flex-col gap-3">
                 {productLinks.map((label) => (
                   <a key={label} href="#" className="text-[14px] text-white/48 hover:text-white/70 transition-colors">
@@ -35,7 +35,7 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
               </div>
             </div>
             <div>
-              <div className="mb-4 text-[11px] font-medium tracking-[0.1em] text-white/28 uppercase">Company</div>
+              <div className="mb-4 text-[11px] font-medium tracking-widest text-white/28 uppercase">Company</div>
               <div className="flex flex-col gap-3">
                 {companyLinks.map((label) => (
                   <a key={label} href="#" className="text-[14px] text-white/48 hover:text-white/70 transition-colors">

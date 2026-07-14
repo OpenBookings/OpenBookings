@@ -47,8 +47,8 @@ const clauses = [
     detail: "Any change to the rate is announced a full month before it takes effect.",
   },
   {
-    term: "Published here first",
-    detail: "The new rate appears on this page before it applies to anyone.",
+    term: "Staying up-to-date",
+    detail: "The new rate appears directly in your inbox, or in the notification center on the dashboard.",
   },
   {
     term: "Never retroactive",
@@ -166,9 +166,9 @@ export async function RateLock() {
                 <span className="text-[15px] font-medium tracking-[-0.01em] text-white">Booking data — stays in the EU</span>
               </div>
               <p className="text-[14px] leading-[1.75] text-white/40">
-                Reservations, guest names, messages, preferences — everything OpenBookings stores lives in
+                Reservations, guest names, messages, preferences. OpenBookings stores lives in
                 EU-certified data centres and never leaves the European Economic Area. GDPR compliance is
-                architectural, not a policy document.
+                by design, not a policy document.
               </p>
             </div>
             <div>
