@@ -4,38 +4,75 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.1405 0.0044 285.8238);
-  --foreground: oklch(0.9848 0 0);
-  --card: oklch(0.1405 0.0044 285.8238);
-  --card-foreground: oklch(0.9848 0 0);
-  --popover: oklch(0.1405 0.0044 285.8238);
-  --popover-foreground: oklch(0.9848 0 0);
-  --primary: oklch(0.7119 0.0129 286.0684);
-  --primary-foreground: oklch(0.1405 0.0044 285.8238);
-  --secondary: oklch(0.2741 0.0055 286.0329);
-  --secondary-foreground: oklch(0.9848 0 0);
-  --muted: oklch(0.2741 0.0055 286.0329);
-  --muted-foreground: oklch(0.7119 0.0129 286.0684);
-  --accent: oklch(0.2741 0.0055 286.0329);
-  --accent-foreground: oklch(0.9848 0 0);
-  --destructive: oklch(0.3959 0.1331 25.7205);
-  --destructive-foreground: oklch(0.9848 0 0);
-  --border: oklch(0.2741 0.0055 286.0329);
-  --input: oklch(0.2741 0.0055 286.0329);
-  --ring: oklch(0.7119 0.0129 286.0684);
-  --chart-1: oklch(0.7119 0.0129 286.0684);
+  color-scheme: dark;
+  /*
+   * Dark theme — Twenty CRM baseline (see twenty-dark-theme.md).
+   * Gray scale is Radix gray dark (P3, perceptually tuned — non-monotonic
+   * steps are intentional). Hex values in comments are the ≈ sRGB equivalents.
+   */
+  --gray-1: color(display-p3 0.09 0.09 0.09); /* #171717 */
+  --gray-2: color(display-p3 0.106 0.106 0.106); /* #1B1B1B */
+  --gray-3: color(display-p3 0.098 0.098 0.098); /* #191919 */
+  --gray-4: color(display-p3 0.114 0.114 0.114); /* #1D1D1D */
+  --gray-5: color(display-p3 0.133 0.133 0.133); /* #222222 */
+  --gray-6: color(display-p3 0.282 0.282 0.282); /* #484848 */
+  --gray-7: color(display-p3 0.298 0.298 0.298); /* #4C4C4C */
+  --gray-8: color(display-p3 0.4 0.4 0.4); /* #666666 */
+  --gray-9: color(display-p3 0.506 0.506 0.506); /* #818181 */
+  --gray-10: color(display-p3 0.482 0.482 0.482); /* #7B7B7B */
+  --gray-11: color(display-p3 0.702 0.702 0.702); /* #B3B3B3 */
+  --gray-12: color(display-p3 0.922 0.922 0.922); /* #EBEBEB */
+
+  /* Alpha grays (white-alpha) — hover/active surfaces */
+  --gray-a1: color(display-p3 1 1 1 / 0.031);
+  --gray-a2: color(display-p3 1 1 1 / 0.059);
+  --gray-a5: color(display-p3 1 1 1 / 0.102);
+  --gray-a7: color(display-p3 1 1 1 / 0.141);
+
+  /* Accent — Radix indigoDark (Twenty accent) */
+  --accent-3: color(display-p3 0.105 0.141 0.275); /* #182449 */
+  --accent-7: color(display-p3 0.245 0.309 0.575); /* #3A4F97 */
+  --accent-9: color(display-p3 0.276 0.384 0.837); /* #3E63DD */
+  --accent-11: color(display-p3 0.63 0.69 1); /* #9EB1FF */
+
+  /* Danger — Radix redDark */
+  --red-3: color(display-p3 0.211 0.081 0.099); /* #3B1219 */
+  --red-5: color(display-p3 0.348 0.11 0.142); /* #611623 */
+  --red-9: color(display-p3 0.83 0.329 0.324); /* #E5484D */
+
+  /* Semantic tokens */
+  --background: var(--gray-1);
+  --foreground: var(--gray-12);
+  --card: var(--gray-2);
+  --card-foreground: var(--gray-12);
+  --popover: var(--gray-2);
+  --popover-foreground: var(--gray-12);
+  --primary: var(--accent-9);
+  --primary-foreground: #ffffff;
+  --secondary: var(--gray-5);
+  --secondary-foreground: var(--gray-12);
+  --muted: var(--gray-4);
+  --muted-foreground: var(--gray-11);
+  --accent: var(--gray-a2);
+  --accent-foreground: var(--gray-12);
+  --destructive: var(--red-9);
+  --destructive-foreground: #ffffff;
+  --border: var(--gray-5);
+  --input: var(--gray-6);
+  --ring: var(--accent-7);
+  --chart-1: var(--accent-9);
   --chart-2: oklch(0.4598 0.1177 262.6626);
   --chart-3: oklch(0.6475 0.1187 235.0233);
   --chart-4: oklch(0.8327 0.1203 195.0908);
   --chart-5: oklch(0.8724 0.1256 169.0628);
-  --sidebar: oklch(0.1405 0.0044 285.8238);
-  --sidebar-foreground: oklch(0.9848 0 0);
-  --sidebar-primary: oklch(0.7119 0.0129 286.0684);
-  --sidebar-primary-foreground: oklch(0.1405 0.0044 285.8238);
-  --sidebar-accent: oklch(0.2741 0.0055 286.0329);
-  --sidebar-accent-foreground: oklch(0.9848 0 0);
-  --sidebar-border: oklch(0.2741 0.0055 286.0329);
-  --sidebar-ring: oklch(0.7119 0.0129 286.0684);
+  --sidebar: var(--gray-2);
+  --sidebar-foreground: var(--gray-11);
+  --sidebar-primary: var(--accent-9);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--gray-a2);
+  --sidebar-accent-foreground: var(--gray-12);
+  --sidebar-border: var(--gray-5);
+  --sidebar-ring: var(--accent-7);
   /* OpenBookings brand colors */
   --ob-brand: oklch(62% 0.21 268);
   --ob-brand-light: oklch(67% 0.20 268);
@@ -45,25 +82,16 @@
   --font-serif: var(--font-gloock), serif;
   --font-mono: monospace;
   --radius: 0.5rem;
-  --shadow-x: 0rem;
-  --shadow-y: 0.5rem;
-  --shadow-blur: 1.5rem;
-  --shadow-spread: -0.5rem;
-  --shadow-opacity: 0.1;
-  --shadow-color: hsl(240 10% 3.9%);
-  --shadow-2xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.05);
-  --shadow-xs: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.05);
-  --shadow-sm: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
-    0rem 1px 2px -1.5px hsl(240 10% 3.9% / 0.1);
-  --shadow: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
-    0rem 1px 2px -1.5px hsl(240 10% 3.9% / 0.1);
-  --shadow-md: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
-    0rem 2px 4px -1.5px hsl(240 10% 3.9% / 0.1);
-  --shadow-lg: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
-    0rem 4px 6px -1.5px hsl(240 10% 3.9% / 0.1);
-  --shadow-xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
-    0rem 8px 10px -1.5px hsl(240 10% 3.9% / 0.1);
-  --shadow-2xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.25);
+  /* Shadows — Twenty dark theme set */
+  --shadow-color: rgba(0, 0, 0, 0.6);
+  --shadow-2xs: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 4px rgba(0, 0, 0, 0.08);
+  --shadow-xs: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 4px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 4px rgba(0, 0, 0, 0.08);
+  --shadow: 2px 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-md: 2px 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 2px 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 2px 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-2xl: 2px 4px 16px rgba(0, 0, 0, 0.16), 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 @theme inline {
@@ -472,8 +500,13 @@
 
 @layer base {
   * {
+    @apply border-border outline-ring/50;
     scrollbar-width: thin;
-    scrollbar-color: oklch(0.38 0.005 286) transparent;
+    scrollbar-color: var(--gray-6) transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
   }
 
   *::-webkit-scrollbar {
@@ -486,12 +519,12 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: oklch(0.38 0.005 286);
+    background: var(--gray-6);
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.48 0.005 286);
+    background: var(--gray-8);
   }
 
   .maplibregl-popup-content {
@@ -500,15 +533,4 @@
   .maplibregl-popup-tip {
     @apply hidden!;
   }
-}
-
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }

@@ -62,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${libreFranklin.variable} ${gloock.variable} ${allura.variable} ${cormorant.variable} ${dmSans.variable}`}
+      className={`dark ${libreFranklin.variable} ${gloock.variable} ${allura.variable} ${cormorant.variable} ${dmSans.variable}`}
     >
       <head />
       <body>
