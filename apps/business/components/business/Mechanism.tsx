@@ -12,7 +12,7 @@ export function Mechanism() {
           {/* Left — the argument */}
           <div>
             <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
-              The Mechanism
+              The Concept
             </div>
             <h2 className="mb-8 font-(family-name:--font-cormorant) text-[44px] leading-[1.04] font-bold tracking-[-1px] text-white sm:text-[62px] sm:tracking-[-1.5px]">
               4.5%. That&apos;s the
@@ -27,15 +27,15 @@ export function Mechanism() {
                 guest&apos;s side of the receipt.
               </p>
               <p>
-                <span className="text-white">Why so low?</span>{" "}Because 4.5% is what it costs to run this —
-                servers, support, payment infrastructure, development — with enough margin to still be here
-                in ten years. The big platforms charge 15–20% because they spend your commission bidding on
-                your own brand name. We don&apos;t.
+                <span className="text-white">Why so low?</span>{" "}Because 4.5% is what it actually costs to
+                run this; servers, support, infrastructure, development. No padding for a growth budget.
+                Bigger commissions often fund bids on your own hotel&apos;s name in search engines, so you&apos;d be
+                renting back a guest who was already looking for you. We skip that entirely.
               </p>
               <p>
-                <span className="text-white">Why believe it?</span>{" "}Because you don&apos;t have to. The
-                booking engine is open source — the fee logic, the ranking logic, all of it is public code
-                on GitHub. No black box, nothing to take on faith.
+                <span className="text-white">Why believe it?</span>{" "}Because you don&apos;t have to take
+                our word for the fees — the booking engine and fee logic are public code on GitHub. And
+                ranking can&apos;t be bought: no host, however large, pays for placement.
               </p>
             </div>
           </div>

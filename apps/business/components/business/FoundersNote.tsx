@@ -11,11 +11,7 @@ const goals = [
   },
   {
     title: "Booking data stays in Europe",
-    detail: "EU data residency by architecture — while payment details go straight to Stripe, never through us.",
-  },
-  {
-    title: "You own the relationship",
-    detail: "Your guests, your data, exportable any time. We're the pipe, not the gatekeeper.",
+    detail: "EU data residency by design. Payments route directly to Stripe.",
   },
 ];
 
@@ -27,7 +23,7 @@ export function FoundersNote() {
           {/* The letter */}
           <div>
             <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-white/45 uppercase">
-              Why This Exists
+              Why We Exists
             </div>
             <h2 className="mb-12 font-(family-name:--font-cormorant) text-[44px] leading-[1.04] font-bold tracking-[-1px] text-white sm:text-[62px] sm:tracking-[-1.5px]">
               A note from
@@ -36,22 +32,16 @@ export function FoundersNote() {
             </h2>
             <div className="max-w-[58ch] space-y-6 text-[16px] leading-[1.85] font-light text-white/55">
               <p>
-                Every year, independent hotels hand a fifth of their revenue to booking platforms — and then
-                pay again to rank above their own name in search results. I kept waiting for someone to
-                build the obvious alternative: a platform that charges what it actually costs to run, and
-                can prove it. Nobody did. So I started building it.
+                Every year, independent hotels hand over a share of their revenue to booking platforms, then pay again to rank above their own name in search results.
+                I watched this happen from your side of the desk, and kept waiting for someone to build the obvious alternative.
+                Nobody did. So I started building it.
               </p>
               <p>
-                OpenBookings charges 4.5% because that&apos;s what covers servers, support, payment
-                infrastructure, and development — with enough margin to still exist in ten years. Not
-                because a pricing team modelled how much you&apos;d tolerate. And since &ldquo;trust
-                me&rdquo; isn&apos;t an argument, the code is public. You can read exactly what happens to
-                every booking, every fee, every ranking decision.
+                OpenBookings is built and run by one person today, that's a current stage, not a promise. 
+                What isn't dependent on any one person is the commission itself: it's written into the code, publicly versioned, and changeable only with 30 days' notice. 
               </p>
               <p>
-                Booking software should be plumbing: reliable, inspectable, and priced like a utility. If
-                that sounds less like a marketplace and more like infrastructure — that&apos;s exactly the
-                point.
+              You're not trusting a founder. You're trusting a business model you can read.
               </p>
               <div className="flex items-end pt-2">
                 <Image
