@@ -13,13 +13,11 @@ import { UserProfile } from "@/components/dashboard/sidebar-02/user-profile";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Building2,
   CalendarDays,
   HandCoins,
   LayoutDashboard,
-  MessageCircle,
-  Tag,
   TrendingUp,
+  PencilSparkles
 } from "lucide-react";
 import type { Route } from "./nav-main";
 import DashboardNavigation from "@/components/dashboard/sidebar-02/nav-main";
@@ -29,71 +27,43 @@ const dashboardRoutes: Route[] = [
   {
     id: "overview",
     title: "Overview",
-    icon: <LayoutDashboard className="size-4 text-red-400" />,
+    icon: <LayoutDashboard className="size-4" />,
     link: "/dashboard",
   },
   {
-    id: "rates",
-    title: "Rates & Availability",
-    icon: <Tag className="size-4 text-orange-400" />,
+    id: "bookings",
+    title: "Bookings",
+    icon: <CalendarDays className="size-4" />,
     link: "#",
     subs: [
-      { title: "Calendar", link: "#"},
-      { title: "Rate Plans", link: "#"},
-      { title: "Restrictions", link: "#"},
+      { title: "Reservations", link: "/dashboard/bookings/reservations" },
+      { title: "Messages", link: "/dashboard/bookings/messages" },
+      { title: "Reviews", link: "/dashboard/bookings/reviews" },
     ],
   },
   {
-    id: "reservations",
-    title: "Reservations",
-    icon: <CalendarDays className="size-4 text-amber-400" />,
-    link: "#",
-    subs: [
-      { title: "All Reservations", link: "#"},
-      { title: "Cancellations", link: "#"},
-    ],
-  },
-  {
-    id: "property",
+    id: "Property",
     title: "Property",
-    icon: <Building2 className="size-4 text-emerald-400" />,
+    icon: <PencilSparkles className="size-4" />,
     link: "#",
     subs: [
-      { title: "Details", link: "#"},
-      { title: "Rooms", link: "#"},
-      { title: "Policies", link: "#"},
-      { title: "Integrations", link: "#"},
+      { title: "R&A", link: "/dashboard/property/rates-availability" },
+      { title: "Property", link: "/dashboard/property/property" },
+      { title: "Rooms", link: "/dashboard/property/rooms" },
     ],
   },
   {
     id: "finance",
     title: "Finance",
-    icon: <HandCoins className="size-4 text-cyan-400" />,
-    link: "#",
-    subs: [
-      { title: "Payouts", link: "#"},
-      { title: "Transactions", link: "#"},
-      { title: "Statements", link: "#"},
-      { title: "Disputes", link: "#"},
-    ],
+    icon: <HandCoins className="size-4" />,
+    link: "/dashboard/finance",
   },
   {
     id: "analytics",
     title: "Analytics",
-    icon: <TrendingUp className="size-4 text-blue-400" />,
-    link: "#",
-    subs: [
-      { title: "Overview", link: "#", },
-      { title: "Sources", link: "#", },
-      { title: "Performance", link: "#"},
-    ],
-  },
-  {
-    id: "massages",
-    title: "Messages",
-    icon: <MessageCircle className="size-4 text-violet-400" />,
-    link: "#",
-  },
+    icon: <TrendingUp className="size-4" />,
+    link: "/dashboard/analytics",
+  }
 ];
 
 export function DashboardSidebar() {

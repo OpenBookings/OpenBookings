@@ -335,6 +335,56 @@ export const transactions = pgTable(
   ],
 );
 
+export const messageThreads = pgTable(
+  "message_threads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** NULL = pre-booking inquiry, not yet tied to a booking. */
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    // Better Auth user ids are text, not uuid
+    hostId: text("host_id").notNull(),
+    guestId: text("guest_id").notNull(),
+    /** 'open' | 'closed' | 'flagged', enforced by a DB check constraint. */
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_message_threads_host_id").on(table.hostId, table.updatedAt),
+    index("idx_message_threads_guest_id").on(table.guestId, table.updatedAt),
+    index("idx_message_threads_booking_id").on(table.bookingId),
+  ],
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => messageThreads.id, { onDelete: "cascade" }),
+    // Better Auth user ids are text, not uuid. Nullable: NULL'd out by the
+    // retention sweep when a message is anonymized.
+    senderId: text("sender_id"),
+    /** 'host' | 'guest', enforced by a DB check constraint. */
+    senderRole: text("sender_role").notNull(),
+    body: text("body").notNull(),
+    flaggedReason: text("flagged_reason"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    /** Set once the per-thread NOTIFY has fired for this message; also the retention-sweep cursor. */
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_messages_thread_id_created_at").on(table.threadId, table.createdAt),
+    index("idx_messages_unread_sweep").on(table.createdAt),
+    index("idx_messages_flagged").on(table.threadId),
+  ],
+);
+
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs
 // db.query instead of the select/execute APIs used so far.

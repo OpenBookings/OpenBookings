@@ -1,105 +1,22 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReservationsTable } from "@/components/dashboard/reservations-table";
 import type {
   MockReservation,
-  MockReservationStatus,
   ReservationBuckets,
 } from "@/components/dashboard/mock-reservations";
 
-const statusLabels: Record<MockReservationStatus, string> = {
-  confirmed: "Confirmed",
-  checked_in: "Checked in",
-  checked_out: "Checked out",
-  pending: "Pending",
-};
-
-const dateFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-});
-
-const currencyFormatter = new Intl.NumberFormat("en-NL", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
-
-function ReservationsTable({
-  reservations,
-  emptyMessage,
+export function ReservationsTabs({
+  buckets,
+  selectedId,
+  onSelect,
 }: {
-  reservations: MockReservation[];
-  emptyMessage: string;
+  buckets: ReservationBuckets;
+  selectedId?: string | null;
+  onSelect?: (reservation: MockReservation) => void;
 }) {
-  return (
-    <div className="overflow-hidden rounded-lg border">
-      <Table>
-        <TableHeader className="bg-muted">
-          <TableRow>
-            <TableHead>Reservation</TableHead>
-            <TableHead>Guest</TableHead>
-            <TableHead>Room</TableHead>
-            <TableHead>Check-in</TableHead>
-            <TableHead>Check-out</TableHead>
-            <TableHead className="text-right">Guests</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {reservations.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={8}
-                className="text-muted-foreground h-24 text-center"
-              >
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          ) : (
-            reservations.map((reservation) => (
-              <TableRow key={reservation.id}>
-                <TableCell className="font-medium">{reservation.id}</TableCell>
-                <TableCell>{reservation.guestName}</TableCell>
-                <TableCell>{reservation.roomName}</TableCell>
-                <TableCell>
-                  {dateFormatter.format(new Date(reservation.checkInDate))}
-                </TableCell>
-                <TableCell>
-                  {dateFormatter.format(new Date(reservation.checkOutDate))}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {reservation.guests}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className="text-muted-foreground px-1.5"
-                  >
-                    {statusLabels[reservation.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {currencyFormatter.format(reservation.totalAmount)}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-export function ReservationsTabs({ buckets }: { buckets: ReservationBuckets }) {
   const tabs = [
     {
       value: "upcoming",
@@ -144,6 +61,8 @@ export function ReservationsTabs({ buckets }: { buckets: ReservationBuckets }) {
           <ReservationsTable
             reservations={tab.reservations}
             emptyMessage={tab.emptyMessage}
+            selectedId={selectedId}
+            onSelect={onSelect}
           />
         </TabsContent>
       ))}

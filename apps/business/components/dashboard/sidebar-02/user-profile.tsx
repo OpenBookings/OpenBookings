@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -37,6 +38,15 @@ export function UserProfile() {
             <span className="truncate font-medium">{name || "—"}</span>
             <span className="truncate text-xs text-muted-foreground">{email}</span>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Log out"
+            aria-label="Log out"
+            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+          >
+            <LogOut className="size-4" />
+          </button>
         </div>
       </SidebarMenuItem>
     </SidebarMenu>

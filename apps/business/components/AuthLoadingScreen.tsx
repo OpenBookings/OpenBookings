@@ -1,10 +1,11 @@
 "use client";
 
 interface Props {
-  visible: boolean;
+  /** Defaults to true so the component can be used directly as a Suspense/loading.tsx fallback. */
+  visible?: boolean;
 }
 
-export function AuthLoadingScreen({ visible }: Props) {
+export function AuthLoadingScreen({ visible = true }: Props) {
   return (
     <div
       aria-hidden={!visible}
