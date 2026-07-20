@@ -35,6 +35,12 @@
   --accent-9: color(display-p3 0.276 0.384 0.837); /* #3E63DD */
   --accent-11: color(display-p3 0.63 0.69 1); /* #9EB1FF */
 
+  /* Status — Radix greenDark / amberDark (steps 3 surface, 11 text) */
+  --green-3: #132d21;
+  --green-11: #3dd68c;
+  --amber-3: #302008;
+  --amber-11: #ffca16;
+
   /* Danger — Radix redDark */
   --red-3: color(display-p3 0.211 0.081 0.099); /* #3B1219 */
   --red-5: color(display-p3 0.348 0.11 0.142); /* #611623 */

@@ -15,8 +15,8 @@ export async function POST(req: Request) {
 
   const origin = new URL(req.url).origin;
   const url = await createAccountLink(row.stripe_account_id, {
-    refreshUrl: `${origin}/onboarding/stripe-connect`,
-    returnUrl: `${origin}/onboarding/verify`,
+    refreshUrl: `${origin}/onboarding/stripe`,
+    returnUrl: `${origin}/onboarding/stripe`,
   });
 
   return NextResponse.json({ url });

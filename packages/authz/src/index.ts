@@ -59,6 +59,41 @@ export async function userOwnsRoom(
   return row?.ok === true;
 }
 
+/** A message_threads row (see packages/db/src/schema.ts). */
+export type ThreadRow = {
+  id: string;
+  booking_id: string | null;
+  property_id: string;
+  host_id: string;
+  guest_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Messaging threads have exactly two participants (host_id, guest_id) — no
+ * separate ownership data, same shape as userOwnsRoom above. Returns the
+ * thread plus which side the session belongs to, since callers (send
+ * message, mark read) need to know the role, not just whether access is
+ * allowed.
+ */
+export async function getThreadForParticipant(
+  session: SessionLike | null | undefined,
+  threadId: string,
+  deps: AuthzDeps = {},
+): Promise<{ thread: ThreadRow; role: "host" | "guest" } | null> {
+  const userId = ownerId(session);
+  if (!userId || !threadId) return null;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const thread = await queryOne<ThreadRow>(
+    `SELECT * FROM message_threads WHERE id = $1 AND (host_id = $2 OR guest_id = $2)`,
+    [threadId, userId],
+  );
+  if (!thread) return null;
+  return { thread, role: thread.host_id === userId ? "host" : "guest" };
+}
+
 /**
  * Host-scoped query helper for apps/business analytics and reads. The scope
  * is derived from the verified session — never from a client-passed id — and
