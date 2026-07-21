@@ -22,6 +22,13 @@ import type { ThreadListItem, ThreadMessage } from "@/components/dashboard/messa
 
 const dayFormatter = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" });
 const POLL_INTERVAL_MS = 5000;
+const WS_RECONNECT_BASE_MS = 1000;
+const WS_RECONNECT_MAX_MS = 8000;
+
+function realtimeWsUrl(): string {
+  const base = process.env.NEXT_PUBLIC_REALTIME_WORKER_URL ?? "";
+  return base.replace(/^http/, "ws");
+}
 
 function dedupeAndSort(prev: ThreadMessage[], incoming: ThreadMessage[]): ThreadMessage[] {
   const byId = new Map(prev.map((m) => [m.id, m]));
@@ -81,9 +88,15 @@ export function ThreadView({
     messagesRef.current = messages;
   }, [messages]);
 
-  // Live updates via SSE, falling back to periodic refetch if the stream drops.
+  // Live updates via a WebSocket to the recipient's Durable Object, falling
+  // back to periodic refetch while disconnected. WebSocket has no built-in
+  // reconnect (unlike EventSource), so that's handled explicitly here with
+  // jittered exponential backoff.
   React.useEffect(() => {
-    const es = new EventSource(`/api/threads/${threadId}/stream`);
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectAttempt = 0;
     let pollId: ReturnType<typeof setInterval> | undefined;
 
     const stopPolling = () => {
@@ -108,23 +121,58 @@ export function ThreadView({
       }, POLL_INTERVAL_MS);
     };
 
-    es.onopen = () => {
-      setLive(true);
-      stopPolling();
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      startPolling();
+      const delay = Math.min(WS_RECONNECT_BASE_MS * 2 ** reconnectAttempt, WS_RECONNECT_MAX_MS);
+      const jitter = delay * (0.5 + Math.random() * 0.5);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(connect, jitter);
     };
-    es.onmessage = (event) => {
+
+    const connect = async () => {
+      if (cancelled) return;
       try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === "message") setMessages((prev) => dedupeAndSort(prev, [payload.message]));
+        // Short-lived (60s) token, re-requested per connection attempt
+        // rather than reused across reconnects.
+        const res = await fetch("/api/realtime/token", { method: "POST" });
+        if (!res.ok) throw new Error("token request failed");
+        const { token } = await res.json();
+        if (cancelled) return;
+
+        ws = new WebSocket(`${realtimeWsUrl()}/connect?token=${encodeURIComponent(token)}`);
+
+        ws.onopen = () => {
+          reconnectAttempt = 0;
+          setLive(true);
+          stopPolling();
+        };
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "message") setMessages((prev) => dedupeAndSort(prev, [payload.message]));
+          } catch {
+            // ignore malformed events
+          }
+        };
+        ws.onclose = () => {
+          if (!cancelled) scheduleReconnect();
+        };
+        ws.onerror = () => {
+          ws?.close();
+        };
       } catch {
-        // ignore malformed events
+        scheduleReconnect();
       }
     };
-    es.onerror = () => startPolling();
+
+    connect();
 
     return () => {
-      es.close();
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       stopPolling();
+      ws?.close();
     };
   }, [threadId]);
 
