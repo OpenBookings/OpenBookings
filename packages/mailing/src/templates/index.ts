@@ -106,4 +106,66 @@ export const templates: Record<string, string> = {
     </table>
   </body>
 </html>`,
+  "new-message": `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>New message on OpenBookings</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#111111;">
+    <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="background-color:#111111;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+
+          <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="max-width:560px;background-color:#1A1A1A;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
+
+            <tr>
+              <td align="center" style="padding:28px 40px 8px;">
+                <img src="https://cdn.openbookings.co/Openbookings-logo-v2.png" alt="OpenBookings" style="display:block;max-width:116px;width:100%;height:auto;" />
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:32px 40px 48px;text-align:center;">
+
+                <h1 style="font-family:Didot,'Big Caslon','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;font-weight:400;font-size:34px;line-height:1.12;color:#F0F0F0;margin:0 0 20px;letter-spacing:-0.01em;">
+                  You've got a new message.
+                </h1>
+
+                <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="margin-bottom:32px;">
+                  <tr>
+                    <td style="background-color:#111111;border-radius:6px;padding:16px 18px;border:1px solid rgba(255,255,255,0.06);text-align:left;">
+                      <p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#AAAAAA;margin:0;line-height:1.6;white-space:pre-wrap;">{{preview}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation">
+                  <tr>
+                    <td>
+                      <a href="{{threadUrl}}" target="_blank" style="display:block;background-color:#FFFFFF;color:#111111;text-align:center;padding:18px 32px;border-radius:7px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:500;letter-spacing:0.02em;text-decoration:none;">Reply &#x2192;</a>
+                    </td>
+                  </tr>
+                </table>
+
+              </td>
+            </tr>
+
+          </table>
+
+          <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="max-width:560px;">
+            <tr>
+              <td style="padding:28px 40px 4px;text-align:center;font-family:'Nimbus Mono PS','Courier New',monospace;font-size:12px;line-height:1.6;color:#888888;">
+                Got a question? Roy here, reads all replies.
+              </td>
+            </tr>
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
 };

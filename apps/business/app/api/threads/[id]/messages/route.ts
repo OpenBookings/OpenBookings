@@ -3,6 +3,7 @@ import { query, queryOne } from "@openbookings/db";
 import { getThreadForParticipant } from "@openbookings/authz";
 import { NextResponse } from "next/server";
 import { detectCircumvention } from "@/lib/messaging/circumvention";
+import { deliverMessageToRecipient } from "@/lib/realtime/deliver";
 
 type MessageRow = {
   id: string;
@@ -54,12 +55,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   await query(`UPDATE message_threads SET updated_at = now() WHERE id = $1`, [threadId]);
 
-  // NOTIFY channel name carries the thread id via pg_notify's text argument,
-  // not string-interpolated into the SQL, so it's safe regardless of format.
-  await query(`SELECT pg_notify('thread_' || $1::text, $2::text)`, [
-    threadId,
-    JSON.stringify({ type: "message", message }),
-  ]);
+  const recipientId =
+    participant.role === "host" ? participant.thread.guest_id : participant.thread.host_id;
+  await deliverMessageToRecipient({ recipientId, threadId, message });
   await query(`UPDATE messages SET notified_at = now() WHERE id = $1`, [message.id]);
 
   return NextResponse.json(
