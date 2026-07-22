@@ -9,7 +9,7 @@ export function AuthLoadingScreen({ visible = true }: Props) {
   return (
     <div
       aria-hidden={!visible}
-      className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
+      className="fixed inset-0 z-200 bg-black flex items-center justify-center"
       style={{
         opacity: visible ? 1 : 0,
         visibility: visible ? "visible" : "hidden",

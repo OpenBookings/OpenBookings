@@ -39,7 +39,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
           {ONBOARDING_STEPS.map((_, i) => (
             <div
               key={i}
-              className={`h-[3px] w-10 rounded-full transition-all duration-300 ${
+              className={`h-0.75 w-10 rounded-full transition-all duration-300 ${
                 i === currentIndex
                   ? "bg-white"
                   : i < currentIndex

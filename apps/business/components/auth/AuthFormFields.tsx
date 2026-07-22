@@ -165,7 +165,7 @@ export function AuthFormFields({
 
     if (sentEmail) {
         return (
-            <div className="w-full min-h-[238px] flex flex-col justify-center items-center text-center gap-3">
+            <div className="w-full min-h-59.5 flex flex-col justify-center items-center text-center gap-3">
                 <h3 className="text-2xl font-semibold text-white">Email sent successfully</h3>
                 <p className="text-white/85 max-w-xs">Please check your inbox at {sentEmail}</p>
                 <Button
@@ -182,7 +182,7 @@ export function AuthFormFields({
 
     if (socialState) {
         return (
-            <div className="w-full min-h-[238px] flex flex-col justify-center items-center text-center gap-3">
+            <div className="w-full min-h-59.5 flex flex-col justify-center items-center text-center gap-3">
                 <h3 className="text-2xl font-semibold text-white">
                     {socialState.failed ? `Failed to continue with ${providerLabel}` : `Redirecting you to ${providerLabel}`}
                 </h3>
