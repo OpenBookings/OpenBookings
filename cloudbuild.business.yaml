@@ -24,6 +24,8 @@ steps:
       - 'NEXT_PUBLIC_SENTRY_DSN=${_NEXT_PUBLIC_SENTRY_DSN}'
       - '--build-arg'
       - 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_REALTIME_WORKER_URL=${_NEXT_PUBLIC_REALTIME_WORKER_URL}'
       - '.'
 
   # ---------- Push ----------
