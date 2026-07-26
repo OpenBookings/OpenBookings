@@ -22,6 +22,7 @@
         "@openbookings/authz": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/mailing": "workspace:*",
+        "@openbookings/messaging": "workspace:*",
         "@openbookings/stripe": "workspace:*",
         "@radix-ui/react-label": "^2.1.11",
         "@radix-ui/react-select": "^2.3.3",
@@ -181,6 +182,22 @@
       "devDependencies": {
         "@types/node": "^22",
         "typescript": "^5",
+      },
+    },
+    "packages/messaging": {
+      "name": "@openbookings/messaging",
+      "version": "0.0.0",
+      "dependencies": {
+        "@openbookings/authz": "workspace:*",
+        "@openbookings/db": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22",
+        "@types/react": "19.2.14",
+        "typescript": "^5",
+      },
+      "peerDependencies": {
+        "react": "^19",
       },
     },
     "packages/stripe": {
@@ -526,6 +543,8 @@
     "@openbookings/db": ["@openbookings/db@workspace:packages/db"],
 
     "@openbookings/mailing": ["@openbookings/mailing@workspace:packages/mailing"],
+
+    "@openbookings/messaging": ["@openbookings/messaging@workspace:packages/messaging"],
 
     "@openbookings/stripe": ["@openbookings/stripe@workspace:packages/stripe"],
 

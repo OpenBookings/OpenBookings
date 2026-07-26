@@ -32,22 +32,18 @@ export function Calendar05({ checkIn, checkOut, onDateChange }: Calendar05Props)
     return dateRange?.from || new Date()
   })
 
-  // Update month when dateRange changes (but only if it's a significant change)
-  React.useEffect(() => {
-    if (dateRange?.from) {
-      const newMonth = new Date(dateRange.from)
-      setMonth((currentMonth) => {
-        // Only update if the month/year is different
-        if (
-          newMonth.getMonth() !== currentMonth.getMonth() ||
-          newMonth.getFullYear() !== currentMonth.getFullYear()
-        ) {
-          return newMonth
-        }
-        return currentMonth
-      })
+  // Update month when dateRange's `from` changes to a different month/year.
+  const [trackedFrom, setTrackedFrom] = React.useState(dateRange?.from)
+  if (dateRange?.from?.getTime() !== trackedFrom?.getTime()) {
+    setTrackedFrom(dateRange?.from)
+    if (
+      dateRange?.from &&
+      (dateRange.from.getMonth() !== month.getMonth() ||
+        dateRange.from.getFullYear() !== month.getFullYear())
+    ) {
+      setMonth(dateRange.from)
     }
-  }, [dateRange?.from])
+  }
 
   const handleSelect = (range: DateRange | undefined) => {
     onDateChange?.(range)

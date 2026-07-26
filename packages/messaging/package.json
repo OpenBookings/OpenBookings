@@ -1,0 +1,24 @@
+{
+  "name": "@openbookings/messaging",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@openbookings/authz": "workspace:*",
+    "@openbookings/db": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "19.2.14",
+    "typescript": "^5"
+  }
+}

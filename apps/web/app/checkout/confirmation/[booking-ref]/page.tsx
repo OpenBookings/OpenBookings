@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 export default function DeadEndpointPage() {
   return (
     <div className="min-h-screen flex flex-col justify-center items-center bg-background text-foreground px-4">
@@ -8,12 +10,12 @@ export default function DeadEndpointPage() {
         <p className="text-lg mb-6">
           This page is no longer active or does not exist.
         </p>
-        <a
+        <Link
           href="/"
           className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-md font-medium shadow hover:bg-primary/90 transition"
         >
           Go Home
-        </a>
+        </Link>
       </div>
     </div>
   );

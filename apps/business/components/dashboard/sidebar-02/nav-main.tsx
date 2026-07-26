@@ -19,7 +19,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 export type Route = {
   id: string;
@@ -54,10 +54,11 @@ export default function DashboardNavigation({ routes }: { routes: Route[] }) {
     routes.find((route) => route.subs?.some((s) => s.link === activeLink))?.id ?? null;
 
   const [openCollapsible, setOpenCollapsible] = useState<string | null>(activeGroupId);
-
-  useEffect(() => {
+  const [lastActiveGroupId, setLastActiveGroupId] = useState(activeGroupId);
+  if (activeGroupId !== lastActiveGroupId) {
+    setLastActiveGroupId(activeGroupId);
     if (activeGroupId) setOpenCollapsible(activeGroupId);
-  }, [activeGroupId]);
+  }
 
   const isRouteActive = (route: Route) =>
     route.link === activeLink ||

@@ -118,6 +118,21 @@ interface CalculationState {
   applied: Set<ModifierType>
 }
 
+interface ModifierContext {
+  extraGuests: number
+  numNights: number
+  totalGuests: number
+  baseOccupancy: number
+  arrivalDate: string
+  today: string
+}
+
+type ModifierStepFn = (
+  state: CalculationState,
+  modifier: Modifier,
+  context: ModifierContext
+) => CalculationState
+
 // ─────────────────────────────────────────────
 // Step functions (ordered by sort_order)
 // ─────────────────────────────────────────────
@@ -125,14 +140,7 @@ interface CalculationState {
 function applyExtraGuest(
   state: CalculationState,
   modifier: Modifier,
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   if (modifier.type !== 'extra_guest') return state
   if (!context.extraGuests) return state
@@ -167,14 +175,7 @@ function applyExtraGuest(
 function applyDayOfWeek(
   state: CalculationState,
   modifier: Modifier,
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   if (modifier.type !== 'day_of_week') return state
 
@@ -207,14 +208,7 @@ function applyDayOfWeek(
 function applyLastMinute(
   state: CalculationState,
   modifier: Modifier,
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   if (modifier.type !== 'last_minute') return state
 
@@ -248,14 +242,7 @@ function applyLastMinute(
 function applyLengthOfStay(
   state: CalculationState,
   modifier: Modifier,
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   if (modifier.type !== 'length_of_stay') return state
 
@@ -276,14 +263,7 @@ function applyLengthOfStay(
 function applyEarlyBird(
   state: CalculationState,
   modifier: Modifier,
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   if (modifier.type !== 'early_bird') return state
 
@@ -308,14 +288,7 @@ function applyEarlyBird(
 function executeModifiers(
   nights: Night[],
   modifiers: Modifier[],
-  context: {
-    extraGuests: number
-    numNights: number
-    totalGuests: number
-    baseOccupancy: number
-    arrivalDate: string
-    today: string
-  }
+  context: ModifierContext
 ): CalculationState {
   // Initial subtotal: sum of base prices
   const initialSubtotal = nights.reduce((sum, n) => sum + n.base_price, 0)
@@ -333,7 +306,7 @@ function executeModifiers(
   // Only one discount may fire — the eligible one with the lowest sort_order
   const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
 
-  const stepFunctions: Record<ModifierType, Function> = {
+  const stepFunctions: Record<ModifierType, ModifierStepFn> = {
     extra_guest: applyExtraGuest,
     day_of_week: applyDayOfWeek,
     last_minute: applyLastMinute,

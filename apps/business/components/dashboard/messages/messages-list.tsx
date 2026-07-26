@@ -4,7 +4,7 @@ import { MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import type { ThreadListItem } from "@/components/dashboard/messages/types";
+import type { ThreadListItem } from "@openbookings/messaging/client";
 
 function initials(name: string | null): string {
   if (!name) return "G";

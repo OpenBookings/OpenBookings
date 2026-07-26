@@ -435,11 +435,12 @@ function useSystemStatus(): SystemStatus {
   });
 
   useEffect(() => {
-    const cached = readCachedStatus();
-    if (cached) {
-      setStatus(cached);
-      return;
-    }
+    const applyCached = () => {
+      const cached = readCachedStatus();
+      if (cached) setStatus(cached);
+      return !!cached;
+    };
+    if (applyCached()) return;
 
     const controller = new AbortController();
 

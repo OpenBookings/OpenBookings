@@ -63,7 +63,9 @@ export function AuthFormFields({
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [microsoftLoading, setMicrosoftLoading] = useState(false);
-    const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+    const [magicLinkError, setMagicLinkError] = useState<string | null>(
+        initialError ?? null,
+    );
     const [sentEmail, setSentEmail] = useState<string | null>(null);
     const [socialState, setSocialState] = useState<{
         provider: "google" | "microsoft";
@@ -71,10 +73,6 @@ export function AuthFormFields({
     } | null>(null);
 
     const setCardPhase = useContext(AuthFormPhaseContext)?.setPhase;
-
-    useEffect(() => {
-        if (initialError) setMagicLinkError(initialError);
-    }, [initialError]);
 
     useEffect(() => {
         if (!setCardPhase) return;

@@ -6,7 +6,7 @@ import { MessageSquare } from "lucide-react";
 import { MessagesList } from "@/components/dashboard/messages/messages-list";
 import { ThreadView } from "@/components/dashboard/messages/thread-view";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { ThreadListItem } from "@/components/dashboard/messages/types";
+import type { ThreadListItem } from "@openbookings/messaging/client";
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 

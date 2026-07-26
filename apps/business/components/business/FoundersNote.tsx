@@ -37,11 +37,11 @@ export function FoundersNote() {
                 Nobody did. So I started building it.
               </p>
               <p>
-                OpenBookings is built and run by one person today, that's a current stage, not a promise. 
-                What isn't dependent on any one person is the commission itself: it's written into the code, publicly versioned, and changeable only with 30 days' notice. 
+                OpenBookings is built and run by one person today, that&apos;s a current stage, not a promise.
+                What isn&apos;t dependent on any one person is the commission itself: it&apos;s written into the code, publicly versioned, and changeable only with 30 days&apos; notice.
               </p>
               <p>
-              You're not trusting a founder. You're trusting a business model you can read.
+              You&apos;re not trusting a founder. You&apos;re trusting a business model you can read.
               </p>
               <div className="flex items-end pt-2">
                 <Image

@@ -15,6 +15,7 @@
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
+    "@openbookings/messaging": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@radix-ui/react-label": "^2.1.11",
     "@radix-ui/react-select": "^2.3.3",
