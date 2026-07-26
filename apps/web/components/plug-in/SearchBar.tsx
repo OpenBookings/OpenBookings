@@ -54,9 +54,12 @@ function SearchBox({
   }, [value, query, refine]);
 
   // Show results when there are hits and query is not empty
-  React.useEffect(() => {
+  const resultsKey = `${query}|${hits.length}`;
+  const [lastResultsKey, setLastResultsKey] = React.useState(resultsKey);
+  if (resultsKey !== lastResultsKey) {
+    setLastResultsKey(resultsKey);
     setShowResults(query.length > 0 && hits.length > 0);
-  }, [query, hits.length]);
+  }
 
   // Close results when clicking outside
   React.useEffect(() => {

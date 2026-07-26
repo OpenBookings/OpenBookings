@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getHostScopedDb } from "@openbookings/authz";
 import { MessagesView } from "@/components/dashboard/messages/messages-view";
-import type { ThreadListItem } from "@/components/dashboard/messages/types";
+import type { ThreadListItem } from "@openbookings/messaging";
 
 export default async function MessagesPage() {
   const session = await auth.api.getSession({ headers: await headers() });

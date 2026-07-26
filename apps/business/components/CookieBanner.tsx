@@ -9,8 +9,11 @@ export function CookieBanner() {
   const [isEU, setIsEU] = useState(false)
 
   useEffect(() => {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-    setIsEU(tz.startsWith('Europe/'))
+    const detectEU = () => {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setIsEU(tz.startsWith('Europe/'))
+    }
+    detectEU()
   }, [])
 
   if (!loaded || !isEU || consent !== null) return null

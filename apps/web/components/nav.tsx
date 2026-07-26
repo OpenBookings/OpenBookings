@@ -23,7 +23,8 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
   const user = session?.user ?? null;
 
   useEffect(() => {
-    setCookiesEnabled(navigator.cookieEnabled);
+    const detectCookies = () => setCookiesEnabled(navigator.cookieEnabled);
+    detectCookies();
   }, []);
 
   useEffect(() => {

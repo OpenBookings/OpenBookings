@@ -84,9 +84,13 @@ function SearchPageInner() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
+    const clearResults = () => {
       setHotels([]);
       setSearchError(null);
+    };
+
+    if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
+      clearResults();
       return;
     }
 
