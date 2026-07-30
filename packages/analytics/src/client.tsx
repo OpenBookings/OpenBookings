@@ -2,6 +2,16 @@
 
 import posthog from 'posthog-js'
 import { PostHogProvider as PHProvider } from 'posthog-js/react'
+
+export { usePostHog } from 'posthog-js/react'
+export type {
+  Ticket,
+  TicketStatus,
+  Message,
+  GetTicketsResponse,
+  GetMessagesResponse,
+  SendMessageResponse,
+} from 'posthog-js'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, useContext, createContext, createElement, Suspense } from 'react'
 
@@ -124,7 +134,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     initRef.current = true
     posthog.init(POSTHOG_KEY, {
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-      ui_host: 'https://eu.posthog.com',
+      ui_host: 'https://eu.i.posthog.com',
       autocapture: false,
       capture_pageview: false,
       session_recording: {

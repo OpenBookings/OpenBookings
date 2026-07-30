@@ -65,39 +65,43 @@ export function ReservationsList({
   const reservations = bucketReservationsByValue[active.value](buckets);
 
   return (
-    <div className="flex flex-col gap-4 px-4 lg:px-6">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="w-fit">
-            {active.label}
-            <span className="text-muted-foreground tabular-nums">
-              {reservations.length}
-            </span>
-            <ChevronDownIcon className="text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-44">
-          <DropdownMenuRadioGroup
-            value={bucket}
-            onValueChange={(value) => setBucket(value as BucketValue)}
-          >
-            {BUCKETS.map((item) => (
-              <DropdownMenuRadioItem key={item.value} value={item.value}>
-                {item.label}
-                <span className="text-muted-foreground ml-auto text-xs tabular-nums">
-                  {bucketReservationsByValue[item.value](buckets).length}
-                </span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <ReservationsTable
-        reservations={reservations}
-        emptyMessage={active.emptyMessage}
-        selectedId={selectedId}
-        onSelect={onSelect}
-      />
+    <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 lg:px-6">
+      <div className="shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="w-fit">
+              {active.label}
+              <span className="text-muted-foreground tabular-nums">
+                {reservations.length}
+              </span>
+              <ChevronDownIcon className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuRadioGroup
+              value={bucket}
+              onValueChange={(value) => setBucket(value as BucketValue)}
+            >
+              {BUCKETS.map((item) => (
+                <DropdownMenuRadioItem key={item.value} value={item.value}>
+                  {item.label}
+                  <span className="text-muted-foreground ml-auto text-xs tabular-nums">
+                    {bucketReservationsByValue[item.value](buckets).length}
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ReservationsTable
+          reservations={reservations}
+          emptyMessage={active.emptyMessage}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
+      </div>
     </div>
   );
 }

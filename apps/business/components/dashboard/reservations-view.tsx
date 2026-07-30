@@ -7,6 +7,7 @@ import {
   ReservationDetailBody,
   ReservationDetailPanel,
   ReservationDetailSkeleton,
+  ReservationQuickActions,
 } from "@/components/dashboard/reservation-detail-panel";
 import {
   Sheet,
@@ -94,15 +95,15 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
 
   return (
     <>
-      <div className="flex items-stretch lg:h-[calc(100svh-var(--header-height)-3rem)] lg:pr-6">
-        <div className="min-w-0 flex-1 lg:overflow-y-auto">
+      <div className="flex min-h-0 flex-1 items-stretch lg:pr-6">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ReservationsList
             buckets={buckets}
             selectedId={selectedId}
             onSelect={handleSelect}
           />
         </div>
-        <div className="hidden w-[22vw] max-w-96 min-w-72 shrink-0 lg:flex lg:flex-col">
+        <div className="hidden w-[22vw] max-w-96 min-w-72 shrink-0 lg:flex lg:min-h-0 lg:flex-col">
           <ReservationDetailPanel
             selectedId={selectedId}
             reservation={detail}
@@ -132,7 +133,10 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
                   Reservation not found.
                 </p>
               ) : (
-                <ReservationDetailBody reservation={detail} />
+                <div className="flex flex-col gap-6">
+                  <ReservationDetailBody reservation={detail} />
+                  <ReservationQuickActions />
+                </div>
               )}
             </div>
           </SheetContent>
