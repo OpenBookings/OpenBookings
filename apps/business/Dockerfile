@@ -45,7 +45,7 @@
     COPY --from=installer /app/node_modules ./node_modules
     COPY --from=pruner /app/out/full/ .
     
-    RUN cd apps/business && bun run build
+    RUN bun run --cwd apps/business build
     
     # ---------- Production ----------
     FROM oven/bun:1.3-alpine
