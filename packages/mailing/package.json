@@ -9,7 +9,8 @@
     "lettermint": "^2.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22",
-    "typescript": "^5"
+    "@openbookings/config": "workspace:*",
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
   }
 }

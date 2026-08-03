@@ -3,6 +3,8 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["NODE_ENV", "CI", "NEXT_PUBLIC_*", "SENTRY_AUTH_TOKEN"],
+      "passThroughEnv": ["DATABASE_URL", "DATABASE_URL_DIRECT"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
@@ -11,6 +13,10 @@
     },
     "lint": {
       "dependsOn": ["^lint"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }

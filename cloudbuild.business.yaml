@@ -23,9 +23,11 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_SENTRY_DSN=${_NEXT_PUBLIC_SENTRY_DSN}'
       - '--build-arg'
-      - 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}'
-      - '--build-arg'
       - 'NEXT_PUBLIC_REALTIME_WORKER_URL=${_NEXT_PUBLIC_REALTIME_WORKER_URL}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_CHATWOOT_BASE_URL=${_NEXT_PUBLIC_CHATWOOT_BASE_URL}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN=${_NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN}'
       - '.'
 
   # ---------- Push ----------
@@ -50,6 +52,13 @@ steps:
       - '--port'
       - '8081'
       - '--allow-unauthenticated'
+
+# Defaults so a trigger that has not been updated yet still builds. Real values
+# belong in the trigger's substitutions, which override anything set here.
+# An empty Chatwoot base URL disables the widget and drops it from the CSP.
+substitutions:
+  _NEXT_PUBLIC_CHATWOOT_BASE_URL: ''
+  _NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN: ''
 
 timeout: 1200s
 

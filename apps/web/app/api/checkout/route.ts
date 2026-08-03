@@ -58,8 +58,8 @@ export async function POST(_req: Request) {
       bookingIntentId: intent.id,
       roomId: intent.roomId,
     },
-    success_url: `${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/booking/confirm?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/booking/${intent.id}/cancelled`,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/booking/confirm?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/booking/${intent.id}/cancelled`,
       expires_at: Math.floor(intent.heldUntil.getTime() / 1000),
     });
   } catch (err) {

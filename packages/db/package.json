@@ -12,12 +12,13 @@
     "db:studio": "bun --env-file=../../.env.local drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^1.0.0-rc.4",
-    "pg": "^8.20.0"
+    "drizzle-orm": "1.0.0-rc.4",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.18.0",
-    "drizzle-kit": "^1.0.0-rc.4",
-    "typescript": "^5"
+    "@openbookings/config": "workspace:*",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "1.0.0-rc.4",
+    "typescript": "^5.9.3"
   }
 }

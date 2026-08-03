@@ -1,5 +1,9 @@
 **/node_modules
 **/.next
+# `turbo prune` writes here; shipping a stale copy in the build context both
+# bloats the upload and leaves the pruner writing into a dirty directory.
+out
+.turbo
 .git
 .gitignore
 **/Dockerfile

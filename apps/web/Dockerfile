@@ -2,11 +2,15 @@
     FROM oven/bun:1.3-alpine AS pruner
     WORKDIR /app
     COPY . .
-    RUN bunx turbo prune @openbookings/web --docker
+    # Pinned: the pruner has no node_modules, so an unpinned `bunx turbo` would
+    # fetch whatever is latest on npm. Keep in sync with turbo in package.json (pinned exact there).
+    RUN bunx turbo@2.10.8 prune @openbookings/web --docker
     
     # ---------- Installer ----------
     FROM oven/bun:1.3-alpine AS installer
-    RUN apk add --no-cache openssl=3.5.7-r0
+    # Floor, not an exact pin: Alpine drops old -rN revisions when the repo
+    # rotates, which turns an exact pin into a sudden 404 on an unrelated day.
+    RUN apk add --no-cache 'openssl>=3.5.7'
     WORKDIR /app
     
     COPY --from=pruner /app/out/json/ .
@@ -25,8 +29,7 @@
     ARG NEXT_PUBLIC_POSTHOG_HOST
     ARG NEXT_PUBLIC_COOKIE_VERSION
     ARG NEXT_PUBLIC_SENTRY_DSN
-    ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-    
+
     ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
     ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
     ENV NEXT_PUBLIC_MAPTILER_API_KEY=$NEXT_PUBLIC_MAPTILER_API_KEY
@@ -34,16 +37,18 @@
     ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
     ENV NEXT_PUBLIC_COOKIE_VERSION=$NEXT_PUBLIC_COOKIE_VERSION
     ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
-    ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-    
-    COPY --from=installer /app/node_modules ./node_modules
+
+    # Bun's isolated linker keeps each workspace's deps (and its .bin) in
+    # <workspace>/node_modules; the root node_modules only holds the store
+    # plus the root package's own deps, so copying it alone leaves no `next`.
+    COPY --from=installer /app/ .
     COPY --from=pruner /app/out/full/ .
-    
+
     RUN bun run --cwd apps/web build
     
     # ---------- Production ----------
     FROM oven/bun:1.3-alpine
-    RUN apk add --no-cache openssl=3.5.7-r0
+    RUN apk add --no-cache 'openssl>=3.5.7'
     WORKDIR /app
     ENV NODE_ENV=production
     

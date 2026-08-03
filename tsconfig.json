@@ -1,0 +1,8 @@
+{
+  // Workspace anchor. Each app and package carries its own tsconfig that
+  // extends the same base; this one exists so editors and root-level `tsc`
+  // invocations resolve the shared options instead of TypeScript defaults.
+  "extends": "@openbookings/config/tsconfig.base.json",
+  "files": [],
+  "include": []
+}

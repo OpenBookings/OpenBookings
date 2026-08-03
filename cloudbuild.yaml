@@ -19,9 +19,9 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_POSTHOG_HOST=${_NEXT_PUBLIC_POSTHOG_HOST}'
       - '--build-arg'
-      - 'NEXT_PUBLIC_SENTRY_DSN=${_NEXT_PUBLIC_SENTRY_DSN}'
+      - 'NEXT_PUBLIC_COOKIE_VERSION=${_NEXT_PUBLIC_COOKIE_VERSION}'
       - '--build-arg'
-      - 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}'
+      - 'NEXT_PUBLIC_SENTRY_DSN=${_NEXT_PUBLIC_SENTRY_DSN}'
       - '.'
 
   # ---------- Push ----------
@@ -46,6 +46,11 @@ steps:
       - '--port'
       - '8080'
       - '--allow-unauthenticated'
+
+# Defaults so a trigger that has not been updated yet still builds. Real values
+# belong in the trigger's substitutions, which override anything set here.
+substitutions:
+  _NEXT_PUBLIC_COOKIE_VERSION: ''
 
 timeout: 1200s
 

@@ -14,10 +14,13 @@
     "test": "bun test packages"
   },
   "devDependencies": {
-    "turbo": "^2.10.2"
+    "@openbookings/config": "workspace:*",
+    "turbo": "2.10.8"
   },
-  "dependencies": {
-    "posthog-js": "^1.372.8",
-    "posthog-node": "^5.33.2"
+  "overrides": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   }
 }
