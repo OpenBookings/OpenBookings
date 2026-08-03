@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
+    "target": "ES2021",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
     "strict": true,
     "types": ["bun"],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx"
-  }
+  },
+  "include": ["src"]
 }

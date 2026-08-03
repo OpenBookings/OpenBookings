@@ -454,6 +454,33 @@ export const messages = pgTable(
   ],
 );
 
+/**
+ * Idempotency ledger for the support bot's Chatwoot webhook. One row per
+ * Chatwoot event (e.g. `message_created:<message_id>`). The webhook inserts
+ * before enqueueing (ON CONFLICT DO NOTHING → duplicate delivery is a no-op);
+ * the task handler sets `replied_at` after posting to Chatwoot so Cloud Tasks
+ * retries never produce a second guest-facing reply.
+ */
+export const processedEvents = pgTable("processed_events", {
+  eventId: text("event_id").primaryKey(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set once a guest-facing reply (or escalation note) was posted for this event. */
+  repliedAt: timestamp("replied_at", { withTimezone: true }),
+});
+
+/**
+ * Support-bot context cache: recent conversation turns per Chatwoot
+ * conversation, so each webhook doesn't re-fetch full history from the
+ * Chatwoot API. Staleness (TTL) is enforced at read time off `updated_at`.
+ */
+export const supportContextCache = pgTable("support_context_cache", {
+  /** Chatwoot conversation id (their ids are integers). */
+  conversationId: bigint("conversation_id", { mode: "number" }).primaryKey(),
+  /** Array of `{ role: "user" | "assistant", content: string }` turns, oldest first. */
+  turns: jsonb("turns").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs
 // db.query instead of the select/execute APIs used so far.
