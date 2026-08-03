@@ -2,16 +2,16 @@
 // Types
 // ─────────────────────────────────────────────
 
-type AdjustmentType = 'flat' | 'percent'
+export type AdjustmentType = 'flat' | 'percent'
 
-type ModifierType =
+export type ModifierType =
   | 'day_of_week'
   | 'length_of_stay'
   | 'early_bird'
   | 'last_minute'
   | 'extra_guest'
 
-interface Night {
+export interface Night {
   date: string        // "2026-07-01"
   base_price: number
   has_override: boolean
@@ -21,7 +21,7 @@ interface NightWithSurcharge extends Night {
   _surcharge: number
 }
 
-interface Modifier {
+export interface Modifier {
   type: ModifierType
   adjustment_type: AdjustmentType
   adjustment_value: number
@@ -368,6 +368,82 @@ export function resolveRoom(
     total_price: round2(state.total),
     applied_modifiers: [...state.applied],
   }
+}
+
+// ─────────────────────────────────────────────
+// Per-night resolution (host ARI grid)
+// ─────────────────────────────────────────────
+
+export interface NightlyRate extends Night {
+  /** Nights actually priced for this cell — `stayLength`, or fewer at the tail. */
+  stay_length: number
+  /** Total for the whole probe stay. */
+  total: number
+  /** Per-night average across the probe. This is what a grid cell displays. */
+  price: number
+  applied_modifiers: ModifierType[]
+}
+
+/** Modifiers that only ever fire on a multi-night stay. */
+const STAY_LENGTH_TYPES = new Set<ModifierType>(['length_of_stay'])
+
+/** True when the plan carries a discount a longer stay would unlock. */
+export function hasStayLengthDiscount(modifiers: Modifier[]): boolean {
+  return modifiers.some(m => STAY_LENGTH_TYPES.has(m.type))
+}
+
+/**
+ * Resolve one price per date, for the host-facing ARI grid.
+ *
+ * A grid cell is a different question from a search result: search prices a
+ * whole stay, a cell prices *a stay of `stayLength` nights arriving on that
+ * date, at base occupancy*, shown as a per-night average. Framing it that way
+ * means each cell is just a stay run through the same executor the
+ * guest-facing search uses — so the grid cannot drift from what guests are
+ * quoted.
+ *
+ * `stayLength` defaults to 1, the extranet convention. Raising it lets a host
+ * see the rates a longer booking would actually get, because stay-length
+ * discounts (`length_of_stay`, and any `early_bird` gated on nights) only fire
+ * once the probe is long enough to qualify. `extra_guest` never fires here —
+ * the probe is at base occupancy, and occupancy is a booking property rather
+ * than a date one. Date-intrinsic modifiers (`day_of_week`, `last_minute`,
+ * lead-time `early_bird`) resolve normally at any stay length, since the
+ * cell's date is the arrival date.
+ *
+ * Callers wanting a full-length probe for every visible date must pass nights
+ * extending `stayLength - 1` days past the last visible date; the tail is
+ * priced on whatever nights it has rather than dropped.
+ */
+export function resolveNightlyRates(
+  nights: Night[],
+  modifiers: Modifier[],
+  options: { baseOccupancy: number; stayLength?: number; today?: string }
+): NightlyRate[] {
+  const today = options.today ?? new Date().toISOString().split('T')[0]
+  const stayLength = Math.max(1, Math.floor(options.stayLength ?? 1))
+
+  return nights.map((night, index) => {
+    const window = nights.slice(index, index + stayLength)
+    const numNights = window.length
+
+    const state = executeModifiers(window, modifiers, {
+      extraGuests: 0,
+      numNights,
+      totalGuests: options.baseOccupancy,
+      baseOccupancy: options.baseOccupancy,
+      arrivalDate: night.date,
+      today,
+    })
+
+    return {
+      ...night,
+      stay_length: numNights,
+      total: round2(state.total),
+      price: round2(state.total / numNights),
+      applied_modifiers: [...state.applied],
+    }
+  })
 }
 
 export function resolveSearchResults(

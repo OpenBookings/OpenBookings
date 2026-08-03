@@ -293,7 +293,7 @@ export function SupportTicketDialog({
           </div>
         </DialogHeader>
 
-        <div className="min-h-[18rem]">
+        <div className="min-h-72">
           {view === "loading" && <LoadingState />}
 
           {view === "list" && (
@@ -369,7 +369,7 @@ function TicketList({
   onCreate: () => void;
 }) {
   return (
-    <div className="flex h-[24rem] flex-col">
+    <div className="flex h-96 flex-col">
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
         {error && <ErrorBanner message={error} />}
         {tickets.length === 0 && !error && (
@@ -544,7 +544,7 @@ function ThreadView({
   }
 
   return (
-    <div className="flex h-[26rem] flex-col">
+    <div className="flex h-104 flex-col">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <StatusBadge status={ticket.status} />
         <span className="text-xs text-muted-foreground">
@@ -574,7 +574,7 @@ function ThreadView({
               >
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words",
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap wrap-break-words",
                     isCustomer
                       ? "rounded-br-sm bg-primary text-primary-foreground"
                       : "rounded-bl-sm bg-muted text-foreground"

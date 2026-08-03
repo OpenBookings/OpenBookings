@@ -59,6 +59,26 @@ export async function userOwnsRoom(
   return row?.ok === true;
 }
 
+/** Rate plans are owned through their room's property — same chain as rooms. */
+export async function userOwnsRatePlan(
+  session: SessionLike | null | undefined,
+  ratePlanId: string,
+  deps: AuthzDeps = {},
+): Promise<boolean> {
+  const userId = ownerId(session);
+  if (!userId || !ratePlanId) return false;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const row = await queryOne<{ ok: boolean }>(
+    `SELECT TRUE AS ok
+     FROM rate_plans rp
+     JOIN rooms r      ON r.id = rp.room_id
+     JOIN properties p ON p.id = r.property_id
+     WHERE rp.id = $1 AND p.owner_user_id = $2`,
+    [ratePlanId, userId],
+  );
+  return row?.ok === true;
+}
+
 /** A message_threads row (see packages/db/src/schema.ts). */
 export type ThreadRow = {
   id: string;

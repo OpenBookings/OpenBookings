@@ -8,7 +8,7 @@ import { getRandomBackgroundImage } from "@/lib/background";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
-/** Shape returned by GET /api/query — see resolveSearchResults() in app/api/query/calculator.ts */
+/** Shape returned by GET /api/query — see resolveSearchResults() in @openbookings/pricing */
 interface HotelSearchApiResult {
   hotel_id: string;
   hotel_name: string;

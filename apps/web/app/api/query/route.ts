@@ -1,7 +1,7 @@
 import type { HotelSearchInput } from "@/types/hotel";
 import { getDb, sql } from "@openbookings/db";
-import { resolveSearchResults } from "@/app/api/query/calculator";
-import type { RoomRow } from "@/app/api/query/calculator";
+import { resolveSearchResults } from "@openbookings/pricing";
+import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
 

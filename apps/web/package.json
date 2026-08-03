@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3002",
     "build": "next build",
     "start": "next start -p ${PORT:-8080} -H 0.0.0.0",
     "lint": "eslint"
@@ -13,6 +13,7 @@
     "@openbookings/auth": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
+    "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.8",
