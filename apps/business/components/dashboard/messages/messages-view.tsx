@@ -58,11 +58,11 @@ export function MessagesView({
 
   return (
     <>
-      <div className="flex items-stretch lg:h-[calc(100svh-var(--header-height)-3rem)] lg:pr-6">
-        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border lg:max-w-sm lg:overflow-y-auto">
+      <div className="flex min-h-0 flex-1 items-stretch px-4 lg:px-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border lg:max-w-sm">
           <MessagesList threads={threads} selectedId={selectedId} onSelect={handleSelect} />
         </div>
-        <div className="hidden flex-1 lg:ml-4 lg:flex lg:flex-col">
+        <div className="hidden flex-1 lg:ml-4 lg:flex lg:min-h-0 lg:flex-col">
           {selected ? (
             <ThreadView key={selected.id} thread={selected} currentUserId={currentUserId} onClose={handleClose} />
           ) : (

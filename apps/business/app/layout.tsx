@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Gloock, Allura, Libre_Franklin, Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
 import { CookieBanner } from "@/components/CookieBanner";
+import { ChatwootWidget } from "@/components/ChatwootWidget";
 import "./globals.css";
 
 const libreFranklin = Libre_Franklin({
@@ -69,6 +70,7 @@ export default function RootLayout({
           <PostHogProvider>
             <CookieBanner />
             {children}
+            <ChatwootWidget />
           </PostHogProvider>
         </CookieConsentProvider>
       </body>

@@ -12,9 +12,8 @@ const sections = [
   { id: "your-rights", label: "7. Your rights" },
   { id: "automated-decisions", label: "8. Automated decisions" },
   { id: "children", label: "9. Children" },
-  { id: "open-source", label: "10. Open source" },
-  { id: "changes", label: "11. Changes" },
-  { id: "contact", label: "12. Contact" },
+  { id: "changes", label: "10. Changes" },
+  { id: "contact", label: "11. Contact" },
 ];
 
 export function PrivacyTOC() {

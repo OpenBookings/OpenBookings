@@ -116,6 +116,13 @@ export const rooms = pgTable(
     roomType: varchar("room_type", { length: 100 }),
     bedType: varchar("bed_type", { length: 100 }),
     sizeSqm: numeric("size_sqm", { precision: 6, scale: 1 }),
+    /**
+     * Physical units of this room type the property owns. Availability is a
+     * property of the room type, not the rate plan: every rate plan attached
+     * to this room draws from this one pool. `room_inventory` overrides it
+     * per date; this is the standing default.
+     */
+    totalUnits: integer("total_units").notNull().default(1),
   },
   (table) => [index("idx_rooms_hotel_id").on(table.propertyId)],
 );
@@ -233,6 +240,17 @@ export const roomImages = pgTable(
   (table) => [index("idx_room_images_room_id").on(table.roomId, table.sortOrder)],
 );
 
+/**
+ * Sparse per-date availability layer for a room type. A missing row is the
+ * common case and means "nothing special about this date".
+ *
+ * Effective availability resolves in two layers, same precedence pattern as
+ * rates (explicit beats computed):
+ *   1. computed  = COALESCE(total_rooms, rooms.total_units) - blocked_rooms - booked
+ *   2. override  = available_override, when set, wins outright
+ * Both layers stay queryable so the grid's detail panel can explain *why* a
+ * number is what it is.
+ */
 export const roomInventory = pgTable(
   "room_inventory",
   {
@@ -241,13 +259,64 @@ export const roomInventory = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
-    totalRooms: integer("total_rooms").notNull(),
-    availableRooms: integer("available_rooms").notNull(),
+    /** Per-date capacity override. NULL = use rooms.total_units. */
+    totalRooms: integer("total_rooms"),
+    /** Units withheld from sale — maintenance, owner use. Reduces the computed baseline. */
+    blockedRooms: integer("blocked_rooms").notNull().default(0),
+    /** Explicit host-set availability. When set, beats the computed baseline entirely. */
+    availableOverride: integer("available_override"),
+    note: text("note"),
+    /** Better Auth user id of the host who last touched this date. */
+    updatedBy: text("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("room_inventory_unique_date").on(table.roomId, table.date),
     index("idx_room_inventory_room_date").on(table.roomId, table.date),
+  ],
+);
+
+/**
+ * Host-set date-range rules on a single rate plan: closures, minimum/maximum
+ * stay, and closed-to-arrival / closed-to-departure.
+ *
+ * Closure and restriction share one table because they are the same kind of
+ * thing (a host-set rule over a date range on a rate plan) and the grid needs
+ * both in one pass. They stay distinct downstream: `is_closed` renders as the
+ * Closed state, the other columns render as Restricted. A date carrying both
+ * is Closed — unbookable outranks constrained.
+ *
+ * Overlaps resolve by `priority DESC`, mirroring `rate_overrides`.
+ */
+export const ratePlanRestrictions = pgTable(
+  "rate_plan_restrictions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id, { onDelete: "cascade" }),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    /** Host closed this rate plan outright for these dates. */
+    isClosed: boolean("is_closed").notNull().default(false),
+    /** Per-date override of rate_plans.min_stay / max_stay. NULL = inherit the plan default. */
+    minStay: integer("min_stay"),
+    maxStay: integer("max_stay"),
+    closedToArrival: boolean("closed_to_arrival").notNull().default(false),
+    closedToDeparture: boolean("closed_to_departure").notNull().default(false),
+    priority: integer("priority").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    note: text("note"),
+    /** Better Auth user id of the host who set this — the detail panel shows who and when. */
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_rate_plan_restrictions_plan_dates").on(
+      table.ratePlanId,
+      table.startDate,
+      table.endDate,
+    ),
   ],
 );
 
@@ -384,6 +453,33 @@ export const messages = pgTable(
     index("idx_messages_flagged").on(table.threadId),
   ],
 );
+
+/**
+ * Idempotency ledger for the support bot's Chatwoot webhook. One row per
+ * Chatwoot event (e.g. `message_created:<message_id>`). The webhook inserts
+ * before enqueueing (ON CONFLICT DO NOTHING → duplicate delivery is a no-op);
+ * the task handler sets `replied_at` after posting to Chatwoot so Cloud Tasks
+ * retries never produce a second guest-facing reply.
+ */
+export const processedEvents = pgTable("processed_events", {
+  eventId: text("event_id").primaryKey(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set once a guest-facing reply (or escalation note) was posted for this event. */
+  repliedAt: timestamp("replied_at", { withTimezone: true }),
+});
+
+/**
+ * Support-bot context cache: recent conversation turns per Chatwoot
+ * conversation, so each webhook doesn't re-fetch full history from the
+ * Chatwoot API. Staleness (TTL) is enforced at read time off `updated_at`.
+ */
+export const supportContextCache = pgTable("support_context_cache", {
+  /** Chatwoot conversation id (their ids are integers). */
+  conversationId: bigint("conversation_id", { mode: "number" }).primaryKey(),
+  /** Array of `{ role: "user" | "assistant", content: string }` turns, oldest first. */
+  turns: jsonb("turns").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs

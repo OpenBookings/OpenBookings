@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PrivacyTOC } from "./PrivacyTOC";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — OpenBookings",
+  title: "Privacy Policy | OpenBookings",
   description:
     "How OpenBookings collects, uses, and protects your personal data.",
 };
@@ -75,19 +75,17 @@ export default function PrivacyPage() {
               </h1>
               <p className="text-sm text-white/40">
                 Last updated:{" "}
-                <time dateTime="2026-04-15">April 15, 2026</time>
+                <time dateTime="2026-07-27">July 27, 2026</time>
                 &ensp;·&ensp;
                 Effective:{" "}
-                <time dateTime="2026-05-01">May 1, 2026</time>
+                <time dateTime="2026-08-01">August 1, 2026</time>
               </p>
             </header>
 
             {/* Lead */}
             <div className="mb-12 rounded-2xl border border-white/8 bg-white/3 p-6 backdrop-blur-sm">
               <p className="mb-3 text-base leading-relaxed text-white/70">
-                Privacy policies are usually written by lawyers for other lawyers. This one
-                isn&apos;t. We&apos;ve tried to write something you can actually read without a
-                law degree — covering what we collect, why, and what we do with it.
+                Written to be read, not decoded. What we collect, why, and what we do with it.
               </p>
               <p className="text-base leading-relaxed text-white/70">
                 This policy applies to{" "}
@@ -110,8 +108,7 @@ export default function PrivacyPage() {
                 <SectionHeading number="1" title="Who we are" />
                 <p className="mb-3 leading-relaxed text-white/70">
                   OpenBookings B.V. is the data controller for everything described in this
-                  policy. We&apos;re a Dutch company, so GDPR applies to us by default — not as a
-                  checkbox exercise, but because we actually care about this stuff.
+                  policy. We&apos;re a Dutch company, so GDPR applies.
                 </p>
                 <p className="leading-relaxed text-white/70">
                   Questions? Email us at{" "}
@@ -126,65 +123,54 @@ export default function PrivacyPage() {
               <section id="what-we-collect" className="scroll-mt-28">
                 <SectionHeading number="2" title="What we collect and why" />
                 <p className="mb-8 leading-relaxed text-white/50">
-                  We only collect data we actually need. Here&apos;s the full list — no surprises.
+                  We only collect data we actually need. Here&apos;s the full list.
                 </p>
 
                 <div className="space-y-6">
                   <DataCard title="2.1 Account data">
                     <p className="mb-2 text-white/70">
-                      Your email address, and optionally your name and profile picture if you sign
-                      in via Google or Apple.
+                      Your email address, name and your profile picture when you sign in with
+                      Google.
                     </p>
-                    <Meta why="You need an account to use the platform. That's it." basis="Performance of a contract." />
+                    <Meta why="You need an account to use the platform." basis="Performance of a contract." />
                   </DataCard>
 
                   <DataCard title="2.2 Booking data">
                     <p className="mb-2 text-white/70">
-                      Guest name, contact details, stay dates, property, number of guests, payment
-                      reference, and booking status.
+                      Guest name, contact details, and booking details: stay dates, property,
+                      number of guests, payment reference, and status.
                     </p>
-                    <Meta why="To process your booking and handle anything that comes up around it." basis="Performance of a contract." />
+                    <p className="text-sm text-white/40">
+                      Card details never reach our servers. Stripe handles those; we only receive
+                      the payment reference.
+                    </p>
+                    <Meta why="To process your booking and handle anything that comes up around it." basis="Performance of a contract; legal obligation for financial records." />
                   </DataCard>
 
-                  <DataCard title="2.3 Payment data">
-                    <p className="mb-2 text-white/70">
-                      We don&apos;t store your card details — that goes straight to Stripe. We only
-                      receive a transaction reference, payment status, and the last four digits of
-                      your card (just for display).
-                    </p>
-                    <Meta why="To confirm payment and match it to your booking. Also a legal requirement for financial records." basis="Performance of a contract; legal obligation." />
-                  </DataCard>
-
-                  <DataCard title="2.4 Analytics data">
+                  <DataCard title="2.3 Analytics data">
                     <p className="mb-2 text-white/70">
                       Page views, navigation paths, approximate device type, browser, and country.
-                      We use PostHog for this, routed through our own domain (
-                      <code className="rounded-md bg-white/10 px-1.5 py-0.5 text-sm font-mono text-white/80">
-                        e.openbookings.co
-                      </code>
-                      ) so your browser never talks directly to a third-party analytics server.
                     </p>
                     <p className="mb-4 text-sm text-white/40">
-                      We never pass your name, full IP address, or payment details into analytics
-                      events.
+                      Via PostHog. We never pass your name, full IP address, or payment details
+                      into analytics events.
                     </p>
                     <Meta
-                      why="To understand how people use the platform and fix what's broken. Not for ads. Never sold."
-                      basis="Consent. Analytics only start if you accept the cookie banner. If you decline (or just ignore it), PostHog doesn't initialise at all — no cookies, no events."
+                      why="To understand usage and fix issues."
+                      basis="Consent, via the cookie banner. No acceptance, nothing tracked."
                     />
                     {/* Session replay callout */}
                     <div className="mt-5 rounded-xl border border-white/8 bg-white/3 p-5">
                       <p className="mb-2 font-medium text-white/90">Session replay</p>
                       <p className="mb-4 text-sm text-white/50">
                         We record on-screen interactions to spot usability issues in the booking
-                        flow. A few things we want you to know:
+                        flow.
                       </p>
                       <ul className="space-y-2">
                         {[
-                          "All text inputs are masked. We never see what you type into forms.",
-                          "Element attributes are masked by default.",
+                          "All text is masked. We never see what you type into forms.",
                           "Recordings are deleted automatically after 30 days.",
-                          "This only runs if you've accepted analytics cookies.",
+                          "Only runs if you accept analytics cookies.",
                         ].map((item) => (
                           <li key={item} className="flex items-start gap-3 text-sm text-white/60">
                             <span className="mt-0.5 text-white/25">–</span>
@@ -195,15 +181,22 @@ export default function PrivacyPage() {
                     </div>
                   </DataCard>
 
+                  <DataCard title="2.4 Error data">
+                    <p className="mb-2 text-white/70">
+                      When something breaks, Sentry receives the error, a stack trace, the page you
+                      were on, and your browser type. No form contents, no payment details.
+                    </p>
+                    <Meta why="To find and fix bugs." basis="Legitimate interest in keeping the platform working." />
+                  </DataCard>
+
                   <DataCard title="2.5 Transactional emails">
                     <p className="mb-2 text-white/70">
-                      Your email address plus whatever&apos;s needed for the email — booking
-                      confirmations, check-in details, payment receipts, magic link sign-ins.
+                      Your email address and the details needed for the message: booking
+                      confirmations, check-in details, receipts, and sign-in links.
                     </p>
                     <Meta basis="Performance of a contract." />
                     <p className="mt-3 text-sm italic text-white/40">
-                      We don&apos;t do marketing emails. Every email we send is triggered by
-                      something you actually did.
+                      No marketing emails. Every email is triggered by something you did.
                     </p>
                   </DataCard>
                 </div>
@@ -220,8 +213,7 @@ export default function PrivacyPage() {
                     <span className="mt-0.5 shrink-0 rounded-md bg-white/10 px-2 py-0.5 text-xs font-semibold text-white/60">
                       Accept
                     </span>
-                    Analytics cookies are set and PostHog starts collecting usage data and session
-                    recordings.
+                    PostHog starts, collecting usage data and session recordings.
                   </li>
                   <li className="flex items-start gap-3 text-white/70">
                     <span className="mt-0.5 shrink-0 rounded-md bg-white/10 px-2 py-0.5 text-xs font-semibold text-white/60">
@@ -232,17 +224,17 @@ export default function PrivacyPage() {
                 </ul>
                 <p className="mb-8 text-sm text-white/40">
                   EU/EEA visitors see this banner until they make a choice. Changed your mind?
-                  Clear your cookies for this site and the banner comes back.
+                  Clear this site&apos;s storage and the banner comes back.
                 </p>
 
                 <p className="mb-4 font-medium text-white/80">What we actually set:</p>
                 <StyledTable
-                  headers={["Type", "Cookie", "What it does", "Expires", "Needs consent?"]}
+                  headers={["Type", "Name", "What it does", "Expires", "Needs consent?"]}
                   rows={[
                     ["Essential", "session token", "Keeps you signed in", "Session / configurable", "No"],
                     ["Essential", "cf_clearance", "Cloudflare bot protection", "30 minutes", "No"],
-                    ["Essential", "cookieyes-consent", "Remembers your consent choice", "1 year", "No"],
-                    ["Analytics", "ph_*", "PostHog analytics & session replay (proxied through our domain)", "1 year", "Yes — EU/EEA"],
+                    ["Essential", "ob_cookie_consent", "Remembers your consent choice (local storage, our own banner)", "90 days", "No"],
+                    ["Analytics", "ph_*", "PostHog analytics and session replay", "1 year", "Yes, EU/EEA"],
                   ]}
                   codeCols={[1]}
                 />
@@ -255,23 +247,22 @@ export default function PrivacyPage() {
               <section id="retention" className="scroll-mt-28">
                 <SectionHeading number="4" title="How long we keep things" />
                 <p className="mb-6 leading-relaxed text-white/50">
-                  We don&apos;t hold onto data longer than we need to. Here&apos;s what that looks
-                  like in practice:
+                  We don&apos;t hold onto data longer than we need to.
                 </p>
                 <StyledTable
                   headers={["Data", "Kept for", "Why"]}
                   rows={[
-                    ["Account data (email)", "3 years after last login", "In case you come back"],
-                    ["Booking records", "7 years from booking date", "Dutch tax / financial records law"],
-                    ["Payment references", "7 years", "Dutch legal requirement"],
+                    ["Account data", "3 years after last login", "In case you come back"],
+                    ["Booking records", "7 years from booking date", "Dutch tax and financial records law"],
                     ["Analytics data", "13 months (rolling)", "Year-over-year trend analysis"],
                     ["Session recordings", "30 days", "Usability analysis only"],
+                    ["Error reports", "90 days", "Debugging"],
                     ["Email logs", "90 days", "Debugging delivery issues"],
                   ]}
                 />
                 <p className="mt-4 text-sm text-white/40">
-                  After these windows close, data is deleted or anonymised. Anonymised data (where
-                  you genuinely can&apos;t be identified) may stick around for statistics.
+                  After these windows close, data is deleted or anonymised. Anonymised data may
+                  stick around for statistics.
                 </p>
               </section>
 
@@ -279,29 +270,29 @@ export default function PrivacyPage() {
               <section id="sharing" className="scroll-mt-28">
                 <SectionHeading number="5" title="Who we share your data with" />
                 <p className="mb-6 leading-relaxed text-white/70">
-                  We don&apos;t sell your data. Full stop. We share it only with the vendors we
-                  need to actually run the platform:
+                  We don&apos;t sell your data. We share it only with the vendors we need to run
+                  the platform:
                 </p>
                 <StyledTable
                   headers={["Vendor", "What they get", "What for", "Where"]}
                   rows={[
-                    ["Stripe", "Name, email, booking amount", "Payment processing and host payouts", "US/EU (SCCs)"],
-                    ["Google Cloud", "Everything we store", "Hosting and infrastructure", "EU (europe-west)"],
+                    ["Neon", "Account and booking records", "Database hosting", "EU (West)"],
+                    ["Google Cloud", "Data processed by the app while it runs", "Application hosting and infrastructure", "EU (West)"],
+                    ["Algolia", "Search queries, IP address", "Destination search", "EU (Central)"],
+                    ["Lettermint", "Email address, booking details", "Sending transactional emails", "EU"],
+                    ["PostHog", "Usage events, session recordings (no PII)", "Product analytics", "EU"],
+                    ["Sentry", "Error reports, stack traces, browser type", "Error tracking", "EU"],
                     ["Cloudflare", "IP address, request metadata", "CDN, DDoS and bot protection", "EU/US (SCCs)"],
-                    ["Postmark", "Email address, booking details", "Sending transactional emails", "US (SCCs)"],
-                    ["PostHog", "Usage events, session recordings (no PII)", "Product analytics", "EU (PostHog Cloud EU)"],
-                    ["CookieYes", "Your consent preference", "Cookie consent management", "EU"],
+                    ["Stripe", "Name, email, booking amount", "Payment processing and host payouts", "US/EU (SCCs)"],
                   ]}
                   boldFirstCol
                 />
                 <p className="mt-4 text-sm text-white/40">
-                  For vendors outside the EU (Stripe, Postmark, Cloudflare), we use Standard
-                  Contractual Clauses (SCCs) approved by the European Commission. Boring but
-                  important.
+                  For the last two, where data can leave the EU, we use Standard Contractual
+                  Clauses approved by the European Commission.
                 </p>
                 <p className="mt-2 text-sm text-white/40">
-                  We&apos;ll also hand over data if a court tells us to. We don&apos;t have much
-                  choice in that situation.
+                  We&apos;ll also hand over data if a court orders it.
                 </p>
               </section>
 
@@ -314,11 +305,10 @@ export default function PrivacyPage() {
                 <ul className="space-y-3">
                   {[
                     "Everything travels over encrypted connections (TLS).",
-                    "Secrets live in a Secret Manager, not in code or environment variable leaks.",
+                    "Secrets live in a Secret Manager, not in code.",
                     "Infrastructure is on Google Cloud with access controls and audit logging.",
-                    "Payment data never touches our servers — Stripe handles all of that.",
-                    "Session recordings are masked so we never capture sensitive inputs.",
-                    "Auth runs entirely on our own infrastructure via Better Auth — no third-party auth processors.",
+                    "Card details never touch our servers. Stripe handles all of that.",
+                    "Session recordings are masked, so we never capture sensitive inputs.",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-3 text-white/70">
                       <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-white/30" />
@@ -336,8 +326,7 @@ export default function PrivacyPage() {
               <section id="your-rights" className="scroll-mt-28">
                 <SectionHeading number="7" title="Your rights under GDPR" />
                 <p className="mb-6 leading-relaxed text-white/70">
-                  If you&apos;re in the EEA, you have real enforceable rights over your data — not
-                  just a list we&apos;re legally required to include.
+                  If you&apos;re in the EEA, you have enforceable rights over your data.
                 </p>
                 <StyledTable
                   headers={["Right", "What it means for you"]}
@@ -359,19 +348,8 @@ export default function PrivacyPage() {
                       privacy@openbookings.co
                     </InlineLink>{" "}
                     and we&apos;ll respond within{" "}
-                    <strong className="text-white/70">30 days</strong>. No fee, unless your
-                    request is clearly excessive.
-                  </p>
-                  <p>
-                    Not happy with how we&apos;ve handled something? You can file a complaint
-                    with the Dutch Data Protection Authority (Autoriteit Persoonsgegevens) at{" "}
-                    <InlineLink
-                      href="https://www.autoriteitpersoonsgegevens.nl"
-                      external
-                    >
-                      autoriteitpersoonsgegevens.nl
-                    </InlineLink>
-                    , or with the authority in your own country.
+                    <strong className="text-white/70">30 days</strong>. 
+                    <br />No fee, unless your request is clearly excessive.
                   </p>
                 </div>
               </section>
@@ -399,27 +377,16 @@ export default function PrivacyPage() {
                 </p>
               </section>
 
-              {/* 10. Open source */}
-              <section id="open-source" className="scroll-mt-28">
-                <SectionHeading number="10" title="We're open source" />
-                <p className="leading-relaxed text-white/70">
-                  Our codebase is public. That doesn&apos;t change anything about your privacy —
-                  this policy applies regardless of how the software is deployed. If you&apos;re
-                  self-hosting it, you&apos;re the data controller for your own installation and
-                  this policy doesn&apos;t cover you.
-                </p>
-              </section>
-
-              {/* 11. Changes */}
+              {/* 10. Changes */}
               <section id="changes" className="scroll-mt-28">
-                <SectionHeading number="11" title="Changes to this policy" />
+                <SectionHeading number="10" title="Changes to this policy" />
                 <p className="mb-4 leading-relaxed text-white/70">
                   We&apos;ll update this from time to time. When something material changes:
                 </p>
                 <ul className="space-y-3">
                   {[
                     'The "Last updated" date at the top changes.',
-                    "We'll email you before material changes take effect.",
+                    "We'll re-show the cookie banner.",
                     "Continuing to use the platform after that means you're good with the update.",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-3 text-white/70">
@@ -430,13 +397,12 @@ export default function PrivacyPage() {
                 </ul>
               </section>
 
-              {/* 12. Contact */}
+              {/* 11. Contact */}
               <section id="contact" className="scroll-mt-28">
-                <SectionHeading number="12" title="Get in touch" />
+                <SectionHeading number="11" title="Get in touch" />
                 <div className="rounded-2xl border border-white/8 bg-white/3 p-6 backdrop-blur-sm">
                   <p className="text-white/70">
-                    Privacy questions, data requests, or just want to know more about how this
-                    works —{" "}
+                    Privacy questions or data requests:{" "}
                     <a
                       href="mailto:privacy@openbookings.co"
                       className="font-medium text-white underline underline-offset-2 decoration-white/30 hover:decoration-white/70 transition-all"

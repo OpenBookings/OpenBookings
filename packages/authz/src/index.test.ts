@@ -3,6 +3,7 @@ import {
   getHostScopedDb,
   getThreadForParticipant,
   userOwnsProperty,
+  userOwnsRatePlan,
   userOwnsRoom,
 } from "./index";
 import type { SessionLike, ThreadRow } from "./index";
@@ -24,6 +25,10 @@ const rooms = [
   { id: "room-1", propertyId: "prop-1" },
   { id: "room-orphan", propertyId: "prop-null" },
 ];
+const ratePlans = [
+  { id: "plan-1", roomId: "room-1" },
+  { id: "plan-orphan", roomId: "room-orphan" },
+];
 
 /** Mirrors the message_threads row shape queried in getThreadForParticipant. */
 const threads: ThreadRow[] = [
@@ -44,6 +49,13 @@ const fakeQueryOne = async <T>(text: string, values: unknown[] = []): Promise<T 
     const [propertyId, userId] = values as [string, string];
     const hit = properties.find((p) => p.id === propertyId && p.owner === userId);
     return (hit ? { ok: true } : null) as T | null;
+  }
+  if (text.includes("FROM rate_plans")) {
+    const [ratePlanId, userId] = values as [string, string];
+    const plan = ratePlans.find((rp) => rp.id === ratePlanId);
+    const room = rooms.find((r) => r.id === plan?.roomId);
+    const owner = properties.find((p) => p.id === room?.propertyId)?.owner;
+    return (plan && owner === userId ? { ok: true } : null) as T | null;
   }
   if (text.includes("FROM rooms")) {
     const [roomId, userId] = values as [string, string];
@@ -160,5 +172,27 @@ describe("getHostScopedDb", () => {
   test("derives scope from the session, exposing it as ownerUserId", () => {
     const host = getHostScopedDb(sessionFor("host-a"));
     expect(host.ownerUserId).toBe("host-a");
+  });
+});
+
+describe("userOwnsRatePlan", () => {
+  test("owner of the parent property is allowed", async () => {
+    expect(await userOwnsRatePlan(sessionFor("host-a"), "plan-1", deps)).toBe(true);
+  });
+
+  test("BOLA: another authenticated host is rejected", async () => {
+    expect(await userOwnsRatePlan(sessionFor("host-b"), "plan-1", deps)).toBe(false);
+  });
+
+  test("plan under an unowned property is inaccessible", async () => {
+    expect(await userOwnsRatePlan(sessionFor("host-a"), "plan-orphan", deps)).toBe(false);
+  });
+
+  test("unknown rate plan fails closed", async () => {
+    expect(await userOwnsRatePlan(sessionFor("host-a"), "nope", deps)).toBe(false);
+  });
+
+  test("missing session fails closed", async () => {
+    expect(await userOwnsRatePlan(null, "plan-1", deps)).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { usePostHog } from "@openbookings/analytics/client";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import {
@@ -10,6 +11,7 @@ import {
 
 export function UserProfile() {
   const { data: session } = authClient.useSession();
+  const posthog = usePostHog();
   const router = useRouter();
 
   const name = session?.user?.name ?? "";
@@ -17,6 +19,9 @@ export function UserProfile() {
   const email = session?.user?.email ?? "";
 
   async function handleLogout() {
+    // Drop the verified PostHog Support identity so it doesn't carry over to
+    // the next user on a shared browser.
+    posthog?.clearIdentity?.();
     await authClient.signOut();
     router.push("/");
   }

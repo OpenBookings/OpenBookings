@@ -47,9 +47,9 @@ const dashboardRoutes: Route[] = [
     icon: <PencilSparkles className="size-4" />,
     link: "#",
     subs: [
-      { title: "R&A", link: "/dashboard/property/rates-availability" },
-      { title: "Property", link: "/dashboard/property/property" },
-      { title: "Rooms", link: "/dashboard/property/rooms" },
+      { title: "R&A", link: "/dashboard/listings/rates-availability" },
+      { title: "Property", link: "/dashboard/listings/property" },
+      { title: "Rooms", link: "/dashboard/listings/rooms" },
     ],
   },
   {

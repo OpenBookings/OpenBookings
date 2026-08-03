@@ -142,7 +142,7 @@ export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMen
               </button>
             </div>
 
-            <CommandList className="max-h-[400px] py-2">
+            <CommandList className="max-h-100 py-2">
               <CommandEmpty>No results found.</CommandEmpty>
 
               {reservationResults.length > 0 && (
@@ -154,7 +154,7 @@ export function CommandMenu02({ open: controlledOpen, onOpenChange }: CommandMen
                       onSelect={() =>
                         runAction({
                           type: "navigate",
-                          href: `/dashboard/reservations/${reservation.id}`,
+                          href: `/dashboard/bookings/reservations?id=${reservation.id}`,
                         })
                       }
                       value={`${reservation.id} ${reservation.guestName}`}

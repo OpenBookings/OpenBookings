@@ -6,7 +6,6 @@ import {
   IconSparkles,
   IconHelp,
   IconMessageCircle,
-  IconTicket,
   IconBook,
   IconX,
   IconTrash,
@@ -14,7 +13,6 @@ import {
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
-import { Popover as PopoverPrimitive } from 'radix-ui';
 import {
   Tooltip,
   TooltipContent,
@@ -239,6 +237,36 @@ function WhatsNewPanel() {
   );
 }
 
+function HelpPanel() {
+  return (
+    <div className="space-y-1">
+      {HELP_LINKS.map((link) => {
+        const content = (
+          <>
+            <span className="shrink-0 text-muted-foreground">{link.icon}</span>
+            <span className="flex flex-col">
+              <span className="text-sm text-foreground">{link.title}</span>
+              <span className="text-xs text-muted-foreground">{link.description}</span>
+            </span>
+          </>
+        );
+
+        return (
+          <a
+            key={link.title}
+            href={link.href}
+            target={link.href.startsWith('http') ? '_blank' : undefined}
+            rel={link.href.startsWith('http') ? 'noreferrer' : undefined}
+            className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-muted"
+          >
+            {content}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Generic status button ────────────────────────────────────────────────────
 
 function StatusButton({
@@ -278,72 +306,23 @@ function StatusButton({
   );
 }
 
-// ─── Help popover ─────────────────────────────────────────────────────────────
+// ─── Help ─────────────────────────────────────────────────────────────────────
 
-const HELP_LINKS = [
-  {
-    icon: <IconMessageCircle className="size-4" />,
-    title: 'Live chat',
-    description: 'Talk to our support team',
-    href: '#',
-  },
-  {
-    icon: <IconTicket className="size-4" />,
-    title: 'Create ticket',
-    description: 'Report an issue or request',
-    href: '#',
-  },
+type HelpLink = {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  href: string;
+};
+
+const HELP_LINKS: HelpLink[] = [
   {
     icon: <IconBook className="size-4" />,
     title: 'Documentation',
-    description: 'Guides and API reference',
+    description: 'Guides / API reference',
     href: 'https://docs.openbookings.co',
   },
 ];
-
-function HelpPopover({ side = 'top' }: { side?: 'top' | 'right' }) {
-  return (
-    <PopoverPrimitive.Root>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverPrimitive.Trigger asChild>
-            <button
-              aria-label="Help"
-              className="flex items-center justify-center size-7 rounded-md transition-colors text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
-            >
-              <IconHelp className="size-4" />
-            </button>
-          </PopoverPrimitive.Trigger>
-        </TooltipTrigger>
-        <TooltipContent side={side}>Help</TooltipContent>
-      </Tooltip>
-      <PopoverPrimitive.Portal>
-        <PopoverPrimitive.Content
-          side={side}
-          align="end"
-          sideOffset={8}
-          className="z-50 w-64 rounded-lg border border-border bg-card p-1.5 shadow-lg outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=top]:slide-in-from-bottom-2"
-        >
-          {HELP_LINKS.map((link) => (
-            <a
-              key={link.title}
-              href={link.href}
-              target={link.href.startsWith('http') ? '_blank' : undefined}
-              rel={link.href.startsWith('http') ? 'noreferrer' : undefined}
-              className="flex items-center gap-3 rounded-md px-2.5 py-2 transition-colors hover:bg-secondary/60"
-            >
-              <span className="shrink-0 text-muted-foreground">{link.icon}</span>
-              <span className="flex flex-col">
-                <span className="text-sm text-foreground">{link.title}</span>
-                <span className="text-xs text-muted-foreground">{link.description}</span>
-              </span>
-            </a>
-          ))}
-        </PopoverPrimitive.Content>
-      </PopoverPrimitive.Portal>
-    </PopoverPrimitive.Root>
-  );
-}
 
 // ─── Status bar ───────────────────────────────────────────────────────────────
 
@@ -462,7 +441,7 @@ function useSystemStatus(): SystemStatus {
   return status;
 }
 
-type Panel = 'actions' | 'whats-new';
+type Panel = 'actions' | 'whats-new' | 'help';
 
 export function StatusBar() {
   const { state, setOpen } = useSidebar();
@@ -493,6 +472,11 @@ export function StatusBar() {
       {!isCollapsed && activePanel === 'whats-new' && (
         <PanelShell title="What's new" onClose={() => setActivePanel(null)}>
           <WhatsNewPanel />
+        </PanelShell>
+      )}
+      {!isCollapsed && activePanel === 'help' && (
+        <PanelShell title="Help" onClose={() => setActivePanel(null)}>
+          <HelpPanel />
         </PanelShell>
       )}
 
@@ -551,7 +535,13 @@ export function StatusBar() {
           />
 
           {/* Help */}
-          <HelpPopover side={tooltipSide} />
+          <StatusButton
+            icon={<IconHelp className="size-4" />}
+            label="Help"
+            active={!isCollapsed && activePanel === 'help'}
+            onClick={() => togglePanel('help')}
+            tooltipSide={tooltipSide}
+          />
 
         </div>
       </div>
