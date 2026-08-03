@@ -5,7 +5,6 @@ import {
   CalendarDays,
   MessageSquare,
   Pencil,
-  UserX,
   CalendarX2,
   X,
 } from "lucide-react";

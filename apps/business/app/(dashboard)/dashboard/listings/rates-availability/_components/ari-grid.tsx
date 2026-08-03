@@ -358,7 +358,7 @@ function ColumnTint({
           key={date}
           className={cn(
             date === today
-              ? "bg-primary/[0.08]"
+              ? "bg-primary/8"
               : isWeekend(date)
                 ? "bg-(--gray-a1)"
                 : undefined,
