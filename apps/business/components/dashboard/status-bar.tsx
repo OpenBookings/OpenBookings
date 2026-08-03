@@ -6,7 +6,6 @@ import {
   IconSparkles,
   IconHelp,
   IconMessageCircle,
-  IconTicket,
   IconBook,
   IconX,
   IconTrash,
@@ -21,7 +20,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { OnboardingChecklist, ONBOARDING_STEPS } from './onboarding-01';
-import { SupportTicketDialog } from './support-ticket-dialog';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -239,7 +237,7 @@ function WhatsNewPanel() {
   );
 }
 
-function HelpPanel({ onCreateTicket }: { onCreateTicket: () => void }) {
+function HelpPanel() {
   return (
     <div className="space-y-1">
       {HELP_LINKS.map((link) => {
@@ -252,19 +250,6 @@ function HelpPanel({ onCreateTicket }: { onCreateTicket: () => void }) {
             </span>
           </>
         );
-
-        if (link.action === 'create-ticket') {
-          return (
-            <button
-              key={link.title}
-              type="button"
-              onClick={onCreateTicket}
-              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
-            >
-              {content}
-            </button>
-          );
-        }
 
         return (
           <a
@@ -328,17 +313,9 @@ type HelpLink = {
   title: string;
   description: string;
   href: string;
-  action?: 'create-ticket';
 };
 
 const HELP_LINKS: HelpLink[] = [
-  {
-    icon: <IconTicket className="size-4" />,
-    title: 'Create ticket',
-    description: 'Get help / Report an Issue',
-    href: '#',
-    action: 'create-ticket',
-  },
   {
     icon: <IconBook className="size-4" />,
     title: 'Documentation',
@@ -470,7 +447,6 @@ export function StatusBar() {
   const { state, setOpen } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const [activePanel, setActivePanel] = useState<Panel | null>(null);
-  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const systemStatus = useSystemStatus();
 
   const completedCount = ONBOARDING_STEPS.filter((s) => s.completed).length;
@@ -500,19 +476,9 @@ export function StatusBar() {
       )}
       {!isCollapsed && activePanel === 'help' && (
         <PanelShell title="Help" onClose={() => setActivePanel(null)}>
-          <HelpPanel
-            onCreateTicket={() => {
-              setActivePanel(null);
-              setTicketDialogOpen(true);
-            }}
-          />
+          <HelpPanel />
         </PanelShell>
       )}
-
-      <SupportTicketDialog
-        open={ticketDialogOpen}
-        onOpenChange={setTicketDialogOpen}
-      />
 
       <div
         className={cn(
