@@ -15,24 +15,65 @@ import type { PaymentSummary } from "@openbookings/stripe";
  */
 
 /**
+ * Strip diacritics and case so one ASCII pattern matches however the guest
+ * typed it — "rückbuchung" / "ruckbuchung", "rétrofacturation" /
+ * "retrofacturation". Patterns below are therefore written unaccented.
+ */
+function normalize(message: string): string {
+  return message
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/**
  * Dispute/chargeback vocabulary in the languages we see most (EN/NL/DE/FR).
- * Deliberately narrow: plain refund questions should stay with the bot.
+ * Deliberately narrow: a guest asking whether they can get a refund, or
+ * complaining about the room, stays with the bot. Only language that means
+ * "I am going around you to my bank/card issuer" escalates.
+ *
+ * Two traps this avoids on purpose:
+ *  - German "stornieren"/"stornierung"/"storno" means *cancel a booking*,
+ *    while Dutch "storneren" means reverse a direct debit. The strings are
+ *    near-identical, so nothing matches a bare `storn-` stem.
+ *  - Generic complaint words (klacht, Beschwerde, réclamation, complaint)
+ *    are not dispute vocabulary and are excluded.
  */
 const DISPUTE_PATTERNS: RegExp[] = [
-  /\bdisputes?\b/i,
-  /\bcharge.?backs?\b/i,
-  /\bmy bank\b.{0,40}\b(reclaim|revers|dispute|recall)/i,
-  /\bgeschil\b/i, // NL
-  /\bterugboeking\b/i, // NL
-  /\brückbuchung\b/i, // DE
-  /\brétrofacturation\b/i, // FR
-  /\blitige\b/i, // FR
+  // ---- EN ----
+  /\bdisput(e|es|ed|ing)\b/,
+  /\bcharge.?backs?\b/,
+  /\b(my|the) (bank|card issuer|credit card company)\b.{0,40}\b(reclaim|revers|disput|recall|refund|claw)/,
+  /\bstop payment\b/,
+  /\b(contact|call|go to|going to)\b.{0,20}\bmy (bank|card issuer)\b/,
+  // ---- NL ----
+  /\bgeschil\b/,
+  /\bterugboeking(en)?\b/,
+  /\bterugboeken\b/,
+  /\bterugvorder(en|ing)\b/,
+  /\b(mijn|de) bank\b.{0,40}\b(terugbo|terugvorder|storneer|storneren|terughal)/,
+  // ---- DE ----
+  /\br(u|ue)ckbuchung(en)?\b/,
+  /\bzur(u|ue)ckbuchen\b/,
+  /\bstreitfall\b/,
+  /\blastschrift\b.{0,40}\bzur(u|ue)ck/,
+  /\b(meine|die) bank\b.{0,40}\b(zur(u|ue)ck|einschalt|anfecht)/,
+  /\bzahlung\b.{0,30}\banfecht(en|ung)\b/,
+  // ---- FR ----
+  /\bretrofacturation\b/,
+  /\blitige\b/,
+  /\bfaire opposition\b/,
+  /\bopposition\b.{0,30}\b(carte|paiement|prelevement)/,
+  /\bcontester\b.{0,40}\b(paiement|prelevement|debit|transaction|montant)/,
+  /\b(ma|la) banque\b.{0,40}\b(rembours|contest|oppos|recuper)/,
 ];
 
 export function messageTriggersEscalation(message: string): string | null {
+  const normalized = normalize(message);
   for (const pattern of DISPUTE_PATTERNS) {
-    if (pattern.test(message)) {
-      return "Guest message mentions a dispute/chargeback — routed straight to a human per partner-agreement dispute procedure.";
+    const match = pattern.exec(normalized);
+    if (match) {
+      return `Guest message mentions a dispute/chargeback ("${match[0]}") — routed straight to a human per partner-agreement dispute procedure.`;
     }
   }
   return null;

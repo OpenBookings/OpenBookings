@@ -1,9 +1,14 @@
 import { Hono } from 'hono'
 import { recordProcessedEvent } from '@openbookings/db'
 import { verifyChatwootSignature } from './chatwoot/signature'
-import { env } from './env'
+import { assertRequiredEnv, env } from './env'
 import { processConversation } from './process'
 import { enqueueProcessConversation, verifyCloudTasksRequest, type ProcessConversationPayload } from './tasks'
+import { trace } from './trace'
+
+// Only when this file is the entrypoint — importing it (tests) must not
+// require the production env set.
+if (import.meta.main) assertRequiredEnv()
 
 const app = new Hono()
 
@@ -20,11 +25,14 @@ app.post('/webhooks/chatwoot', async (c) => {
   const signatureOk = verifyChatwootSignature(
     rawBody,
     c.req.header('X-Chatwoot-Signature'),
+    c.req.header('X-Chatwoot-Timestamp'),
     env.chatwootWebhookSecret,
   )
   if (!signatureOk) {
+    trace('webhook', 'signature rejected')
     return c.json({ error: 'invalid signature' }, 401)
   }
+  trace('webhook', 'signature ok')
 
   let payload: {
     event?: string
@@ -37,6 +45,7 @@ app.post('/webhooks/chatwoot', async (c) => {
   try {
     payload = JSON.parse(rawBody)
   } catch {
+    trace('webhook', 'invalid json body')
     return c.json({ error: 'invalid json' }, 400)
   }
 
@@ -53,12 +62,19 @@ app.post('/webhooks/chatwoot', async (c) => {
     typeof conversationId !== 'number' ||
     !payload.content?.trim()
   ) {
+    trace('webhook', 'ignored', {
+      event: payload.event,
+      messageType: payload.message_type,
+      private: payload.private,
+    })
     return c.json({ ok: true, ignored: true })
   }
 
   const eventId = `message_created:${payload.id}`
+  trace('webhook', 'received', { eventId, conversationId })
   const firstDelivery = await recordProcessedEvent(eventId)
   if (!firstDelivery) {
+    trace('webhook', 'duplicate delivery, dropping', { eventId })
     return c.json({ ok: true, duplicate: true })
   }
 
@@ -68,6 +84,7 @@ app.post('/webhooks/chatwoot', async (c) => {
     messageId: payload.id,
     content: payload.content,
   })
+  trace('webhook', 'enqueued', { eventId })
   return c.json({ ok: true })
 })
 
@@ -83,6 +100,7 @@ app.post('/tasks/process-conversation', async (c) => {
     queueName: c.req.header('X-CloudTasks-QueueName'),
   })
   if (!authorized) {
+    trace('task', 'unauthorized request rejected')
     return c.json({ error: 'unauthorized' }, 403)
   }
 
@@ -92,11 +110,14 @@ app.post('/tasks/process-conversation', async (c) => {
     typeof payload?.conversationId !== 'number' ||
     typeof payload?.content !== 'string'
   ) {
+    trace('task', 'malformed payload, dropping')
     // Malformed task body will never become valid — 200 so the queue drops it.
     return c.json({ ok: false, error: 'malformed payload' })
   }
 
+  trace('task', 'picked up', { eventId: payload.eventId, conversationId: payload.conversationId })
   await processConversation(payload)
+  trace('task', 'done', { eventId: payload.eventId })
   return c.json({ ok: true })
 })
 

@@ -72,7 +72,8 @@
       },
     },
     "apps/support-bot": {
-      "name": "support-bot",
+      "name": "@openbookings/support-bot",
+      "version": "0.0.0",
       "dependencies": {
         "@google-cloud/tasks": "^6.2.0",
         "@mistralai/mistralai": "^1.10.0",
@@ -83,7 +84,9 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
+        "@openbookings/config": "workspace:*",
         "@types/bun": "latest",
+        "typescript": "^5.9.3",
       },
     },
     "apps/web": {
@@ -611,6 +614,8 @@
     "@openbookings/pricing": ["@openbookings/pricing@workspace:packages/pricing"],
 
     "@openbookings/stripe": ["@openbookings/stripe@workspace:packages/stripe"],
+
+    "@openbookings/support-bot": ["@openbookings/support-bot@workspace:apps/support-bot"],
 
     "@openbookings/web": ["@openbookings/web@workspace:apps/web"],
 
@@ -2039,8 +2044,6 @@
     "stubs": ["stubs@3.0.0", "", {}, "sha512-PdHt7hHUJKxvTCgbKX9C1V/ftOcjJQgz8BZwNfV5c4B6dcGqlpelTbJ999jBGZ2jYiPAwcX5dP6oBwVlBlUbxw=="],
 
     "styled-jsx": ["styled-jsx@5.1.6", "", { "dependencies": { "client-only": "0.0.1" }, "peerDependencies": { "react": ">= 16.8.0 || 17.x.x || ^18.0.0-0 || ^19.0.0-0" } }, "sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA=="],
-
-    "support-bot": ["support-bot@workspace:apps/support-bot"],
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 

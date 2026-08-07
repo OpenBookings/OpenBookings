@@ -5,6 +5,7 @@ import {
   type SupportReservation,
 } from "@openbookings/db";
 import { getPaymentSummary } from "@openbookings/stripe";
+import { trace } from "../trace";
 
 /**
  * Tool registry for the Mistral agent: one Zod schema per tool's arguments,
@@ -211,12 +212,15 @@ export async function executeTool(name: string, rawArgs: unknown): Promise<ToolE
   }
   const parsed = def.schema.safeParse(rawArgs);
   if (!parsed.success) {
-    return { ok: false, error: `Invalid arguments for ${name}: ${parsed.error.issues.map((i) => i.message).join("; ")}` };
+    const error = `Invalid arguments for ${name}: ${parsed.error.issues.map((i) => i.message).join("; ")}`;
+    trace("tools", `${name} rejected: invalid args`, { error });
+    return { ok: false, error };
   }
   try {
     return { ok: true, result: await def.execute(parsed.data as never) };
   } catch (err) {
     console.error(`Tool ${name} failed`, err);
+    trace("tools", `${name} threw`, { err: String(err) });
     return { ok: false, error: `Tool ${name} failed to execute. Do not retry more than once; escalate if this blocks you.` };
   }
 }

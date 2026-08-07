@@ -1,0 +1,63 @@
+steps:
+  # ---------- Build ----------
+  # No --build-arg here: unlike web/business there are no NEXT_PUBLIC_* values
+  # to inline at build time. Everything this service reads is runtime config,
+  # set on the Cloud Run service (see --set-env-vars / --set-secrets below).
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - '-f'
+      - apps/support-bot/Dockerfile
+      - '-t'
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
+      - '.'
+
+  # ---------- Push ----------
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
+
+  # ---------- Deploy ----------
+  # --allow-unauthenticated is required: Chatwoot posts to /webhooks/chatwoot
+  # from outside GCP and cannot present a Google identity. The service is not
+  # open in practice — the webhook is gated on the Chatwoot HMAC, and
+  # /tasks/process-conversation verifies the Cloud Tasks OIDC token in-process
+  # (src/tasks.ts) rather than relying on IAM.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_NAME
+      - '--image'
+      - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA'
+      - '--region'
+      - $_DEPLOY_REGION
+      - '--platform'
+      - $_PLATFORM
+      - '--port'
+      - '8080'
+      - '--allow-unauthenticated'
+      # The identity the container runs as. Distinct from the queue's OIDC
+      # service account, which is what *calls* this service.
+      - '--service-account'
+      - $_RUNTIME_SERVICE_ACCOUNT
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,CLOUD_TASKS_QUEUE_NAME=${_CLOUD_TASKS_QUEUE_NAME},CLOUD_TASKS_QUEUE_LOCATION=${_CLOUD_TASKS_QUEUE_LOCATION},CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=${_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL},SERVICE_BASE_URL=${_SERVICE_BASE_URL},CHATWOOT_BASE_URL=${_CHATWOOT_BASE_URL},CHATWOOT_ACCOUNT_ID=${_CHATWOOT_ACCOUNT_ID},REFUND_ESCALATION_THRESHOLD_EUR=${_REFUND_ESCALATION_THRESHOLD_EUR}'
+      # Secrets stay in Secret Manager and are mounted as env vars; they are
+      # never substitutions, so they cannot leak into build logs.
+      - '--set-secrets'
+      - 'MISTRAL_API_KEY=support-bot-mistral-api-key:latest,CHATWOOT_API_TOKEN=support-bot-chatwoot-api-token:latest,CHATWOOT_WEBHOOK_SECRET=support-bot-chatwoot-webhook-secret:latest,DATABASE_URL=support-bot-database-url:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest'
+
+# Defaults so a trigger that has not been updated yet still builds. Real
+# values belong in the trigger's substitutions, which override anything here.
+substitutions:
+  _CLOUD_TASKS_QUEUE_NAME: support-bot-conversations
+  _CLOUD_TASKS_QUEUE_LOCATION: europe-west1
+  _REFUND_ESCALATION_THRESHOLD_EUR: '250'
+
+timeout: 1200s
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,4 +1,5 @@
 import { env } from "../env";
+import { trace } from "../trace";
 
 /**
  * Minimal Chatwoot Application API client — only the calls the bot needs.
@@ -18,6 +19,8 @@ function accountUrl(path: string): string {
 }
 
 async function chatwootFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = init?.method ?? "GET";
+  trace("chatwoot", `→ ${method} ${path}`, init?.body ? { body: init.body } : undefined);
   const res = await fetch(accountUrl(path), {
     ...init,
     headers: {
@@ -28,8 +31,10 @@ async function chatwootFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Chatwoot ${init?.method ?? "GET"} ${path} failed: ${res.status} ${body.slice(0, 300)}`);
+    trace("chatwoot", `← ${res.status} ${method} ${path}`, { body: body.slice(0, 300) });
+    throw new Error(`Chatwoot ${method} ${path} failed: ${res.status} ${body.slice(0, 300)}`);
   }
+  trace("chatwoot", `← ${res.status} ${method} ${path}`);
   return (await res.json()) as T;
 }
 

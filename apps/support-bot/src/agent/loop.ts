@@ -3,6 +3,7 @@ import type { CachedTurn } from "@openbookings/db";
 import { env } from "../env";
 import { SYSTEM_PROMPT } from "./prompt";
 import { executeTool, mistralToolSchemas, TOOLS } from "./tools";
+import { trace } from "../trace";
 
 export const MISTRAL_MODEL = "mistral-medium-latest";
 export const MAX_TOOL_ITERATIONS = 5;
@@ -61,16 +62,22 @@ export async function runAgentLoop(opts: {
   const toolLog: ToolCallLogEntry[] = [];
 
   for (let iteration = 0; iteration <= maxIterations; iteration++) {
+    trace("loop", `iteration ${iteration}: calling model`);
     const response = await opts.chat(messages);
     const toolCalls = response.toolCalls ?? [];
 
     if (toolCalls.length === 0) {
       const text = response.content?.trim();
-      if (text) return { kind: "reply", text, toolLog };
+      if (text) {
+        trace("loop", "final reply", { length: text.length });
+        return { kind: "reply", text, toolLog };
+      }
+      trace("loop", "empty response from model → escalate");
       return { kind: "escalate", reason: "Model returned an empty response.", toolLog };
     }
 
     if (iteration === maxIterations) {
+      trace("loop", "max iterations reached → escalate");
       return { kind: "escalate", reason: "Unable to resolve after max tool calls.", toolLog };
     }
 
@@ -79,20 +86,26 @@ export async function runAgentLoop(opts: {
     for (const call of toolCalls) {
       const name = call.function.name;
       const args = parseArgs(call.function.arguments);
+      trace("loop", `tool call: ${name}`, { args });
 
       if (name === "escalate_to_human") {
         const parsed = TOOLS.escalate_to_human.schema.safeParse(args);
         const reason = parsed.success ? parsed.data.reason : "Model requested escalation.";
+        trace("loop", "escalate_to_human called by model", { reason });
         return { kind: "escalate", reason, toolLog };
       }
 
       const execution = await executeTool(name, args);
       const result = execution.ok ? execution.result : { error: execution.error };
       toolLog.push({ name, args, result });
+      trace("loop", `tool result: ${name}`, execution.ok ? { ok: true, result } : { ok: false, error: execution.error });
 
       if (execution.ok && opts.onToolResult) {
         const forcedReason = opts.onToolResult(name, execution.result);
-        if (forcedReason) return { kind: "escalate", reason: forcedReason, toolLog };
+        if (forcedReason) {
+          trace("loop", "rule-driven escalation forced", { name, reason: forcedReason });
+          return { kind: "escalate", reason: forcedReason, toolLog };
+        }
       }
 
       messages.push({

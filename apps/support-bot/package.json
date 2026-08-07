@@ -1,7 +1,11 @@
 {
-  "name": "support-bot",
+  "name": "@openbookings/support-bot",
+  "version": "0.0.0",
+  "private": true,
   "scripts": {
-    "dev": "bun run --hot src/index.ts",
+    "dev": "PORT=3003 bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
@@ -14,6 +18,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@openbookings/config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
   }
 }

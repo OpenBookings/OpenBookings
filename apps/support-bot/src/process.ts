@@ -16,6 +16,7 @@ import { env } from "./env";
 import { messageTriggersEscalation, paymentTriggersEscalation } from "./escalation";
 import { mistralChat, runAgentLoop, type ChatFn, type ToolCallLogEntry } from "./agent/loop";
 import type { ProcessConversationPayload } from "./tasks";
+import { trace } from "./trace";
 
 /** Cached context is considered fresh for this long; older → refetch from Chatwoot. */
 const CONTEXT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -64,9 +65,15 @@ export async function processConversation(
 ): Promise<void> {
   const { eventId, conversationId, content } = payload;
 
-  if (await hasRepliedToEvent(eventId)) return;
+  trace("process", "start", { eventId, conversationId });
+
+  if (await hasRepliedToEvent(eventId)) {
+    trace("process", "already replied, skipping (retry no-op)", { eventId });
+    return;
+  }
 
   const escalate = async (reason: string, toolLog: ToolCallLogEntry[]) => {
+    trace("process", "escalating", { conversationId, reason, toolCalls: toolLog.length });
     await postPrivateNote(conversationId, escalationNote(reason, toolLog));
     await setConversationStatus(conversationId, "open");
     await markEventReplied(eventId);
@@ -76,13 +83,17 @@ export async function processConversation(
   // message escalates before the model is ever called.
   const preCheckReason = messageTriggersEscalation(content);
   if (preCheckReason) {
+    trace("process", "pre-check escalation triggered", { reason: preCheckReason });
     await escalate(preCheckReason, []);
     return;
   }
 
-  let turns =
-    (await getConversationCache(conversationId, CONTEXT_CACHE_TTL_MS)) ??
-    (await fetchTurnsFromChatwoot(conversationId));
+  const cached = await getConversationCache(conversationId, CONTEXT_CACHE_TTL_MS);
+  let turns = cached ?? (await fetchTurnsFromChatwoot(conversationId));
+  trace("process", "context loaded", {
+    source: cached ? "cache" : "chatwoot",
+    turns: turns.length,
+  });
   // The triggering message postdates the cache (and may race the history
   // fetch) — make sure it's the final user turn exactly once.
   if (turns.at(-1)?.role !== "user" || turns.at(-1)?.content !== content) {
@@ -109,10 +120,12 @@ export async function processConversation(
     return;
   }
 
+  trace("process", "replying", { conversationId, length: outcome.text.length });
   await postReply(conversationId, outcome.text);
   await markEventReplied(eventId);
   await setConversationCache(conversationId, [
     ...turns,
     { role: "assistant", content: outcome.text },
   ]);
+  trace("process", "done", { eventId });
 }

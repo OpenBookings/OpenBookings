@@ -1,6 +1,7 @@
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { OAuth2Client } from "google-auth-library";
 import { env } from "./env";
+import { trace } from "./trace";
 
 /**
  * Cloud Tasks decoupling: the webhook enqueues, Cloud Tasks POSTs back to
@@ -18,7 +19,41 @@ export type ProcessConversationPayload = {
 
 let tasksClient: CloudTasksClient | undefined;
 
+/**
+ * Local-dev dispatch: POST straight to our own task handler instead of going
+ * through a queue that does not exist outside GCP. Deliberately not awaited,
+ * so the webhook still returns immediately the way it does in production —
+ * but failures are logged, because a silent one here looks like the bot
+ * simply never replying.
+ */
+function dispatchInline(payload: ProcessConversationPayload): void {
+  const url = `${env.serviceBaseUrl}/tasks/process-conversation`;
+  trace("tasks", "inline dispatch →", { url, eventId: payload.eventId });
+  void fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CloudTasks-QueueName": "inline-dev" },
+    body: JSON.stringify(payload),
+  })
+    .then(async (res) => {
+      if (res.ok) {
+        trace("tasks", "inline dispatch ok", { eventId: payload.eventId });
+        return;
+      }
+      const body = await res.text().catch(() => "");
+      console.error(
+        `[inline dispatch] ${url} -> ${res.status} ${body.slice(0, 200)}` +
+          (res.status === 403 ? " (set TASKS_AUTH_DISABLED=true)" : ""),
+      );
+    })
+    .catch((err) => console.error(`[inline dispatch] ${url} failed:`, err));
+}
+
 export async function enqueueProcessConversation(payload: ProcessConversationPayload): Promise<void> {
+  if (env.tasksInline) {
+    dispatchInline(payload);
+    return;
+  }
+  trace("tasks", "creating cloud task", { eventId: payload.eventId });
   tasksClient ??= new CloudTasksClient();
   const parent = tasksClient.queuePath(
     env.cloudTasksProject,
@@ -53,18 +88,30 @@ export async function verifyCloudTasksRequest(headers: {
   authorization?: string;
   queueName?: string;
 }): Promise<boolean> {
-  if (env.tasksAuthDisabled) return true;
-  if (!headers.queueName) return false;
+  if (env.tasksAuthDisabled) {
+    trace("tasks", "OIDC check bypassed (TASKS_AUTH_DISABLED)");
+    return true;
+  }
+  if (!headers.queueName) {
+    trace("tasks", "OIDC check failed: missing queue header");
+    return false;
+  }
   const token = headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (!token) return false;
+  if (!token) {
+    trace("tasks", "OIDC check failed: missing bearer token");
+    return false;
+  }
   try {
     const ticket = await oidcVerifier.verifyIdToken({
       idToken: token,
       audience: env.serviceBaseUrl,
     });
     const claims = ticket.getPayload();
-    return claims?.email === env.tasksServiceAccountEmail && claims.email_verified === true;
-  } catch {
+    const ok = claims?.email === env.tasksServiceAccountEmail && claims.email_verified === true;
+    trace("tasks", ok ? "OIDC check passed" : "OIDC check failed: email mismatch", { email: claims?.email });
+    return ok;
+  } catch (err) {
+    trace("tasks", "OIDC check failed: token verification error", { err: String(err) });
     return false;
   }
 }

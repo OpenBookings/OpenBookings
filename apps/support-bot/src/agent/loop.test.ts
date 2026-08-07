@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { runAgentLoop, type ChatFn, type ChatResponse, type LoopMessage } from "./loop";
+import {
+  MAX_TOOL_ITERATIONS,
+  runAgentLoop,
+  type ChatFn,
+  type ChatResponse,
+  type LoopMessage,
+} from "./loop";
 
 // Non-UUID booking references make the reservation tools return "not found"
 // without touching the database, so the loop is exercised end-to-end offline.
@@ -85,6 +91,32 @@ describe("runAgentLoop", () => {
       reason: "Unable to resolve after max tool calls.",
     });
     expect(calls).toHaveLength(4); // 3 tool iterations + the capped attempt
+  });
+
+  it("terminates at the production cap on a pathological tool-call chain", async () => {
+    // A model that never stops calling tools. The scripted chat is primed
+    // with far more responses than the cap allows, so if the loop failed to
+    // terminate this would keep running rather than fail fast.
+    const endless: ChatResponse = {
+      content: null,
+      toolCalls: [toolCall("get_reservation", { booking_reference: "REF-1" })],
+    };
+    const { chat, calls } = scriptedChat(Array(100).fill(endless));
+
+    const outcome = await runAgentLoop({
+      turns: [{ role: "user", content: "help" }],
+      chat, // no maxIterations override — the real default
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "escalate",
+      reason: "Unable to resolve after max tool calls.",
+    });
+    // MAX_TOOL_ITERATIONS tool rounds, then one final capped attempt.
+    expect(calls).toHaveLength(MAX_TOOL_ITERATIONS + 1);
+    if (outcome.kind === "escalate") {
+      expect(outcome.toolLog).toHaveLength(MAX_TOOL_ITERATIONS);
+    }
   });
 
   it("lets onToolResult force escalation off a tool result", async () => {

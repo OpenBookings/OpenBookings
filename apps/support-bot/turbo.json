@@ -1,0 +1,13 @@
+{
+  "$schema": "https://v2-10-2.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // `build` here is `tsc --noEmit`: a typecheck gate, not a bundle. It
+    // emits nothing, so the root task's outputs would otherwise warn on
+    // every run.
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    }
+  }
+}
