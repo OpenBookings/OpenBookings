@@ -6,15 +6,19 @@ import useSWR from "swr";
 import { completeOnboarding } from "../actions";
 import type { OnboardingStatus } from "../_lib/status";
 
-const fetcher = (url: string) =>
-  fetch(url).then((r) => {
+// Fixed, same-origin endpoint — never built from user input, so there is no
+// request target an attacker could influence.
+const STATUS_ENDPOINT = "/api/onboarding/status";
+
+const fetcher = () =>
+  fetch(STATUS_ENDPOINT, { credentials: "same-origin" }).then((r) => {
     if (!r.ok) throw new Error("Failed to fetch status");
     return r.json() as Promise<OnboardingStatus>;
   });
 
 export function VerifyStep({ initialStatus }: { initialStatus: OnboardingStatus }) {
   const router = useRouter();
-  const { data } = useSWR<OnboardingStatus>("/api/onboarding/status", fetcher, {
+  const { data } = useSWR<OnboardingStatus>(STATUS_ENDPOINT, fetcher, {
     refreshInterval: 5000,
     fallbackData: initialStatus,
   });
