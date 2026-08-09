@@ -58,6 +58,47 @@ apps need the new dev callback origins registered, e.g.
 `http://business.localhost:3001/api/auth/callback/google` (same pattern per
 provider). Until then, magic-link sign-in works unchanged in dev.
 
+## Microsoft OAuth (host portal only)
+
+One **multi-tenant** app registration in our own Entra tenant. Scopes are
+`openid profile email` only (`disableDefaultScope` — no `User.Read`, no
+Graph calls; the profile-photo fetch is disabled).
+
+- **Email claim**: Microsoft does not reliably send `email`; the host
+  instance falls back to `preferred_username` / `upn` only when they are
+  email-shaped (`microsoftEmailFromProfile`). A user whose token has no
+  email-shaped claim cannot sign up — by design, since magic-link recovery
+  and the one-email-one-account invariant need a routable address.
+- **Tenant id**: the `tid` claim is stamped onto `account.tenant_id`
+  (migration `0008_microsoft_tenant.sql`) for org auto-join later.
+- **Admin consent** (for support): many M365 tenants block user consent to
+  third-party apps. A tenant admin can pre-approve us by visiting:
+
+  ```
+  https://login.microsoftonline.com/{their-tenant-id}/adminconsent?client_id={our-client-id}&redirect_uri=https://business.openbookings.co
+  ```
+
+  (`common` also works in place of the tenant id if they are signed in as
+  admin.) Until consent is granted those users see AADSTS65001/90094 —
+  point them at their IT admin with that URL.
+
+## Account linking
+
+Implicit (sign-in-time) OAuth account linking is **disabled** on both
+instances (`disableImplicitLinking: true`). With hard email exclusivity, an
+OAuth sign-in on the wrong portal must fail outright instead of Better Auth
+attaching the OAuth account row to the other portal's user before the
+session hook rejects it (orphan `account` row on a user who never consented
+to it). Explicit linking via `linkSocial()` while signed in still works.
+Consequence to know about: a user who signed up with magic link cannot
+implicitly attach Google/Microsoft by just signing in with it — they get the
+collision/not-linked error and must link from account settings once that UI
+exists.
+
+Signup with an email that already exists (either portal) is rejected in
+`user.create.before` with a clear message ("already registered as a
+guest/host account") instead of a raw Postgres unique-violation error.
+
 ## Production rollout order (PR "auth boundary")
 
 1. Apply `packages/db/drizzle/0007_auth_boundary.sql` by hand (adds

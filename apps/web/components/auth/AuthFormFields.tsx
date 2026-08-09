@@ -54,14 +54,18 @@ export function AuthFormWelcomeTitle() {
 
 export function AuthFormFields({
     onSignInSuccess,
+    initialError,
 }: {
     onSignInSuccess?: () => void;
+    initialError?: string | null;
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [appleLoading, setAppleLoading] = useState(false);
-    const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+    const [magicLinkError, setMagicLinkError] = useState<string | null>(
+        initialError ?? null,
+    );
     const [sentEmail, setSentEmail] = useState<string | null>(null);
     const [socialState, setSocialState] = useState<{
         provider: "google" | "apple";
@@ -124,6 +128,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "google",
                 callbackURL: "/",
+                errorCallbackURL: "/",
             });
             setSocialState({ provider: "google", failed: false });
             await redirectPromise;
@@ -145,6 +150,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "apple",
                 callbackURL: "/",
+                errorCallbackURL: "/",
             });
             setSocialState({ provider: "apple", failed: false });
             await redirectPromise;

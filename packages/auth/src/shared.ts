@@ -59,6 +59,18 @@ export function accountTypeMismatchMessage(required: string): string {
     : "This is a business account. Please sign in at business.openbookings.co instead.";
 }
 
+/**
+ * Message shown when a signup collides with an existing account of the other
+ * type. Unique email is load-bearing (one email = one account, host or
+ * guest); surfacing which type exists leaks account existence — accepted
+ * tradeoff for a marketplace, better than a raw Postgres error.
+ */
+export function emailCollisionMessage(required: string): string {
+  return required === "business"
+    ? "This email is already registered as a guest account. Please use a different address for your host account."
+    : "This email is already registered as a host account. Please use a different address for your guest account.";
+}
+
 type SessionResult<
   U extends Record<string, unknown>,
   S extends Record<string, unknown>,
@@ -159,13 +171,29 @@ export function advancedCookieConfig(cookiePrefix: string, secure: boolean) {
 export function buildAccountTypeHooks(
   accountType: string,
   getAccountType: (userId: string) => Promise<string | null | undefined>,
+  /**
+   * When provided, signup is rejected with a clear collision message if the
+   * email already belongs to a user (of either type — same-type duplicates
+   * are a sign-in, not a signup, so any hit here is a collision). The unique
+   * constraint on user.email still backs this against races; the hook exists
+   * so the failure surfaces as copy, not a raw Postgres error.
+   */
+  getUserIdByEmail?: (email: string) => Promise<string | null | undefined>,
 ) {
   return {
     user: {
       create: {
-        before: async (user: User & Record<string, unknown>) => ({
-          data: { ...user, account_type: accountType },
-        }),
+        before: async (user: User & Record<string, unknown>) => {
+          if (getUserIdByEmail && typeof user.email === "string") {
+            const existing = await getUserIdByEmail(user.email);
+            if (existing) {
+              throw new APIError("UNPROCESSABLE_ENTITY", {
+                message: emailCollisionMessage(accountType),
+              });
+            }
+          }
+          return { data: { ...user, account_type: accountType } };
+        },
       },
     },
     session: {
@@ -188,13 +216,86 @@ export function buildAccountTypeHooks(
 
 /** account_type hooks wired to a live pg pool. */
 export function accountTypeHooksForPool(pool: Pool, accountType: string) {
-  return buildAccountTypeHooks(accountType, async (userId) => {
-    const result = await pool.query<{ account_type: string | null }>(
-      `SELECT account_type FROM "user" WHERE id = $1`,
-      [userId],
-    );
-    return result.rows[0]?.account_type;
-  });
+  return buildAccountTypeHooks(
+    accountType,
+    async (userId) => {
+      const result = await pool.query<{ account_type: string | null }>(
+        `SELECT account_type FROM "user" WHERE id = $1`,
+        [userId],
+      );
+      return result.rows[0]?.account_type;
+    },
+    async (email) => {
+      const result = await pool.query<{ id: string }>(
+        `SELECT id FROM "user" WHERE email = $1`,
+        [email],
+      );
+      return result.rows[0]?.id;
+    },
+  );
+}
+
+/**
+ * Implicit (sign-in-time) account linking is off on both instances: with
+ * hard email exclusivity, an OAuth sign-in on the wrong portal must fail
+ * outright instead of Better Auth quietly attaching the OAuth account row to
+ * the existing user of the other type before the session hook rejects it —
+ * that path leaves an orphan `account` row on a user who never consented to
+ * it. Explicit linking via linkSocial() while signed in remains available.
+ */
+export const accountLinkingOptions = {
+  accountLinking: {
+    enabled: true,
+    disableImplicitLinking: true,
+  },
+} as const;
+
+const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/**
+ * Best-effort payload decode of a JWT that was already verified upstream
+ * (better-auth verifies the Microsoft id token signature before storing it).
+ */
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Microsoft does not reliably put the user's address in the `email` claim —
+ * for some work/school tenants only `preferred_username` or `upn` carries
+ * it. Fall back to those only when they are email-shaped (a UPN can be a
+ * phone number or a non-routable alias, and a non-routable address would
+ * break magic-link recovery and the one-email-one-account invariant).
+ */
+export function microsoftEmailFromProfile(profile: {
+  email?: string;
+  preferred_username?: string;
+  upn?: string;
+}): string | undefined {
+  for (const candidate of [profile.email, profile.preferred_username, profile.upn]) {
+    if (candidate && EMAIL_SHAPE.test(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * account.create.before hook: persist the Entra tenant id (`tid` claim) on
+ * the account row. Needed later for org auto-join; decoding here is safe
+ * because the id token's signature was verified during the code exchange.
+ */
+export function stampMicrosoftTenantId(
+  account: { providerId: string; idToken?: string | null } & Record<string, unknown>,
+) {
+  if (account.providerId !== "microsoft" || !account.idToken) return;
+  const tid = decodeJwtPayload(account.idToken)?.tid;
+  if (typeof tid !== "string") return;
+  return { data: { ...account, tenant_id: tid } };
 }
 
 /** `user.additionalFields` both instances share. Never client-settable. */

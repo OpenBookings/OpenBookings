@@ -1,14 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { SS_AuthForm } from "./SS-AuthForm";
 import { AuthFormFields, AuthFormPhaseProvider } from "./AuthFormFields";
 import { Kbd } from "@/components/ui/kbd";
 
+const NOT_LINKED_MESSAGE =
+    "An account already exists for this email. Sign in with the method you used originally — or, if this email belongs to your host account, use a different address.";
+
 export function CS_AuthForm() {
     const [openCSAuthForm, setOpenCSAuthForm] = useState(false);
+    const [initialError, setInitialError] = useState<string | null>(null);
+
+    // OAuth failures come back as a full-page redirect to /?error=...; reopen
+    // the sign-in overlay with the message and strip the param from the URL.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("error") !== "account_not_linked") return;
+        setInitialError(NOT_LINKED_MESSAGE);
+        setOpenCSAuthForm(true);
+        params.delete("error");
+        const query = params.toString();
+        window.history.replaceState(
+            null,
+            "",
+            window.location.pathname + (query ? `?${query}` : ""),
+        );
+    }, []);
 
     return (
         <>
@@ -38,7 +58,10 @@ export function CS_AuthForm() {
                             </div>
                         }
                     >
-                        <AuthFormFields onSignInSuccess={() => setOpenCSAuthForm(false)} />
+                        <AuthFormFields
+                            onSignInSuccess={() => setOpenCSAuthForm(false)}
+                            initialError={initialError}
+                        />
                     </SS_AuthForm>
                 </AuthFormPhaseProvider>
             </FocusOverlay>

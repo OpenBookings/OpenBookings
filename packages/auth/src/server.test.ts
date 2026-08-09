@@ -4,9 +4,11 @@ import {
   advancedCookieConfig,
   buildAccountTypeHooks,
   isAccountTypeAllowed,
+  microsoftEmailFromProfile,
   portalForAccountType,
   sessionCookieNames,
   sessionForApp,
+  stampMicrosoftTenantId,
 } from "./server";
 
 // These hooks are what Better Auth runs on every sign-in path — password,
@@ -204,6 +206,105 @@ describe("cookie isolation", () => {
       cookiePrefix: "ob-guest",
       crossSubDomainCookies: { enabled: false },
     });
+  });
+});
+
+describe("user.create.before (email collision)", () => {
+  test("existing email is rejected with the friendly collision message", async () => {
+    const hooks = buildAccountTypeHooks(
+      "business",
+      async () => null,
+      async () => "existing-user-id",
+    );
+    await expect(hooks.user.create.before(makeUser())).rejects.toThrow(
+      /already registered as a guest account/,
+    );
+  });
+
+  test("guest signup with a host email gets the inverse message", async () => {
+    const hooks = buildAccountTypeHooks(
+      "private",
+      async () => null,
+      async () => "existing-user-id",
+    );
+    await expect(hooks.user.create.before(makeUser())).rejects.toThrow(
+      /already registered as a host account/,
+    );
+  });
+
+  test("fresh email passes and is stamped", async () => {
+    const hooks = buildAccountTypeHooks(
+      "business",
+      async () => null,
+      async () => null,
+    );
+    const result = await hooks.user.create.before(makeUser());
+    expect((result.data as Record<string, unknown>).account_type).toBe("business");
+  });
+});
+
+describe("microsoftEmailFromProfile", () => {
+  test("prefers the email claim", () => {
+    expect(
+      microsoftEmailFromProfile({
+        email: "a@b.co",
+        preferred_username: "other@c.co",
+      }),
+    ).toBe("a@b.co");
+  });
+
+  test("falls back to email-shaped preferred_username, then upn", () => {
+    expect(
+      microsoftEmailFromProfile({ preferred_username: "user@tenant.co" }),
+    ).toBe("user@tenant.co");
+    expect(microsoftEmailFromProfile({ upn: "user@tenant.co" })).toBe(
+      "user@tenant.co",
+    );
+  });
+
+  test("never returns a non-email UPN or phone", () => {
+    expect(
+      microsoftEmailFromProfile({ preferred_username: "+31612345678" }),
+    ).toBeUndefined();
+    expect(microsoftEmailFromProfile({ upn: "PHONE#user" })).toBeUndefined();
+    expect(microsoftEmailFromProfile({})).toBeUndefined();
+  });
+});
+
+describe("stampMicrosoftTenantId", () => {
+  const fakeIdToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.y`;
+
+  test("stamps tenant_id from the tid claim on microsoft accounts", () => {
+    const result = stampMicrosoftTenantId({
+      providerId: "microsoft",
+      idToken: fakeIdToken({ tid: "tenant-123" }),
+    });
+    expect(result?.data.tenant_id).toBe("tenant-123");
+  });
+
+  test("leaves other providers untouched", () => {
+    expect(
+      stampMicrosoftTenantId({
+        providerId: "google",
+        idToken: fakeIdToken({ tid: "nope" }),
+      }),
+    ).toBeUndefined();
+  });
+
+  test("tolerates missing or malformed id tokens", () => {
+    expect(
+      stampMicrosoftTenantId({ providerId: "microsoft", idToken: null }),
+    ).toBeUndefined();
+    expect(
+      stampMicrosoftTenantId({ providerId: "microsoft", idToken: "garbage" }),
+    ).toBeUndefined();
+    expect(
+      stampMicrosoftTenantId({
+        providerId: "microsoft",
+        idToken: fakeIdToken({}),
+      }),
+    ).toBeUndefined();
   });
 });
 

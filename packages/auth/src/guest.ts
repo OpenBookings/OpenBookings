@@ -3,6 +3,7 @@ import { magicLink } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
 import {
+  accountLinkingOptions,
   accountTypeHooksForPool,
   advancedCookieConfig,
   magicLinkOptions,
@@ -34,6 +35,7 @@ export function createGuestAuth(config: GuestAuthConfig) {
     database: pool,
     user: { additionalFields: userAdditionalFields },
     session: sharedSessionOptions,
+    account: accountLinkingOptions,
     advanced: advancedCookieConfig(config.cookiePrefix, secureCookies),
     databaseHooks: accountTypeHooksForPool(pool, "private"),
     plugins: [
