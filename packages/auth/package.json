@@ -4,7 +4,10 @@
   "private": true,
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts",
+    "./guest": "./src/guest.ts",
+    "./host": "./src/host.ts",
+    "./client/guest": "./src/client/guest.ts",
+    "./client/host": "./src/client/host.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {

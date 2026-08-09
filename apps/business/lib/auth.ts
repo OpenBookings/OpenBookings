@@ -1,4 +1,5 @@
-import { createAuth, sessionForApp } from "@openbookings/auth/server";
+import { createHostAuth } from "@openbookings/auth/host";
+import { sessionForApp } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
 import { cache } from "react";
@@ -6,7 +7,7 @@ import { headers } from "next/headers";
 
 const env = readAuthEnv();
 
-export const auth = createAuth({
+export const auth = createHostAuth({
   baseURL: env.AUTH_BASE_URL,
   secret: env.BETTER_AUTH_SECRET,
   databaseUrl: process.env.DATABASE_URL!,
@@ -23,7 +24,6 @@ export const auth = createAuth({
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET_BUSINESS,
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-  accountType: "business",
 });
 
 /**

@@ -1,5 +1,5 @@
-import { createAuthClientInstance } from "@openbookings/auth/client";
+import { createGuestAuthClient } from "@openbookings/auth/client/guest";
 
-export const authClient = createAuthClientInstance(
+export const authClient = createGuestAuthClient(
   process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"
 );

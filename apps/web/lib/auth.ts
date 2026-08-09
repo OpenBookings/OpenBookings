@@ -1,4 +1,5 @@
-import { createAuth, sessionForApp } from "@openbookings/auth/server";
+import { createGuestAuth } from "@openbookings/auth/guest";
+import { sessionForApp } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
 import { cache } from "react";
@@ -6,7 +7,7 @@ import { headers } from "next/headers";
 
 const env = readAuthEnv();
 
-export const auth = createAuth({
+export const auth = createGuestAuth({
   baseURL: env.AUTH_BASE_URL,
   secret: env.BETTER_AUTH_SECRET,
   databaseUrl: process.env.DATABASE_URL!,
@@ -22,7 +23,6 @@ export const auth = createAuth({
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   appleClientId: process.env.APPLE_CLIENT_ID,
   appleClientSecret: process.env.APPLE_CLIENT_SECRET,
-  accountType: "private",
 });
 
 /**
