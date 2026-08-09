@@ -1,9 +1,10 @@
 "use server";
 
 import { getServerSession } from "@/lib/auth";
-import { query, queryOne } from "@openbookings/db";
+import { query, queryOne, withTransaction } from "@openbookings/db";
 import { headers } from "next/headers";
 import { createConnectAccount } from "@openbookings/stripe";
+import { provisionOrganizationTx } from "@/lib/provision-organization";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -196,11 +197,30 @@ export async function provisionStripeAccount(): Promise<string> {
   return accountId;
 }
 
-/** Mark onboarding as complete for the current user. */
+/**
+ * Mark onboarding as complete and provision the organization in the same
+ * transaction: org + profile + owner membership + draft property + consent
+ * rows + audit event land together or not at all, so an abandoned or failed
+ * completion never leaves partial rows (handoff task 9).
+ */
 export async function completeOnboarding(): Promise<void> {
   const session = await getSession();
-  await query(
-    `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
-    [session.user.id]
-  );
+  const stepData = await loadStepData();
+  const legal = stepData["legal-n-boring"];
+  if (!legal) throw new Error("Legal step data is missing");
+
+  await withTransaction(async (client) => {
+    await provisionOrganizationTx(client, {
+      userId: session.user.id,
+      legal,
+      coreText: stepData["core-info-text"],
+      location: stepData["core-info-location"],
+      stripeAccountId:
+        (stepData as { stripe_account_id?: string }).stripe_account_id ?? null,
+    });
+    await client.query(
+      `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
+      [session.user.id]
+    );
+  });
 }

@@ -3,13 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./permissions": "./src/permissions.ts"
   },
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
-    "@openbookings/db": "workspace:*"
+    "@openbookings/db": "workspace:*",
+    "better-auth": "^1.6.23"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",

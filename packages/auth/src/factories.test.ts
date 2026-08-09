@@ -33,6 +33,15 @@ describe("factory plugin surface", () => {
     expect("signInMagicLink" in host.api).toBe(true);
   });
 
+  test("admin endpoints exist only on the host instance", () => {
+    const guest = createGuestAuth(base);
+    const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
+    expect("impersonateUser" in host.api).toBe(true);
+    expect("setRole" in host.api).toBe(true);
+    expect("impersonateUser" in guest.api).toBe(false);
+    expect("setRole" in guest.api).toBe(false);
+  });
+
   test("an organization route on the guest handler returns 404", async () => {
     const guest = createGuestAuth(base);
     const response = await guest.handler(

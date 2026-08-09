@@ -1,4 +1,17 @@
 import { query as dbQuery, queryOne as dbQueryOne } from "@openbookings/db";
+import {
+  PROPERTY_SCOPED_ROLES,
+  roles,
+  type HostRole,
+} from "./permissions";
+
+export {
+  ac,
+  roles,
+  statement,
+  PROPERTY_SCOPED_ROLES,
+  type HostRole,
+} from "./permissions";
 
 /**
  * Ownership / authorization checks. Single choke point per resource type:
@@ -128,6 +141,78 @@ export async function getThreadForParticipant(
  *     ["confirmed"],
  *   );
  */
+/**
+ * Property scoping for manager/frontdesk. Owner, admin, and finance are
+ * org-wide; property-scoped roles need a property_access row. Fails closed
+ * on unknown roles.
+ */
+export async function memberHasPropertyAccess(
+  member: { id: string; role: string },
+  propertyId: string,
+  deps: AuthzDeps = {},
+): Promise<boolean> {
+  if (!member.id || !propertyId) return false;
+  const role = member.role as HostRole;
+  if (!(role in roles)) return false;
+  if (!PROPERTY_SCOPED_ROLES.includes(role)) return true;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const row = await queryOne<{ ok: boolean }>(
+    `SELECT TRUE AS ok FROM property_access WHERE member_id = $1 AND property_id = $2`,
+    [member.id, propertyId],
+  );
+  return row?.ok === true;
+}
+
+/** Session slice for org-scoped access: Better Auth's org plugin stores the
+ * active org on the session row. */
+export type OrgSessionLike = {
+  user: { id: string; account_type?: string | null };
+  session: { activeOrganizationId?: string | null };
+};
+
+/**
+ * Org-scoped access (task 11). The org id comes from the session's
+ * activeOrganizationId — never from client input; URL params are routing
+ * hints only — and membership is re-verified against the member table on
+ * every call, so a stale activeOrganizationId (member removed since sign-in)
+ * fails closed. Returns null when the session has no verified org.
+ *
+ * Repository functions built on this take orgId as a required argument via
+ * the bound `$1`, same convention as getHostScopedDb.
+ */
+export async function getOrgScopedDb(
+  session: OrgSessionLike | null | undefined,
+  deps: AuthzDeps = {},
+): Promise<null | {
+  organizationId: string;
+  memberRole: string;
+  query: <T = unknown>(text: string, values?: unknown[]) => Promise<T[]>;
+  queryOne: <T = unknown>(text: string, values?: unknown[]) => Promise<T | null>;
+}> {
+  const userId = ownerId(session);
+  const orgId = session?.session?.activeOrganizationId;
+  if (!userId || !orgId) return null;
+  if (session?.user?.account_type !== "business") return null;
+
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const membership = await queryOne<{ role: string }>(
+    `SELECT role FROM "member" WHERE "organizationId" = $1 AND "userId" = $2`,
+    [orgId, userId],
+  );
+  if (!membership) return null;
+
+  return {
+    organizationId: orgId,
+    memberRole: membership.role,
+    query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {
+      return dbQuery<T>(text, [orgId, ...values]);
+    },
+    queryOne<T = unknown>(text: string, values: unknown[] = []): Promise<T | null> {
+      return dbQueryOne<T>(text, [orgId, ...values]);
+    },
+  };
+}
+
 export function getHostScopedDb(session: SessionLike | null | undefined) {
   const userId = ownerId(session);
   if (!userId) throw new Error("getHostScopedDb requires an authenticated session");

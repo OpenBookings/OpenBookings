@@ -44,6 +44,32 @@ export function getPool(): Pool {
   return pool;
 }
 
+/**
+ * Run `fn` inside a single BEGIN/COMMIT transaction on one connection.
+ * Rolls back on any throw. Neon's pooler runs in transaction mode, so all
+ * statements inside see one consistent connection.
+ */
+export async function withTransaction<T>(
+  fn: (client: import("pg").PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // surface the original error, not the rollback failure
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** Run a parameterized query and return rows. */
 export async function query<T = unknown>(
   text: string,
