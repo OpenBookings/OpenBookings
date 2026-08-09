@@ -38,6 +38,36 @@ function ownerId(session: SessionLike | null | undefined): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
+/**
+ * Edit access to a property `p` for user `$2` (task 11). Two paths:
+ *
+ * - legacy direct ownership (owner_user_id), kept while pre-org rows and
+ *   call sites migrate;
+ * - org membership on the property's organization: owner/admin are
+ *   org-wide; manager is property-scoped and needs a property_access row.
+ *   frontdesk/finance never get edit access through this predicate — their
+ *   narrower grants go through the permission statement per endpoint.
+ *
+ * Cross-org access fails here structurally: the member row must belong to
+ * THIS property's organization_id, so a role in another org matches
+ * nothing.
+ */
+export const PROPERTY_EDIT_ACCESS_SQL = `(
+  p.owner_user_id = $2
+  OR EXISTS (
+    SELECT 1 FROM "member" m
+    WHERE m."organizationId" = p.organization_id
+      AND m."userId" = $2
+      AND (
+        m.role IN ('owner', 'admin')
+        OR (m.role = 'manager' AND EXISTS (
+          SELECT 1 FROM property_access pa
+          WHERE pa.member_id = m.id AND pa.property_id = p.id
+        ))
+      )
+  )
+)`;
+
 export async function userOwnsProperty(
   session: SessionLike | null | undefined,
   propertyId: string,
@@ -47,7 +77,8 @@ export async function userOwnsProperty(
   if (!userId || !propertyId) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
-    `SELECT TRUE AS ok FROM properties WHERE id = $1 AND owner_user_id = $2`,
+    `SELECT TRUE AS ok FROM properties p
+     WHERE p.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [propertyId, userId],
   );
   return row?.ok === true;
@@ -66,7 +97,7 @@ export async function userOwnsRoom(
     `SELECT TRUE AS ok
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE r.id = $1 AND p.owner_user_id = $2`,
+     WHERE r.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [roomId, userId],
   );
   return row?.ok === true;
@@ -86,7 +117,7 @@ export async function userOwnsRatePlan(
      FROM rate_plans rp
      JOIN rooms r      ON r.id = rp.room_id
      JOIN properties p ON p.id = r.property_id
-     WHERE rp.id = $1 AND p.owner_user_id = $2`,
+     WHERE rp.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [ratePlanId, userId],
   );
   return row?.ok === true;

@@ -43,6 +43,18 @@ export type HostAuthConfig = BaseAuthConfig & {
    * written to audit_log.
    */
   sendSecurityAlert?: (alert: SecurityAlert) => Promise<void>;
+  /**
+   * Fire-and-forget feed of host-portal auth events (task 17), e.g. into
+   * Tirreno. Called after the audit_log row is written; failures are
+   * swallowed — risk tooling must never block a sign-in.
+   */
+  onAuthEvent?: (event: {
+    action: "auth.sign-in";
+    userId: string;
+    ip: string | null;
+    userAgent: string | null;
+    newDevice: boolean;
+  }) => Promise<void>;
 };
 
 const STEP_UP_MESSAGE =
@@ -129,6 +141,15 @@ export function createHostAuth(config: HostAuthConfig) {
         JSON.stringify({ newDevice: isNewDevice }),
       ],
     );
+    config
+      .onAuthEvent?.({
+        action: "auth.sign-in",
+        userId: session.userId,
+        ip: session.ipAddress ?? null,
+        userAgent: ua,
+        newDevice: isNewDevice,
+      })
+      .catch((err) => console.error("[auth] onAuthEvent failed:", err));
     if (!isNewDevice || !config.sendSecurityAlert) return;
     const owners = await pool.query<{ email: string }>(
       `SELECT DISTINCT u.email
@@ -321,6 +342,11 @@ export function createHostAuth(config: HostAuthConfig) {
       // plugin exposes none — verified against plugin source).
       twoFactor({
         issuer: "OpenBookings",
+        // Hosts sign in with magic link or OAuth and have no password;
+        // without this, /two-factor/enable would demand one. Users who do
+        // have a credential account still must provide their password
+        // (shouldRequirePassword checks per-user).
+        allowPasswordless: true,
       }),
     ],
     socialProviders: {
