@@ -1,10 +1,10 @@
 import { createAccountLink } from '@openbookings/stripe';
-import { auth } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import { queryOne } from '@openbookings/db';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await getServerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const row = await queryOne<{ stripe_account_id: string | null }>(

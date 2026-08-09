@@ -1,12 +1,11 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { getHostScopedDb } from "@openbookings/authz";
 import { MessagesView } from "@/components/dashboard/messages/messages-view";
 import type { ThreadListItem } from "@openbookings/messaging";
 
 export default async function MessagesPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getServerSession();
   if (!session) redirect("/login");
 
   const host = getHostScopedDb(session);

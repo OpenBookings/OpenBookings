@@ -1,7 +1,6 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { query } from "@openbookings/db";
 import { userOwnsRoom } from "@openbookings/authz";
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { RoomImageUploader } from "@/components/upload/RoomImageUploader";
 import { ArrowLeft } from "lucide-react";
@@ -12,7 +11,7 @@ interface PageProps {
 }
 
 export default async function RoomUploadPage({ params }: PageProps) {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getServerSession();
   if (!session) redirect("/login");
 
   const { roomId } = await params;

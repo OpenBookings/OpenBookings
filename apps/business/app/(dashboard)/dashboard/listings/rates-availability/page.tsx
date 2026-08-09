@@ -1,9 +1,8 @@
 import { Suspense } from "react";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AriView } from "./_components/ari-view";
 import {
@@ -62,7 +61,7 @@ export default async function RatesAvailabilityPage({
 }
 
 async function AriContent({ searchParams }: PageProps) {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getServerSession();
   if (!session) redirect("/login");
 
   const params = await searchParams;

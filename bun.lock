@@ -163,6 +163,7 @@
         "@better-auth/infra": "^0.1.13",
         "better-auth": "^1.6.23",
         "pg": "^8.22.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@openbookings/config": "workspace:*",

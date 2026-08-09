@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { getBucket } from "@/lib/gcs";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
@@ -13,7 +13,7 @@ const EXT_MAP: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
