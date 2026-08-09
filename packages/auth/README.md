@@ -99,6 +99,61 @@ Signup with an email that already exists (either portal) is rejected in
 `user.create.before` with a clear message ("already registered as a
 guest/host account") instead of a raw Postgres unique-violation error.
 
+## Passkeys, step-up, and recovery (host portal)
+
+**Factors**: passkey (`@better-auth/passkey`) with TOTP two-factor as
+fallback. Recovery/backup codes come from the twoFactor plugin — generated
+when a host enables two-factor; the passkey plugin has none (verified
+against plugin source).
+
+**Enrollment UX** (UI still to build — see follow-up tasks): prompt after
+first host sign-in; push adding a second passkey on a different device.
+Enrollment copy must say passkeys sync via iCloud Keychain / Google
+Password Manager — most users assume they are device-bound. An org can set
+`org_profile.auth_policy = '{"requirePasskey": true}'` to block members
+from deleting their last passkey (enforced server-side).
+
+**Step-up**: `session.lastVerifiedAt` is stamped at sign-in and refreshed
+by a successful passkey/TOTP/backup-code verification. Sensitive actions
+require it fresher than 15 minutes — recency is the mechanism; merely
+owning a passkey proves nothing about who holds this session cookie. The
+gate reads the session row from the database, never the cookie cache.
+Enforced today on the Better Auth endpoints: organization delete, member
+removal, promotion to owner/admin, change email, delete user (403
+`STEP_UP_REQUIRED`). The remaining gated actions from the handoff — change
+Stripe payout destination, bulk guest-data export — are app endpoints that
+must call `isStepUpFresh` when they are built. Everything else (bookings,
+rates, ARI, messaging, property content, statements) runs on a normal
+session.
+
+**Recovery ladder** (staff runbook):
+1. Another org admin triggers re-enrollment — covers most multi-person
+   hotels.
+2. Recovery codes issued at two-factor enrollment.
+3. Email recovery with a 24–72h cooldown before the new credential can
+   authorize payout changes; notify all owners/admins immediately; keep
+   the old passkey valid during the window so a real owner can cancel.
+4. Manual verification by staff: KvK number, Stripe account holder name,
+   last payout amount and date, recent booking reference. Identity
+   documents alone are NOT sufficient — they prove who someone is, not
+   that they control this account. Log everything to audit_log.
+
+**Hard rule** (enforced via `payoutChangeBlockedUntil`): staff credential
+resets write `audit_log` action `recovery.credential-reset`; the
+payout-destination endpoint must refuse changes for
+`RECOVERY_PAYOUT_COOLDOWN_HOURS` (72h) after the latest such row.
+
+## Session hygiene (host portal)
+
+- Host sessions: 24h idle expiry, hourly refresh (guest keeps Better
+  Auth's 7-day default).
+- Every sign-in writes `audit_log` action `auth.sign-in`; a user-agent
+  never seen for that user emails all org owners
+  (`sendSecurityAlert` in apps/business). This log is also the feed for
+  Tirreno once that integration lands.
+- Device list + revoke: Better Auth's `listSessions` / `revokeSession`
+  endpoints are mounted; the Account → Security UI still needs building.
+
 ## Production rollout order (PR "auth boundary")
 
 1. Apply `packages/db/drizzle/0007_auth_boundary.sql` by hand (adds

@@ -16,7 +16,11 @@ export default async function MessagesPage() {
        t.updated_at,
        t.booking_id,
        p.name AS property_name,
-       g.name AS guest_name,
+       -- PII minimization (task 15): the list shows initial + surname only;
+       -- the full name/contact loads when a single thread is opened.
+       CASE WHEN position(' ' in g.name) = 0 THEN g.name
+            ELSE LEFT(g.name, 1) || '. ' || split_part(g.name, ' ', -1)
+       END AS guest_name,
        g.image AS guest_image,
        lm.body AS last_message_body,
        lm.created_at AS last_message_at,

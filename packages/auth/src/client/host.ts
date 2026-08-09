@@ -2,8 +2,10 @@ import { createAuthClient } from "better-auth/react";
 import {
   magicLinkClient,
   organizationClient,
+  twoFactorClient,
   inferAdditionalFields,
 } from "better-auth/client/plugins";
+import { passkeyClient } from "@better-auth/passkey/client";
 import { ac, roles } from "@openbookings/authz/permissions";
 
 /**
@@ -17,6 +19,8 @@ export function createHostAuthClient(baseURL: string) {
     plugins: [
       magicLinkClient(),
       organizationClient({ ac, roles }),
+      passkeyClient(),
+      twoFactorClient(),
       inferAdditionalFields({
         user: { account_type: { type: "string" } },
       }),

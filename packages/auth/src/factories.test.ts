@@ -42,6 +42,15 @@ describe("factory plugin surface", () => {
     expect("setRole" in guest.api).toBe(false);
   });
 
+  test("passkey and two-factor endpoints exist only on the host instance", () => {
+    const guest = createGuestAuth(base);
+    const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
+    expect("generatePasskeyRegistrationOptions" in host.api).toBe(true);
+    expect("verifyTOTP" in host.api).toBe(true);
+    expect("generatePasskeyRegistrationOptions" in guest.api).toBe(false);
+    expect("verifyTOTP" in guest.api).toBe(false);
+  });
+
   test("an organization route on the guest handler returns 404", async () => {
     const guest = createGuestAuth(base);
     const response = await guest.handler(

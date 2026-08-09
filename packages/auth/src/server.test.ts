@@ -4,11 +4,13 @@ import {
   advancedCookieConfig,
   buildAccountTypeHooks,
   isAccountTypeAllowed,
+  isStepUpFresh,
   microsoftEmailFromProfile,
   portalForAccountType,
   sessionCookieNames,
   sessionForApp,
   stampMicrosoftTenantId,
+  stepUpRequiredForRequest,
 } from "./server";
 
 // These hooks are what Better Auth runs on every sign-in path — password,
@@ -305,6 +307,42 @@ describe("stampMicrosoftTenantId", () => {
         idToken: fakeIdToken({}),
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("step-up (task 14)", () => {
+  test("recency is the mechanism: fresh within 15 minutes, stale after", () => {
+    const now = new Date("2026-08-09T12:00:00Z");
+    expect(isStepUpFresh(new Date("2026-08-09T11:50:00Z"), now)).toBe(true);
+    expect(isStepUpFresh(new Date("2026-08-09T11:44:59Z"), now)).toBe(false);
+    expect(isStepUpFresh(null, now)).toBe(false);
+    expect(isStepUpFresh(undefined, now)).toBe(false);
+    expect(isStepUpFresh("garbage", now)).toBe(false);
+  });
+
+  test("the sensitive Better Auth endpoints require step-up", () => {
+    expect(stepUpRequiredForRequest("/organization/delete", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/organization/remove-member", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/change-email", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/delete-user", {})).toBe(true);
+  });
+
+  test("role updates require step-up only when promoting to owner/admin, failing closed", () => {
+    const path = "/organization/update-member-role";
+    expect(stepUpRequiredForRequest(path, { role: "owner" })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: "admin" })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: "frontdesk" })).toBe(false);
+    expect(stepUpRequiredForRequest(path, { role: ["manager", "admin"] })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: [] })).toBe(true);
+    expect(stepUpRequiredForRequest(path, {})).toBe(true);
+    expect(stepUpRequiredForRequest(path, null)).toBe(true);
+  });
+
+  test("everyday endpoints never require step-up", () => {
+    expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/sign-in/magic-link", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/organization/create", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/organization/invite-member", {})).toBe(false);
   });
 });
 

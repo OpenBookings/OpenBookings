@@ -2,6 +2,7 @@ import { createHostAuth } from "@openbookings/auth/host";
 import { sessionForApp } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
+import { sendSecurityAlert } from "@/lib/mailing/security-alert";
 import { cache } from "react";
 import { headers } from "next/headers";
 
@@ -12,6 +13,7 @@ export const auth = createHostAuth({
   secret: env.BETTER_AUTH_SECRET,
   databaseUrl: process.env.DATABASE_URL!,
   sendMagicLink,
+  sendSecurityAlert,
   cookiePrefix: env.AUTH_COOKIE_PREFIX,
   trustedOrigins: [
     "https://appleid.apple.com",

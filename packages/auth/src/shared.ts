@@ -322,6 +322,65 @@ export const sharedSessionOptions = {
   },
 } as const;
 
+/**
+ * Step-up (task 14): recency is the mechanism, not passkey presence — a
+ * stolen session cookie must not pass sensitive gates. `lastVerifiedAt` is
+ * stamped on the session row at sign-in and refreshed by a successful
+ * passkey/TOTP/backup-code verification; sensitive actions require it to be
+ * fresher than 15 minutes and read it from the database, never from the
+ * cookie cache.
+ */
+export const STEP_UP_MAX_AGE_MS = 15 * 60 * 1000;
+
+export function isStepUpFresh(
+  lastVerifiedAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!lastVerifiedAt) return false;
+  const at = new Date(lastVerifiedAt).getTime();
+  if (Number.isNaN(at)) return false;
+  return now.getTime() - at < STEP_UP_MAX_AGE_MS;
+}
+
+/** Better Auth endpoints whose success re-verifies the current session. */
+export const STEP_UP_REFRESH_PATHS = [
+  "/passkey/verify-authentication",
+  "/two-factor/verify-totp",
+  "/two-factor/verify-backup-code",
+] as const;
+
+/**
+ * Which auth-endpoint requests require a fresh step-up. The other gated
+ * actions from the handoff — change Stripe payout destination and bulk
+ * guest-data export — are app endpoints, not Better Auth ones; they call
+ * `isStepUpFresh` themselves when they are built.
+ *
+ * Fail closed: an update-member-role request without a readable role still
+ * requires step-up.
+ */
+export function stepUpRequiredForRequest(
+  path: string,
+  body: unknown,
+): boolean {
+  switch (path) {
+    case "/organization/delete":
+    case "/organization/remove-member":
+    case "/change-email":
+    case "/delete-user":
+      return true;
+    case "/organization/update-member-role": {
+      const role = (body as { role?: unknown } | null | undefined)?.role;
+      if (typeof role === "string") return role === "owner" || role === "admin";
+      if (Array.isArray(role)) {
+        return role.some((r) => r === "owner" || r === "admin") || role.length === 0;
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
 export function magicLinkOptions(config: BaseAuthConfig) {
   return {
     sendMagicLink: async ({ email, url }: { email: string; url: string }) => {
