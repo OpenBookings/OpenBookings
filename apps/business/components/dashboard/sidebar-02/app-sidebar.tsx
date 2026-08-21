@@ -16,6 +16,7 @@ import {
   CalendarDays,
   HandCoins,
   LayoutDashboard,
+  ShieldCheck,
   TrendingUp,
   PencilSparkles
 } from "lucide-react";
@@ -63,6 +64,12 @@ const dashboardRoutes: Route[] = [
     title: "Analytics",
     icon: <TrendingUp className="size-4" />,
     link: "/dashboard/analytics",
+  },
+  {
+    id: "security",
+    title: "Security",
+    icon: <ShieldCheck className="size-4" />,
+    link: "/account/security",
   }
 ];
 
