@@ -6,9 +6,13 @@ import {
   type ChatResponse,
   type LoopMessage,
 } from "./loop";
+import type { ToolContext } from "./tools";
 
 // Non-UUID booking references make the reservation tools return "not found"
 // without touching the database, so the loop is exercised end-to-end offline.
+
+/** An identified guest — these tests are about loop control flow, not authorization. */
+const GUEST: ToolContext = { guestEmail: "guest@example.com" };
 
 function scriptedChat(responses: ChatResponse[]): { chat: ChatFn; calls: LoopMessage[][] } {
   const calls: LoopMessage[][] = [];
@@ -39,6 +43,7 @@ describe("runAgentLoop", () => {
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "Is my booking refundable?" }],
       chat,
+      toolContext: GUEST,
     });
 
     expect(outcome.kind).toBe("reply");
@@ -68,6 +73,7 @@ describe("runAgentLoop", () => {
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "Let me talk to a human" }],
       chat,
+      toolContext: GUEST,
     });
 
     expect(outcome).toMatchObject({ kind: "escalate", reason: "Guest wants a person" });
@@ -83,6 +89,7 @@ describe("runAgentLoop", () => {
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "help" }],
       chat,
+      toolContext: GUEST,
       maxIterations: 3,
     });
 
@@ -106,6 +113,7 @@ describe("runAgentLoop", () => {
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "help" }],
       chat, // no maxIterations override — the real default
+      toolContext: GUEST,
     });
 
     expect(outcome).toMatchObject({
@@ -127,6 +135,7 @@ describe("runAgentLoop", () => {
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "where is my refund" }],
       chat,
+      toolContext: GUEST,
       onToolResult: () => "Forced by rule-based check",
     });
 
@@ -134,14 +143,18 @@ describe("runAgentLoop", () => {
   });
 
   it("feeds invalid tool arguments back as errors instead of crashing", async () => {
+    // get_payment_status requires a booking reference; an empty object is the
+    // schema violation here. (An empty get_reservation is *valid* — it means
+    // "this guest's bookings".)
     const { chat, calls } = scriptedChat([
-      { content: null, toolCalls: [toolCall("get_reservation", {})] },
-      { content: "Could you share your booking reference or email?" },
+      { content: null, toolCalls: [toolCall("get_payment_status", {})] },
+      { content: "Could you share your booking reference?" },
     ]);
 
     const outcome = await runAgentLoop({
       turns: [{ role: "user", content: "check my booking" }],
       chat,
+      toolContext: GUEST,
     });
 
     expect(outcome.kind).toBe("reply");

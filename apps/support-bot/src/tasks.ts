@@ -15,6 +15,13 @@ export type ProcessConversationPayload = {
   conversationId: number;
   messageId: number;
   content: string;
+  /**
+   * Email of the Chatwoot contact who sent the message, or null for an
+   * anonymous contact. Read off the HMAC-verified webhook body and carried
+   * here so the async side never has to trust message content for identity;
+   * the task itself is OIDC-verified, so this field is not guest-writable.
+   */
+  guestEmail: string | null;
 };
 
 let tasksClient: CloudTasksClient | undefined;

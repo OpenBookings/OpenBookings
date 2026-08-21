@@ -40,7 +40,10 @@ app.post('/webhooks/chatwoot', async (c) => {
     content?: string | null
     message_type?: string | number
     private?: boolean
-    conversation?: { id?: number }
+    // `sender` on an incoming message is the contact; `conversation.meta.sender`
+    // is the same contact and is the field present on some Chatwoot versions.
+    sender?: { email?: string | null }
+    conversation?: { id?: number; meta?: { sender?: { email?: string | null } } }
   }
   try {
     payload = JSON.parse(rawBody)
@@ -70,8 +73,16 @@ app.post('/webhooks/chatwoot', async (c) => {
     return c.json({ ok: true, ignored: true })
   }
 
+  // Identity for the whole turn, fixed here from the signed webhook body. Every
+  // booking lookup downstream is scoped to this address; an anonymous contact
+  // (null) can reach no booking data at all.
+  const guestEmail =
+    payload.sender?.email?.trim().toLowerCase() ||
+    payload.conversation?.meta?.sender?.email?.trim().toLowerCase() ||
+    null
+
   const eventId = `message_created:${payload.id}`
-  trace('webhook', 'received', { eventId, conversationId })
+  trace('webhook', 'received', { eventId, conversationId, identified: guestEmail !== null })
   const firstDelivery = await recordProcessedEvent(eventId)
   if (!firstDelivery) {
     trace('webhook', 'duplicate delivery, dropping', { eventId })
@@ -83,6 +94,7 @@ app.post('/webhooks/chatwoot', async (c) => {
     conversationId,
     messageId: payload.id,
     content: payload.content,
+    guestEmail,
   })
   trace('webhook', 'enqueued', { eventId })
   return c.json({ ok: true })

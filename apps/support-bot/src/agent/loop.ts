@@ -2,7 +2,7 @@ import { Mistral } from "@mistralai/mistralai";
 import type { CachedTurn } from "@openbookings/db";
 import { env } from "../env";
 import { SYSTEM_PROMPT } from "./prompt";
-import { executeTool, mistralToolSchemas, TOOLS } from "./tools";
+import { executeTool, mistralToolSchemas, TOOLS, type ToolContext } from "./tools";
 import { trace } from "../trace";
 
 export const MISTRAL_MODEL = "mistral-medium-latest";
@@ -47,10 +47,15 @@ function parseArgs(raw: string | Record<string, unknown>): unknown {
  * `onToolResult` is the rule-driven escalation hook: called with every
  * successful tool result; returning a string forces escalation with that
  * reason.
+ *
+ * `toolContext` carries the server-derived guest identity every tool scopes
+ * its lookups to. It is threaded through the loop rather than read from the
+ * turns, because the turns are guest-authored text.
  */
 export async function runAgentLoop(opts: {
   turns: CachedTurn[];
   chat: ChatFn;
+  toolContext: ToolContext;
   onToolResult?: (toolName: string, result: unknown) => string | null;
   maxIterations?: number;
 }): Promise<AgentOutcome> {
@@ -95,7 +100,7 @@ export async function runAgentLoop(opts: {
         return { kind: "escalate", reason, toolLog };
       }
 
-      const execution = await executeTool(name, args);
+      const execution = await executeTool(name, args, opts.toolContext);
       const result = execution.ok ? execution.result : { error: execution.error };
       toolLog.push({ name, args, result });
       trace("loop", `tool result: ${name}`, execution.ok ? { ok: true, result } : { ok: false, error: execution.error });

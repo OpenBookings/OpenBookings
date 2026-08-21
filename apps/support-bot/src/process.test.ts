@@ -36,6 +36,7 @@ const payload = (overrides: Record<string, unknown> = {}) => ({
   conversationId: 77,
   messageId: 1,
   content: "What time is check-in?",
+  guestEmail: "guest@example.com",
   ...overrides,
 });
 

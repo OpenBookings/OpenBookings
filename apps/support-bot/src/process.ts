@@ -64,8 +64,12 @@ export async function processConversation(
   deps: { chat?: ChatFn } = {},
 ): Promise<void> {
   const { eventId, conversationId, content } = payload;
+  // The one place the guest's identity enters the agent. It comes from the
+  // Chatwoot contact via the HMAC-verified webhook, never from message text,
+  // so no amount of prompt injection can widen what the tools will read.
+  const guestEmail = payload.guestEmail?.trim().toLowerCase() || null;
 
-  trace("process", "start", { eventId, conversationId });
+  trace("process", "start", { eventId, conversationId, identified: guestEmail !== null });
 
   if (await hasRepliedToEvent(eventId)) {
     trace("process", "already replied, skipping (retry no-op)", { eventId });
@@ -104,6 +108,7 @@ export async function processConversation(
   const outcome = await runAgentLoop({
     turns,
     chat: deps.chat ?? mistralChat(),
+    toolContext: { guestEmail },
     // Rule-driven safety net #2: payment lookups revealing a dispute or
     // large refund force escalation regardless of what the model would do.
     onToolResult: (toolName, result) => {

@@ -1,5 +1,5 @@
 import { mock } from "bun:test";
-import type { CachedTurn } from "@openbookings/db";
+import type { CachedTurn, SupportReservation } from "@openbookings/db";
 
 /**
  * Shared test doubles for `@openbookings/db` and the Chatwoot client.
@@ -20,18 +20,59 @@ export type ChatwootCall =
   | { kind: "status"; conversationId: number; status: string }
   | { kind: "incoming"; conversationId: number; content: string };
 
+/** The two fields a test actually varies; the rest of the row is filled in. */
+export type FakeReservation = { bookingId: string; guestEmail: string | null };
+
 /** In-memory stand-in for the processed_events table. */
 export const processedEvents = new Map<string, { repliedAt: boolean }>();
 /** In-memory stand-in for support_context_cache. */
 export const contextCache = new Map<number, CachedTurn[]>();
+/** In-memory stand-in for the bookings a reservation lookup can reach, by reference. */
+export const reservations = new Map<string, FakeReservation>();
 /** Every write the pipeline made to Chatwoot, in order. */
 export const chatwootCalls: ChatwootCall[] = [];
 
 export function resetMocks(): void {
   processedEvents.clear();
   contextCache.clear();
+  reservations.clear();
   chatwootCalls.length = 0;
   nextIncomingId = 9000;
+}
+
+/** Expand a fixture into the full row shape the tools destructure. */
+function reservationRow(fake: FakeReservation): SupportReservation {
+  return {
+    booking_id: fake.bookingId,
+    status: "confirmed",
+    check_in_date: "2026-09-01",
+    check_out_date: "2026-09-03",
+    check_in_time: "15:00:00",
+    check_out_time: "11:00:00",
+    total_amount: 32500,
+    currency: "eur",
+    stripe_payment_intent_id: "pi_test",
+    cancellation_reason: null,
+    cancelled_at: null,
+    created_at: "2026-08-01T00:00:00.000Z",
+    guest_email: fake.guestEmail,
+    property_name: "Test Villa",
+    property_city: "Amsterdam",
+    property_country: "NL",
+    rooms: [
+      {
+        room_name: "Suite",
+        rate_plan_name: "Standard",
+        is_refundable: true,
+        cancellation_policy: "Flexible",
+        adults: 2,
+        children: 0,
+        total_nights: 2,
+        price_per_night: 16250,
+        total_amount: 32500,
+      },
+    ],
+  };
 }
 
 mock.module("@openbookings/db", () => ({
@@ -52,10 +93,20 @@ mock.module("@openbookings/db", () => ({
     contextCache.set(conversationId, turns);
   },
 
-  // Imported by agent/tools.ts at module load. Tests that need reservation
-  // data script the chat around them rather than exercising SQL.
-  findReservationByReference: async () => null,
-  findReservationsByGuestEmail: async () => [],
+  // Imported by agent/tools.ts at module load. These mirror the SQL contract
+  // the real queries have: reference lookup is *unscoped* (it can return any
+  // guest's booking — authorization is the tool layer's job, and these doubles
+  // must not paper over that), email lookup is scoped and case-insensitive.
+  findReservationByReference: async (bookingReference: string) => {
+    const fake = reservations.get(bookingReference.trim());
+    return fake ? reservationRow(fake) : null;
+  },
+  findReservationsByGuestEmail: async (guestEmail: string) => {
+    const wanted = guestEmail.trim().toLowerCase();
+    return [...reservations.values()]
+      .filter((r) => r.guestEmail?.trim().toLowerCase() === wanted)
+      .map(reservationRow);
+  },
 }));
 
 /** Ids Chatwoot hands back for created guest messages — distinctive on sight. */
