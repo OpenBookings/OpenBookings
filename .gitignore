@@ -51,3 +51,7 @@ next-env.d.ts
 .design-sync
 .ds-sync
 ds-bundle
+
+# Graphify
+graphify-out
+.cursorrules
