@@ -133,9 +133,15 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     if (consent !== 'accepted' || initRef.current || !POSTHOG_KEY) return
     initRef.current = true
     posthog.init(POSTHOG_KEY, {
+      // Opt into PostHog's dated config defaults ("auto-upgrade"). The SDK derives
+      // its current best-practice configuration for this snapshot; explicit options
+      // below still override it. Bump the date deliberately to adopt newer defaults.
+      defaults: '2026-08-29',
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-      ui_host: 'https://eu.i.posthog.com',
+      ui_host: 'https://t.openbookings.co',
       autocapture: false,
+      // Keep manual pageview capture via <PostHogPageView>; the dated defaults would
+      // otherwise switch this to automatic 'history=_change' capture.
       capture_pageview: false,
       session_recording: {
         maskAllInputs: true,

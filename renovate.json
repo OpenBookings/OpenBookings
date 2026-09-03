@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Telemetry / analytics SDKs — auto-merge once a release has aged 3 days (supply-chain safeguard, https://posthog.com/docs/health-checks/keeping-sdks-current)",
+      "matchPackageNames": ["posthog-js", "posthog-node", "posthog-react-native", "@sentry/nextjs"],
+      "automerge": true
+    },
+    {
+      "description": "Type definitions — no runtime impact, a bad update fails typecheck at build time",
+      "matchPackageNames": ["@types/**"],
+      "automerge": true
+    },
+    {
+      "description": "Dev-only lint / CSS tooling — patch + minor",
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": [
+        "eslint",
+        "eslint-config-next",
+        "turbo",
+        "tw-animate-css",
+        "@tailwindcss/postcss",
+        "tailwindcss",
+        "postcss"
+      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    },
+    {
+      "description": "Everything else: auto-merge patch releases only; minor / major open a PR for review",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "Never auto-merge — security, DB, payments, and framework core need a human",
+      "matchPackageNames": [
+        "next",
+        "react",
+        "react-dom",
+        "better-auth",
+        "@better-auth/infra",
+        "drizzle-orm",
+        "drizzle-kit",
+        "stripe",
+        "hono",
+        "@mistralai/mistralai",
+        "google-auth-library",
+        "@google-cloud/**",
+        "typescript"
+      ],
+      "automerge": false
+    }
+  ]
+}

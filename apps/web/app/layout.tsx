@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Gloock } from "next/font/google";
+import { Gloock, Libre_Franklin } from "next/font/google";
 import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
 import { CookieBanner } from "@/components/CookieBanner";
 import "./globals.css";
@@ -9,6 +9,15 @@ const gloock = Gloock({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-gloock",
+});
+
+// globals.css has named Libre Franklin as `--font-sans` all along, but nothing
+// ever loaded it, so every `font-sans` surface fell back to ui-sans-serif.
+// DESIGN_SYSTEM.md §2.2, bug fix #1.
+const libreFranklin = Libre_Franklin({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-libre-franklin",
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co";
@@ -49,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${gloock.variable}`}>
+    <html lang="en" className={`dark ${gloock.variable} ${libreFranklin.variable}`}>
       <head />
       <body>
         <CookieConsentProvider>
