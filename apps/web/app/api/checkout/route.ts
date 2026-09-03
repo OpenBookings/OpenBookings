@@ -15,9 +15,10 @@ import {
 /**
  * Creates the Checkout Session backing the embedded checkout page.
  *
- * `ui_mode: 'elements'` returns a client secret instead of a hosted URL: the
- * page mounts Stripe's Payment Element against it and confirms client-side,
- * so we keep our own layout and our own pay button.
+ * `ui_mode: 'form'` returns a client secret instead of a hosted URL: the page
+ * mounts Stripe's embedded form against it and confirms client-side, so the
+ * page keeps its own surrounding layout while Stripe owns the fields, the
+ * validation and the pay button.
  *
  * Every priced row of the booking goes across as its own line item. The page
  * renders the breakdown back out of the session rather than from local data,
@@ -166,7 +167,7 @@ export async function POST() {
 
     session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      ui_mode: 'elements',
+      ui_mode: 'form',
       line_items: booking.lines.map((line) => ({
         price_data: {
           currency: booking.currency,
@@ -178,11 +179,19 @@ export async function POST() {
         },
         quantity: line.quantity,
       })),
-      // Makes the Session require a phone number, which hosts need to reach the
-      // guest about arrival. It does NOT render a field: the Contact Details
-      // Element collects email only, so the number is collected by our own
-      // input and pushed with `updatePhoneNumber`. See PhoneField.
+      // Hosts need a number to reach the guest about arrival. Under
+      // `ui_mode: 'form'` Stripe renders and validates the field itself, which
+      // is why this no longer needs a hand-built input beside the Elements.
       phone_number_collection: { enabled: true },
+      // Previously asked for by the Billing Address Element's own options,
+      // which the form does not read — it takes its fields from the Session
+      // instead. Without this the guest is charged without ever giving a name
+      // or an address, and the booking reaches the host anonymous.
+      //
+      // This covers the name too. `name_collection` would also add one, but to
+      // the contact block, leaving the guest looking at two "Full name" fields
+      // and no way to tell which one Stripe wanted.
+      billing_address_collection: 'required',
       payment_intent_data: booking.stripeAccountId
         ? {
             transfer_data: { destination: booking.stripeAccountId },
@@ -193,8 +202,8 @@ export async function POST() {
       metadata: {
         bookingIntentId: booking.intentId,
         roomId: booking.roomId,
-        // Guest name, email and phone arrive via `customer_details`, filled in
-        // by the Contact Details and Billing Address Elements.
+        // Guest name, email and phone arrive via `customer_details`, filled
+        // in by the embedded form and read back by the webhook.
         totalCents: String(total),
       },
       return_url: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,

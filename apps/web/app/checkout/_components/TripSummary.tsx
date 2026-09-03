@@ -1,7 +1,7 @@
 'use client';
 
 import { ShieldCheck } from 'lucide-react';
-import { useCheckoutElements } from '@stripe/react-stripe-js/checkout';
+import { useCheckoutForm } from '@stripe/react-stripe-js/checkout';
 
 /**
  * The left half of checkout: what the guest is about to buy.
@@ -259,7 +259,7 @@ function LedgerSkeleton() {
  * so the split shown here cannot disagree with the one being charged.
  */
 function Ledger() {
-  const checkoutState = useCheckoutElements();
+  const checkoutState = useCheckoutForm();
 
   if (checkoutState.type !== 'success') return <LedgerSkeleton />;
 

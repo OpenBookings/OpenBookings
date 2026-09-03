@@ -186,80 +186,11 @@ export const ELEMENT_LOAD_FAILED: CheckoutErrorCopy = {
   retryable: true,
 };
 
-/** The browser says it is offline, checked before we bother Stripe. */
-export const OFFLINE: CheckoutErrorCopy = {
-  message: "You appear to be offline. Reconnect and try again — nothing has been charged.",
-  retryable: true,
-};
-
 /** The session was already paid — a back button or a second tab. */
 export const CHECKOUT_ALREADY_PAID: CheckoutErrorCopy = {
   message: 'This booking has already been paid. Do not pay again — check your email for the confirmation.',
   retryable: false,
 };
-
-const GENERIC_SUBMIT_ERROR =
-  'Something went wrong while confirming your payment. Please try again — if it keeps happening, no charge has been made.';
-
-/**
- * What each element is called in a sentence a guest reads.
- *
- * `contactDetails` is the one that matters most: it holds the phone number,
- * and a missing phone is the failure guests hit most often.
- */
-const ELEMENT_LABELS: Record<string, string> = {
-  payment: 'payment details',
-  checkoutForm: 'payment form',
-  contactDetails: 'contact details',
-  shippingAddress: 'shipping address',
-  billingAddress: 'billing address',
-  taxId: 'tax ID',
-  terms: 'terms',
-  linkAuthentication: 'email address',
-};
-
-/** A message with any leading/trailing slack removed, or null if it was empty. */
-function cleaned(message: unknown): string | null {
-  if (typeof message !== 'string') return null;
-  const trimmed = message.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-type ValidationErrorLike = {
-  code?: string | null;
-  message?: string;
-  validation_errors?: Array<{ message?: string; element?: string }>;
-};
-
-/**
- * Turns `validateElements()`'s error into a sentence.
- *
- * This is the fix for the silent submit. Stripe reports element-level
- * incompleteness in `validation_errors` and leaves the top-level `message`
- * empty, so reading `error.message` alone produced an empty string, rendered
- * nothing, and re-enabled the button with no explanation — exactly what
- * happened when the phone number was left blank.
- */
-export function describeValidationError(error: ValidationErrorLike): string {
-  const failures = error.validation_errors ?? [];
-
-  if (failures.length > 1) {
-    return 'Please complete the highlighted fields above and try again.';
-  }
-
-  const [failure] = failures;
-  if (failure) {
-    // Stripe's own copy when it has any ("Your phone number is incomplete."),
-    // otherwise a sentence built from which element complained.
-    const detail = cleaned(failure.message);
-    if (detail) return detail;
-
-    const label = failure.element ? ELEMENT_LABELS[failure.element] : undefined;
-    if (label) return `Please complete your ${label} and try again.`;
-  }
-
-  return cleaned(error.message) ?? 'Please complete the highlighted fields above and try again.';
-}
 
 /* -------------------------------------------------------------------------
  * Decline mapping
@@ -370,46 +301,18 @@ const DECLINE_MESSAGES: Record<string, string> = {
   partner_action_not_supported: `Your payment provider doesn't support this. ${USE_ANOTHER_CARD}`,
 };
 
+/** A message with any leading/trailing slack removed, or null if it was empty. */
+function cleaned(message: unknown): string | null {
+  if (typeof message !== 'string') return null;
+  const trimmed = message.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 type ConfirmErrorLike = {
   code?: string | null;
   message?: string;
   paymentFailed?: { declineCode?: string | null };
 };
-
-export type ConfirmErrorDescription = {
-  message: string;
-  /**
-   * False for declines and other buyer-fixable failures — those are expected
-   * traffic, and paging on them would bury the failures that mean a bug.
-   */
-  report: boolean;
-  /** Set when Stripe sent a decline code we have no words for yet. */
-  unmappedCode?: string;
-};
-
-/** Turns `confirm()`'s error into a sentence, and decides whether it's ours. */
-export function describeConfirmError(error: ConfirmErrorLike): ConfirmErrorDescription {
-  if (error.code === 'paymentFailed') {
-    const declineCode = error.paymentFailed?.declineCode;
-    const mapped = declineCode ? DECLINE_MESSAGES[declineCode] : undefined;
-    if (mapped) return { message: mapped, report: false };
-
-    // A decline code Stripe has added since this map was written. The guest
-    // still gets usable copy, but it is worth knowing about so the code can be
-    // given words of its own.
-    if (declineCode) {
-      return { message: GENERIC_DECLINE, report: true, unmappedCode: declineCode };
-    }
-
-    // Declined with no code at all — nothing to look up.
-    return { message: cleaned(error.message) ?? GENERIC_DECLINE, report: false };
-  }
-
-  // Everything else arrives as `code: null` with a message of varying quality.
-  // Show it when there is one — it is usually about a field — but still report
-  // it, because this bucket is also where integration bugs land.
-  return { message: cleaned(error.message) ?? GENERIC_SUBMIT_ERROR, report: true };
-}
 
 /**
  * Our words for a Stripe decline code, for callers holding one directly rather

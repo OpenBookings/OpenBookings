@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import * as Sentry from '@sentry/nextjs';
 import { loadStripe } from '@stripe/stripe-js';
 import type { Appearance, Stripe } from '@stripe/stripe-js';
-import { CheckoutElementsProvider } from '@stripe/react-stripe-js/checkout';
+import { CheckoutFormProvider } from '@stripe/react-stripe-js/checkout';
 import { buildAppearance } from '../_lib/appearance';
 import {
   checkoutErrorCopy,
@@ -210,7 +210,7 @@ async function loadStripeOrFail(): Promise<Stripe> {
 function CheckoutSession({
   appearance,
   ...props
-}: CheckoutClientProps & { appearance: Appearance }) {
+}: CheckoutClientProps & { appearance: Omit<Appearance, 'rules'> }) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SessionState>({ status: 'loading' });
   const [stripe, setStripe] = useState<Stripe | null>(null);
@@ -264,12 +264,12 @@ function CheckoutSession({
   }
 
   return (
-    <CheckoutElementsProvider
+    <CheckoutFormProvider
       // Keyed on the secret so a retry mounts a clean provider against the new
       // Session rather than reusing the one that failed.
       key={state.clientSecret}
       stripe={stripe}
-      options={{ clientSecret: state.clientSecret, elementsOptions: { appearance } }}
+      options={{ clientSecret: state.clientSecret, appearance }}
     >
       <Shell heroImageUrl={props.heroImageUrl}>
         <TripSummary {...props} />
@@ -277,6 +277,6 @@ function CheckoutSession({
           <PaymentCard expiresAt={state.expiresAt} onRestart={retry} />
         </PaymentCardBoundary>
       </Shell>
-    </CheckoutElementsProvider>
+    </CheckoutFormProvider>
   );
 }
