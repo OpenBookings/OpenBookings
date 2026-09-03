@@ -182,9 +182,19 @@ export function PaymentCard({ expiresAt, onRestart }: PaymentCardProps) {
         There is no pay button of ours here any more: the form renders its own,
         labelled with the amount from the Session, so what the guest presses
         can never disagree with what is charged.
+
+        The express wallet buttons are turned off rather than left to `auto`.
+        They sit above everything else and lead with someone else's brand,
+        which on a page that has just shown the guest a specific room reads as
+        a detour rather than a shortcut. Apple Pay and Google Pay are left
+        alone: they are the two the guest's own device offers, and they cost
+        nothing in trust.
       */}
       <CheckoutForm
-        options={{ layout: 'expanded' }}
+        options={{
+          layout: 'expanded',
+          expressCheckout: { paymentMethods: { link: 'never', amazonPay: 'never' } },
+        }}
         onConfirm={onConfirm}
         onLoadError={onLoadError}
       />
