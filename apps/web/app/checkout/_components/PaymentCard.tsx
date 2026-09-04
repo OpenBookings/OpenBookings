@@ -198,6 +198,18 @@ export function PaymentCard({ expiresAt, onRestart }: PaymentCardProps) {
         onConfirm={onConfirm}
         onLoadError={onLoadError}
       />
+      {/*
+        Signed off under the pay button, where a payment page conventionally
+        says who handled the money. Decorative to a screen reader — the fields
+        above already announce themselves as Stripe's.
+      */}
+      <img
+        src="/powered-by-stripe.svg"
+        alt=""
+        aria-hidden="true"
+        className="mx-auto mt-5 h-8 w-auto opacity-70"
+        draggable="false"
+      />
     </CardShell>
   );
 }

@@ -133,6 +133,23 @@ function resolveAppUrl(): string {
   return 'http://localhost:3002';
 }
 
+/**
+ * An explicit payment method configuration for checkout, if one is set.
+ *
+ * These charges are made on the platform with no merchant of record, so it is
+ * the platform's own configuration set that decides what the guest is offered
+ * — the connected-account set, and the per-host child configurations under it,
+ * never come into play while hosts hold `transfers` alone.
+ *
+ * Left unset, Stripe uses the platform's default configuration, which is a
+ * perfectly good answer. This exists so the booking form can be pointed at a
+ * configuration of its own without a deploy. Test and live mode hold different
+ * `pmc_` objects, hence an environment variable rather than a constant.
+ */
+function resolvePaymentMethodConfiguration(): string | undefined {
+  return process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || undefined;
+}
+
 /** Clamped into Stripe's accepted window so a bad `holdMinutes` can't 400. */
 function resolveExpiry(holdMinutes: number): number {
   const requested = Number.isFinite(holdMinutes) ? holdMinutes * 60 * 1000 : 0;
@@ -163,6 +180,7 @@ export async function POST() {
     const booking = (summary = await getBookingSummary());
     const total = assertChargeable(booking);
     const appUrl = resolveAppUrl();
+    const paymentMethodConfiguration = resolvePaymentMethodConfiguration();
     const expiresAt = resolveExpiry(booking.holdMinutes);
 
     session = await stripe.checkout.sessions.create({
@@ -192,9 +210,18 @@ export async function POST() {
       // the contact block, leaving the guest looking at two "Full name" fields
       // and no way to tell which one Stripe wanted.
       billing_address_collection: 'required',
+      ...(paymentMethodConfiguration
+        ? { payment_method_configuration: paymentMethodConfiguration }
+        : {}),
       payment_intent_data: booking.stripeAccountId
         ? {
             transfer_data: { destination: booking.stripeAccountId },
+            // No `on_behalf_of`. It would hand the host merchant-of-record
+            // status and with it their own payment method configuration, but
+            // Stripe refuses it for an account holding `transfers` without
+            // `card_payments` — and hosts here are deliberately payout-only.
+            // The refusal also lands at confirm time rather than on session
+            // creation, so the guest would fill in a card before seeing it.
             // Platform fee temporarily disabled — restore with
             // `application_fee_amount: booking.platformFeeCents` when needed.
           }

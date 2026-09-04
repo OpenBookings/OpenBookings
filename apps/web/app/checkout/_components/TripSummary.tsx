@@ -55,13 +55,18 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 /**
  * The room, with its photo.
  *
- * The thumbnail is not decoration: a guest who picked a Garden Junior Suite and
- * is shown a Deluxe should be able to catch it without reading a word.
+ * The two marks sit centred above everything else — the partnership is a
+ * letterhead, not a competitor to the room name, so it gets the top of the
+ * block and then gets out of the way.
+ *
+ * Beneath it the photo runs 16:9, the shape hotel photography is actually shot
+ * in, so the room is shown the way the host framed it rather than cropped to a
+ * portrait sliver. The name and its attributes sit beside it on the same
+ * optical centre, so the pairing scans as one object: this picture, this room.
  */
 function RoomIdentity({
   logoUrl,
   propertyName,
-  locationLabel,
   roomName,
   roomType,
   roomImageUrl,
@@ -69,43 +74,43 @@ function RoomIdentity({
 }: {
   logoUrl: string;
   propertyName: string;
-  locationLabel: string | null;
   roomName: string;
   roomType: string | null;
   roomImageUrl: string;
   attributes: string[];
 }) {
   return (
-    <div className="flex flex-col sm:flex-row items-stretch gap-5 sm:gap-6">
-      {roomImageUrl && (
-        // Sized to be looked at rather than glanced past — at thumbnail scale
-        // one hotel room is indistinguishable from another, which defeats the
-        // point of showing it. 4:5 keeps a portrait crop of a wide photo.
-        // eslint-disable-next-line @next/next/no-img-element
+    <div className="space-y-7 sm:space-y-9">
+      <div className="flex items-center justify-center gap-4">
+        {logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt={propertyName} className="h-10 w-auto sm:h-12 object-contain" />
+        )}
+        <span className="text-white/40 text-sm font-medium" aria-hidden="true">✕</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={roomImageUrl}
-          alt=""
-          className="aspect-4/4 w-28 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-40"
+          src="/OB-LOGO-LIGHT.png"
+          alt="OpenBookings"
+          className="h-10 w-auto sm:h-12 object-contain"
         />
-      )}
-      <div className="min-w-0 min-h-0 flex flex-col flex-1 py-1">
-        <div className="flex items-center gap-3 flex-1 min-h-0 mt-2">
-          {logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={propertyName} className="h-10 w-auto sm:h-14 object-contain" />
-          )}
-          <span className="text-white/50 text-sm font-medium" aria-hidden="true">✕</span>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/OB-LOGO-LIGHT.png" alt="OpenBookings" className="h-10 w-auto sm:h-14 object-contain" />
-        </div>
+      </div>
 
-        <div className="mt-8">
-          <h1 className="mt-1.5 font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
+      <div className="flex items-center gap-5 sm:gap-7">
+        {roomImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={roomImageUrl}
+            alt=""
+            className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <h1 className="font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
             {roomName}
             {roomType && roomType !== roomName ? ` ${roomType}` : ''}
           </h1>
           {attributes.length > 0 && (
-            <p className="mt-2.5 text-sm text-white/55">{attributes.join(' · ')}</p>
+            <p className="mt-3 text-sm text-white/55">{attributes.join(' · ')}</p>
           )}
         </div>
       </div>
@@ -372,7 +377,6 @@ export function TripSummary(props: TripSummaryProps) {
       <RoomIdentity
         logoUrl={props.logoUrl}
         propertyName={props.propertyName}
-        locationLabel={props.locationLabel}
         roomName={props.roomName}
         roomType={props.roomType}
         roomImageUrl={props.roomImageUrl}

@@ -38,7 +38,7 @@ export type CheckoutClientProps = TripSummaryProps & {
  */
 function Backdrop({ heroImageUrl }: { heroImageUrl: string }) {
   return (
-    <div className="fixed inset-0 -z-10 bg-[#0b1c4d]" aria-hidden="true">
+    <div className="fixed inset-0 -z-10 bg-black" aria-hidden="true">
       {heroImageUrl && (
         // Not next/image: the photo is host-supplied and no remote patterns
         // are configured for it. images.openbookings.co is allowed by CSP.
@@ -49,7 +49,7 @@ function Backdrop({ heroImageUrl }: { heroImageUrl: string }) {
           className="size-full scale-105 object-cover blur-[2px]"
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0b1c4d]/95 via-[#0b1c4d]/80 to-[#0b1c4d]/60" />
+      <div className="absolute inset-0 bg-gradient-to-br from-black/90 via-black/75 to-black/55" />
     </div>
   );
 }
