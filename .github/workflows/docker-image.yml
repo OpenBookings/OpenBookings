@@ -28,5 +28,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
