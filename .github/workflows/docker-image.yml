@@ -31,3 +31,12 @@ jobs:
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
+            NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
