@@ -20,7 +20,7 @@ const libreFranklin = Libre_Franklin({
   variable: "--font-libre-franklin",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co";
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://openbookings.co";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
