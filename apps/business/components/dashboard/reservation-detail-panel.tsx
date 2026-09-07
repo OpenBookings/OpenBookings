@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Ban,
-  CalendarDays,
-  MessageSquare,
-  Pencil,
-  CalendarX2,
-  X,
-} from "lucide-react";
+import { Ban, MessageSquare, Pencil, CalendarX2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +10,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ReservationStatusBadge } from "@/components/dashboard/reservation-status";
 import type { MockReservation } from "@/components/dashboard/mock-reservations";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -218,72 +210,5 @@ export function ReservationDetailSkeleton() {
         </div>
       ))}
     </div>
-  );
-}
-
-export function ReservationDetailPanel({
-  selectedId,
-  reservation,
-  loading,
-  onClose,
-}: {
-  selectedId: string | null;
-  reservation: MockReservation | null;
-  loading: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <aside className="flex flex-1 flex-col overflow-hidden rounded-lg border">
-      {selectedId === null ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <CalendarDays className="text-muted-foreground/60 size-8" />
-          <p className="text-muted-foreground text-sm">
-            Select a reservation to see its details.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="bg-muted flex items-center justify-between gap-2 border-b px-4 py-3">
-            {loading ? (
-              <Skeleton className="h-5 w-32" />
-            ) : !reservation ? (
-              <span className="text-muted-foreground text-sm font-medium">
-                {selectedId}
-              </span>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{reservation.id}</span>
-                <ReservationStatusBadge status={reservation.status} />
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={onClose}
-              aria-label="Close details"
-            >
-              <X />
-            </Button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-5">
-            {loading ? (
-              <ReservationDetailSkeleton />
-            ) : !reservation ? (
-              <p className="text-muted-foreground py-8 text-center text-sm">
-                Reservation not found.
-              </p>
-            ) : (
-              <ReservationDetailBody reservation={reservation} />
-            )}
-          </div>
-          {!loading && reservation && (
-            <div className="border-t p-4">
-              <ReservationQuickActions />
-            </div>
-          )}
-        </>
-      )}
-    </aside>
   );
 }

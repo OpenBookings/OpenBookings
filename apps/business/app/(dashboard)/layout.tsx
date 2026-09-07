@@ -1,5 +1,5 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { DashboardSidebar } from "@/components/dashboard/sidebar-02/app-sidebar";
+import { DashboardSidebar } from "@/components/dashboard/sidebar-08/app-sidebar";
 import { SessionEntryOverlay } from "@/components/SessionEntryOverlay";
 
 // Auth + onboarding gating happens in proxy.ts before this ever renders.
