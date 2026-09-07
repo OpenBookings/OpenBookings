@@ -29,6 +29,7 @@
     ARG NEXT_PUBLIC_POSTHOG_HOST
     ARG NEXT_PUBLIC_COOKIE_VERSION
     ARG NEXT_PUBLIC_SENTRY_DSN
+    ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 
     ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
     ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
@@ -37,6 +38,7 @@
     ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
     ENV NEXT_PUBLIC_COOKIE_VERSION=$NEXT_PUBLIC_COOKIE_VERSION
     ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+    ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in
     # <workspace>/node_modules; the root node_modules only holds the store
@@ -62,4 +64,4 @@
     
     USER nextjs
     EXPOSE 8080
-    CMD ["bun", "apps/web/server.js"]
+    CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec bun apps/web/server.js"]
