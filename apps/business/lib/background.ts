@@ -1,4 +1,4 @@
-import backgrounds from "./backgrounds.json" assert { type: "json" };
+import backgrounds from "./backgrounds.json" with { type: "json" };
 
 type Background = {
   image_path: string;

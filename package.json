@@ -2,7 +2,10 @@
   "name": "openbookings",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.20.0"
   },
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
+    "@openbookings/db": "workspace:*",
     "turbo": "2.10.8"
   },
   "overrides": {

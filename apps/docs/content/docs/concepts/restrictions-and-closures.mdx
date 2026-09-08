@@ -1,0 +1,74 @@
+---
+title: Restrictions and closures
+description: The three different reasons a date will not sell, and which one you are looking at.
+---
+
+## Overview
+
+When a guest cannot book a date, it is for one of three reasons. They look similar in the grid but have completely different causes and completely different fixes. Telling them apart is the single most useful diagnostic skill on this screen.
+
+## The three reasons
+
+### Sold out
+
+**The room type has no rooms left.** Nothing is wrong — you are full.
+
+- Affects **every rate plan** on that room type at once, because they share one pool.
+- Shown as a grey, diagonally striped bar.
+- Fixed, if it needs fixing at all, through [availability](/docs/concepts/availability) — not by reopening anything.
+
+### Closed
+
+**Someone deliberately closed this rate plan** for these dates. Rooms may well be free; guests still cannot book this plan.
+
+- Affects **one rate plan** only. Other plans on the same rooms keep selling.
+- Shown as a red bar.
+- Fixed by reopening the dates.
+
+### Restricted
+
+**The plan is still bookable, but with conditions.** A guest whose stay fits the conditions can book it; one whose stay does not, cannot.
+
+- Affects **one rate plan** only.
+- Shown as an amber bar naming the rule, for example *Min 3 nt* or *No arrival*.
+- Changed by setting a new rule over the same dates.
+
+<Callout type="info">
+  Sold out is striped as well as grey, so it can be told from closed without relying on colour. Every state also carries an icon and a word.
+</Callout>
+
+## The restriction rules
+
+| Rule | Effect on the guest |
+| --- | --- |
+| **Minimum stay** | Must book at least that many nights for a stay covering these dates. |
+| **Maximum stay** | Stays covering these dates cannot be longer than that. |
+| **Closed to arrival** | Cannot check in on these dates, though a stay may run through them. |
+| **Closed to departure** | Cannot check out on these dates. |
+
+Closed-to-arrival is the one people misread. It does not take the date off sale — a guest arriving the day before and staying through is unaffected.
+
+## Which lever to pull
+
+| The situation | The fix |
+| --- | --- |
+| Rooms genuinely unavailable | Block units, or set an availability override. |
+| You want one offer withdrawn | Close that rate plan. |
+| You will sell, but only to longer stays | Set a minimum stay. |
+| You need to protect a changeover day | Closed to arrival or departure. |
+
+## A closure and a stay rule are separate things
+
+You can set both at once, and they are stored as two independent rules. This matters when undoing:
+
+<Callout type="warn">
+  Reopening dates lifts closures only. Any minimum stay, maximum stay, closed-to-arrival or closed-to-departure rule over the same dates stays in place, and the plan may still not sell the way you expect.
+</Callout>
+
+## Reading a bar as one decision
+
+A run of dates sharing the same rule is drawn as a **single bar**. Two bars side by side means two separate rules were set, even if they look continuous. So one bar is one decision someone made, and the panel will tell you who made it and when.
+
+## What to do next
+
+To set or lift these, see [Restrictions](/docs/property/setting-restrictions). To work through a date that will not sell, see [Why a date is not selling](/docs/common-tasks/why-a-date-is-not-selling).

@@ -1,0 +1,63 @@
+---
+title: Editing availability
+description: Block rooms, override the number, and change capacity across a date range.
+---
+
+## Overview
+
+This page covers making changes to how many rooms you have available. For what the number means and where it comes from, read [Availability](/docs/concepts/availability) first — it takes two minutes and prevents the commonest mistake here.
+
+All editing happens from the [Rates & Availability](/docs/property/rates-and-availability) grid.
+
+## What you can do here
+
+- Hold rooms back for maintenance or owner use
+- Set an availability number by hand, ignoring the calculation
+- Change the total number of rooms for particular dates
+- Leave a note explaining a change, and see who made the last one
+
+## How to see why a number is what it is
+
+1. Select the availability number in the grid.
+2. A panel opens showing the room type and date.
+3. **Effective availability** gives the headline — for example *3 of 8* — and says whether it came from the calculation or from an override.
+4. **How this number is reached** lists total units, booked, blocked, the calculated baseline and any manual override.
+5. **Last change** shows when the last edit was made, who made it, and any note they left.
+
+## How to change availability
+
+1. Select **Edit availability** on the toolbar. Selecting a cell first and using the **Edit availability** button in its panel fills in the room type and date for you.
+2. Choose the **Room type**. Each option shows how many rooms it has.
+3. Set the **From** and **To** dates. The change applies to every date in that range.
+4. Fill in whichever of the three fields you need:
+
+   | Field | What it does |
+   | --- | --- |
+   | **Blocked units** | Rooms held back for maintenance or owner use. Subtracted from the calculation. |
+   | **Availability override** | An explicit number replacing the calculation completely. Leave empty to keep calculating. |
+   | **Capacity override** | A different total room count for these dates. Leave empty to use the room type's normal total. |
+
+5. Optionally add a **Note**. It is shown to whoever opens the cell later.
+6. Select **Apply to range**.
+
+## How to undo an override
+
+Open **Edit availability** for the same room type and dates, clear the **Availability override** field, and apply. The calculated number takes over again. Blocked units and the note stay as they were.
+
+## Tips
+
+- Always write a note when you block rooms or set an override. The panel shows it to the next person, which saves a phone call.
+- Prefer **Blocked units** over an override whenever there is a reason for the rooms being gone. See [the comparison](/docs/concepts/availability#blocked-units-versus-an-override).
+- Working over a whole range at once is the normal way to use this. Editing one date at a time is the exception.
+
+## Limitations and warnings
+
+<Callout type="warn">
+  Every edit applies to the whole date range you set, in one go. There is no preview and no undo — check the **From** and **To** dates before selecting **Apply to range**.
+</Callout>
+
+<Callout type="warn">
+  Availability belongs to the room type, so a change here affects every rate plan on it, not just the one you were looking at.
+</Callout>
+
+- To stop just one rate plan selling, set a closure instead. See [Setting restrictions](/docs/property/setting-restrictions).

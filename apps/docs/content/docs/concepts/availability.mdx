@@ -1,0 +1,59 @@
+---
+title: Availability
+description: Where the number of bookable rooms comes from, and what overrides it.
+---
+
+## Overview
+
+Availability is how many rooms of a type you have left to sell on a date. It belongs to the [room type](/docs/concepts/how-your-property-is-organised), so every rate plan on that room type reads the same number.
+
+There are two ways the number can be arrived at, and the dashboard always tells you which one is in play.
+
+## The calculation
+
+By default, OpenBookings works it out for you:
+
+> **Total rooms** − **booked** − **blocked** = **available**
+
+| Part | Meaning |
+| --- | --- |
+| **Total rooms** | How many units the room type has. Can be overridden for particular dates. |
+| **Booked** | Units taken by confirmed and completed bookings. Maintained for you. |
+| **Blocked** | Units you have deliberately held back — maintenance, owner use. |
+
+Blocking is the normal way to take rooms out of circulation. Because the calculation still runs, the number stays correct as new bookings arrive.
+
+## The override
+
+You can instead set an explicit number that replaces the calculation entirely. When an override is in effect, a small dot appears after the number in the grid, and the detail panel says so.
+
+<Callout type="warn">
+  An override is frozen. It does not adjust as bookings come in — set availability to 5, take three bookings, and it still says 5. Use blocked units instead whenever you can.
+</Callout>
+
+Clearing an override hands control back to the calculation. Blocked units and any note you left stay in place.
+
+## Blocked units versus an override
+
+| | Blocked units | Availability override |
+| --- | --- | --- |
+| Tracks new bookings | Yes | No |
+| Says *why* rooms are gone | Yes — they are held back | No |
+| Right for | Maintenance, owner use, anything with a reason | Rare cases where you need an exact number regardless |
+
+## Capacity override
+
+Separately, you can change the **total** room count for particular dates — useful when a whole floor is unavailable for a period. This feeds the calculation as the *Total rooms* figure rather than replacing the result.
+
+## Reading the number
+
+| What you see | Meaning |
+| --- | --- |
+| A plain number | Rooms available. |
+| An amber number | Two or fewer left. |
+| A red number | Nothing left to sell. |
+| A dot after the number | A manual override is in effect. |
+
+## What to do next
+
+To change any of this, see [Editing availability](/docs/property/editing-availability).

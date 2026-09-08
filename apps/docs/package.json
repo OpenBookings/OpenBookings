@@ -1,0 +1,35 @@
+{
+  "name": "@openbookings/docs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3004",
+    "build": "next build",
+    "start": "next start -p ${PORT:-8082} -H 0.0.0.0",
+    "lint": "eslint",
+    "types:check": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "cn": "^0.2.6",
+    "fumadocs-core": "^16.15.8",
+    "fumadocs-mdx": "^15.4.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.15.8",
+    "lucide-react": "^1.25.0",
+    "next": "^16.2.10",
+    "postcss": "^8.5.19",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@openbookings/config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^22.20.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

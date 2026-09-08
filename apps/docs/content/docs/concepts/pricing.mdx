@@ -1,0 +1,52 @@
+---
+title: Pricing
+description: How a nightly price is built up, and why the same date can cost different amounts.
+---
+
+## Overview
+
+A price is never just a number you typed. It starts from the rate plan's base rate and is moved by adjustments that fire only when their conditions are met. That is why the same date can show one price for a one-night stay and a lower one for a week.
+
+The dashboard shows you the whole chain, so a price is always explainable.
+
+## The base rate
+
+Every rate plan has a **base rate** — shown in places as the BAR. It is the starting point for every date on that plan.
+
+A **rate override** can replace the base rate on particular dates. When one applies, the detail panel names it and tells you what the plan's normal base rate is.
+
+## The adjustments
+
+On top of the base rate sit adjustments. Each has a condition, and each is either applied or not applied on a given date:
+
+| Adjustment | Fires when |
+| --- | --- |
+| **Day of week** | The date falls on a particular day — a weekend uplift, say. |
+| **Length of stay** | The booking is long enough to qualify for a discount. |
+| **Early bird** | The booking is made far enough before arrival. |
+| **Last minute** | Arrival is close. |
+| **Extra guest** | The booking is for more guests than the room's standard occupancy. |
+
+They apply **in a fixed order**, and the order changes the result — a percentage taken before a flat addition is not the same as after. The price breakdown lists them in the order they run, so read it from the top.
+
+An adjustment that does not qualify is shown dimmed and marked *not applied*, so you can see the rule exists and simply did not fire.
+
+## Why the stay length changes the price
+
+Some discounts only exist for longer bookings. Since the grid has to show *a* price, it shows the price for a one-night stay by default — and marks any plan that has a longer-stay discount waiting with an asterisk (`*`).
+
+The price shown is real. It is just not the whole story: a guest booking more nights would pay less per night. Raising the stay length on the toolbar reveals what they would actually be charged.
+
+## Reading a price cell
+
+| What you see | Meaning |
+| --- | --- |
+| A price | The plan is open and bookable at that rate. |
+| A price with `*` | A longer-stay discount exists that this price does not include. |
+| A coloured bar | The plan is not simply open — see [Restrictions and closures](/docs/concepts/restrictions-and-closures). |
+
+Prices are per night, at the room's standard occupancy, in the plan's currency.
+
+## What to do next
+
+To see a breakdown or add a plan, see [Rate plans](/docs/property/managing-rate-plans).
