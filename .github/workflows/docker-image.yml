@@ -1,44 +1,79 @@
-name: OpenBookings Web - Docker CI
-
+name: OpenBookings - Docker CI
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
 permissions:
   contents: read
-
 env:
   SCW_REGISTRY: rg.nl-ams.scw.cloud
   SCW_NAMESPACE: namespace-distracted-saha
-  IMAGE_NAME: openbookings
 
 jobs:
-  build:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      business: ${{ steps.filter.outputs.business }}
+      docs: ${{ steps.filter.outputs.docs }}
+      support: ${{ steps.filter.outputs.support }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
+            business:
+              - 'apps/business/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
+            docs:
+              - 'apps/docs/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
+            support:
+              - 'apps/support-bot/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
+
+  build-web:
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Log in to Scaleway Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
           password: ${{ secrets.SCW_SECRET_KEY }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
-          # Unique tags: SHA + incrementing run number
           tags: |
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.run_number }}
           build-args: |
+            # App specific Args
             NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+
+            # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
             NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
@@ -46,3 +81,76 @@ jobs:
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
             NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+
+  build-business:
+    needs: detect
+    if: needs.detect.outputs.business == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/business/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.run_number }}
+          build-args: |
+            # App specific Args
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_BUSINESS_APP_URL }}
+            NEXT_PUBLIC_REALTIME_WORKER_URL=${{ vars.NEXT_PUBLIC_BUSINESS_REALTIME_WORKER_URL}}
+
+            # General Args
+            NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
+            NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+
+  build-docs:
+    needs: detect
+    if: needs.detect.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/docs/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.run_number }}
+
+  build-support:
+    needs: detect
+    if: needs.detect.outputs.support == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/support-bot/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.run_number }}
