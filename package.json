@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
+    "@openbookings/db": "workspace:*",
     "turbo": "2.10.8"
   },
   "overrides": {

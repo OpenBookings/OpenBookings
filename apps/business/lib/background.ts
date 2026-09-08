@@ -1,4 +1,4 @@
-import backgrounds from "./backgrounds.json" assert { type: "json" };
+import backgrounds from "./backgrounds.json" with { type: "json" };
 
 type Background = {
   image_path: string;
@@ -6,7 +6,7 @@ type Background = {
 };
 // URL builder for background images
 const getBackgroundImageUrl = (image_path: string) => {
-  return `https://images.openbookings.co/${image_path}`;
+  return `https://cdn.openbookings.co/Public/backgrounds/${image_path}`;
 };
 
 // Random background image picker

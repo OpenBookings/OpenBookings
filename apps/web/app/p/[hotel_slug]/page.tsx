@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getDb, sql } from "@openbookings/db";
-import type { HotelPageData } from "@/app/api/query/pr/route";
+import { buildHeroQuery, type HotelPageData } from "@/lib/hotel-page-query";
 import type { DbAmenityCategory, DbRoom } from "./_components/constants";
 
 import { NavWrapper }       from "./_components/NavWrapper";
@@ -12,43 +12,6 @@ import { RoomsSection }     from "./_components/RoomsCarousel";
 import { PoliciesSection }  from "./_components/PoliciesSection";
 import { LocationSection }  from "./_components/LocationSection";
 import { FootnoteSection }  from "./_components/FootnoteSection";
-
-function buildHeroQuery(slug: string) {
-  return sql`
-  SELECT
-    p.id,
-    p.name,
-    p.subtitle,
-    ST_Y(p.location::geometry) AS lat,
-    ST_X(p.location::geometry) AS lon,
-    (
-      SELECT pi.url
-      FROM property_images pi
-      WHERE pi.property_id = p.id
-      ORDER BY (CASE WHEN pi.group = 'hero-image' THEN 0 ELSE 1 END) ASC, pi.sort_order ASC, pi.created_at ASC
-      LIMIT 1
-    ) AS hero_image_url,
-    (
-      SELECT pi.url
-      FROM property_images pi
-      WHERE pi.property_id = p.id AND pi.group = 'logo'
-      LIMIT 1
-    ) AS logo_image_url,
-    (
-      SELECT COALESCE(json_agg(json_build_object('url', pi.url, 'alt_text', pi.alt_text) ORDER BY pi.sort_order ASC, pi.created_at ASC), '[]'::json)
-      FROM (
-        SELECT pi2.url, pi2.alt_text, pi2.sort_order, pi2.created_at
-        FROM property_images pi2
-        WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo' AND pi2.group != 'hero-image')
-        ORDER BY pi2.sort_order ASC, pi2.created_at ASC
-        LIMIT 20
-      ) pi
-    ) AS gallery_images
-  FROM properties p
-  WHERE p.slug = ${slug}
-  LIMIT 1
-`;
-}
 
 function buildAmenitiesQuery(slug: string) {
   return sql`

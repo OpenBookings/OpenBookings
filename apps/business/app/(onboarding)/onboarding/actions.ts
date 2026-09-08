@@ -4,6 +4,7 @@ import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { headers } from "next/headers";
 import { createConnectAccount } from "@openbookings/stripe";
+import { promoteOnboardingToProperty } from "./promotion";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -196,11 +197,25 @@ export async function provisionStripeAccount(): Promise<string> {
   return accountId;
 }
 
-/** Mark onboarding as complete for the current user. */
+/** Mark onboarding as complete, and materialise the host's property row. */
 export async function completeOnboarding(): Promise<void> {
   const session = await getSession();
+  const userId = session.user.id;
+
+  const stepData = await loadStepData();
+  const result = await promoteOnboardingToProperty(
+    { userId, userEmail: session.user.email, stepData },
+    { query, queryOne },
+  );
+
+  // A promotion that could not run is not a reason to trap the host in the
+  // wizard — they finished it. The editor's empty state picks up from here.
+  if (!result.created && result.reason !== "already-owns-property") {
+    console.error("[onboarding] property promotion skipped", { userId, reason: result.reason });
+  }
+
   await query(
     `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
-    [session.user.id]
+    [userId],
   );
 }

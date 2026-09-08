@@ -1,53 +1,12 @@
-import { getDb, sql } from "@openbookings/db";
+import { getDb } from "@openbookings/db";
 import { NextRequest, NextResponse } from "next/server";
+import { buildHeroQuery } from "@/lib/hotel-page-query";
 
-export interface HotelPageData {
-  id: string;
-  name: string;
-  subtitle: string | null;
-  hero_image_url: string | null;
-  logo_image_url: string | null;
-  gallery_images: { url: string; alt_text: string | null }[];
-  lat: number;
-  lon: number;
-}
+// Re-exported so the page's components keep importing the type from here.
+// The definition, and the query that produces it, live in @/lib/hotel-page-query.
+export type { HotelPageData } from "@/lib/hotel-page-query";
 
-function buildHeroQuery(slug: string) {
-  return sql`
-  SELECT
-    p.id,
-    p.name,
-    p.subtitle,
-    ST_Y(p.location::geometry) AS lat,
-    ST_X(p.location::geometry) AS lon,
-    (
-      SELECT pi.url
-      FROM property_images pi
-      WHERE pi.property_id = p.id
-      ORDER BY pi.sort_order ASC, pi.created_at ASC
-      LIMIT 1
-    ) AS hero_image_url,
-    (
-      SELECT pi.url
-      FROM property_images pi
-      WHERE pi.property_id = p.id AND pi.group = 'logo'
-      LIMIT 1
-    ) AS logo_image_url,
-    (
-      SELECT COALESCE(json_agg(json_build_object('url', pi.url, 'alt_text', pi.alt_text) ORDER BY pi.sort_order ASC, pi.created_at ASC), '[]'::json)
-      FROM (
-        SELECT pi2.url, pi2.alt_text, pi2.sort_order, pi2.created_at
-        FROM property_images pi2
-        WHERE pi2.property_id = p.id AND (pi2.group IS NULL OR pi2.group != 'logo')
-        ORDER BY pi2.sort_order ASC, pi2.created_at ASC
-        LIMIT 20
-      ) pi
-    ) AS gallery_images
-  FROM properties p
-  WHERE p.slug = ${slug}
-  LIMIT 1
-`;
-}
+import type { HotelPageData } from "@/lib/hotel-page-query";
 
 export async function GET(request: NextRequest) {
   let slug = request.nextUrl.searchParams.get("slug");
@@ -71,5 +30,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Hotel not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ ...row, gallery_images: row.gallery_images ?? [] });
+  return NextResponse.json({
+    ...row,
+    gallery_images: row.gallery_images ?? [],
+    highlights: row.highlights ?? [],
+  });
 }

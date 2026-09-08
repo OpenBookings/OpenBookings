@@ -42,11 +42,11 @@ function createUppy(roomId: string) {
         }),
       });
       if (!res.ok) throw new Error("Failed to get upload URL");
-      const { uploadUrl, gcsKey } = (await res.json()) as {
+      const { uploadUrl, key } = (await res.json()) as {
         uploadUrl: string;
-        gcsKey: string;
+        key: string;
       };
-      uppy.setFileMeta(file.id, { gcsKey, roomId });
+      uppy.setFileMeta(file.id, { key, roomId });
       return uploadUrl;
     },
     method: "PUT",
@@ -70,14 +70,14 @@ export function RoomImageUploader({ roomId, existingImages = [] }: Props) {
 
   useUppyEvent(uppy, "upload-success", async (file) => {
     if (!file) return;
-    const gcsKey = file.meta.gcsKey as string | undefined;
+    const key = file.meta.key as string | undefined;
     const fileRoomId = file.meta.roomId as string | undefined;
-    if (!gcsKey || !fileRoomId) return;
+    if (!key || !fileRoomId) return;
 
     const res = await fetch("/api/upload/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gcsKey, roomId: fileRoomId }),
+      body: JSON.stringify({ key, roomId: fileRoomId }),
     });
     if (!res.ok) return;
 
