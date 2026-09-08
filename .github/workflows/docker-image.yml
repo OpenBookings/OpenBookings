@@ -30,7 +30,10 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
-          tags: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          # Unique tags: SHA + incrementing run number
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}
           build-args: |
             NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
