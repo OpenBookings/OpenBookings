@@ -2,6 +2,11 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+@theme inline {
+  --font-display: var(--font-gloock), ui-serif, Georgia, serif;
+  --font-body: var(--font-libre-franklin), ui-sans-serif, system-ui, sans-serif;
+}
+
 html {
   scrollbar-gutter: stable;
 }
@@ -9,4 +14,21 @@ html {
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The shader canvas paints its first frame after WebGL links; fade it in so a
+   hard swap from flat background to ink never flashes. */
+.ink-canvas {
+  opacity: 0;
+  transition: opacity 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ink-canvas.is-ready {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ink-canvas {
+    transition: none;
+  }
 }
