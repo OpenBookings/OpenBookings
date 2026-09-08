@@ -68,7 +68,6 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.sha }}
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.run_number }}
           build-args: |
             # App specific Args
             NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
@@ -100,7 +99,6 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.sha }}
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.run_number }}
           build-args: |
             # App specific Args
             NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_BUSINESS_APP_URL }}
@@ -133,7 +131,6 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.sha }}
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.run_number }}
 
   build-support:
     needs: detect
@@ -153,4 +150,3 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
-            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.run_number }}
