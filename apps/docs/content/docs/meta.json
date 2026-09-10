@@ -1,10 +1,15 @@
 {
-  "title": "Documentation",
   "pages": [
-    "index",
-    "tutorials",
-    "how-to",
-    "reference",
-    "explanation"
+    "start-here",
+    "rooms-and-property",
+    "rates-and-availability",
+    "reservations",
+    "messages",
+    "reviews",
+    "getting-paid",
+    "analytics",
+    "somethings-not-right",
+    "account-and-access",
+    "look-it-up"
   ]
 }

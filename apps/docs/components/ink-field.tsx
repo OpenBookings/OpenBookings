@@ -171,7 +171,19 @@ function compile(gl: WebGLRenderingContext, type: number, src: string) {
   return shader;
 }
 
-export function InkField({ className }: { className?: string }) {
+export interface InkFieldProps {
+  className?: string;
+  speed?: number;
+  cursorInfluence?: number;
+  width?: number;
+}
+
+export function InkField({
+  className,
+  speed = 1.0,
+  cursorInfluence = 0.55,
+  width = 0.50,
+}: InkFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -192,7 +204,7 @@ export function InkField({ className }: { className?: string }) {
     const pointer = { x: 0, y: 0 };
     const target = { x: 0, y: 0 };
     let amount = 0;
-    let targetAmount = 0.55;
+    let targetAmount = cursorInfluence;
     let hasPointer = false;
     let start = 0;
 
@@ -320,7 +332,7 @@ export function InkField({ className }: { className?: string }) {
 
       if (!hasPointer && !reduceMotion) {
         // Slow Lissajous drift so the field is alive without a mouse (and on touch).
-        const t = timeMs * 0.0001;
+        const t = timeMs * 0.0001 * speed;
         target.x = w * (0.5 + 0.26 * Math.sin(t * 1.7));
         target.y = h * (0.5 + 0.20 * Math.sin(t * 2.3 + 1.1));
       }
@@ -336,10 +348,10 @@ export function InkField({ className }: { className?: string }) {
 
       // Narrow viewports stack the text over the full width, so pull the calm
       // zone across almost everything; wide ones keep it to the left column.
-      const calmEdge = host.getBoundingClientRect().width < 768 ? 0.95 : 0.50;
+      const calmEdge = host.getBoundingClientRect().width < 768 ? 0.95 : width;
 
       gl.uniform2f(locs.uRes!, w, h);
-      gl.uniform1f(locs.uTime!, forceTime ?? (reduceMotion ? 6.0 : (timeMs - start) / 1000));
+      gl.uniform1f(locs.uTime!, forceTime ?? (reduceMotion ? 6.0 : (timeMs - start) / 1000 * speed));
       gl.uniform2f(locs.uPointer!, pointer.x, pointer.y);
       gl.uniform1f(locs.uPointerAmt!, reduceMotion ? 0.35 : amount);
       gl.uniform3fv(locs.uBg!, current.bg);
@@ -417,13 +429,13 @@ export function InkField({ className }: { className?: string }) {
       const rect = host.getBoundingClientRect();
       const dpr = canvas.width / Math.max(rect.width, 1);
       hasPointer = true;
-      targetAmount = 1;
+      targetAmount = cursorInfluence * 1.8; // Target amount when active
       target.x = (e.clientX - rect.left) * dpr;
       target.y = (rect.height - (e.clientY - rect.top)) * dpr; // gl_FragCoord.y is bottom-up
     };
     const onPointerLeave = () => {
       hasPointer = false;
-      targetAmount = 0.55;
+      targetAmount = cursorInfluence; // Revert to base influence
     };
 
     if (!reduceMotion) {
@@ -485,7 +497,7 @@ export function InkField({ className }: { className?: string }) {
         gl.getExtension('WEBGL_lose_context')?.loseContext();
       }
     };
-  }, []);
+  }, [speed, cursorInfluence, width]);
 
   return <canvas ref={canvasRef} className={className} aria-hidden="true" />;
 }

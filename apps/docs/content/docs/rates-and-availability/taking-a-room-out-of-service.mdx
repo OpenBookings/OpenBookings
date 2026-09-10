@@ -1,0 +1,43 @@
+---
+title: Taking a room out of service
+description: How to block rooms for maintenance without breaking existing rates.
+---
+
+*Last updated: 10 September 2026*
+
+## Overview
+
+Use **blocked units**, not an availability override, to hold a room back for maintenance or owner use. Blocking removes rooms from the pool while letting the calculation keep running, so the number stays correct as new bookings arrive.
+
+## How to take a room out of service
+
+1. Open Rates & Availability and select **Edit availability** on the toolbar.
+2. Choose the **Room type**.
+3. Set **From** and **To** to cover the full period.
+4. In **Blocked units**, enter how many rooms are out of service. For one room, enter `1`. If rooms are already blocked for another reason, enter the total.
+5. Leave **Availability override** and **Capacity override** empty.
+6. In **Note**, write what is happening and when it ends.
+7. Select **Apply to range**.
+
+## How to put the room back
+
+Repeat the steps for the same room type and dates, setting **Blocked units** back to `0` — or to whatever is still legitimately blocked. Update the note.
+
+## Limitations and warnings
+
+- Blocked units do not expire on their own. Nothing releases the rooms until you do. 
+- Blocking affects every rate plan on that room type.
+- The dashboard tracks room types, not individual rooms. Blocking one unit removes *a* room from the pool; it does not reserve a specific room number.
+- If the room type already has bookings that would now exceed what is left, blocking does not cancel them. 
+
+---
+
+**In this section:**
+- [Reading the grid](/docs/rates-and-availability/reading-the-grid)
+- [Editing availability](/docs/rates-and-availability/editing-availability)
+- [Managing rate plans](/docs/rates-and-availability/managing-rate-plans)
+- [Setting restrictions](/docs/rates-and-availability/setting-restrictions)
+- [Taking a room out of service](/docs/rates-and-availability/taking-a-room-out-of-service)
+- [How pricing works](/docs/rates-and-availability/how-pricing-works)
+- [Preparing for a busy period](/docs/rates-and-availability/preparing-for-a-busy-period)
+- [Grid legend](/docs/rates-and-availability/grid-legend)

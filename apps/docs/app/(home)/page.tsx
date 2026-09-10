@@ -32,7 +32,12 @@ export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col">
       <section className="relative isolate flex min-h-[min(84vh,46rem)] items-end overflow-hidden">
-        <InkField className="ink-canvas pointer-events-none absolute inset-0 size-full" />
+        <InkField 
+          className="ink-canvas pointer-events-none absolute inset-0 size-full" 
+          speed={1.0} 
+          cursorInfluence={0.55}
+          width={0.5}
+        />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
