@@ -68,4 +68,4 @@
     
     USER nextjs
     EXPOSE 8081
-    CMD ["bun", "apps/business/server.js"]
+    CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec bun apps/business/server.js"]
