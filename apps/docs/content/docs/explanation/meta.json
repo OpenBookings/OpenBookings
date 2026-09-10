@@ -1,11 +1,13 @@
 {
-  "title": "Concepts",
+  "title": "Explanation",
   "pages": [
     "index",
     "how-your-property-is-organised",
     "availability",
     "pricing",
+    "reservation-statuses",
     "restrictions-and-closures",
-    "reservation-statuses"
+    "your-account",
+    "getting-help"
   ]
 }

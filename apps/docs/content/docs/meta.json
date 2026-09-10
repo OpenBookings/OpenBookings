@@ -2,19 +2,9 @@
   "title": "Documentation",
   "pages": [
     "index",
-    "---Start here---",
-    "getting-started",
-    "concepts",
-    "---Using the dashboard---",
-    "bookings",
-    "property",
-    "finance",
-    "analytics",
-    "---Tasks and lookup---",
-    "common-tasks",
+    "tutorials",
+    "how-to",
     "reference",
-    "---Your account---",
-    "your-account",
-    "getting-help"
+    "explanation"
   ]
 }

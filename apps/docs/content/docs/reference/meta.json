@@ -1,4 +1,17 @@
 {
   "title": "Reference",
-  "pages": ["index", "glossary", "grid-legend", "limits-and-data"]
+  "pages": [
+    "index",
+    "property-details",
+    "rooms",
+    "rates-and-availability",
+    "reservations",
+    "messages",
+    "reviews",
+    "finance",
+    "analytics",
+    "glossary",
+    "grid-legend",
+    "limits-and-data"
+  ]
 }
