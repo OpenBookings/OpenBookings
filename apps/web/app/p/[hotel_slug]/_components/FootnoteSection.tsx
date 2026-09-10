@@ -19,7 +19,7 @@ export function FootnoteSection({ hotel }: { hotel: HotelPageData }) {
             ×
           </span>
           <img
-            src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
+            src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
             alt="OpenBookings"
             className="h-auto w-28 object-contain"
           />
