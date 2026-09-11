@@ -19,7 +19,15 @@
     RUN bun install --frozen-lockfile
 
     # ---------- Builder ----------
-    FROM oven/bun:1.3-alpine AS builder
+    # Node, not Bun, runs `next build`. Bun 1.3.14 on musl segfaults while
+    # tearing down Next 16.3's build workers -- *after* the output is fully
+    # written -- so a perfectly good build exits 139 (the same crash, same
+    # address, hit web, business and docs at once when Next went 16.2 -> 16.3;
+    # the Bun image digest was unchanged across the last green build). Bun
+    # still resolves and installs the deps, and still runs the server in
+    # production; only this step needs Node. Keep the major line in step with
+    # `engines.node` in the root package.json.
+    FROM node:22-alpine AS builder
     WORKDIR /app
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in
@@ -28,7 +36,10 @@
     COPY --from=installer /app/ .
     COPY --from=pruner /app/out/full/ .
 
-    RUN bun run --cwd apps/docs build
+    # npm is only a script runner here: the install was Bun's, and npm just
+    # puts apps/docs/node_modules/.bin on PATH and runs the same `build`
+    # script, so package.json stays the single source of truth.
+    RUN cd apps/docs && npm run build
     # The docs app ships no static assets today; the production stage still
     # copies a public/ so adding one later needs no Dockerfile change.
     RUN mkdir -p apps/docs/public
