@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { getIp } from "better-auth/api";
 import {
   accountTypeMismatchMessage,
   buildAccountTypeHooks,
+  IP_ADDRESS_HEADERS,
   isAccountTypeAllowed,
 } from "./server";
 
@@ -101,5 +103,58 @@ describe("accountTypeMismatchMessage", () => {
     expect(accountTypeMismatchMessage("private")).toContain(
       "business.openbookings.co",
     );
+  });
+});
+
+// Client IP resolution. These run Better Auth's own resolver against the
+// header list createAuth ships, so a change in either — our ordering or an
+// upstream tightening of what counts as trustworthy — fails here rather than
+// silently collapsing rate limiting into one shared per-path bucket.
+
+const ipOptions = {
+  advanced: { ipAddress: { ipAddressHeaders: IP_ADDRESS_HEADERS } },
+} as never;
+
+const resolveIp = (headers: Record<string, string>) =>
+  getIp(new Headers(headers), ipOptions);
+
+describe("IP_ADDRESS_HEADERS", () => {
+  test("cf-connecting-ip resolves behind a multi-hop forwarded chain", () => {
+    expect(
+      resolveIp({
+        "cf-connecting-ip": "203.0.113.7",
+        "x-forwarded-for": "203.0.113.7, 172.71.0.1, 10.0.0.5",
+      }),
+    ).toBe("203.0.113.7");
+  });
+
+  test("cf-connecting-ip is preferred over x-forwarded-for", () => {
+    expect(
+      resolveIp({
+        "cf-connecting-ip": "203.0.113.7",
+        "x-forwarded-for": "198.51.100.9",
+      }),
+    ).toBe("203.0.113.7");
+  });
+
+  test("falls back to a single-hop x-forwarded-for", () => {
+    expect(resolveIp({ "x-forwarded-for": "198.51.100.9" })).toBe(
+      "198.51.100.9",
+    );
+  });
+
+  test("a garbage cf-connecting-ip falls through instead of being trusted", () => {
+    expect(
+      resolveIp({
+        "cf-connecting-ip": "not-an-ip",
+        "x-forwarded-for": "198.51.100.9",
+      }),
+    ).toBe("198.51.100.9");
+  });
+
+  test("distinct clients get distinct rate-limit buckets", () => {
+    const a = resolveIp({ "cf-connecting-ip": "203.0.113.7" });
+    const b = resolveIp({ "cf-connecting-ip": "203.0.113.8" });
+    expect(a).not.toBe(b);
   });
 });

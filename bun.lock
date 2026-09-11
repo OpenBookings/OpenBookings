@@ -35,7 +35,7 @@
         "@uppy/dashboard": "^5.1.1",
         "@uppy/react": "^5.2.0",
         "@uppy/xhr-upload": "^5.2.0",
-        "better-auth": "^1.6.23",
+        "better-auth": "1.6.25",
         "carbone": "^3.8.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -136,7 +136,7 @@
         "@stripe/react-stripe-js": "^6",
         "@stripe/stripe-js": "^9",
         "algoliasearch": "^5.46.2",
-        "better-auth": "^1.6.23",
+        "better-auth": "1.6.25",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "framer-motion": "^12.42.2",
@@ -193,7 +193,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@better-auth/infra": "^0.1.13",
-        "better-auth": "^1.6.23",
+        "better-auth": "1.6.25",
         "pg": "^8.22.0",
       },
       "devDependencies": {

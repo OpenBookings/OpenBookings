@@ -77,6 +77,34 @@ export function buildAccountTypeHooks(
   };
 }
 
+/**
+ * Headers Better Auth reads, in order, to resolve the client IP used for rate
+ * limiting and session tracking. The first header that is present AND parses
+ * to a single trustworthy address wins.
+ *
+ * `cf-connecting-ip` is a single address written by Cloudflare, so it resolves
+ * without `advanced.ipAddress.trustedProxies`. The `x-forwarded-for` chain
+ * behind Cloudflare -> Scaleway has 2+ hops, and Better Auth refuses to
+ * resolve a multi-hop chain because its leftmost token is client-spoofable —
+ * which is why IP resolution returned null and every request collapsed into
+ * one shared per-path rate-limit bucket.
+ *
+ * `x-forwarded-for` is kept as a fallback so moving back to a platform whose
+ * load balancer sets XFF but not `cf-connecting-ip` (e.g. a GCP LB in front of
+ * Cloud Run) degrades to single-hop parsing instead of silently regressing to
+ * the shared bucket.
+ *
+ * NOTE: this only tells Better Auth which header to believe; it does not make
+ * the header trustworthy. It is sound only while the origin cannot be reached
+ * except through Cloudflare. If the container URL is publicly reachable, any
+ * client can set `cf-connecting-ip` per request and choose its own rate-limit
+ * bucket, which is worse than no resolution at all.
+ */
+export const IP_ADDRESS_HEADERS: string[] = [
+  "cf-connecting-ip",
+  "x-forwarded-for",
+];
+
 export function createAuth(config: AuthServerConfig) {
   const pool = new Pool({ connectionString: config.databaseUrl });
 
@@ -97,6 +125,11 @@ export function createAuth(config: AuthServerConfig) {
       cookieCache: {
         enabled: true,
         maxAge: 5 * 60,
+      },
+    },
+    advanced: {
+      ipAddress: {
+        ipAddressHeaders: IP_ADDRESS_HEADERS,
       },
     },
     databaseHooks: config.accountType
