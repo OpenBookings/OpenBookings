@@ -25,6 +25,20 @@ function dedupeAndSort(prev: ThreadMessage[], incoming: ThreadMessage[]): Thread
 }
 
 /**
+ * Ids reach us as opaque strings from the server, but they still end up as
+ * path segments here — encode them so an id carrying `/`, `?` or `..` can
+ * only ever address the endpoint we mean, never a different one.
+ */
+function threadMessagesUrl(threadId: string, since?: string): string {
+  const base = `/api/threads/${encodeURIComponent(threadId)}/messages`;
+  return since ? `${base}?since=${encodeURIComponent(since)}` : base;
+}
+
+function markReadUrl(messageId: string): string {
+  return `/api/messages/${encodeURIComponent(messageId)}/read`;
+}
+
+/**
  * Full client-side state machine for one open thread, shared by the host
  * dashboard (apps/business) and the guest inbox (apps/web): initial page
  * load, live updates over a WebSocket to the user's Durable Object with
@@ -54,7 +68,7 @@ export function useThreadMessages({
     let cancelled = false;
     setLoading(true);
     setMessages([]);
-    fetch(`/api/threads/${threadId}/messages`)
+    fetch(threadMessagesUrl(threadId))
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled) setMessages(data.messages ?? []);
@@ -95,9 +109,7 @@ export function useThreadMessages({
       if (pollId) return;
       pollId = setInterval(() => {
         const since = messagesRef.current.at(-1)?.id;
-        const url = since
-          ? `/api/threads/${threadId}/messages?since=${since}`
-          : `/api/threads/${threadId}/messages`;
+        const url = threadMessagesUrl(threadId, since);
         fetch(url)
           .then((res) => res.json())
           .then((data) => {
@@ -169,7 +181,7 @@ export function useThreadMessages({
     );
     if (unread.length === 0) return;
     unread.forEach((m) => {
-      fetch(`/api/messages/${m.id}/read`, { method: "PATCH" })
+      fetch(markReadUrl(m.id), { method: "PATCH" })
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!data?.message) return;
@@ -187,7 +199,7 @@ export function useThreadMessages({
       setSending(true);
       setWarning(null);
       try {
-        const res = await fetch(`/api/threads/${threadId}/messages`, {
+        const res = await fetch(threadMessagesUrl(threadId), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ body: trimmed }),

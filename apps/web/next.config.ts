@@ -13,9 +13,14 @@ const STRIPE_FRAME_SRC =
 const STRIPE_CONNECT_SRC = "https://api.stripe.com https://link.com https://*.link.com";
 const STRIPE_IMG_SRC = "https://*.stripe.com https://*.link.com";
 
+// `eval` is only needed by the dev-time React Refresh runtime; a production
+// bundle never evaluates strings, so the allowance never ships.
+const isDev = process.env.NODE_ENV !== "production";
+const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval'" : "";
+
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC};
+  script-src 'self' 'unsafe-inline'${DEV_SCRIPT_SRC} https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC};
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co https://eu-assets.i.posthog.com;
   img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
   font-src 'self' https://fonts.gstatic.com;
@@ -57,7 +62,15 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Strict-Transport-Security", value: "max-age=86400" },
+          // Two years, applied to every openbookings.co subdomain. Add
+          // `; preload` and submit at hstspreload.org once that is a
+          // commitment we want to make — it is hard to walk back.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Content-Security-Policy",
             value: ContentSecurityPolicy,

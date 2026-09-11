@@ -283,7 +283,7 @@ export async function executeTool(
   try {
     return { ok: true, result: await def.execute(parsed.data as never, ctx) };
   } catch (err) {
-    console.error(`Tool ${name} failed`, err);
+    console.error("Tool %s failed", name, err);
     trace("tools", `${name} threw`, { err: String(err) });
     return { ok: false, error: `Tool ${name} failed to execute. Do not retry more than once; escalate if this blocks you.` };
   }
