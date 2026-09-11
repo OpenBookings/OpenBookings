@@ -29,7 +29,8 @@ export default function Layout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
     >
       <body className="flex flex-col min-h-screen">
-        <RootProvider>{children}</RootProvider>
+        {/* Search lives at /_search so the whole /api namespace is free for the API docs area. */}
+        <RootProvider search={{ options: { api: '/_search' } }}>{children}</RootProvider>
       </body>
     </html>
   );

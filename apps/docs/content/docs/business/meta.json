@@ -1,0 +1,19 @@
+{
+  "title": "Business",
+  "icon": "Building2",
+  "root": true,
+  "pagesIndex": "index",
+  "pages": [
+    "start-here",
+    "rooms-and-property",
+    "rates-and-availability",
+    "reservations",
+    "messages",
+    "reviews",
+    "getting-paid",
+    "analytics",
+    "somethings-not-right",
+    "account-and-access",
+    "look-it-up"
+  ]
+}
