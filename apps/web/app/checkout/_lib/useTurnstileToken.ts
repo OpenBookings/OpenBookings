@@ -91,6 +91,18 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return scriptPromise;
 }
 
+export type TurnstileOptions = {
+  /**
+   * Whether to render the widget at all.
+   *
+   * False while the gate is still waiting on sign-in. A token is only valid
+   * for a few minutes and is spent once at siteverify, so minting one before
+   * the guest has finished a magic-link round trip only produces a stale token
+   * — and a social sign-in reloads the page and discards it regardless.
+   */
+  enabled: boolean;
+};
+
 export type TurnstileState = {
   /** A fresh, unspent token, or null while one is being minted. */
   token: string | null;
@@ -102,13 +114,14 @@ export type TurnstileState = {
   reset: () => void;
 };
 
-export function useTurnstileToken(): TurnstileState {
+export function useTurnstileToken({ enabled }: TurnstileOptions): TurnstileState {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
 
     loadTurnstile()
@@ -124,6 +137,16 @@ export function useTurnstileToken(): TurnstileState {
           // is rejected server-side even though the challenge was solved.
           action: TURNSTILE_ACTION,
           theme: 'dark',
+          // Render nothing unless a human actually has to do something.
+          //
+          // The managed widget solves silently for most visitors, but under
+          // the default `always` it still paints its ~300x65 branded box while
+          // doing so — a piece of Cloudflare chrome sitting in the middle of
+          // our layout for every guest, to report a result they never had to
+          // participate in. `interaction-only` keeps the callback firing on a
+          // silent solve and only draws the box when there is a challenge to
+          // click, so the gate reserves space for it but usually shows none.
+          appearance: 'interaction-only',
           callback: (issued: string) => {
             if (!active) return;
             setFailed(false);
@@ -157,7 +180,7 @@ export function useTurnstileToken(): TurnstileState {
       widgetIdRef.current = null;
       if (id) window.turnstile?.remove(id);
     };
-  }, []);
+  }, [enabled]);
 
   const reset = useCallback(() => {
     setToken(null);

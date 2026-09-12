@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
+import { headers } from 'next/headers';
 import { stripe } from '@openbookings/stripe';
+import { auth } from '@/lib/auth';
 import {
   BookingNotFoundError,
   getBookingSummary,
@@ -170,11 +172,22 @@ function failure(code: CheckoutErrorCode, status: number): Response {
 }
 
 export async function POST(request: Request) {
-  // Turnstile gate. This runs before anything else: creating a Checkout
-  // Session is a write against Stripe's API, and this endpoint is
-  // unauthenticated, so an unverified caller must not reach it at all.
-  // Everything below this block is unchanged — the gate does not replace the
-  // handler, it only decides whether the handler runs.
+  // Two gates, both before anything else happens: creating a Checkout Session
+  // is a write against Stripe's API, so a caller who is neither signed in nor
+  // verified must not reach the handler at all.
+  //
+  // Auth first, and it is deliberately checked here rather than trusted from
+  // the page. The gate in the browser is what the guest experiences, but it is
+  // UI — the session cookie read on this side is the only thing that actually
+  // decides. A request forged straight at this route skips the gate entirely
+  // and still has to get past this line.
+  const authSession = await auth.api
+    .getSession({ headers: await headers() })
+    .catch(() => null);
+  if (!authSession?.user?.email) {
+    return failure('auth_required', 401);
+  }
+
   const payload = (await request.json().catch(() => null)) as {
     'cf-turnstile-response'?: unknown;
   } | null;
@@ -205,6 +218,15 @@ export async function POST(request: Request) {
     session = await stripe.checkout.sessions.create({
       mode: 'payment',
       ui_mode: 'form',
+      // Prefills the contact block, and locks it: Stripe renders a
+      // `customer_email` as read-only. That is the behaviour we want. The
+      // booking is being attached to this account, so letting the guest type a
+      // different address into the payment form would produce a confirmation
+      // sent somewhere the account holder cannot see.
+      //
+      // This is the payoff for putting sign-in ahead of the Session rather
+      // than beside it — by the time we get here there is an address to send.
+      customer_email: authSession.user.email,
       line_items: booking.lines.map((line) => ({
         price_data: {
           currency: booking.currency,
@@ -248,8 +270,15 @@ export async function POST(request: Request) {
       metadata: {
         bookingIntentId: booking.intentId,
         roomId: booking.roomId,
-        // Guest name, email and phone arrive via `customer_details`, filled
-        // in by the embedded form and read back by the webhook.
+        // Who the booking belongs to. `customer_details` still carries the
+        // name, phone and billing address the guest types into the form, but
+        // that is whatever they typed — this is the account the webhook should
+        // attach the booking to.
+        //
+        // TODO: once booking intents are real rows, the intent should carry
+        // this and the webhook should read it from there. Metadata is the only
+        // place to put it while `getBookingSummary` is pinned to a seeded id.
+        userId: authSession.user.id,
         totalCents: String(total),
       },
       return_url: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
