@@ -11,6 +11,7 @@ import {
   STRIPE_JS_UNAVAILABLE,
   type CheckoutErrorCopy,
 } from '../_lib/errors';
+import { useTurnstileToken } from '../_lib/useTurnstileToken';
 import { CheckoutNotice } from './CheckoutNotice';
 import { PaymentCard } from './PaymentCard';
 import { PaymentCardBoundary } from './PaymentCardBoundary';
@@ -149,13 +150,18 @@ class SessionFailure extends Error {
 }
 
 async function createSession(
+  turnstileToken: string,
   signal: AbortSignal
 ): Promise<{ clientSecret: string; expiresAt: number | null }> {
   let response: Response;
   try {
     response = await fetch('/api/checkout', {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      // The route verifies this with Cloudflare before it touches Stripe. The
+      // field name is Turnstile's own, so the server reads it exactly as the
+      // canonical siteverify flow expects.
+      body: JSON.stringify({ 'cf-turnstile-response': turnstileToken }),
       signal,
     });
   } catch (err) {
@@ -214,13 +220,27 @@ function CheckoutSession({
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SessionState>({ status: 'loading' });
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  const {
+    token: turnstileToken,
+    failed: turnstileFailed,
+    containerRef: turnstileRef,
+    reset: resetTurnstile,
+  } = useTurnstileToken();
 
   const retry = useCallback(() => {
     setState({ status: 'loading' });
+    // The previous token was redeemed at siteverify and cannot be spent twice,
+    // so the retry needs a fresh one. Resetting clears it and re-runs the
+    // challenge; the effect below waits for the replacement.
+    resetTurnstile();
     setAttempt((n) => n + 1);
-  }, []);
+  }, [resetTurnstile]);
 
   useEffect(() => {
+    // No token yet — the challenge is still running. Not a failure; the effect
+    // re-runs as soon as one is issued.
+    if (!turnstileToken) return;
+
     // Aborting on cleanup keeps React's development double-mount from leaving
     // a second, orphaned Session holding the same room.
     const controller = new AbortController();
@@ -228,7 +248,7 @@ function CheckoutSession({
 
     // Stripe.js and the Session are independent, so a slow script does not
     // delay the request that puts the room on hold.
-    Promise.all([loadStripeOrFail(), createSession(controller.signal)])
+    Promise.all([loadStripeOrFail(), createSession(turnstileToken, controller.signal)])
       .then(([loaded, session]) => {
         if (!active) return;
         setStripe(loaded);
@@ -248,15 +268,58 @@ function CheckoutSession({
       active = false;
       controller.abort();
     };
-  }, [attempt]);
+  }, [attempt, turnstileToken]);
 
-  if (state.status === 'error') {
-    return <NoticeShell heroImageUrl={props.heroImageUrl} copy={state.copy} onRetry={retry} />;
+  // A blocked script or a failed challenge is terminal for this attempt: there
+  // is no token to send, so the Session is never requested. Derived rather than
+  // pushed into state from an effect — it is a fact about this render, and
+  // mirroring it into `state` would only add a cascading re-render.
+  const resolved: SessionState = turnstileFailed
+    ? { status: 'error', copy: checkoutErrorCopy('verification_failed') }
+    : state;
+
+  // Only while a token is actually being waited on. Once the Session exists the
+  // widget has done its job, and a token that later expires re-mints itself in
+  // the background — surfacing that would put a challenge in front of someone
+  // halfway through paying.
+  const awaitingChallenge = !turnstileToken && resolved.status !== 'ready';
+
+  // Mounted in every branch below, never conditionally: `resetTurnstile()`
+  // acts on a live widget, and unmounting the container on the error screen
+  // would leave the retry button with nothing to reset.
+  const challenge = (
+    <div
+      // Collapsed rather than unmounted or `display:none`, either of which
+      // would tear down the widget we still need for retries.
+      className={
+        awaitingChallenge
+          ? 'flex justify-center py-4'
+          : 'pointer-events-none h-0 overflow-hidden opacity-0'
+      }
+      aria-hidden={awaitingChallenge ? undefined : true}
+    >
+      <div ref={turnstileRef} />
+    </div>
+  );
+
+  if (resolved.status === 'error') {
+    return (
+      <>
+        {challenge}
+        <NoticeShell heroImageUrl={props.heroImageUrl} copy={resolved.copy} onRetry={retry} />
+      </>
+    );
   }
 
-  if (state.status === 'loading' || !stripe) {
+  if (resolved.status === 'loading' || !stripe) {
     return (
       <Shell heroImageUrl={props.heroImageUrl}>
+        {/*
+          Spans both columns so an interactive challenge is centred on the page
+          rather than tucked into the summary column. A managed widget usually
+          resolves without input and stays collapsed.
+        */}
+        <div className="lg:col-span-2">{challenge}</div>
         <div className="h-72 animate-pulse rounded-2xl bg-white/10" aria-hidden="true" />
         <div className="h-[32rem] animate-pulse rounded-3xl bg-white/20" aria-hidden="true" />
       </Shell>
@@ -267,14 +330,15 @@ function CheckoutSession({
     <CheckoutFormProvider
       // Keyed on the secret so a retry mounts a clean provider against the new
       // Session rather than reusing the one that failed.
-      key={state.clientSecret}
+      key={resolved.clientSecret}
       stripe={stripe}
-      options={{ clientSecret: state.clientSecret, appearance }}
+      options={{ clientSecret: resolved.clientSecret, appearance }}
     >
       <Shell heroImageUrl={props.heroImageUrl}>
+        {challenge}
         <TripSummary {...props} />
         <PaymentCardBoundary onRestart={retry}>
-          <PaymentCard expiresAt={state.expiresAt} onRestart={retry} />
+          <PaymentCard expiresAt={resolved.expiresAt} onRestart={retry} />
         </PaymentCardBoundary>
       </Shell>
     </CheckoutFormProvider>

@@ -11,6 +11,8 @@ import {
   classifyStripeError,
   type CheckoutErrorCode,
 } from '@/app/checkout/_lib/errors';
+import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
+import { getClientIP } from '@/lib/rateLimit';
 
 /**
  * Creates the Checkout Session backing the embedded checkout page.
@@ -167,7 +169,24 @@ function failure(code: CheckoutErrorCode, status: number): Response {
   );
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  // Turnstile gate. This runs before anything else: creating a Checkout
+  // Session is a write against Stripe's API, and this endpoint is
+  // unauthenticated, so an unverified caller must not reach it at all.
+  // Everything below this block is unchanged — the gate does not replace the
+  // handler, it only decides whether the handler runs.
+  const payload = (await request.json().catch(() => null)) as {
+    'cf-turnstile-response'?: unknown;
+  } | null;
+
+  const verified = await verifyTurnstileToken(
+    payload?.['cf-turnstile-response'],
+    getClientIP(request)
+  );
+  if (!verified) {
+    return failure('verification_failed', 403);
+  }
+
   // Declared outside the try only so the catch can name the booking in Sentry;
   // the read itself is inside it, because a booking that cannot be loaded is a
   // checkout failure like any other rather than an unhandled 500.
