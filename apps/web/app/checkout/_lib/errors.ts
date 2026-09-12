@@ -26,7 +26,9 @@ export type CheckoutErrorCode =
   /** We could not reach Stripe at all, or the browser could not reach us. */
   | 'stripe_unreachable'
   /** Stripe is rate limiting us. Worth retrying, but not immediately. */
-  | 'rate_limited';
+  | 'rate_limited'
+  /** The Turnstile check did not pass, so the Session was never requested. */
+  | 'verification_failed';
 
 export type CheckoutErrorCopy = {
   message: string;
@@ -56,6 +58,14 @@ const CHECKOUT_ERRORS: Record<CheckoutErrorCode, CheckoutErrorCopy> = {
   },
   rate_limited: {
     message: 'Our payment provider is busy. Wait a few seconds and try again.',
+    retryable: true,
+  },
+  verification_failed: {
+    // Deliberately vague about which check failed. A guest who genuinely
+    // tripped it needs a retry, not a diagnosis, and naming the reason would
+    // tell someone automating against this endpoint what to change.
+    message:
+      "We couldn't confirm you're not a bot. Nothing has been charged — please try again.",
     retryable: true,
   },
 };

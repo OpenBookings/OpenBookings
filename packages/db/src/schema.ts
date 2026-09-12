@@ -484,3 +484,32 @@ export const supportContextCache = pgTable("support_context_cache", {
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs
 // db.query instead of the select/execute APIs used so far.
+
+/**
+ * Per-host onboarding progress for apps/business: which steps are done, the
+ * data each step collected, and when the whole flow was completed.
+ *
+ * `user_id` is a Better Auth user id (text, FK to `"user"` with ON DELETE
+ * CASCADE — deleting an account takes its onboarding record with it) and is
+ * the primary key, which is what the `ON CONFLICT (user_id)` upserts in
+ * `apps/business/app/(onboarding)/onboarding/actions.ts` rely on.
+ *
+ * `step_data` is a merge target, never overwritten wholesale: each save does
+ * `step_data || $new::jsonb`, so unrelated keys survive. The Stripe connected
+ * account id lives under it as `step_data->>'stripe_account_id'` rather than
+ * in a column of its own — see STRIPE_SETUP.md.
+ *
+ * Declared here because it was previously only in the live database: nothing
+ * in this repo described it, so `drizzle-kit push` read it as a table to drop
+ * and a fresh environment came up without it at all.
+ */
+export const hostOnboarding = pgTable("host_onboarding", {
+  /** Better Auth user id. */
+  userId: text("user_id").primaryKey(),
+  /** Step keys (see DbStep) already completed, deduped and sorted on write. */
+  completedSteps: text("completed_steps").array().notNull().default([]),
+  /** Accumulated per-step payloads, merged key-by-key. */
+  stepData: jsonb("step_data").notNull().default({}),
+  /** NULL until the host clears the onboarding wall; the proxy gates on this. */
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+});

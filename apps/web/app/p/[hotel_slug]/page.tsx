@@ -45,7 +45,7 @@ function buildHeroQuery(slug: string) {
       ) pi
     ) AS gallery_images
   FROM properties p
-  WHERE p.slug = ${slug}
+  WHERE p.slug = ${slug} AND p.is_active
   LIMIT 1
 `;
 }
@@ -56,7 +56,7 @@ function buildAmenitiesQuery(slug: string) {
   FROM amenities a
   JOIN property_amenities pa ON pa.amenity_id = a.id
   JOIN properties p ON p.id = pa.property_id
-  WHERE p.slug = ${slug}
+  WHERE p.slug = ${slug} AND p.is_active
   ORDER BY a.category, a.sort_order, a.label
 `;
 }
@@ -97,7 +97,7 @@ function buildRoomsQuery(slug: string) {
     ) AS tags
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE p.slug = ${slug} AND r.is_active = true
+  WHERE p.slug = ${slug} AND p.is_active AND r.is_active = true
   ORDER BY r.name
 `;
 }

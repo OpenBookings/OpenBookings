@@ -67,18 +67,35 @@ export function checkRateLimit(
 }
 
 /**
- * Get client IP from request headers
+ * Client IP for rate-limit bucketing.
+ *
+ * Order matters, and matches IP_ADDRESS_HEADERS in packages/auth/src/server.ts
+ * for the same reason: `cf-connecting-ip` is a single address written by
+ * Cloudflare and overwritten on every request, whereas the leftmost token of
+ * `x-forwarded-for` is whatever the client sent. Reading XFF first let any
+ * caller pick its own bucket — and therefore mint unlimited magic links for an
+ * address — by rotating one header.
+ *
+ * This is only sound while the origin cannot be reached except through
+ * Cloudflare. If the container URL is publicly reachable, a client can set
+ * `cf-connecting-ip` itself and the IP limit is decorative; the per-email
+ * limit above it is the one that still bites.
  */
 export function getClientIP(request: Request): string {
-  // Check various headers for the real IP
+  const cloudflare = request.headers.get("cf-connecting-ip")?.trim()
+  if (cloudflare) {
+    return cloudflare
+  }
+
+  const realIP = request.headers.get("x-real-ip")?.trim()
+  if (realIP) {
+    return realIP
+  }
+
+  // Spoofable, so last: better a shared bucket than an attacker-chosen one.
   const forwarded = request.headers.get("x-forwarded-for")
   if (forwarded) {
     return forwarded.split(",")[0].trim()
-  }
-
-  const realIP = request.headers.get("x-real-ip")
-  if (realIP) {
-    return realIP
   }
 
   // Fallback (won't work in serverless, but useful for local dev)

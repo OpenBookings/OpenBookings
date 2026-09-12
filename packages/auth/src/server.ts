@@ -105,8 +105,36 @@ export const IP_ADDRESS_HEADERS: string[] = [
   "x-forwarded-for",
 ];
 
+/**
+ * Better Auth's pool, separate from the one in @openbookings/db because Better
+ * Auth wants to own its own client. That means each app process holds two
+ * pools against the same database, so this one is capped and timed out the
+ * same way — see packages/db/src/index.ts for the connection arithmetic.
+ */
+function createAuthPool(connectionString: string): Pool {
+  const pool = new Pool({
+    connectionString,
+    max: Number(process.env.AUTH_PGPOOL_MAX) || 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 15_000,
+    idle_in_transaction_session_timeout: Number(process.env.PG_IDLE_TX_TIMEOUT_MS) || 15_000,
+    application_name: "openbookings-auth",
+  });
+
+  // Without this listener, an idle client dropped by the server (Neon
+  // scale-to-zero, a failover) emits 'error' on an EventEmitter that has no
+  // handler, which Node escalates to an uncaught exception and the process
+  // dies. Signing in is not worth a restart loop.
+  pool.on("error", (err) => {
+    console.error("[auth] idle client error (connection discarded):", err);
+  });
+
+  return pool;
+}
+
 export function createAuth(config: AuthServerConfig) {
-  const pool = new Pool({ connectionString: config.databaseUrl });
+  const pool = createAuthPool(config.databaseUrl);
 
   return betterAuth({
     baseURL: config.baseURL,
