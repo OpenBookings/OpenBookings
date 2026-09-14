@@ -70,7 +70,7 @@ Graph calls; the profile-photo fetch is disabled).
   email-shaped claim cannot sign up — by design, since magic-link recovery
   and the one-email-one-account invariant need a routable address.
 - **Tenant id**: the `tid` claim is stamped onto `account.tenant_id`
-  (migration `0008_microsoft_tenant.sql`) for org auto-join later.
+  (migration `0010_microsoft_tenant.sql`) for org auto-join later.
 - **Admin consent** (for support): many M365 tenants block user consent to
   third-party apps. A tenant admin can pre-approve us by visiting:
 
@@ -156,7 +156,7 @@ payout-destination endpoint must refuse changes for
 
 ## Production rollout order (PR "auth boundary")
 
-1. Apply `packages/db/drizzle/0007_auth_boundary.sql` by hand (adds
+1. Apply `packages/db/drizzle/0009_auth_boundary.sql` by hand (adds
    `session.portal` + backfill). Must land **before** the deploy — sessions
    write `portal` on creation from then on.
 2. Set `AUTH_COOKIE_PREFIX` (and optionally `AUTH_BASE_URL`) on both Cloud

@@ -1,4 +1,4 @@
--- 0009_org_iam — admin plugin columns, property scoping, audit log.
+-- 0011_org_iam — admin plugin columns, property scoping, audit log.
 --
 -- Apply BY HAND (psql or the Neon SQL editor), BEFORE deploying the code
 -- that writes these. This repo has no drizzle journal; every statement is

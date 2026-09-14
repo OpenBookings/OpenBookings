@@ -1,4 +1,4 @@
--- 0010_passkeys_stepup — passkey + two-factor tables and the step-up clock.
+-- 0012_passkeys_stepup — passkey + two-factor tables and the step-up clock.
 --
 -- Apply BY HAND (psql or the Neon SQL editor), BEFORE deploying the code
 -- that writes these. This repo has no drizzle journal; every statement is

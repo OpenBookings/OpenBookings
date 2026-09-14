@@ -1,4 +1,4 @@
--- 0011_org_backfill — one org per existing host (task 11 transition).
+-- 0013_org_backfill — one org per existing host (task 11 transition).
 --
 -- Apply BY HAND (psql or the Neon SQL editor), AFTER 0009. Idempotent:
 -- hosts who already own an org are skipped, so re-running is a no-op and

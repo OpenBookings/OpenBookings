@@ -1,4 +1,4 @@
--- 0007_auth_boundary — portal stamp on the Better Auth session table.
+-- 0009_auth_boundary — portal stamp on the Better Auth session table.
 --
 -- Apply BY HAND (psql or the Neon SQL editor), BEFORE deploying the code
 -- that writes it: better-auth's session additionalFields insert the column
