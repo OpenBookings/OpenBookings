@@ -1,0 +1,9 @@
+{
+  "title": "Reservations",
+  "pages": [
+    "finding-a-booking",
+    "reading-a-booking",
+    "booking-statuses",
+    "cancellations-and-no-shows"
+  ]
+}

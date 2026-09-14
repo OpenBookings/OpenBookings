@@ -30,7 +30,7 @@ export const templates: Record<string, string> = {
             <!-- Header -->
             <tr>
               <td class="ob-header" align="center" style="padding:28px 40px 8px;">
-                <img class="ob-logo" src="https://cdn.openbookings.co/Openbookings-logo-v2.png" alt="OpenBookings" style="display:block;max-width:116px;width:100%;height:auto;" />
+                <img class="ob-logo" src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png" alt="OpenBookings" style="display:block;max-width:116px;width:100%;height:auto;" />
               </td>
             </tr>
 

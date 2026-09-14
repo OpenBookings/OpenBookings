@@ -18,7 +18,7 @@ export function AuthLoadingScreen({ visible = true }: Props) {
       }}
     >
       <img
-        src="https://cdn.openbookings.co/Openbookings-logo-v2.png"
+        src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
         alt="OpenBookings"
         draggable="false"
         className="h-16 sm:h-20 w-auto select-none pointer-events-none animate-pulse"

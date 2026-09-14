@@ -77,11 +77,14 @@ export const properties = pgTable(
     addressLine1: varchar("address_line_1", { length: 255 }).notNull(),
     addressLine2: varchar("address_line_2", { length: 255 }),
     city: varchar("city", { length: 100 }).notNull(),
+    postalCode: varchar("postal_code", { length: 20 }),
     country: char("country", { length: 2 }).notNull(),
     timezone: varchar("timezone", { length: 50 }).notNull(),
     location: geographyPoint("location").notNull(),
     checkInTime: time("check_in_time").notNull(),
     checkOutTime: time("check_out_time").notNull(),
+    /** End of the arrival window. NULL = no stated cut-off. */
+    checkInUntil: time("check_in_until"),
     stripeAccountId: varchar("stripe_account_id", { length: 255 }).unique(),
     commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.035"),
     taxRate: numeric("tax_rate", { precision: 5, scale: 4 }).notNull().default("0.00"),
@@ -197,6 +200,78 @@ export const propertyAmenities = pgTable(
       .references(() => amenities.id, { onDelete: "cascade" }),
   },
   (table) => [primaryKey({ columns: [table.propertyId, table.amenityId] })],
+);
+
+export const cotPolicyEnum = pgEnum("cot_policy", ["free", "paid", "unavailable"]);
+
+/**
+ * Guest-facing listing content, 1:1 with `properties`.
+ *
+ * One table rather than three (prose / policy / legal) because it is one
+ * screen's worth of content edited together, and it costs the public listing
+ * page a single LEFT JOIN. Every column is nullable: the row must be able to
+ * exist before the host has filled it in. Completeness is an application-layer
+ * rule (see the editor's completion.ts), not a database constraint.
+ */
+export const propertyContent = pgTable("property_content", {
+  propertyId: uuid("property_id")
+    .primaryKey()
+    .references(() => properties.id, { onDelete: "cascade" }),
+
+  // Prose
+  overviewHeadline: varchar("overview_headline", { length: 120 }),
+  overviewDescription: text("overview_description"),
+  locationAbout: text("location_about"),
+  ctaHeadline: varchar("cta_headline", { length: 120 }),
+  ctaBody: text("cta_body"),
+  finePrint: text("fine_print").array(),
+
+  // Policy facts. The arrival window itself lives on `properties`.
+  reception24h: boolean("reception_24h").notNull().default(false),
+  freeCancellationDays: integer("free_cancellation_days"),
+  prepaymentRequired: boolean("prepayment_required").notNull().default(false),
+  childrenWelcome: boolean("children_welcome").notNull().default(true),
+  minCheckInAge: integer("min_check_in_age"),
+  cotPolicy: cotPolicyEnum("cot_policy"),
+  /** Whole currency units, like rate_plans.bar. Read back as a string; convert explicitly. */
+  cotFee: bigint("cot_fee", { mode: "number" }),
+  extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+  petsAllowed: boolean("pets_allowed").notNull().default(false),
+  paymentMethods: text("payment_methods").array(),
+
+  // Legal / business details, shown in the guest-facing business details modal.
+  legalCompanyName: varchar("legal_company_name", { length: 255 }),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  companyRegistration: varchar("company_registration", { length: 100 }),
+  vatNumber: varchar("vat_number", { length: 100 }),
+
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * "Nearby" rows on the listing page's Location section.
+ *
+ * `distance` is a display string ("50 m", "1.2 km"), not a number: the host is
+ * describing walking distance loosely, and a numeric column invites a precision
+ * they do not have. `icon` is a lucide name from the curated set the editor
+ * offers, resolved by the same getIcon helper AmenitiesSection.tsx uses.
+ */
+export const propertyHighlights = pgTable(
+  "property_highlights",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 100 }).notNull(),
+    icon: varchar("icon", { length: 50 }).notNull(),
+    distance: varchar("distance", { length: 30 }).notNull(),
+    sortOrder: smallint("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("idx_property_highlights_property").on(table.propertyId, table.sortOrder),
+  ],
 );
 
 export const roomAmenities = pgTable(
@@ -484,3 +559,32 @@ export const supportContextCache = pgTable("support_context_cache", {
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs
 // db.query instead of the select/execute APIs used so far.
+
+/**
+ * Per-host onboarding progress for apps/business: which steps are done, the
+ * data each step collected, and when the whole flow was completed.
+ *
+ * `user_id` is a Better Auth user id (text, FK to `"user"` with ON DELETE
+ * CASCADE — deleting an account takes its onboarding record with it) and is
+ * the primary key, which is what the `ON CONFLICT (user_id)` upserts in
+ * `apps/business/app/(onboarding)/onboarding/actions.ts` rely on.
+ *
+ * `step_data` is a merge target, never overwritten wholesale: each save does
+ * `step_data || $new::jsonb`, so unrelated keys survive. The Stripe connected
+ * account id lives under it as `step_data->>'stripe_account_id'` rather than
+ * in a column of its own — see STRIPE_SETUP.md.
+ *
+ * Declared here because it was previously only in the live database: nothing
+ * in this repo described it, so `drizzle-kit push` read it as a table to drop
+ * and a fresh environment came up without it at all.
+ */
+export const hostOnboarding = pgTable("host_onboarding", {
+  /** Better Auth user id. */
+  userId: text("user_id").primaryKey(),
+  /** Step keys (see DbStep) already completed, deduped and sorted on write. */
+  completedSteps: text("completed_steps").array().notNull().default([]),
+  /** Accumulated per-step payloads, merged key-by-key. */
+  stepData: jsonb("step_data").notNull().default({}),
+  /** NULL until the host clears the onboarding wall; the proxy gates on this. */
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+});

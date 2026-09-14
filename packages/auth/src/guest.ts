@@ -1,11 +1,11 @@
 import { betterAuth } from "better-auth";
 import { magicLink } from "better-auth/plugins";
 import { dash } from "@better-auth/infra";
-import { Pool } from "pg";
 import {
   accountLinkingOptions,
   accountTypeHooksForPool,
-  advancedCookieConfig,
+  advancedConfig,
+  createAuthPool,
   magicLinkOptions,
   sharedSessionOptions,
   userAdditionalFields,
@@ -26,7 +26,7 @@ export type GuestAuthConfig = BaseAuthConfig & {
  * Apple, and are created with account_type 'private'.
  */
 export function createGuestAuth(config: GuestAuthConfig) {
-  const pool = new Pool({ connectionString: config.databaseUrl });
+  const pool = createAuthPool(config.databaseUrl);
   const secureCookies = config.baseURL.startsWith("https://");
 
   return betterAuth({
@@ -36,7 +36,7 @@ export function createGuestAuth(config: GuestAuthConfig) {
     user: { additionalFields: userAdditionalFields },
     session: sharedSessionOptions,
     account: accountLinkingOptions,
-    advanced: advancedCookieConfig(config.cookiePrefix, secureCookies),
+    advanced: advancedConfig(config.cookiePrefix, secureCookies),
     databaseHooks: accountTypeHooksForPool(pool, "private"),
     plugins: [
       magicLink(magicLinkOptions(config)),

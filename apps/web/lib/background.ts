@@ -6,7 +6,7 @@ type Background = {
 };
 // URL builder for background images
 const getBackgroundImageUrl = (image_path: string) => {
-  return `https://images.openbookings.co/${image_path}`;
+  return `https://cdn.openbookings.co/${image_path}`;
 };
 
 // Random background image picker

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginClient } from "./login-client";
@@ -27,11 +28,7 @@ export default async function LoginPage({
     if (session.user.account_type === "business") {
       // Already signed in — never show the login form. Only allow local paths
       // as redirect targets.
-      const target =
-        params.redirect?.startsWith("/") && !params.redirect.startsWith("//")
-          ? params.redirect
-          : "/onboarding";
-      redirect(target);
+      redirect(safeRedirectPath(params.redirect, "/onboarding"));
     }
     // Signed in with a non-business account: show the login form with an
     // explanation; the client signs the session out so they can retry.

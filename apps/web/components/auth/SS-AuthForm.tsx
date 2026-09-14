@@ -19,7 +19,7 @@ export function SS_AuthForm({
             <CardHeader className="text-center flex flex-col items-center">
                 {cardAction ? <CardAction>{cardAction}</CardAction> : null}
                 <CardTitle className="flex flex-col items-center">
-                    <img src="https://cdn.openbookings.co/Openbookings-logo-v2.png" alt="OpenBookings" className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none" draggable="false" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} />
+                    <img src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png" alt="OpenBookings" className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none" draggable="false" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} />
                     <div className="h-4"></div>
                     <AuthFormWelcomeTitle />
                 </CardTitle>

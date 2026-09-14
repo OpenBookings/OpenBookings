@@ -11,5 +11,7 @@ export function trace(scope: string, event: string, data?: Record<string, unknow
   if (!enabled) return;
   const ts = new Date().toISOString().slice(11, 23);
   const suffix = data && Object.keys(data).length > 0 ? ` ${JSON.stringify(data)}` : "";
-  console.log(`[${ts}] ${scope.padEnd(8)} ${event}${suffix}`);
+  // Literal format string — `suffix` is serialised tool/webhook data and
+  // must not be able to introduce its own specifiers.
+  console.log("[%s] %s %s%s", ts, scope.padEnd(8), event, suffix);
 }

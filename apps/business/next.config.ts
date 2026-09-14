@@ -2,15 +2,26 @@ import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
 
+// `eval` is only needed by the dev-time React Refresh runtime, and the
+// localhost origin only by the local guest app, so neither ships to
+// production.
+const isDev = process.env.NODE_ENV !== "production";
+const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval' http://localhost:3000" : "";
+
+// The R2 host in connect-src is wildcarded over its first label because the
+// S3 SDK signs virtual-hosted-style URLs, so browser uploads go to
+// `<bucket>.<account>.eu.r2.cloudflarestorage.com`, not to the bare R2_ENDPOINT
+// host. CSP matches hosts literally, and a blocked upload surfaces only as
+// `TypeError: Failed to fetch`. `bun scripts/check-storage.ts` asserts this.
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com http://localhost:3000;
+  script-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com${DEV_SCRIPT_SRC};
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://eu-assets.i.posthog.com;
-  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com https://storage.googleapis.com;
+  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
   font-src 'self' https://fonts.gstatic.com;
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://storage.googleapis.com wss://ob-durableobjects.w-vanderwal.workers.dev;
-  worker-src blob:;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
+  worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
@@ -46,7 +57,15 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Strict-Transport-Security", value: "max-age=86400" },
+          // Two years, applied to every openbookings.co subdomain. Add
+          // `; preload` and submit at hstspreload.org once that is a
+          // commitment we want to make — it is hard to walk back.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Content-Security-Policy", value: ContentSecurityPolicy },
         ],
       },

@@ -50,7 +50,7 @@ function buildHotelImageUrl(hotelId: string, image: string): string {
   }
 
   const normalizedImagePath = image.replace(/^\/+/, "");
-  return `https://images.openbookings.co/${hotelId}/${normalizedImagePath}`;
+  return `https://cdn.openbookings.co/${hotelId}/${normalizedImagePath}`;
 }
 
 function HotelCardHeroImage({

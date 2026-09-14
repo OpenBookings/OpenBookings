@@ -1,72 +1,325 @@
+import * as Sentry from '@sentry/nextjs';
+import { headers } from 'next/headers';
 import { stripe } from '@openbookings/stripe';
+import { auth } from '@/lib/auth';
+import {
+  BookingNotFoundError,
+  getBookingSummary,
+  totalCents,
+  type BookingSummary,
+} from '@/app/checkout/_lib/booking';
+import {
+  checkoutErrorCopy,
+  classifyStripeError,
+  type CheckoutErrorCode,
+} from '@/app/checkout/_lib/errors';
+import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
+import { getClientIP } from '@/lib/rateLimit';
 
-const STATIC_INTENT = {
-  id: 'intent_static_001',
-  roomId: 'room_static_001',
-  checkIn: new Date('2026-07-01'),
-  checkOut: new Date('2026-07-05'),
-  guestCount: 2,
-  heldUntil: null,
-  room: {
-    name: 'Deluxe Sea View',
-    property: {
-      name: "Hotel Côte d'Azur",
-      stripeAccountId: process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '',
-    },
-  },
+/**
+ * Creates the Checkout Session backing the embedded checkout page.
+ *
+ * `ui_mode: 'form'` returns a client secret instead of a hosted URL: the page
+ * mounts Stripe's embedded form against it and confirms client-side, so the
+ * page keeps its own surrounding layout while Stripe owns the fields, the
+ * validation and the pay button.
+ *
+ * Every priced row of the booking goes across as its own line item. The page
+ * renders the breakdown back out of the session rather than from local data,
+ * so the guest cannot be shown a split that differs from what is charged.
+ */
+
+/** Stripe rejects sessions expiring sooner than this or later than 24 hours. */
+const MIN_HOLD_MS = 30 * 60 * 1000;
+const MAX_HOLD_MS = 24 * 60 * 60 * 1000;
+/**
+ * Shaves the round trip off both ends. Without it a 30-minute hold computed
+ * here can reach Stripe at 29:59 and be rejected outright, which is a failure
+ * that only shows up under latency.
+ */
+const HOLD_MARGIN_MS = 60 * 1000;
+
+/**
+ * Smallest chargeable amount per currency, in minor units. Stripe rejects
+ * anything below it, so we catch it here where we can say something useful
+ * instead of surfacing "Amount must be at least €0.50".
+ */
+const MINIMUM_CHARGE: Record<string, number> = {
+  eur: 50,
+  gbp: 30,
+  usd: 50,
+  chf: 50,
+  sek: 300,
+  dkk: 250,
+  nok: 300,
 };
 
-const STATIC_PRICING = {
-  totalCents: 48000,
-  platformFeeCents: 2400,
-};
-
-function formatDateRange(checkIn: Date, checkOut: Date) {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  return `${fmt(checkIn)} – ${fmt(checkOut)}`;
+class CheckoutError extends Error {
+  constructor(
+    readonly code: CheckoutErrorCode,
+    message: string
+  ) {
+    super(message);
+    this.name = 'CheckoutError';
+  }
 }
 
-export async function POST(_req: Request) {
-  const intent = { ...STATIC_INTENT, heldUntil: new Date(Date.now() + 30 * 60 * 1000) };
-  const pricing = STATIC_PRICING;
+/**
+ * Rejects bookings Stripe would reject, before we ask it to.
+ *
+ * Everything here is a bug on our side rather than anything the guest did, so
+ * each case throws with the detail we want in Sentry and a code that maps to
+ * copy telling the guest not to keep retrying.
+ */
+function assertChargeable(summary: BookingSummary): number {
+  if (summary.lines.length === 0) {
+    throw new CheckoutError('booking_invalid', 'Booking has no priced lines');
+  }
+
+  for (const line of summary.lines) {
+    if (!Number.isInteger(line.unitAmountCents) || line.unitAmountCents < 0) {
+      throw new CheckoutError(
+        'booking_invalid',
+        `Line "${line.name}" has a non-integer or negative unit amount: ${line.unitAmountCents}`
+      );
+    }
+    if (!Number.isInteger(line.quantity) || line.quantity < 1) {
+      throw new CheckoutError(
+        'booking_invalid',
+        `Line "${line.name}" has an invalid quantity: ${line.quantity}`
+      );
+    }
+  }
+
+  const total = totalCents(summary.lines);
+  const minimum = MINIMUM_CHARGE[summary.currency.toLowerCase()] ?? 50;
+  if (total < minimum) {
+    throw new CheckoutError(
+      'booking_invalid',
+      `Total ${total} is below the ${summary.currency} minimum of ${minimum}`
+    );
+  }
+
+  // Only meaningful on a Connect booking: without a destination there is no
+  // fee to take, and Stripe rejects a fee that swallows the whole payment.
+  if (summary.stripeAccountId) {
+    if (!Number.isInteger(summary.platformFeeCents) || summary.platformFeeCents < 0) {
+      throw new CheckoutError(
+        'booking_invalid',
+        `Platform fee is not a non-negative integer: ${summary.platformFeeCents}`
+      );
+    }
+    if (summary.platformFeeCents >= total) {
+      throw new CheckoutError(
+        'booking_invalid',
+        `Platform fee ${summary.platformFeeCents} is not below the total ${total}`
+      );
+    }
+  }
+
+  return total;
+}
+
+/**
+ * Where Stripe sends the guest back to.
+ *
+ * The localhost fallback is a development convenience and nothing more —
+ * shipping it would redirect real guests to a machine that isn't theirs, so
+ * outside development a missing URL is a configuration failure.
+ */
+function resolveAppUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_WEB_URL?.trim();
+  if (configured) return configured.replace(/\/$/, '');
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new CheckoutError('config_error', 'NEXT_PUBLIC_WEB_URL is not set');
+  }
+  return 'http://localhost:3002';
+}
+
+/**
+ * An explicit payment method configuration for checkout, if one is set.
+ *
+ * These charges are made on the platform with no merchant of record, so it is
+ * the platform's own configuration set that decides what the guest is offered
+ * — the connected-account set, and the per-host child configurations under it,
+ * never come into play while hosts hold `transfers` alone.
+ *
+ * Left unset, Stripe uses the platform's default configuration, which is a
+ * perfectly good answer. This exists so the booking form can be pointed at a
+ * configuration of its own without a deploy. Test and live mode hold different
+ * `pmc_` objects, hence an environment variable rather than a constant.
+ */
+function resolvePaymentMethodConfiguration(): string | undefined {
+  return process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || undefined;
+}
+
+/** Clamped into Stripe's accepted window so a bad `holdMinutes` can't 400. */
+function resolveExpiry(holdMinutes: number): number {
+  const requested = Number.isFinite(holdMinutes) ? holdMinutes * 60 * 1000 : 0;
+  const clamped = Math.min(
+    Math.max(requested, MIN_HOLD_MS + HOLD_MARGIN_MS),
+    MAX_HOLD_MS - HOLD_MARGIN_MS
+  );
+  return Math.floor((Date.now() + clamped) / 1000);
+}
+
+function failure(code: CheckoutErrorCode, status: number): Response {
+  return Response.json(
+    { error: { code, message: checkoutErrorCopy(code).message } },
+    { status, headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
+export async function POST(request: Request) {
+  // Two gates, both before anything else happens: creating a Checkout Session
+  // is a write against Stripe's API, so a caller who is neither signed in nor
+  // verified must not reach the handler at all.
+  //
+  // Auth first, and it is deliberately checked here rather than trusted from
+  // the page. The gate in the browser is what the guest experiences, but it is
+  // UI — the session cookie read on this side is the only thing that actually
+  // decides. A request forged straight at this route skips the gate entirely
+  // and still has to get past this line.
+  const authSession = await auth.api
+    .getSession({ headers: await headers() })
+    .catch(() => null);
+  if (!authSession?.user?.email) {
+    return failure('auth_required', 401);
+  }
+
+  const payload = (await request.json().catch(() => null)) as {
+    'cf-turnstile-response'?: unknown;
+  } | null;
+
+  const verified = await verifyTurnstileToken(
+    payload?.['cf-turnstile-response'],
+    getClientIP(request)
+  );
+  if (!verified) {
+    return failure('verification_failed', 403);
+  }
+
+  // Declared outside the try only so the catch can name the booking in Sentry;
+  // the read itself is inside it, because a booking that cannot be loaded is a
+  // checkout failure like any other rather than an unhandled 500.
+  let summary: BookingSummary | null = null;
 
   let session;
   try {
+    // Bound to a const as well: the line-item map below is a closure, and TS
+    // will not keep a narrowing on the outer `let` across one.
+    const booking = (summary = await getBookingSummary());
+    const total = assertChargeable(booking);
+    const appUrl = resolveAppUrl();
+    const paymentMethodConfiguration = resolvePaymentMethodConfiguration();
+    const expiresAt = resolveExpiry(booking.holdMinutes);
+
     session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    line_items: [
-      {
+      mode: 'payment',
+      ui_mode: 'form',
+      // Prefills the contact block, and locks it: Stripe renders a
+      // `customer_email` as read-only. That is the behaviour we want. The
+      // booking is being attached to this account, so letting the guest type a
+      // different address into the payment form would produce a confirmation
+      // sent somewhere the account holder cannot see.
+      //
+      // This is the payoff for putting sign-in ahead of the Session rather
+      // than beside it — by the time we get here there is an address to send.
+      customer_email: authSession.user.email,
+      line_items: booking.lines.map((line) => ({
         price_data: {
-          currency: 'eur',
-          unit_amount: pricing.totalCents,
+          currency: booking.currency,
+          unit_amount: line.unitAmountCents,
           product_data: {
-            name: `${intent.room.property.name} — ${intent.room.name}`,
-            description: `${formatDateRange(intent.checkIn, intent.checkOut)} · ${intent.guestCount} guests`,
+            name: line.name,
+            description: `${booking.propertyName} — ${booking.roomName}`,
           },
         },
-        quantity: 1,
+        quantity: line.quantity,
+      })),
+      // Hosts need a number to reach the guest about arrival. Under
+      // `ui_mode: 'form'` Stripe renders and validates the field itself, which
+      // is why this no longer needs a hand-built input beside the Elements.
+      phone_number_collection: { enabled: true },
+      // Previously asked for by the Billing Address Element's own options,
+      // which the form does not read — it takes its fields from the Session
+      // instead. Without this the guest is charged without ever giving a name
+      // or an address, and the booking reaches the host anonymous.
+      //
+      // This covers the name too. `name_collection` would also add one, but to
+      // the contact block, leaving the guest looking at two "Full name" fields
+      // and no way to tell which one Stripe wanted.
+      billing_address_collection: 'required',
+      ...(paymentMethodConfiguration
+        ? { payment_method_configuration: paymentMethodConfiguration }
+        : {}),
+      payment_intent_data: booking.stripeAccountId
+        ? {
+            transfer_data: { destination: booking.stripeAccountId },
+            // No `on_behalf_of`. It would hand the host merchant-of-record
+            // status and with it their own payment method configuration, but
+            // Stripe refuses it for an account holding `transfers` without
+            // `card_payments` — and hosts here are deliberately payout-only.
+            // The refusal also lands at confirm time rather than on session
+            // creation, so the guest would fill in a card before seeing it.
+            // Platform fee temporarily disabled — restore with
+            // `application_fee_amount: booking.platformFeeCents` when needed.
+          }
+        : {},
+      metadata: {
+        bookingIntentId: booking.intentId,
+        roomId: booking.roomId,
+        // Who the booking belongs to. `customer_details` still carries the
+        // name, phone and billing address the guest types into the form, but
+        // that is whatever they typed — this is the account the webhook should
+        // attach the booking to.
+        //
+        // TODO: once booking intents are real rows, the intent should carry
+        // this and the webhook should read it from there. Metadata is the only
+        // place to put it while `getBookingSummary` is pinned to a seeded id.
+        userId: authSession.user.id,
+        totalCents: String(total),
       },
-    ],
-    payment_intent_data: intent.room.property.stripeAccountId
-      ? {
-          transfer_data: { destination: intent.room.property.stripeAccountId },
-          application_fee_amount: pricing.platformFeeCents,
-        }
-      : {},
-    metadata: {
-      bookingIntentId: intent.id,
-      roomId: intent.roomId,
-    },
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/booking/confirm?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/booking/${intent.id}/cancelled`,
-      expires_at: Math.floor(intent.heldUntil.getTime() / 1000),
+      return_url: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+      expires_at: expiresAt,
     });
+
+    // Typed as nullable, and a session without one is unusable client-side.
+    // Better to fail here than to hand the browser `null` and watch Stripe.js
+    // fail with something less traceable.
+    if (!session.client_secret) {
+      throw new CheckoutError('session_failed', `Session ${session.id} has no client_secret`);
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[checkout]', message);
-    return Response.json({ error: message }, { status: 500 });
+    const code =
+      err instanceof CheckoutError
+        ? err.code
+        : err instanceof BookingNotFoundError
+          ? 'booking_invalid'
+          : classifyStripeError(err);
+
+    // The full error only ever goes here. `config_error` and `booking_invalid`
+    // both mean the deployment is broken rather than the guest, so they are
+    // worth a louder level than a transient Stripe blip.
+    Sentry.captureException(err, {
+      level: code === 'config_error' || code === 'booking_invalid' ? 'fatal' : 'error',
+      tags: { area: 'checkout', checkoutErrorCode: code },
+      extra: { intentId: summary?.intentId, roomId: summary?.roomId },
+    });
+    console.error('[checkout]', code, err instanceof Error ? err.message : String(err));
+
+    return failure(code, code === 'rate_limited' ? 503 : 500);
   }
 
-  return Response.json({ checkoutUrl: session.url });
+  return Response.json(
+    {
+      clientSecret: session.client_secret,
+      // Drives the client-side hold countdown, so a guest who leaves the tab
+      // open is told the hold lapsed instead of being declined by Stripe.
+      expiresAt: session.expires_at,
+    },
+    // A cached client secret would hand a second guest someone else's session.
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
 }

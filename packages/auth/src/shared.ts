@@ -109,7 +109,7 @@ export function sessionForApp<
  * Full cookie names this instance sets, for middleware that needs to expire
  * them on an account-type mismatch. Mirrors better-auth's naming: in
  * production the four core cookies carry the browser-enforced __Host- prefix
- * (see `advancedCookieConfig`), in dev they are `${prefix}.${name}`.
+ * (see `advancedConfig`), in dev they are `${prefix}.${name}`.
  */
 export function sessionCookieNames(
   cookiePrefix: string,
@@ -122,7 +122,67 @@ export function sessionCookieNames(
 }
 
 /**
- * Cookie isolation between the guest and host apps.
+ * Headers Better Auth reads, in order, to resolve the client IP used for rate
+ * limiting and session tracking. The first header that is present AND parses
+ * to a single trustworthy address wins.
+ *
+ * `cf-connecting-ip` is a single address written by Cloudflare, so it resolves
+ * without `advanced.ipAddress.trustedProxies`. The `x-forwarded-for` chain
+ * behind Cloudflare -> Scaleway has 2+ hops, and Better Auth refuses to
+ * resolve a multi-hop chain because its leftmost token is client-spoofable —
+ * which is why IP resolution returned null and every request collapsed into
+ * one shared per-path rate-limit bucket.
+ *
+ * `x-forwarded-for` is kept as a fallback so moving back to a platform whose
+ * load balancer sets XFF but not `cf-connecting-ip` (e.g. a GCP LB in front of
+ * Cloud Run) degrades to single-hop parsing instead of silently regressing to
+ * the shared bucket.
+ *
+ * NOTE: this only tells Better Auth which header to believe; it does not make
+ * the header trustworthy. It is sound only while the origin cannot be reached
+ * except through Cloudflare. If the container URL is publicly reachable, any
+ * client can set `cf-connecting-ip` per request and choose its own rate-limit
+ * bucket, which is worse than no resolution at all.
+ */
+export const IP_ADDRESS_HEADERS: string[] = [
+  "cf-connecting-ip",
+  "x-forwarded-for",
+];
+
+/**
+ * Better Auth's pool, separate from the one in @openbookings/db because Better
+ * Auth wants to own its own client. That means each app process holds two
+ * pools against the same database, so this one is capped and timed out the
+ * same way — see packages/db/src/index.ts for the connection arithmetic.
+ *
+ * Both factories (guest and host) build their pool through here, so the two
+ * instances in a process share these limits rather than each opening an
+ * uncapped pool.
+ */
+export function createAuthPool(connectionString: string): Pool {
+  const pool = new Pool({
+    connectionString,
+    max: Number(process.env.AUTH_PGPOOL_MAX) || 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 15_000,
+    idle_in_transaction_session_timeout: Number(process.env.PG_IDLE_TX_TIMEOUT_MS) || 15_000,
+    application_name: "openbookings-auth",
+  });
+
+  // Without this listener, an idle client dropped by the server (Neon
+  // scale-to-zero, a failover) emits 'error' on an EventEmitter that has no
+  // handler, which Node escalates to an uncaught exception and the process
+  // dies. Signing in is not worth a restart loop.
+  pool.on("error", (err) => {
+    console.error("[auth] idle client error (connection discarded):", err);
+  });
+
+  return pool;
+}
+
+/**
+ * Cookie isolation between the guest and host apps, plus client-IP resolution.
  *
  * - Distinct `cookiePrefix` per instance, no default.
  * - `crossSubDomainCookies` disabled — a Domain=.openbookings.co cookie would
@@ -133,12 +193,16 @@ export function sessionCookieNames(
  *   automatic __Secure- prefix is turned off so names don't double-prefix;
  *   `defaultCookieAttributes.secure` keeps Secure on any non-core cookie a
  *   plugin creates (OAuth state etc.).
+ * - `ipAddress.ipAddressHeaders` tells Better Auth which header to believe for
+ *   the client IP (see IP_ADDRESS_HEADERS). Without it every request shares
+ *   one rate-limit bucket, so it must be set on BOTH instances, not just one.
  */
-export function advancedCookieConfig(cookiePrefix: string, secure: boolean) {
+export function advancedConfig(cookiePrefix: string, secure: boolean) {
   if (!secure) {
     return {
       cookiePrefix,
       crossSubDomainCookies: { enabled: false as const },
+      ipAddress: { ipAddressHeaders: IP_ADDRESS_HEADERS },
     };
   }
   const hostNamed = (name: string) => ({
@@ -148,6 +212,7 @@ export function advancedCookieConfig(cookiePrefix: string, secure: boolean) {
   return {
     cookiePrefix,
     crossSubDomainCookies: { enabled: false as const },
+    ipAddress: { ipAddressHeaders: IP_ADDRESS_HEADERS },
     useSecureCookies: false,
     defaultCookieAttributes: { secure: true },
     cookies: {

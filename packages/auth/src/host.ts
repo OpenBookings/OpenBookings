@@ -3,12 +3,12 @@ import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { passkey } from "@better-auth/passkey";
 import { dash } from "@better-auth/infra";
-import { Pool } from "pg";
 import { ac, roles } from "@openbookings/authz/permissions";
 import {
   accountLinkingOptions,
   accountTypeHooksForPool,
-  advancedCookieConfig,
+  advancedConfig,
+  createAuthPool,
   isStepUpFresh,
   magicLinkOptions,
   microsoftEmailFromProfile,
@@ -69,7 +69,7 @@ const STEP_UP_MESSAGE =
  * the passkey plugin has none; verified against plugin source).
  */
 export function createHostAuth(config: HostAuthConfig) {
-  const pool = new Pool({ connectionString: config.databaseUrl });
+  const pool = createAuthPool(config.databaseUrl);
   const secureCookies = config.baseURL.startsWith("https://");
   const baseHooks = accountTypeHooksForPool(pool, "business");
 
@@ -215,7 +215,7 @@ export function createHostAuth(config: HostAuthConfig) {
         },
       },
     },
-    advanced: advancedCookieConfig(config.cookiePrefix, secureCookies),
+    advanced: advancedConfig(config.cookiePrefix, secureCookies),
     databaseHooks: {
       ...baseHooks,
       session: {

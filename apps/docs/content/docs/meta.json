@@ -1,0 +1,8 @@
+{
+  "pages": [
+    "guest",
+    "business",
+    "api",
+    "self-hosted"
+  ]
+}

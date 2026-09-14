@@ -34,7 +34,7 @@
   --sidebar-accent-foreground: oklch(0.9848 0 0);
   --sidebar-border: oklch(0.2741 0.0055 286.0329);
   --sidebar-ring: oklch(0.7119 0.0129 286.0684);
-  --font-sans: Libre Franklin, ui-sans-serif, sans-serif, system-ui;
+  --font-sans: var(--font-libre-franklin), ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-gloock), serif;
   --font-mono: monospace;
   --radius: 0.5rem;

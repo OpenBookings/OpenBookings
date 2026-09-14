@@ -1,9 +1,5 @@
 import type { PoolClient } from "pg";
-import type {
-  CoreInfoTextData,
-  CoreInfoLocationData,
-  LegalNBoringData,
-} from "@/app/(onboarding)/onboarding/actions";
+import type { LegalNBoringData } from "@/app/(onboarding)/onboarding/actions";
 
 /**
  * Org provisioning (handoff task 9). One transactional function, called on
@@ -14,6 +10,12 @@ import type {
  * Rate-plan scaffolding is deliberately absent: rate_plans are room-scoped
  * (schema), and a draft property has no rooms yet. The default rate plan is
  * created with the first room instead.
+ *
+ * The host's property row is NOT created here. promoteOnboardingToProperty
+ * (app/(onboarding)/onboarding/promotion.ts) owns that — it handles slug
+ * collisions, country->timezone mapping, and seeds property_content, and is
+ * shared with the backfill script. completeOnboarding calls both inside one
+ * transaction and links the property to the org afterwards.
  */
 
 /** Slugs that can never become org slugs (route/subdomain collisions). */
@@ -41,15 +43,12 @@ export function slugifyOrgName(name: string): string {
 export type ProvisionInput = {
   userId: string;
   legal: LegalNBoringData;
-  coreText: CoreInfoTextData | undefined;
-  location: CoreInfoLocationData | undefined;
   stripeAccountId: string | null;
 };
 
 export type ProvisionResult = {
   organizationId: string;
   slug: string;
-  propertyId: string | null;
   alreadyProvisioned: boolean;
 };
 
@@ -78,7 +77,6 @@ export async function provisionOrganizationTx(
     return {
       organizationId: existing.rows[0].organizationId,
       slug: existing.rows[0].slug,
-      propertyId: null,
       alreadyProvisioned: true,
     };
   }
@@ -126,39 +124,7 @@ export async function provisionOrganizationTx(
     [organizationId, input.userId],
   );
 
-  // 4. Draft property from the onboarding core-info steps. Dual-written
-  // with owner_user_id while repositories still authorize on it (task 11).
-  let propertyId: string | null = null;
-  if (input.coreText && input.location) {
-    const [lng, lat] = input.location.coordinates ?? [0, 0];
-    const property = await client.query<{ id: string }>(
-      `INSERT INTO properties
-         (name, slug, subtitle, address_line_1, city, country, timezone,
-          location, check_in_time, check_out_time, stripe_account_id,
-          is_active, owner_user_id, organization_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7,
-               ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography,
-               '15:00', '11:00', $10, FALSE, $11, $12)
-       RETURNING id`,
-      [
-        input.coreText.displayName,
-        `${slug}-${Date.now().toString(36)}`,
-        input.coreText.tagline || null,
-        input.location.streetAddress,
-        input.location.city,
-        (input.location.country || "NL").slice(0, 2).toUpperCase(),
-        "Europe/Amsterdam",
-        lng,
-        lat,
-        input.stripeAccountId,
-        input.userId,
-        organizationId,
-      ],
-    );
-    propertyId = property.rows[0]!.id;
-  }
-
-  // 5. Host Agreement + DPA consent rows from the signed legal step.
+  // 4. Host Agreement + DPA consent rows from the signed legal step.
   for (const [docId, signature] of [
     ["partner-agreement", input.legal.partnerAgreement],
     ["dpa", input.legal.dpa],
@@ -181,18 +147,18 @@ export async function provisionOrganizationTx(
     );
   }
 
-  // 6. Audit event.
+  // 5. Audit event.
   await client.query(
     `INSERT INTO audit_log (action, actor_user_id, organization_id, detail)
      VALUES ('org.provisioned', $1, $2, $3)`,
     [
       input.userId,
       organizationId,
-      JSON.stringify({ slug, propertyId, stripeAccountId: input.stripeAccountId }),
+      JSON.stringify({ slug, stripeAccountId: input.stripeAccountId }),
     ],
   );
 
-  // 7. Point the user's live sessions at the new org so activeOrganizationId
+  // 6. Point the user's live sessions at the new org so activeOrganizationId
   // resolves immediately (task 11: org id comes from the session, never from
   // client input).
   await client.query(
@@ -200,5 +166,5 @@ export async function provisionOrganizationTx(
     [organizationId, input.userId],
   );
 
-  return { organizationId, slug, propertyId, alreadyProvisioned: false };
+  return { organizationId, slug, alreadyProvisioned: false };
 }

@@ -290,7 +290,7 @@ Always pair with `rounded-{lg|xl|2xl}` and a shadow. Never a hard opaque backgro
 
 White-alpha ladder — text `white`, `/90`, `/60`, `/50`, `/40`; borders `/20` (default), `/15` (dividers), `/10` (subtle separators).
 
-**Background imagery** (`apps/web/DESIGN.md` §Image & Media, and matched by `apps/business/app/(auth)/login/login-client.tsx:78–89`): served from `https://images.openbookings.co/{path}`, registered in `lib/backgrounds.json` (**byte-identical in both apps**), `bg-cover bg-center bg-no-repeat`, always overlaid with
+**Background imagery** (`apps/web/DESIGN.md` §Image & Media, and matched by `apps/business/app/(auth)/login/login-client.tsx:78–89`): served from `https://cdn.openbookings.co/{path}`, registered in `lib/backgrounds.json` (**byte-identical in both apps**), `bg-cover bg-center bg-no-repeat`, always overlaid with
 
 ```css
 linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0) 100%)

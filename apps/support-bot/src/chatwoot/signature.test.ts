@@ -1,8 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { SIGNATURE_TOLERANCE_SECONDS, verifyChatwootSignature } from "./signature";
 
-const SECRET = "test-webhook-secret";
+/**
+ * Generated per run rather than written inline: these are throwaway fixtures,
+ * and a literal key here is indistinguishable from a committed credential to
+ * anything scanning the repo.
+ */
+const SECRET = randomBytes(32).toString("hex");
+const WRONG_SECRET = randomBytes(32).toString("hex");
 const BODY = JSON.stringify({ event: "message_created", id: 42 });
 
 /** Fixed clock so timestamp-window assertions don't depend on wall time. */
@@ -45,7 +51,7 @@ describe("verifyChatwootSignature", () => {
   });
 
   it("rejects a signature made with the wrong secret", () => {
-    expect(verify(BODY, sign(BODY, TS, "wrong-secret"), TS)).toBe(false);
+    expect(verify(BODY, sign(BODY, TS, WRONG_SECRET), TS)).toBe(false);
   });
 
   it("rejects a tampered body", () => {
