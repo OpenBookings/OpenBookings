@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth"
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
 import { queryOne } from "@openbookings/db"
 import { getPostHogClient } from "@openbookings/analytics/server"
+import { resolveCallbackURL } from "@openbookings/auth/callback-url"
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"
 
 export async function POST(request: NextRequest) {
   let body: unknown
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
   }
 
-  const { email } = body as { email?: unknown }
+  const { email, callbackURL } = body as { email?: unknown; callbackURL?: unknown }
 
   if (!email || typeof email !== "string") {
     return NextResponse.json({ error: "Email is required" }, { status: 400 })
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
       headers: request.headers,
       body: {
         email: normalizedEmail,
-        callbackURL: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"}`,
+        callbackURL: resolveCallbackURL(callbackURL, APP_URL),
       },
     })
   } catch (err) {

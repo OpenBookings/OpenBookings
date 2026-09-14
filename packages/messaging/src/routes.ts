@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { query, queryOne } from "@openbookings/db";
 import { getThreadForParticipant, type SessionLike, type ThreadRow } from "@openbookings/authz";
 import { detectCircumvention } from "./circumvention";
@@ -37,9 +38,23 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
+/**
+ * Bearer check for the cron endpoints.
+ *
+ * `===` on strings short-circuits at the first differing byte, so how long the
+ * comparison takes leaks how many leading bytes of the secret the caller got
+ * right — recoverable one byte at a time by an attacker who can time enough
+ * requests. `timingSafeEqual` always reads both buffers to the end. It throws
+ * rather than returning false when the lengths differ, so length is checked
+ * separately; that leaks only the secret's length, which is not the part worth
+ * protecting.
+ */
 function bearerAuthorized(req: Request, secret: string | undefined): boolean {
   if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const presented = Buffer.from(req.headers.get("authorization") ?? "");
+  if (presented.length !== expected.length) return false;
+  return timingSafeEqual(presented, expected);
 }
 
 export function createMessagingRoutes(config: MessagingRoutesConfig) {

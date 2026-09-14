@@ -47,12 +47,17 @@ function dispatchInline(payload: ProcessConversationPayload): void {
         return;
       }
       const body = await res.text().catch(() => "");
+      // Format specifiers with the values as separate arguments: the response
+      // body is remote input and must never be read as the format string.
       console.error(
-        `[inline dispatch] ${url} -> ${res.status} ${body.slice(0, 200)}` +
-          (res.status === 403 ? " (set TASKS_AUTH_DISABLED=true)" : ""),
+        "[inline dispatch] %s -> %s %s%s",
+        url,
+        res.status,
+        body.slice(0, 200),
+        res.status === 403 ? " (set TASKS_AUTH_DISABLED=true)" : "",
       );
     })
-    .catch((err) => console.error(`[inline dispatch] ${url} failed:`, err));
+    .catch((err) => console.error("[inline dispatch] %s failed:", url, err));
 }
 
 export async function enqueueProcessConversation(payload: ProcessConversationPayload): Promise<void> {

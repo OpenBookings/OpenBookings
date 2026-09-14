@@ -26,7 +26,11 @@ export type CheckoutErrorCode =
   /** We could not reach Stripe at all, or the browser could not reach us. */
   | 'stripe_unreachable'
   /** Stripe is rate limiting us. Worth retrying, but not immediately. */
-  | 'rate_limited';
+  | 'rate_limited'
+  /** The Turnstile check did not pass, so the Session was never requested. */
+  | 'verification_failed'
+  /** Nobody is signed in, so there is no guest to attach the booking to. */
+  | 'auth_required';
 
 export type CheckoutErrorCopy = {
   message: string;
@@ -56,6 +60,22 @@ const CHECKOUT_ERRORS: Record<CheckoutErrorCode, CheckoutErrorCopy> = {
   },
   rate_limited: {
     message: 'Our payment provider is busy. Wait a few seconds and try again.',
+    retryable: true,
+  },
+  verification_failed: {
+    // Deliberately vague about which check failed. A guest who genuinely
+    // tripped it needs a retry, not a diagnosis, and naming the reason would
+    // tell someone automating against this endpoint what to change.
+    message:
+      "We couldn't confirm you're not a bot. Nothing has been charged — please try again.",
+    retryable: true,
+  },
+  auth_required: {
+    // The gate signs the guest in before it ever requests a Session, so the
+    // browser should never see this: reaching it means the cookie lapsed
+    // between the page render and the fetch. Retrying re-runs the gate, which
+    // is exactly the right recovery, hence retryable.
+    message: 'Your sign-in expired before we could start the payment. Nothing has been charged — please sign in again.',
     retryable: true,
   },
 };

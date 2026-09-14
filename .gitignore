@@ -55,3 +55,6 @@ ds-bundle
 # Graphify
 graphify-out
 .cursorrules
+
+# fumadocs generated content
+.source

@@ -4,14 +4,15 @@
   "private": true,
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./callback-url": "./src/callbackUrl.ts"
   },
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
     "@better-auth/infra": "^0.1.13",
-    "better-auth": "^1.6.23",
+    "better-auth": "1.6.25",
     "pg": "^8.22.0"
   },
   "devDependencies": {

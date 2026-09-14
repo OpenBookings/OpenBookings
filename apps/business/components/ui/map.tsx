@@ -1,6 +1,14 @@
 "use client";
 
-import MapLibreGL, { type PopupOptions, type MarkerOptions } from "maplibre-gl";
+// maplibre-gl v6 is ESM-only with no default export, and the style
+// specification types now live in their own package.
+import * as MapLibreGL from "maplibre-gl";
+import type { PopupOptions, MarkerOptions } from "maplibre-gl";
+import type {
+  LineLayerSpecification,
+  ProjectionSpecification,
+  StyleSpecification,
+} from "@maplibre/maplibre-gl-style-spec";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   createContext,
@@ -109,7 +117,7 @@ type MapViewport = {
   pitch: number;
 };
 
-type MapStyleOption = string | MapLibreGL.StyleSpecification;
+type MapStyleOption = string | StyleSpecification;
 
 type MapRef = MapLibreGL.Map;
 
@@ -128,7 +136,7 @@ type MapProps = {
     dark?: MapStyleOption;
   };
   /** Map projection type. Use `{ type: "globe" }` for 3D globe view. */
-  projection?: MapLibreGL.ProjectionSpecification;
+  projection?: ProjectionSpecification;
   /**
    * Controlled viewport. When provided with onViewportChange,
    * the map becomes controlled and viewport is driven by this prop.
@@ -1193,9 +1201,9 @@ type MapArcEvent<T extends MapArcDatum = MapArcDatum> = {
   originalEvent: MapLibreGL.MapMouseEvent;
 };
 
-type MapArcLinePaint = NonNullable<MapLibreGL.LineLayerSpecification["paint"]>;
+type MapArcLinePaint = NonNullable<LineLayerSpecification["paint"]>;
 type MapArcLineLayout = NonNullable<
-  MapLibreGL.LineLayerSpecification["layout"]
+  LineLayerSpecification["layout"]
 >;
 
 type MapArcProps<T extends MapArcDatum = MapArcDatum> = {

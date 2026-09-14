@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
     const result = await getDb().execute(buildHeroQuery(slug));
     row = (result.rows[0] as unknown as HotelPageData) ?? null;
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Database error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Logged, not returned — see the note in ../route.ts.
+    console.error("[property]", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Property is unavailable right now" }, { status: 500 });
   }
 
   if (!row) {

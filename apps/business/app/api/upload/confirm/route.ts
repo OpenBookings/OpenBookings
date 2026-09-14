@@ -7,6 +7,22 @@ import { randomUUID } from "crypto";
 
 const IMAGE_GROUPS = new Set(["hero-image", "logo", "gallery"]);
 
+/**
+ * The exact shape /api/upload/presign hands out: `uploads/<uuid><ext>` for one
+ * of the three image types it will sign for.
+ *
+ * `key` arrives from the browser, so possession of it is not evidence that
+ * this host uploaded it. Without this check the key is concatenated into a
+ * public object URL and stored as an image, which lets any authenticated host
+ * point a room or property of their own at any other object in the bucket —
+ * including another property's photos — and lets a crafted key ("../", a query
+ * string, a fragment) shape the stored URL into something other than a bucket
+ * object. Ownership of the *room* or *property* is checked below; this checks
+ * the *key*.
+ */
+const UPLOAD_KEY_RE =
+  /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i;
+
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: req.headers });
   if (!session) {
@@ -22,7 +38,7 @@ export async function POST(req: Request) {
 
   const { key, roomId, propertyId, group } = body;
 
-  if (typeof key !== "string" || !key) {
+  if (typeof key !== "string" || !UPLOAD_KEY_RE.test(key)) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
   }
 

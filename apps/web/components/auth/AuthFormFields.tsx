@@ -54,8 +54,22 @@ export function AuthFormWelcomeTitle() {
 
 export function AuthFormFields({
     onSignInSuccess,
+    callbackURL = "/",
 }: {
     onSignInSuccess?: () => void;
+    /**
+     * Where to land once sign-in completes.
+     *
+     * Both routes out of this form leave the page — the magic link opens from
+     * the guest's inbox and the social buttons redirect to the provider — so
+     * the caller cannot resume by staying mounted. A surface that needs the
+     * guest back where they started, like checkout, passes its own path here.
+     *
+     * Must be a site-relative path. The server re-validates it before putting
+     * it in an email, because a magic-link callback is an open redirect the
+     * moment it is allowed to point off-site.
+     */
+    callbackURL?: string;
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
@@ -96,7 +110,7 @@ export function AuthFormFields({
             const response = await fetch("/api/auth/login-link", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email, callbackURL }),
             });
 
             const data = await response.json();
@@ -123,7 +137,7 @@ export function AuthFormFields({
         try {
             const redirectPromise = authClient.signIn.social({
                 provider: "google",
-                callbackURL: "/",
+                callbackURL,
             });
             setSocialState({ provider: "google", failed: false });
             await redirectPromise;
@@ -144,7 +158,7 @@ export function AuthFormFields({
         try {
             const redirectPromise = authClient.signIn.social({
                 provider: "apple",
-                callbackURL: "/",
+                callbackURL,
             });
             setSocialState({ provider: "apple", failed: false });
             await redirectPromise;

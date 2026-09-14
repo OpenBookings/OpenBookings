@@ -1,0 +1,49 @@
+---
+title: Editing availability
+description: How to change the number of available rooms or override capacity.
+---
+
+*Last updated: 10 September 2026*
+
+## Overview
+
+Availability is how many rooms of a room type you have left to sell. By default, OpenBookings calculates this: **Total rooms** − **booked** − **blocked** = **available**.
+
+You use **Edit availability** on the grid toolbar to override this calculation or block rooms.
+
+## How to change availability
+
+1. Select **Edit availability** on the toolbar. Selecting a cell first and using the button in its panel fills in the room type and date for you.
+2. Choose the **Room type**. 
+3. Set the **From** and **To** dates. The change applies to every date in that range.
+4. Fill in whichever field you need:
+   - **Blocked units** — Rooms held back. Subtracted from the calculation.
+   - **Availability override** — An explicit number replacing the calculation completely. Leave empty to keep calculating.
+   - **Capacity override** — A different total room count for these dates. Leave empty to use the room type's normal total.
+5. Optionally add a **Note**. It is shown to whoever opens the cell later.
+6. Select **Apply to range**.
+
+## How to undo an override
+
+Open **Edit availability** for the same room type and dates, clear the **Availability override** field, and apply. The calculated number takes over again.
+
+## Limitations and warnings
+
+<Callout type="warn">
+  Every edit applies immediately to the whole date range you set. There is no preview and no undo. 
+</Callout>
+
+- Availability belongs to the room type, so a change here affects every rate plan on it. To stop just one rate plan selling, [set a restriction](/business/rates-and-availability/setting-restrictions) instead.
+- An availability override is frozen. It does not adjust as bookings come in — set availability to 5, take three bookings, and it still says 5. Use blocked units instead whenever you can.
+
+---
+
+**In this section:**
+- [Reading the grid](/business/rates-and-availability/reading-the-grid)
+- [Editing availability](/business/rates-and-availability/editing-availability)
+- [Managing rate plans](/business/rates-and-availability/managing-rate-plans)
+- [Setting restrictions](/business/rates-and-availability/setting-restrictions)
+- [Taking a room out of service](/business/rates-and-availability/taking-a-room-out-of-service)
+- [How pricing works](/business/rates-and-availability/how-pricing-works)
+- [Preparing for a busy period](/business/rates-and-availability/preparing-for-a-busy-period)
+- [Grid legend](/business/rates-and-availability/grid-legend)

@@ -12,17 +12,28 @@ const STRIPE_FRAME_SRC = "https://js.stripe.com https://*.js.stripe.com https://
 const STRIPE_CONNECT_SRC = "https://api.stripe.com https://link.com https://*.link.com";
 const STRIPE_IMG_SRC = "https://*.stripe.com https://*.link.com";
 
-const localDevSrc = "https://web.localhost:3002 https://business.localhost:3001";
+// Cloudflare Turnstile on the checkout page: api.js is a script, and the
+// challenge itself renders in an iframe from the same origin.
+// Source: https://developers.cloudflare.com/turnstile/reference/content-security-policy/
+const TURNSTILE_SRC = "https://challenges.cloudflare.com";
+
+// `eval` is only needed by the dev-time React Refresh runtime, and the sibling
+// localhost origins only by local development, so neither ships to production.
+const isDev = process.env.NODE_ENV !== "production";
+const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval'" : "";
+const localDevSrc = isDev
+  ? " https://web.localhost:3002 https://business.localhost:3001"
+  : "";
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC};
+  script-src 'self' 'unsafe-inline'${DEV_SCRIPT_SRC} https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC} ${TURNSTILE_SRC};
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co https://eu-assets.i.posthog.com;
   img-src 'self' data: blob: https://*.scw.cloud https://cdn.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC} ${localDevSrc};
+  connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC}${localDevSrc};
   worker-src 'self' blob:;
-  frame-src 'self' https://cdn-cookieyes.com https://*.posthog.com ${STRIPE_FRAME_SRC};
+  frame-src 'self' https://cdn-cookieyes.com https://*.posthog.com ${STRIPE_FRAME_SRC} ${TURNSTILE_SRC};
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
@@ -58,7 +69,15 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Strict-Transport-Security", value: "max-age=86400" },
+          // Two years, applied to every openbookings.co subdomain. Add
+          // `; preload` and submit at hstspreload.org once that is a
+          // commitment we want to make — it is hard to walk back.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Content-Security-Policy",
             value: ContentSecurityPolicy,

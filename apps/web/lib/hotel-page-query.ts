@@ -117,7 +117,7 @@ export function buildHeroQuery(slug: string) {
     ) AS gallery_images
   FROM properties p
   LEFT JOIN property_content c ON c.property_id = p.id
-  WHERE p.slug = ${slug}
+  WHERE p.slug = ${slug} AND p.is_active
   LIMIT 1
 `;
 }

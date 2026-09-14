@@ -149,7 +149,8 @@ candidate_rooms AS (
     ORDER BY created_at DESC
     LIMIT 1
   ) rp ON TRUE
-  WHERE u.adults   <= r.max_adults
+  WHERE p.is_active
+    AND u.adults   <= r.max_adults
     AND u.children <= r.max_children
     AND ST_DWithin(
       p.location::geography,
@@ -295,6 +296,12 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Database error"
 
+    // The detail goes to our own telemetry and logs. It does not go to the
+    // caller: a Postgres error text names tables, columns and constraints,
+    // which hands an unauthenticated client a free schema dump and turns a
+    // malformed-input probe into a discovery tool.
+    console.error("[search]", message)
+
     const posthog = getPostHogClient()
     posthog.capture({
       distinctId,
@@ -306,7 +313,7 @@ export async function GET(request: NextRequest) {
     })
     await posthog.shutdown()
 
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: "Search is unavailable right now" }, { status: 500 })
   }
 
   const posthog = getPostHogClient()
