@@ -8,6 +8,11 @@ import { withSentryConfig } from "@sentry/nextjs";
 const isDev = process.env.NODE_ENV !== "production";
 const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval' http://localhost:3000" : "";
 
+// The R2 host in connect-src is wildcarded over its first label because the
+// S3 SDK signs virtual-hosted-style URLs, so browser uploads go to
+// `<bucket>.<account>.eu.r2.cloudflarestorage.com`, not to the bare R2_ENDPOINT
+// host. CSP matches hosts literally, and a blocked upload surfaces only as
+// `TypeError: Failed to fetch`. `bun scripts/check-storage.ts` asserts this.
 const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com${DEV_SCRIPT_SRC};
@@ -15,7 +20,7 @@ const ContentSecurityPolicy = `
   img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
   font-src 'self' https://fonts.gstatic.com;
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
   worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';

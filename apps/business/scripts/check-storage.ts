@@ -55,6 +55,49 @@ const uploadUrl = await getSignedUrl(
 );
 console.log("✓ presigned PUT minted");
 
+// The browser applies our own CSP before the request ever leaves the page, so
+// this fails earlier than CORS and looks identical from JS: a bare
+// `TypeError: Failed to fetch` with no status. Worth asserting because the
+// host here is not the configured endpoint — the SDK signs virtual-hosted
+// style, so the bucket name becomes a subdomain.
+const { default: nextConfig } = await import("../next.config");
+const cspHeader = (await nextConfig.headers!())
+  .flatMap((h: { headers: { key: string; value: string }[] }) => h.headers)
+  .find((h: { key: string }) => h.key === "Content-Security-Policy");
+if (!cspHeader) {
+  console.error("✗ no Content-Security-Policy header in next.config.ts");
+  process.exit(1);
+}
+
+const directives = new Map(
+  cspHeader.value
+    .split(";")
+    .map((d: string) => d.trim().split(/\s+/))
+    .filter((parts: string[]) => parts[0])
+    .map((parts: string[]) => [parts[0], parts.slice(1)] as const),
+);
+const connectSrc = directives.get("connect-src") ?? directives.get("default-src") ?? [];
+
+// CSP host matching, not glob: a bare host must be equal, and `*.` matches one
+// or more leading labels but never the bare host itself.
+const uploadOrigin = new URL(uploadUrl).origin;
+const allowsUpload = connectSrc.some((source: string) => {
+  if (!source.includes("//")) return false;
+  const [scheme, host] = source.split("//");
+  const { protocol, host: target } = new URL(uploadOrigin);
+  if (scheme !== protocol) return false;
+  return host.startsWith("*.") ? target.endsWith(host.slice(1)) : host === target;
+});
+if (!allowsUpload) {
+  console.error(
+    `✗ CSP connect-src does not allow ${uploadOrigin} — browser uploads will fail\n` +
+      `  add it to ContentSecurityPolicy in apps/business/next.config.ts\n` +
+      `  note the bucket subdomain: a bare endpoint host does not cover it`,
+  );
+  process.exit(1);
+}
+console.log(`✓ CSP connect-src allows ${uploadOrigin}`);
+
 // The upload runs in the browser, so CORS decides whether it works at all —
 // and it is invisible to every other step here, because a server-side PUT
 // sends no Origin and is never preflighted. Reading the bucket's CORS config
