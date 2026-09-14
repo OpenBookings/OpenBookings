@@ -39,7 +39,7 @@ async function EditorContent({ searchParams }: PageProps) {
     <PropertyEditor
       data={data}
       amenities={amenities}
-      publicBaseUrl={process.env.NEXT_PUBLIC_WEB_URL ?? "https://openbookings.co"}
+      publicBaseUrl={process.env.NEXT_PUBLIC_WEB_URL || "https://openbookings.co"}
     />
   );
 }

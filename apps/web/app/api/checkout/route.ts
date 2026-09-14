@@ -128,11 +128,11 @@ function assertChargeable(summary: BookingSummary): number {
  * outside development a missing URL is a configuration failure.
  */
 function resolveAppUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const configured = process.env.NEXT_PUBLIC_WEB_URL?.trim();
   if (configured) return configured.replace(/\/$/, '');
 
   if (process.env.NODE_ENV === 'production') {
-    throw new CheckoutError('config_error', 'NEXT_PUBLIC_APP_URL is not set');
+    throw new CheckoutError('config_error', 'NEXT_PUBLIC_WEB_URL is not set');
   }
   return 'http://localhost:3002';
 }

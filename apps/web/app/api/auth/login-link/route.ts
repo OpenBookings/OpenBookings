@@ -5,7 +5,7 @@ import { queryOne } from "@openbookings/db"
 import { getPostHogClient } from "@openbookings/analytics/server"
 import { resolveCallbackURL } from "@openbookings/auth/callback-url"
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://openbookings.co"
+const APP_URL = process.env.NEXT_PUBLIC_WEB_URL || "https://openbookings.co"
 
 export async function POST(request: NextRequest) {
   let body: unknown

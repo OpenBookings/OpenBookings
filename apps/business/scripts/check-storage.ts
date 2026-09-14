@@ -21,7 +21,7 @@ const required = [
   "MEDIA_BASE_URL",
   // The origin the browser will actually send on the upload PUT, so the CORS
   // preflight below tests the real thing rather than a guess.
-  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_BUSINESS_URL",
 ];
 const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
@@ -61,7 +61,7 @@ console.log("✓ presigned PUT minted");
 // instead would not do: that needs an Admin token, so a scoped object token
 // gets AccessDenied and the check degrades to a shrug. Ask R2 the same
 // question the browser asks.
-const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL!).origin;
+const appOrigin = new URL(process.env.NEXT_PUBLIC_BUSINESS_URL!).origin;
 
 async function preflight(origin: string) {
   const res = await fetch(uploadUrl, {

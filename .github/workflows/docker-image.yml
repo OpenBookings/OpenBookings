@@ -69,8 +69,10 @@ jobs:
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.sha }}
           build-args: |
-            # App specific Args
-            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            # Both origins, under the same names the code reads. Every image
+            # gets both because the two apps link at each other.
+            NEXT_PUBLIC_WEB_URL=${{ vars.NEXT_PUBLIC_WEB_URL }}
+            NEXT_PUBLIC_BUSINESS_URL=${{ vars.NEXT_PUBLIC_BUSINESS_URL }}
 
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
@@ -100,9 +102,13 @@ jobs:
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.sha }}
           build-args: |
+            # Both origins, under the same names the code reads. Every image
+            # gets both because the two apps link at each other.
+            NEXT_PUBLIC_WEB_URL=${{ vars.NEXT_PUBLIC_WEB_URL }}
+            NEXT_PUBLIC_BUSINESS_URL=${{ vars.NEXT_PUBLIC_BUSINESS_URL }}
+
             # App specific Args
-            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_BUSINESS_APP_URL }}
-            NEXT_PUBLIC_REALTIME_WORKER_URL=${{ vars.NEXT_PUBLIC_BUSINESS_REALTIME_WORKER_URL}}
+            NEXT_PUBLIC_REALTIME_WORKER_URL=${{ vars.NEXT_PUBLIC_BUSINESS_REALTIME_WORKER_URL }}
 
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
@@ -111,7 +117,6 @@ jobs:
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
 
   build-docs:
     needs: detect

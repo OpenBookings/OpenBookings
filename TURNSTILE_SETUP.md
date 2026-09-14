@@ -62,8 +62,11 @@ secret must never pass through chat. Finish it yourself:
    (already covered by `.gitignore`).
 2. **Production.** Add the secret to the same store the other secrets use —
    Google Secret Manager, alongside `stripe-secret-key` — and surface it to the
-   `web` service the way `cloudbuild.yaml` surfaces the rest. Pipe it through
-   stdin rather than passing it as a command argument:
+   `web` service as a runtime env var the way the other secrets are. It is a
+   server-side secret, so it must never become a Docker build arg: the
+   `build-web` job in `.github/workflows/docker-image.yml` only passes
+   `NEXT_PUBLIC_*` values, which are baked into the client bundle. Pipe it
+   through stdin rather than passing it as a command argument:
 
    ```sh
    printf '%s' "$SECRET" | gcloud secrets create turnstile-secret --data-file=-

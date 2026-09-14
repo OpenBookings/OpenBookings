@@ -120,14 +120,15 @@ To receive real Chatwoot deliveries the webhook URL must be a public domain
 
 ## Deploy
 
-Cloud Run, via `apps/support-bot/Dockerfile` + `cloudbuild.support-bot.yaml`
-(same turbo-prune shape as web/business). Non-secret config is set with
-`--set-env-vars` from trigger substitutions; secrets come from Secret Manager
-via `--set-secrets`, so they never appear in build logs.
+The image is built and pushed by the `build-support` job in
+`.github/workflows/docker-image.yml`, from `apps/support-bot/Dockerfile` (same
+turbo-prune shape as web/business). Runtime config — both the non-secret env
+vars and the secrets — is set on the deployment target, not at build time, so
+secrets never appear in build logs.
 
 `SERVICE_BASE_URL` is both the Cloud Tasks target and the OIDC audience, so
 it must equal the service's own public URL. That URL does not exist until the
-first deploy — deploy once, then set the substitution and redeploy.
+first deploy — deploy once, then set the variable and redeploy.
 
 ```sh
 docker build -f apps/support-bot/Dockerfile -t support-bot .   # from repo root

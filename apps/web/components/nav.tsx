@@ -7,6 +7,11 @@ import { authClient } from "@/lib/auth-client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 
+// Inlined at build time, so a non-production web build links at the matching
+// business deployment rather than sending the visitor to production.
+const BUSINESS_URL =
+  process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co/";
+
 interface NavProps {
   authError: string | null;
   onDismissAuthError: () => void;
@@ -215,7 +220,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
             <div className="flex flex-col gap-2">
               <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Company</p>
               <a href="/company" className="text-sm text-white/65 hover:text-white transition-colors">Company Info</a>
-              <a href="https://business.openbookings.co/" className="text-sm text-white/65 hover:text-white transition-colors">List your property</a>
+              <a href={BUSINESS_URL} className="text-sm text-white/65 hover:text-white transition-colors">List your property</a>
             </div>
           </div>
         </div>

@@ -74,7 +74,7 @@ Session parameters:
 - `payment_intent_data.transfer_data.destination` — only when the booking has a
   connected account
 - `metadata` — `bookingIntentId`, `roomId`, `totalCents`
-- `return_url` — `${NEXT_PUBLIC_APP_URL}/checkout/return?session_id={CHECKOUT_SESSION_ID}`
+- `return_url` — `${NEXT_PUBLIC_WEB_URL}/checkout/return?session_id={CHECKOUT_SESSION_ID}`
 - `expires_at` — 30-minute room hold, clamped into Stripe's 30 min–24 h window
   with a 60 s margin on both ends
 
@@ -184,7 +184,7 @@ is listed in the required env but consumed inside `@openbookings/stripe`, not `e
 | `STRIPE_CONNECT_ACCOUNT_ID` | ✅ `acct_…` (seed fallback) | — | — |
 | `STRIPE_PAYMENT_METHOD_CONFIGURATION` | ✅ `pmc_…` | — | — |
 | `STRIPE_WEBHOOK_SECRET` | — | **referenced but not in `.env.local`** | — |
-| `NEXT_PUBLIC_APP_URL` | required in production (localhost:3002 fallback in dev) | — | — |
+| `NEXT_PUBLIC_WEB_URL` | required in production (localhost:3002 fallback in dev) | — | — |
 
 Everything is **test mode** today.
 

@@ -3,8 +3,8 @@ import { sendMagicLink } from "@/lib/mailing/magic-link";
 
 export const auth = createAuth({
   baseURL:
-    process.env.BETTER_AUTH_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_WEB_URL ||
     "https://openbookings.co",
   secret: process.env.BETTER_AUTH_SECRET!,
   databaseUrl: process.env.DATABASE_URL!,

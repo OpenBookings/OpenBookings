@@ -5,8 +5,8 @@ import { headers } from "next/headers";
 
 export const auth = createAuth({
   baseURL:
-    process.env.BETTER_AUTH_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_BUSINESS_URL ||
     "https://business.openbookings.co",
   secret: process.env.BETTER_AUTH_SECRET!,
   databaseUrl: process.env.DATABASE_URL!,
