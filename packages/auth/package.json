@@ -4,7 +4,8 @@
   "private": true,
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./callback-url": "./src/callbackUrl.ts"
   },
   "scripts": {
     "test": "bun test"
