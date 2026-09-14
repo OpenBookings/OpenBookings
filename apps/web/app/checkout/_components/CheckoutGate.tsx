@@ -192,7 +192,17 @@ export function CheckoutGate({
       {visible ? <Backdrop heroImageUrl={heroImageUrl} /> : null}
 
       <div className="flex min-h-full items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-black/40 p-8 shadow-2xl backdrop-blur-2xl">
+        {/*
+          `text-white` is the card's inherited foreground, not decoration on
+          the wrapper. `<body>` sets no colour, so the document default — black
+          — is what anything without its own reaches. Most of this card names
+          its colour, but the shared sign-in controls do not: `Input` and the
+          `outline` Button variant set a background and let the text inherit,
+          which is correct everywhere else because every other surface renders
+          them inside `<Card>` and that supplies `text-card-foreground`. This
+          card is hand-rolled glass, so it has to supply the same thing.
+        */}
+        <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-black/40 p-8 text-white shadow-2xl backdrop-blur-2xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
