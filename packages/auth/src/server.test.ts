@@ -288,6 +288,42 @@ describe("microsoftEmailFromProfile", () => {
     expect(microsoftEmailFromProfile({ upn: "PHONE#user" })).toBeUndefined();
     expect(microsoftEmailFromProfile({})).toBeUndefined();
   });
+
+  test("still accepts ordinary multi-label domains", () => {
+    for (const address of [
+      "first.last@sub.domain.example.com",
+      "user+tag@example.co.uk",
+      "a@b.c",
+    ]) {
+      expect(microsoftEmailFromProfile({ email: address })).toBe(address);
+    }
+  });
+
+  test("rejects consecutive dots in the domain", () => {
+    // Intentional tightening from the linear-regex rewrite: the old pattern
+    // matched this, but "b..c" is not a valid domain.
+    expect(microsoftEmailFromProfile({ email: "a@b..c" })).toBeUndefined();
+  });
+
+  test("rejects anything past the length cap", () => {
+    const local = "a".repeat(64);
+    const domain = "b".repeat(300) + ".com";
+    expect(`${local}@${domain}`.length).toBeGreaterThan(320);
+    expect(
+      microsoftEmailFromProfile({ email: `${local}@${domain}` }),
+    ).toBeUndefined();
+  });
+
+  test("a pathological claim does not stall the matcher", () => {
+    // Regression guard for the quadratic backtracking CodeQL flagged: the
+    // previous pattern took ~1.5s on a 64KB input of this shape. Both the
+    // length cap and the linear regex independently prevent that, so this
+    // asserts the outcome rather than either mechanism.
+    const evil = "a@" + "x.".repeat(64_000) + "@";
+    const started = performance.now();
+    expect(microsoftEmailFromProfile({ upn: evil })).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(50);
+  });
 });
 
 describe("stampMicrosoftTenantId", () => {
