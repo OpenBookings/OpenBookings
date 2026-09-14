@@ -128,7 +128,7 @@ export function DashboardSidebar({
               >
                 <a href="/dashboard">
                   <img
-                    src="https://images.openbookings.co/44ca5796-7461-488a-9613-be71394d4aaa/logo.svg"
+                    src="https://cdn.openbookings.co/44ca5796-7461-488a-9613-be71394d4aaa/logo.svg"
                     alt=""
                     className="pointer-events-none size-8 shrink-0 rounded-lg object-contain select-none"
                     draggable={false}

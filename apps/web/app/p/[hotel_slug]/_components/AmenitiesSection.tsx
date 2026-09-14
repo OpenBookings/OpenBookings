@@ -1,24 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X, Sparkles } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import * as Icons from "lucide-react";
+import { X } from "lucide-react";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import type { DbAmenityCategory } from "./constants";
 import { AMENITIES_PREVIEW, PILLS_PER_ROW } from "./constants";
-
-// Maps icon name strings stored in the DB to Lucide components.
-// Handles both PascalCase ("BedDouble") and kebab-case ("bed-double").
-function toPascalCase(s: string) {
-  return s.replace(/(^\w|-\w)/g, (m) => m.replace("-", "").toUpperCase());
-}
-
-function getIcon(name: string): LucideIcon {
-  const pascal = toPascalCase(name);
-  const icon = (Icons as Record<string, unknown>)[pascal] ?? (Icons as Record<string, unknown>)[name];
-  return (typeof icon === "function" ? icon : Sparkles) as LucideIcon;
-}
+import { getIcon } from "./icons";
 
 export function AmenitiesSection({
   hotelName,

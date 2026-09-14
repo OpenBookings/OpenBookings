@@ -46,30 +46,30 @@ export function BusinessDetailsButton({ hotel }: { hotel: HotelPageData }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 transition-[filter] duration-300 group-hover:blur-none blur-sm select-none group-hover:select-auto">
               <div className="flex flex-col gap-1">
                 <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Legal name</p>
-                <p className="text-sm text-white/80 font-medium">{hotel.name}</p>
+                <p className="text-sm text-white/80 font-medium">{hotel.legal_company_name ?? hotel.name}</p>
               </div>
               <div className="flex flex-col gap-1">
                 <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Address</p>
-                <p className="text-sm text-white/80">Via della Quiete 1</p>
-                <p className="text-sm text-white/80">57037 Portoferraio, Italy</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Email</p>
+                <p className="text-sm text-white/80">{hotel.address_line_1}</p>
                 <p className="text-sm text-white/80">
-                  reservations@{hotel.name.toLowerCase().replace(/\s+/g, "")}.com
+                  {[hotel.postal_code, hotel.city, hotel.country].filter(Boolean).join(" ")}
                 </p>
               </div>
               <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Email</p>
+                <p className="text-sm text-white/80">{hotel.contact_email}</p>
+              </div>
+              <div className="flex flex-col gap-1">
                 <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Phone</p>
-                <p className="text-sm text-white/80">+39 0565 944 111</p>
+                <p className="text-sm text-white/80">{hotel.contact_phone}</p>
               </div>
               <div className="flex flex-col gap-1">
                 <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Company registration</p>
-                <p className="text-sm text-white/80 font-mono tracking-wide">IT 03847210491</p>
+                <p className="text-sm text-white/80 font-mono tracking-wide">{hotel.company_registration}</p>
               </div>
               <div className="flex flex-col gap-1">
                 <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">VAT number</p>
-                <p className="text-sm text-white/80 font-mono tracking-wide">REA LI-92847</p>
+                <p className="text-sm text-white/80 font-mono tracking-wide">{hotel.vat_number}</p>
               </div>
             </div>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 group-hover:opacity-0">

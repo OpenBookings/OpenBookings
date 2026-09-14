@@ -10,7 +10,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.21.0",
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
     "@openbookings/authz": "workspace:*",
@@ -43,6 +44,7 @@
     "@maplibre/maplibre-gl-style-spec": "^26.4.2",
     "maplibre-gl": "^6.9.0",
     "next": "^16.3.4",
+    "next-themes": "^0.4.6",
     "pdf-lib": "^1.17.1",
     "pg": "^8.22.0",
     "postcss": "^8.5.19",
@@ -50,6 +52,7 @@
     "radix-ui": "^1.6.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "sonner": "^2.0.8",
     "swr": "^2.4.2",
     "tailwind-merge": "^3.6.0",
     "vaul": "^1.1.2",

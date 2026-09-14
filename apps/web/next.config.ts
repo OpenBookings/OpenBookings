@@ -8,8 +8,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 // The *.link.com entries cover Link, which the Payment Element offers by
 // default — they can be dropped if Link is disabled in the Stripe Dashboard.
 const STRIPE_SCRIPT_SRC = "https://js.stripe.com https://*.js.stripe.com";
-const STRIPE_FRAME_SRC =
-  "https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://link.com https://*.link.com";
+const STRIPE_FRAME_SRC = "https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://link.com https://*.link.com";
 const STRIPE_CONNECT_SRC = "https://api.stripe.com https://link.com https://*.link.com";
 const STRIPE_IMG_SRC = "https://*.stripe.com https://*.link.com";
 
@@ -18,18 +17,21 @@ const STRIPE_IMG_SRC = "https://*.stripe.com https://*.link.com";
 // Source: https://developers.cloudflare.com/turnstile/reference/content-security-policy/
 const TURNSTILE_SRC = "https://challenges.cloudflare.com";
 
-// `eval` is only needed by the dev-time React Refresh runtime; a production
-// bundle never evaluates strings, so the allowance never ships.
+// `eval` is only needed by the dev-time React Refresh runtime, and the sibling
+// localhost origins only by local development, so neither ships to production.
 const isDev = process.env.NODE_ENV !== "production";
 const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval'" : "";
+const localDevSrc = isDev
+  ? " https://web.localhost:3002 https://business.localhost:3001"
+  : "";
 
 const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-inline'${DEV_SCRIPT_SRC} https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC} ${TURNSTILE_SRC};
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co https://eu-assets.i.posthog.com;
-  img-src 'self' data: blob: https://images.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
+  img-src 'self' data: blob: https://*.scw.cloud https://cdn.openbookings.co https://cdn.openbookings.co https://cdn-cookieyes.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://cdn-cookieyes.com https://*.cookieyes.com https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC};
+  connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC}${localDevSrc};
   worker-src 'self' blob:;
   frame-src 'self' https://cdn-cookieyes.com https://*.posthog.com ${STRIPE_FRAME_SRC} ${TURNSTILE_SRC};
   frame-ancestors 'none';

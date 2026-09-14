@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
-import { getBucket } from "@/lib/gcs";
+import { getBucketName, getS3 } from "@/lib/s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import path from "path";
@@ -36,15 +38,15 @@ export async function POST(req: Request) {
   }
 
   const ext = EXT_MAP[contentType] ?? path.extname(fileName).toLowerCase() ?? ".jpg";
-  const gcsKey = `uploads/${randomUUID()}${ext}`;
+  const key = `uploads/${randomUUID()}${ext}`;
 
-  const file = getBucket().file(gcsKey);
-  const [uploadUrl] = await file.getSignedUrl({
-    version: "v4",
-    action: "write",
-    expires: Date.now() + 10 * 60 * 1000,
-    contentType,
-  });
+  // ContentType is signed in, so the browser's PUT must send the same header or
+  // Scaleway rejects the signature.
+  const uploadUrl = await getSignedUrl(
+    getS3(),
+    new PutObjectCommand({ Bucket: getBucketName(), Key: key, ContentType: contentType }),
+    { expiresIn: 600 },
+  );
 
-  return NextResponse.json({ uploadUrl, gcsKey });
+  return NextResponse.json({ uploadUrl, key });
 }
