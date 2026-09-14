@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   const key = `uploads/${randomUUID()}${ext}`;
 
   // ContentType is signed in, so the browser's PUT must send the same header or
-  // Scaleway rejects the signature.
+  // R2 rejects the signature.
   const uploadUrl = await getSignedUrl(
     getS3(),
     new PutObjectCommand({ Bucket: getBucketName(), Key: key, ContentType: contentType }),
