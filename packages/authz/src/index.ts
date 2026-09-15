@@ -1,4 +1,17 @@
 import { query as dbQuery, queryOne as dbQueryOne } from "@openbookings/db";
+import {
+  PROPERTY_SCOPED_ROLES,
+  roles,
+  type HostRole,
+} from "./permissions";
+
+export {
+  ac,
+  roles,
+  statement,
+  PROPERTY_SCOPED_ROLES,
+  type HostRole,
+} from "./permissions";
 
 /**
  * Ownership / authorization checks. Single choke point per resource type:
@@ -25,6 +38,36 @@ function ownerId(session: SessionLike | null | undefined): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
+/**
+ * Edit access to a property `p` for user `$2` (task 11). Two paths:
+ *
+ * - legacy direct ownership (owner_user_id), kept while pre-org rows and
+ *   call sites migrate;
+ * - org membership on the property's organization: owner/admin are
+ *   org-wide; manager is property-scoped and needs a property_access row.
+ *   frontdesk/finance never get edit access through this predicate — their
+ *   narrower grants go through the permission statement per endpoint.
+ *
+ * Cross-org access fails here structurally: the member row must belong to
+ * THIS property's organization_id, so a role in another org matches
+ * nothing.
+ */
+export const PROPERTY_EDIT_ACCESS_SQL = `(
+  p.owner_user_id = $2
+  OR EXISTS (
+    SELECT 1 FROM "member" m
+    WHERE m."organizationId" = p.organization_id
+      AND m."userId" = $2
+      AND (
+        m.role IN ('owner', 'admin')
+        OR (m.role = 'manager' AND EXISTS (
+          SELECT 1 FROM property_access pa
+          WHERE pa.member_id = m.id AND pa.property_id = p.id
+        ))
+      )
+  )
+)`;
+
 export async function userOwnsProperty(
   session: SessionLike | null | undefined,
   propertyId: string,
@@ -34,7 +77,8 @@ export async function userOwnsProperty(
   if (!userId || !propertyId) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
-    `SELECT TRUE AS ok FROM properties WHERE id = $1 AND owner_user_id = $2`,
+    `SELECT TRUE AS ok FROM properties p
+     WHERE p.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [propertyId, userId],
   );
   return row?.ok === true;
@@ -53,7 +97,7 @@ export async function userOwnsRoom(
     `SELECT TRUE AS ok
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE r.id = $1 AND p.owner_user_id = $2`,
+     WHERE r.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [roomId, userId],
   );
   return row?.ok === true;
@@ -73,7 +117,7 @@ export async function userOwnsRatePlan(
      FROM rate_plans rp
      JOIN rooms r      ON r.id = rp.room_id
      JOIN properties p ON p.id = r.property_id
-     WHERE rp.id = $1 AND p.owner_user_id = $2`,
+     WHERE rp.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
     [ratePlanId, userId],
   );
   return row?.ok === true;
@@ -128,6 +172,78 @@ export async function getThreadForParticipant(
  *     ["confirmed"],
  *   );
  */
+/**
+ * Property scoping for manager/frontdesk. Owner, admin, and finance are
+ * org-wide; property-scoped roles need a property_access row. Fails closed
+ * on unknown roles.
+ */
+export async function memberHasPropertyAccess(
+  member: { id: string; role: string },
+  propertyId: string,
+  deps: AuthzDeps = {},
+): Promise<boolean> {
+  if (!member.id || !propertyId) return false;
+  const role = member.role as HostRole;
+  if (!(role in roles)) return false;
+  if (!PROPERTY_SCOPED_ROLES.includes(role)) return true;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const row = await queryOne<{ ok: boolean }>(
+    `SELECT TRUE AS ok FROM property_access WHERE member_id = $1 AND property_id = $2`,
+    [member.id, propertyId],
+  );
+  return row?.ok === true;
+}
+
+/** Session slice for org-scoped access: Better Auth's org plugin stores the
+ * active org on the session row. */
+export type OrgSessionLike = {
+  user: { id: string; account_type?: string | null };
+  session: { activeOrganizationId?: string | null };
+};
+
+/**
+ * Org-scoped access (task 11). The org id comes from the session's
+ * activeOrganizationId — never from client input; URL params are routing
+ * hints only — and membership is re-verified against the member table on
+ * every call, so a stale activeOrganizationId (member removed since sign-in)
+ * fails closed. Returns null when the session has no verified org.
+ *
+ * Repository functions built on this take orgId as a required argument via
+ * the bound `$1`, same convention as getHostScopedDb.
+ */
+export async function getOrgScopedDb(
+  session: OrgSessionLike | null | undefined,
+  deps: AuthzDeps = {},
+): Promise<null | {
+  organizationId: string;
+  memberRole: string;
+  query: <T = unknown>(text: string, values?: unknown[]) => Promise<T[]>;
+  queryOne: <T = unknown>(text: string, values?: unknown[]) => Promise<T | null>;
+}> {
+  const userId = ownerId(session);
+  const orgId = session?.session?.activeOrganizationId;
+  if (!userId || !orgId) return null;
+  if (session?.user?.account_type !== "business") return null;
+
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const membership = await queryOne<{ role: string }>(
+    `SELECT role FROM "member" WHERE "organizationId" = $1 AND "userId" = $2`,
+    [orgId, userId],
+  );
+  if (!membership) return null;
+
+  return {
+    organizationId: orgId,
+    memberRole: membership.role,
+    query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {
+      return dbQuery<T>(text, [orgId, ...values]);
+    },
+    queryOne<T = unknown>(text: string, values: unknown[] = []): Promise<T | null> {
+      return dbQueryOne<T>(text, [orgId, ...values]);
+    },
+  };
+}
+
 export function getHostScopedDb(session: SessionLike | null | undefined) {
   const userId = ownerId(session);
   if (!userId) throw new Error("getHostScopedDb requires an authenticated session");

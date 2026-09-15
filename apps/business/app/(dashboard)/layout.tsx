@@ -1,6 +1,7 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/sidebar-08/app-sidebar";
 import { SessionEntryOverlay } from "@/components/SessionEntryOverlay";
+import { PasskeyNudge } from "@/components/dashboard/passkey-nudge";
 import { Toaster } from "@/components/ui/sonner";
 
 // Auth + onboarding gating happens in proxy.ts before this ever renders.
@@ -20,7 +21,10 @@ export default function DashboardLayout({
     >
       <SessionEntryOverlay />
       <DashboardSidebar />
-      <SidebarInset>{children}</SidebarInset>
+      <SidebarInset>
+        <PasskeyNudge />
+        {children}
+      </SidebarInset>
       <Toaster />
     </SidebarProvider>
   );

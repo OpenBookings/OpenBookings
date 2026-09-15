@@ -1,11 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { z } from "zod";
 import { query } from "@openbookings/db";
 import { userOwnsRatePlan, userOwnsRoom } from "@openbookings/authz";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 
 /**
  * Bulk mutations behind the ARI toolbar modals. Every one of them writes a
@@ -33,7 +32,7 @@ const dateRange = z
   });
 
 async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getServerSession();
   if (!session) throw new Error("Not signed in");
   return session;
 }

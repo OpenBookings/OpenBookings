@@ -54,9 +54,17 @@ export function AuthFormWelcomeTitle() {
 
 export function AuthFormFields({
     onSignInSuccess,
+    initialError,
     callbackURL = "/",
 }: {
     onSignInSuccess?: () => void;
+    /**
+     * Pre-filled error, shown in the same slot as a failed magic-link send.
+     * An OAuth failure is a full-page redirect, so the error cannot be raised
+     * in a catch here — it arrives as `?error=` on `errorCallbackURL` and the
+     * mounting surface feeds it back in through this prop.
+     */
+    initialError?: string | null;
     /**
      * Where to land once sign-in completes.
      *
@@ -68,6 +76,10 @@ export function AuthFormFields({
      * Must be a site-relative path. The server re-validates it before putting
      * it in an email, because a magic-link callback is an open redirect the
      * moment it is allowed to point off-site.
+     *
+     * Doubles as the OAuth `errorCallbackURL`, so a failed social sign-in
+     * returns the guest to the surface they started on rather than dropping
+     * them on the home page mid-flow.
      */
     callbackURL?: string;
 }) {
@@ -75,7 +87,9 @@ export function AuthFormFields({
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [appleLoading, setAppleLoading] = useState(false);
-    const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+    const [magicLinkError, setMagicLinkError] = useState<string | null>(
+        initialError ?? null,
+    );
     const [sentEmail, setSentEmail] = useState<string | null>(null);
     const [socialState, setSocialState] = useState<{
         provider: "google" | "apple";
@@ -138,6 +152,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "google",
                 callbackURL,
+                errorCallbackURL: callbackURL,
             });
             setSocialState({ provider: "google", failed: false });
             await redirectPromise;
@@ -159,6 +174,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "apple",
                 callbackURL,
+                errorCallbackURL: callbackURL,
             });
             setSocialState({ provider: "apple", failed: false });
             await redirectPromise;

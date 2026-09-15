@@ -1,21 +1,40 @@
 // apps/web/proxy.ts
 import { NextRequest, NextResponse } from "next/server";
+import { sessionForApp, sessionCookieNames } from "@openbookings/auth/server";
+import { readAuthEnv } from "@openbookings/auth/env";
 import { auth } from "@/lib/auth"; // from packages/auth
 import { headers } from "next/headers";
 
+const env = readAuthEnv();
+const secureCookies = env.AUTH_BASE_URL.startsWith("https://");
+
 export async function proxy(request: NextRequest) {
-  const session = await auth.api.getSession({
+  const rawSession = await auth.api.getSession({
     headers: await headers(),
   });
 
-  if (!session) {
+  if (!rawSession) {
     const loginUrl = new URL("/", request.url);
     loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session.user.account_type !== "private") {
-    return NextResponse.redirect(new URL("/", request.url));
+  // Re-check account_type and portal on every request: the sign-in-time hook
+  // never sees an already-issued cookie carried over from the host app.
+  const session = sessionForApp(rawSession, "private");
+  if (!session) {
+    // Expire this app's session cookies so a host-app session doesn't bounce
+    // every request through this redirect. __Host- cookies can only be
+    // expired by a Set-Cookie satisfying the same prefix rules.
+    const response = NextResponse.redirect(new URL("/", request.url));
+    for (const name of sessionCookieNames(env.AUTH_COOKIE_PREFIX, secureCookies)) {
+      response.cookies.set(name, "", {
+        maxAge: 0,
+        path: "/",
+        secure: secureCookies,
+      });
+    }
+    return response;
   }
 
   return NextResponse.next();

@@ -4,16 +4,23 @@
   "private": true,
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts",
-    "./callback-url": "./src/callbackUrl.ts"
+    "./guest": "./src/guest.ts",
+    "./host": "./src/host.ts",
+    "./client/guest": "./src/client/guest.ts",
+    "./client/host": "./src/client/host.ts",
+    "./callback-url": "./src/callbackUrl.ts",
+    "./env": "./src/env.ts"
   },
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
     "@better-auth/infra": "^0.1.13",
+    "@better-auth/passkey": "1.6.25",
+    "@openbookings/authz": "workspace:*",
     "better-auth": "1.6.25",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",

@@ -2,9 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { getIp } from "better-auth/api";
 import {
   accountTypeMismatchMessage,
+  advancedConfig,
   buildAccountTypeHooks,
   IP_ADDRESS_HEADERS,
   isAccountTypeAllowed,
+  isStepUpFresh,
+  microsoftEmailFromProfile,
+  portalForAccountType,
+  sessionCookieNames,
+  sessionForApp,
+  stampMicrosoftTenantId,
+  stepUpRequiredForRequest,
 } from "./server";
 
 // These hooks are what Better Auth runs on every sign-in path — password,
@@ -78,12 +86,16 @@ describe("session.create.before (cross-app sign-in rejection)", () => {
 
   test("matching account signs in on web", async () => {
     const hooks = buildAccountTypeHooks("private", async () => "private");
-    await expect(hooks.session.create.before(makeSession())).resolves.toBeUndefined();
+    await expect(hooks.session.create.before(makeSession())).resolves.toMatchObject({
+      data: { portal: "guest" },
+    });
   });
 
   test("matching account signs in on business", async () => {
     const hooks = buildAccountTypeHooks("business", async () => "business");
-    await expect(hooks.session.create.before(makeSession())).resolves.toBeUndefined();
+    await expect(hooks.session.create.before(makeSession())).resolves.toMatchObject({
+      data: { portal: "host" },
+    });
   });
 
   test("lookup uses the session's userId", async () => {
@@ -94,6 +106,296 @@ describe("session.create.before (cross-app sign-in rejection)", () => {
     });
     await hooks.session.create.before(makeSession("user-42"));
     expect(asked).toBe("user-42");
+  });
+});
+
+describe("session.create.before (portal stamping)", () => {
+  test("business sessions are stamped host", async () => {
+    const hooks = buildAccountTypeHooks("business", async () => "business");
+    const result = await hooks.session.create.before(makeSession());
+    expect((result?.data as Record<string, unknown>).portal).toBe("host");
+  });
+
+  test("private sessions are stamped guest", async () => {
+    const hooks = buildAccountTypeHooks("private", async () => "private");
+    const result = await hooks.session.create.before(makeSession());
+    expect((result?.data as Record<string, unknown>).portal).toBe("guest");
+  });
+});
+
+describe("sessionForApp (per-request re-check)", () => {
+  const make = (account_type: string | null, portal?: string | null) => ({
+    user: { id: "u1", account_type },
+    session: { id: "s1", portal },
+  });
+
+  test("null/undefined session resolves to null", () => {
+    expect(sessionForApp(null, "business")).toBeNull();
+    expect(sessionForApp(undefined, "business")).toBeNull();
+  });
+
+  test("guest session presented to the business app is rejected", () => {
+    expect(sessionForApp(make("private", "guest"), "business")).toBeNull();
+  });
+
+  test("business session presented to the web app is rejected", () => {
+    expect(sessionForApp(make("business", "host"), "private")).toBeNull();
+  });
+
+  test("missing account_type is rejected, never defaulted", () => {
+    expect(sessionForApp(make(null, "host"), "business")).toBeNull();
+  });
+
+  test("portal stamp from the other app is rejected even if account_type matches", () => {
+    expect(sessionForApp(make("business", "guest"), "business")).toBeNull();
+  });
+
+  test("legacy session without portal passes on account_type alone", () => {
+    expect(sessionForApp(make("business", null), "business")).not.toBeNull();
+    expect(sessionForApp(make("business", undefined), "business")).not.toBeNull();
+  });
+
+  test("matching session passes through unchanged", () => {
+    const s = make("private", "guest");
+    expect(sessionForApp(s, "private")).toBe(s);
+  });
+});
+
+describe("portalForAccountType", () => {
+  test("maps account types to portals", () => {
+    expect(portalForAccountType("business")).toBe("host");
+    expect(portalForAccountType("private")).toBe("guest");
+    expect(portalForAccountType("unknown")).toBeUndefined();
+  });
+});
+
+describe("cookie isolation", () => {
+  test("dev cookies are prefix-scoped without __Host-", () => {
+    expect(sessionCookieNames("ob-host", false)).toContain(
+      "ob-host.session_token",
+    );
+  });
+
+  test("production cookies carry the __Host- prefix", () => {
+    expect(sessionCookieNames("ob-host", true)).toContain(
+      "__Host-ob-host.session_token",
+    );
+  });
+
+  test("guest and host cookie names never overlap", () => {
+    for (const secure of [true, false]) {
+      const guest = new Set(sessionCookieNames("ob-guest", secure));
+      for (const name of sessionCookieNames("ob-host", secure)) {
+        expect(guest.has(name)).toBe(false);
+      }
+    }
+  });
+
+  test("cross-subdomain cookies are disabled in every mode", () => {
+    expect(advancedConfig("ob-host", false).crossSubDomainCookies.enabled).toBe(false);
+    expect(advancedConfig("ob-host", true).crossSubDomainCookies.enabled).toBe(false);
+  });
+
+  test("production config names core cookies __Host- and disables the __Secure- auto-prefix", () => {
+    const config = advancedConfig("ob-host", true);
+    expect(config.useSecureCookies).toBe(false);
+    expect(config.cookies?.session_token.name).toBe("__Host-ob-host.session_token");
+    expect(config.cookies?.session_token.attributes.secure).toBe(true);
+    expect(config.defaultCookieAttributes?.secure).toBe(true);
+  });
+
+  test("dev config sets no domain and no __Host- names", () => {
+    const config = advancedConfig("ob-guest", false);
+    expect(config).toEqual({
+      cookiePrefix: "ob-guest",
+      crossSubDomainCookies: { enabled: false },
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] },
+    });
+  });
+
+  test("both instances resolve the client IP from the same headers", () => {
+    // Regression guard: the guest/host split must not drop the ipAddress
+    // config main added. Without it Better Auth cannot resolve an IP behind
+    // Cloudflare and every request collapses into one rate-limit bucket.
+    for (const secure of [false, true]) {
+      for (const prefix of ["ob-guest", "ob-host"]) {
+        expect(advancedConfig(prefix, secure).ipAddress.ipAddressHeaders).toEqual([
+          "cf-connecting-ip",
+          "x-forwarded-for",
+        ]);
+      }
+    }
+  });
+});
+
+describe("user.create.before (email collision)", () => {
+  test("existing email is rejected with the friendly collision message", async () => {
+    const hooks = buildAccountTypeHooks(
+      "business",
+      async () => null,
+      async () => "existing-user-id",
+    );
+    await expect(hooks.user.create.before(makeUser())).rejects.toThrow(
+      /already registered as a guest account/,
+    );
+  });
+
+  test("guest signup with a host email gets the inverse message", async () => {
+    const hooks = buildAccountTypeHooks(
+      "private",
+      async () => null,
+      async () => "existing-user-id",
+    );
+    await expect(hooks.user.create.before(makeUser())).rejects.toThrow(
+      /already registered as a host account/,
+    );
+  });
+
+  test("fresh email passes and is stamped", async () => {
+    const hooks = buildAccountTypeHooks(
+      "business",
+      async () => null,
+      async () => null,
+    );
+    const result = await hooks.user.create.before(makeUser());
+    expect((result.data as Record<string, unknown>).account_type).toBe("business");
+  });
+});
+
+describe("microsoftEmailFromProfile", () => {
+  test("prefers the email claim", () => {
+    expect(
+      microsoftEmailFromProfile({
+        email: "a@b.co",
+        preferred_username: "other@c.co",
+      }),
+    ).toBe("a@b.co");
+  });
+
+  test("falls back to email-shaped preferred_username, then upn", () => {
+    expect(
+      microsoftEmailFromProfile({ preferred_username: "user@tenant.co" }),
+    ).toBe("user@tenant.co");
+    expect(microsoftEmailFromProfile({ upn: "user@tenant.co" })).toBe(
+      "user@tenant.co",
+    );
+  });
+
+  test("never returns a non-email UPN or phone", () => {
+    expect(
+      microsoftEmailFromProfile({ preferred_username: "+31612345678" }),
+    ).toBeUndefined();
+    expect(microsoftEmailFromProfile({ upn: "PHONE#user" })).toBeUndefined();
+    expect(microsoftEmailFromProfile({})).toBeUndefined();
+  });
+
+  test("still accepts ordinary multi-label domains", () => {
+    for (const address of [
+      "first.last@sub.domain.example.com",
+      "user+tag@example.co.uk",
+      "a@b.c",
+    ]) {
+      expect(microsoftEmailFromProfile({ email: address })).toBe(address);
+    }
+  });
+
+  test("rejects consecutive dots in the domain", () => {
+    // Intentional tightening from the linear-regex rewrite: the old pattern
+    // matched this, but "b..c" is not a valid domain.
+    expect(microsoftEmailFromProfile({ email: "a@b..c" })).toBeUndefined();
+  });
+
+  test("rejects anything past the length cap", () => {
+    const local = "a".repeat(64);
+    const domain = "b".repeat(300) + ".com";
+    expect(`${local}@${domain}`.length).toBeGreaterThan(320);
+    expect(
+      microsoftEmailFromProfile({ email: `${local}@${domain}` }),
+    ).toBeUndefined();
+  });
+
+  test("a pathological claim does not stall the matcher", () => {
+    // Regression guard for the quadratic backtracking CodeQL flagged: the
+    // previous pattern took ~1.5s on a 64KB input of this shape. Both the
+    // length cap and the linear regex independently prevent that, so this
+    // asserts the outcome rather than either mechanism.
+    const evil = "a@" + "x.".repeat(64_000) + "@";
+    const started = performance.now();
+    expect(microsoftEmailFromProfile({ upn: evil })).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(50);
+  });
+});
+
+describe("stampMicrosoftTenantId", () => {
+  const fakeIdToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.y`;
+
+  test("stamps tenant_id from the tid claim on microsoft accounts", () => {
+    const result = stampMicrosoftTenantId({
+      providerId: "microsoft",
+      idToken: fakeIdToken({ tid: "tenant-123" }),
+    });
+    expect(result?.data.tenant_id).toBe("tenant-123");
+  });
+
+  test("leaves other providers untouched", () => {
+    expect(
+      stampMicrosoftTenantId({
+        providerId: "google",
+        idToken: fakeIdToken({ tid: "nope" }),
+      }),
+    ).toBeUndefined();
+  });
+
+  test("tolerates missing or malformed id tokens", () => {
+    expect(
+      stampMicrosoftTenantId({ providerId: "microsoft", idToken: null }),
+    ).toBeUndefined();
+    expect(
+      stampMicrosoftTenantId({ providerId: "microsoft", idToken: "garbage" }),
+    ).toBeUndefined();
+    expect(
+      stampMicrosoftTenantId({
+        providerId: "microsoft",
+        idToken: fakeIdToken({}),
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("step-up (task 14)", () => {
+  test("recency is the mechanism: fresh within 15 minutes, stale after", () => {
+    const now = new Date("2026-08-09T12:00:00Z");
+    expect(isStepUpFresh(new Date("2026-08-09T11:50:00Z"), now)).toBe(true);
+    expect(isStepUpFresh(new Date("2026-08-09T11:44:59Z"), now)).toBe(false);
+    expect(isStepUpFresh(null, now)).toBe(false);
+    expect(isStepUpFresh(undefined, now)).toBe(false);
+    expect(isStepUpFresh("garbage", now)).toBe(false);
+  });
+
+  test("the sensitive Better Auth endpoints require step-up", () => {
+    expect(stepUpRequiredForRequest("/organization/delete", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/organization/remove-member", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/change-email", {})).toBe(true);
+    expect(stepUpRequiredForRequest("/delete-user", {})).toBe(true);
+  });
+
+  test("role updates require step-up only when promoting to owner/admin, failing closed", () => {
+    const path = "/organization/update-member-role";
+    expect(stepUpRequiredForRequest(path, { role: "owner" })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: "admin" })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: "frontdesk" })).toBe(false);
+    expect(stepUpRequiredForRequest(path, { role: ["manager", "admin"] })).toBe(true);
+    expect(stepUpRequiredForRequest(path, { role: [] })).toBe(true);
+    expect(stepUpRequiredForRequest(path, {})).toBe(true);
+    expect(stepUpRequiredForRequest(path, null)).toBe(true);
+  });
+
+  test("everyday endpoints never require step-up", () => {
+    expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/sign-in/magic-link", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/organization/create", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/organization/invite-member", {})).toBe(false);
   });
 });
 

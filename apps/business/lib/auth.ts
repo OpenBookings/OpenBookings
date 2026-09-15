@@ -1,29 +1,33 @@
-import { createAuth } from "@openbookings/auth/server";
+import { createHostAuth } from "@openbookings/auth/host";
+import { sessionForApp } from "@openbookings/auth/server";
+import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
+import { sendSecurityAlert } from "@/lib/mailing/security-alert";
+import { forwardAuthEvent } from "@/lib/tirreno";
 import { cache } from "react";
 import { headers } from "next/headers";
 
-export const auth = createAuth({
-  baseURL:
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_BUSINESS_URL ||
-    "https://business.openbookings.co",
-  secret: process.env.BETTER_AUTH_SECRET!,
+const env = readAuthEnv();
+
+export const auth = createHostAuth({
+  baseURL: env.AUTH_BASE_URL,
+  secret: env.BETTER_AUTH_SECRET,
   databaseUrl: process.env.DATABASE_URL!,
   sendMagicLink,
+  sendSecurityAlert,
+  onAuthEvent: forwardAuthEvent,
+  cookiePrefix: env.AUTH_COOKIE_PREFIX,
   trustedOrigins: [
     "https://appleid.apple.com",
     "https://business.openbookings.co",
     "https://openbookings.co",
-    "http://localhost:3000",
-    "http://localhost:8080",
+    "http://business.localhost:3001",
   ],
   dashApiKey: process.env.BETTER_AUTH_DASH_API_KEY,
   googleClientId: process.env.GOOGLE_CLIENT_ID_BUSINESS,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET_BUSINESS,
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-  accountType: "business",
 });
 
 /**
@@ -32,7 +36,13 @@ export const auth = createAuth({
  * in the same render sees the exact same session, instead of each call site
  * hitting better-auth's cookie cache/DB independently and risking a
  * momentary disagreement between them.
+ *
+ * Every read goes through sessionForApp: an already-issued cookie from the
+ * guest app (or a session row stamped with the wrong portal) resolves to
+ * null here, on every route — the sign-in-time hook alone can't catch a
+ * cookie that was issued before it or injected across apps.
  */
 export const getServerSession = cache(async () => {
-  return auth.api.getSession({ headers: await headers() });
+  const session = await auth.api.getSession({ headers: await headers() });
+  return sessionForApp(session, "business");
 });

@@ -1,9 +1,10 @@
 "use server";
 
 import { getServerSession } from "@/lib/auth";
-import { query, queryOne } from "@openbookings/db";
+import { query, queryOne, withTransaction } from "@openbookings/db";
 import { headers } from "next/headers";
 import { createConnectAccount } from "@openbookings/stripe";
+import { provisionOrganizationTx } from "@/lib/provision-organization";
 import { promoteOnboardingToProperty } from "./promotion";
 
 export interface LegalSignatureRecord {
@@ -197,25 +198,67 @@ export async function provisionStripeAccount(): Promise<string> {
   return accountId;
 }
 
-/** Mark onboarding as complete, and materialise the host's property row. */
+/**
+ * Mark onboarding as complete: provision the organization and materialise the
+ * host's property in the same transaction, so org + profile + owner membership
+ * + consent rows + audit event + property land together or not at all. An
+ * abandoned or failed completion never leaves partial rows (handoff task 9).
+ *
+ * Property creation lives in promoteOnboardingToProperty rather than inline:
+ * it handles slug collisions and country->timezone mapping, seeds
+ * property_content, and is shared with the backfill script. It is given
+ * transaction-bound deps so its INSERTs roll back with the org if anything
+ * below fails — its ON CONFLICT DO NOTHING is deliberately written to be safe
+ * inside a surrounding transaction.
+ */
 export async function completeOnboarding(): Promise<void> {
   const session = await getSession();
   const userId = session.user.id;
-
   const stepData = await loadStepData();
-  const result = await promoteOnboardingToProperty(
-    { userId, userEmail: session.user.email, stepData },
-    { query, queryOne },
-  );
+  const legal = stepData["legal-n-boring"];
+  if (!legal) throw new Error("Legal step data is missing");
 
-  // A promotion that could not run is not a reason to trap the host in the
-  // wizard — they finished it. The editor's empty state picks up from here.
-  if (!result.created && result.reason !== "already-owns-property") {
-    console.error("[onboarding] property promotion skipped", { userId, reason: result.reason });
-  }
+  await withTransaction(async (client) => {
+    const txDeps = {
+      query: async <T = unknown>(text: string, values?: unknown[]) =>
+        (await client.query(text, values)).rows as T[],
+      queryOne: async <T = unknown>(text: string, values?: unknown[]) =>
+        ((await client.query(text, values)).rows[0] ?? null) as T | null,
+    };
 
-  await query(
-    `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
-    [userId],
-  );
+    const { organizationId } = await provisionOrganizationTx(client, {
+      userId,
+      legal,
+      stripeAccountId:
+        (stepData as { stripe_account_id?: string }).stripe_account_id ?? null,
+    });
+
+    const result = await promoteOnboardingToProperty(
+      { userId, userEmail: session.user.email, stepData },
+      txDeps,
+    );
+
+    // A promotion that could not run is not a reason to trap the host in the
+    // wizard — they finished it. The editor's empty state picks up from here.
+    if (!result.created && result.reason !== "already-owns-property") {
+      console.error("[onboarding] property promotion skipped", {
+        userId,
+        reason: result.reason,
+      });
+    }
+
+    // promoteOnboardingToProperty predates the org model and only sets
+    // owner_user_id. Link the host's properties to the org they now own;
+    // scoped to NULL so a re-run never moves a property between orgs.
+    await client.query(
+      `UPDATE properties SET organization_id = $1
+        WHERE owner_user_id = $2 AND organization_id IS NULL`,
+      [organizationId, userId],
+    );
+
+    await client.query(
+      `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
+      [userId],
+    );
+  });
 }

@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty, userOwnsRoom } from "@openbookings/authz";
 import { publicUrl } from "@/lib/s3";
@@ -24,7 +24,7 @@ const UPLOAD_KEY_RE =
   /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i;
 
 export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

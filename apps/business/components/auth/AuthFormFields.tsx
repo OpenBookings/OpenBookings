@@ -128,6 +128,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "google",
                 callbackURL: "/",
+                errorCallbackURL: "/login",
             });
             setSocialState({ provider: "google", failed: false });
             await redirectPromise;
@@ -148,6 +149,7 @@ export function AuthFormFields({
             const redirectPromise = authClient.signIn.social({
                 provider: "microsoft",
                 callbackURL: "/",
+                errorCallbackURL: "/login",
             });
             setSocialState({ provider: "microsoft", failed: false });
             await redirectPromise;
