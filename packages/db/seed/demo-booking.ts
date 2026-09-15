@@ -38,6 +38,14 @@ const CHILDREN = 0;
 const PRICE_PER_NIGHT = 185;
 const BOOKING_FEE_RATE = 0.035;
 
+/**
+ * The sentence the checkout page quotes verbatim. The 7 days here is the same
+ * 7 as `FREE_CANCELLATION_DAYS` in `apps/web/app/checkout/_lib/booking.ts`,
+ * which is what turns it into an actual date under the policy.
+ */
+const CANCELLATION_POLICY =
+  "Free cancellation until 7 days before check-in. After that the first night is charged.";
+
 const ROOM_SUBTOTAL = PRICE_PER_NIGHT * NIGHTS;
 const BOOKING_FEE = Math.round(ROOM_SUBTOTAL * BOOKING_FEE_RATE);
 /** Grand total, fee included. `booking_fee_amount` names a component of it. */
@@ -73,7 +81,13 @@ async function main() {
          cancellation_policy = excluded.cancellation_policy,
          booking_fee_rate = excluded.booking_fee_rate,
          updated_at = now()`,
-      [DEMO_RATE_PLAN_ID, ROOM_ID, PRICE_PER_NIGHT, BOOKING_FEE_RATE.toFixed(4)],
+      [
+        DEMO_RATE_PLAN_ID,
+        ROOM_ID,
+        PRICE_PER_NIGHT,
+        CANCELLATION_POLICY,
+        BOOKING_FEE_RATE.toFixed(4),
+      ],
     );
 
     // `pending` is the pre-payment state: the room is held, nothing is charged.

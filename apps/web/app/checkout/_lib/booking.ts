@@ -15,7 +15,7 @@
  * the `*Cents` fields below.
  */
 
-import { query } from '@openbookings/db';
+import { queryOne } from '@openbookings/db';
 
 /** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
 const CHECKOUT_BOOKING_ID = 'b0000000-0000-4000-8000-000000000001';
@@ -178,10 +178,63 @@ const BOOKING_QUERY = `
 
 /** A booking that cannot be rendered or charged. Surfaced as a checkout failure. */
 export class BookingNotFoundError extends Error {
-  constructor(bookingId: string) {
-    super(`No bookable row for booking ${bookingId}`);
+  /** Which link in the chain was missing. Carried for logs, not for callers. */
+  readonly reason: string;
+
+  constructor(bookingId: string, reason: string) {
+    super(`No bookable row for booking ${bookingId}: ${reason}`);
     this.name = 'BookingNotFoundError';
+    this.reason = reason;
   }
+}
+
+/**
+ * Why `BOOKING_QUERY` came back empty.
+ *
+ * Every join in that query is inner, so a booking missing any one of its
+ * reservation, room or rate plan disappears exactly as if the booking itself
+ * did not exist — and the two need very different fixes. Run only on the
+ * failure path, so the happy path stays at one round trip.
+ */
+const DIAGNOSIS_QUERY = `
+  select
+    exists(select 1 from bookings where id = $1)                     as booking,
+    exists(select 1 from bookings b join properties p on p.id = b.hotel_id
+           where b.id = $1)                                          as property,
+    exists(select 1 from reservations where booking_id = $1)         as reservation,
+    exists(select 1 from reservations res join rooms r on r.id = res.room_id
+           where res.booking_id = $1)                                as room,
+    exists(select 1 from reservations res join rate_plans rp on rp.id = res.rate_plan_id
+           where res.booking_id = $1)                                as rate_plan
+`;
+
+type Diagnosis = {
+  booking: boolean;
+  property: boolean;
+  reservation: boolean;
+  room: boolean;
+  rate_plan: boolean;
+};
+
+/** Names the first missing link, in the order the query joins them. */
+async function diagnose(bookingId: string): Promise<string> {
+  let d: Diagnosis | null;
+  try {
+    d = await queryOne<Diagnosis>(DIAGNOSIS_QUERY, [bookingId]);
+  } catch (err) {
+    // The diagnosis is a courtesy; never let it replace the real failure.
+    return `diagnosis failed (${err instanceof Error ? err.message : String(err)})`;
+  }
+  if (!d) return 'no diagnosis available';
+
+  if (!d.booking) return 'no such booking';
+  if (!d.property) return 'booking references a property that does not exist';
+  if (!d.reservation) return 'booking has no reservation — it was never given a room';
+  if (!d.room) return 'reservation references a room that does not exist';
+  if (!d.rate_plan) return 'reservation references a rate plan that does not exist';
+  // Every link resolves on its own, so the row was lost to something the
+  // checks above do not model. Worth seeing verbatim rather than guessing.
+  return 'all joins resolve individually; the combined query still returned no row';
 }
 
 /** Postgres `date` arrives as "2026-10-14"; parsed as UTC so the day never shifts. */
@@ -199,9 +252,8 @@ function toCents(majorUnits: number): number {
 }
 
 export async function getBookingSummary(): Promise<StaySummary> {
-  const rows = await query<BookingRow>(BOOKING_QUERY, [CHECKOUT_BOOKING_ID]);
-  const row = rows[0];
-  if (!row) throw new BookingNotFoundError(CHECKOUT_BOOKING_ID);
+  const row = await queryOne<BookingRow>(BOOKING_QUERY, [CHECKOUT_BOOKING_ID]);
+  if (!row) throw new BookingNotFoundError(CHECKOUT_BOOKING_ID, await diagnose(CHECKOUT_BOOKING_ID));
 
   const checkIn = parseDate(row.check_in_date);
   const checkOut = parseDate(row.check_out_date);
