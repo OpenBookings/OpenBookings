@@ -6,7 +6,8 @@
     "dev": "PORT=3003 bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@google-cloud/tasks": "^6.2.0",

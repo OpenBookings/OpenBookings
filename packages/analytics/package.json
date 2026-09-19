@@ -6,6 +6,9 @@
     "./client": "./src/client.tsx",
     "./server": "./src/server.ts"
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "posthog-js": "^1.422.5",
     "posthog-node": "^5.51.4"
