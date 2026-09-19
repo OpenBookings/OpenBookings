@@ -54,6 +54,10 @@ export function SectionForm<T>({
 
   React.useEffect(() => {
     if (!state.success) return;
+    // The server action's result is the only signal that the form is saved, and
+    // this component does not own state.success's lifecycle. Deriving `dirty`
+    // instead risks the unsaved-changes guard misfiring.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDirty(false);
     onDirtyChange?.(false);
     toast.success("Saved", { description: `${title} is up to date.` });

@@ -30,6 +30,7 @@ describe("safeRedirectPath", () => {
   });
 
   it("rejects non-http schemes", () => {
+    // eslint-disable-next-line no-script-url -- the hostile input under test
     expect(safeRedirectPath("javascript:alert(1)", FALLBACK)).toBe(FALLBACK);
     expect(safeRedirectPath("data:text/html,<script>", FALLBACK)).toBe(FALLBACK);
   });

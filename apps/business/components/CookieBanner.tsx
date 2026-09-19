@@ -1,25 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useCookieConsent } from '@openbookings/analytics/client'
 
+// Browser-only, so it is false on the server. That doubles as the hydration
+// gate the old `mounted` flag provided: the banner is portalled to document.body
+// and contributes no server HTML, so there is nothing to mismatch.
+const detectEU = () => {
+  if (typeof window === 'undefined') return false
+  return Intl.DateTimeFormat().resolvedOptions().timeZone.startsWith('Europe/')
+}
+
 export function CookieBanner() {
   const { consent, loaded, accept, decline } = useCookieConsent()
-  const [isEU, setIsEU] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  // Read once during the initial render rather than set from an effect.
+  const [isEU] = useState(detectEU)
 
-  useEffect(() => {
-    const detectEU = () => {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-      setIsEU(tz.startsWith('Europe/'))
-    }
-    detectEU()
-    setMounted(true)
-  }, [])
-
-  if (!mounted || !loaded || !isEU || consent !== null) return null
+  if (!isEU || !loaded || consent !== null) return null
 
   return createPortal(
     <div className="fixed bottom-4 left-4 z-[2147483647] max-w-sm rounded-xl border border-white/10 bg-neutral-900 p-4 shadow-lg">
