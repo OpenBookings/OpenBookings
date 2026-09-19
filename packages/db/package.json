@@ -9,7 +9,9 @@
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
-    "db:studio": "bun --env-file=../../.env.local drizzle-kit studio"
+    "db:setup:ci": "bun scripts/apply-schema-ci.ts",
+    "db:studio": "bun --env-file=../../.env.local drizzle-kit studio",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "1.0.0-rc.4",

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p ${PORT:-8082} -H 0.0.0.0",
     "lint": "eslint",
-    "types:check": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "cn": "^0.2.6",

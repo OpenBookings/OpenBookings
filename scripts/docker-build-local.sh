@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the web image locally the same way .github/workflows/docker-image.yml does,
+# Build the web image locally the same way .github/workflows/ci.yml does,
 # and optionally push it to the Scaleway container registry.
 #
 #   ./scripts/docker-build-local.sh              # build only, tag :local
@@ -12,7 +12,7 @@ set -euo pipefail
 
 REGISTRY="rg.nl-ams.scw.cloud"
 NAMESPACE="namespace-distracted-saha"
-IMAGE_NAME="openbookings"
+IMAGE_NAME="openbookings-web"
 PLATFORM="${PLATFORM:-linux/amd64}"   # Scaleway runs amd64; Apple Silicon is arm64
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,7 +26,8 @@ PUSH=0
 
 # ---- Build args ----------------------------------------------------------
 BUILD_ARG_NAMES=(
-  NEXT_PUBLIC_APP_URL
+  NEXT_PUBLIC_WEB_URL
+  NEXT_PUBLIC_BUSINESS_URL
   NEXT_PUBLIC_COOKIE_VERSION
   NEXT_PUBLIC_MAPTILER_API_KEY
   NEXT_PUBLIC_MAPTILER_STYLE_ID
