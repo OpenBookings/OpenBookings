@@ -55,23 +55,11 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # The postgis image creates the extension in POSTGRES_DB on first init,
-      # but no migration in packages/db/drizzle declares it — production had it
-      # enabled out of band — so make it explicit rather than depending on the
-      # image's init scripts. Goes through pg, which this package already
-      # depends on, so it needs no psql on the runner.
-      - name: Enable PostGIS
+      # Enables PostGIS and applies the schema. See scripts/apply-schema-ci.ts
+      # for why this is neither `drizzle-kit push` nor `drizzle-kit migrate`.
+      - name: Prepare test database
         working-directory: packages/db
-        run: bun run db:postgis:ci
-
-      # `migrate` cannot run: packages/db/drizzle has no meta/_journal.json,
-      # starts at 0006, and has two 0007_* files. `push` derives the schema from
-      # src/schema.ts, which is what an ephemeral database wants anyway. The
-      # db:push:ci script exists because `db:push` hardcodes
-      # --env-file=../../.env.local, which does not exist on a runner.
-      - name: Apply schema to test database
-        working-directory: packages/db
-        run: bun run db:push:ci
+        run: bun run db:setup:ci
 
       - run: bun run lint
 

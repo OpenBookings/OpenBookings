@@ -9,8 +9,7 @@
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
-    "db:postgis:ci": "bun scripts/enable-postgis.ts",
-    "db:push:ci": "drizzle-kit push --force",
+    "db:setup:ci": "bun scripts/apply-schema-ci.ts",
     "db:studio": "bun --env-file=../../.env.local drizzle-kit studio",
     "typecheck": "tsc --noEmit"
   },
