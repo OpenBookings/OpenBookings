@@ -25,7 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        # PostGIS, not plain postgres: properties.location is
+        # geography(point, 4326) and the ARI/search queries call ST_DWithin,
+        # ST_MakePoint and ST_X/ST_Y. Stock postgres has no `geography` type,
+        # so drizzle-kit push fails on the properties table.
+        image: postgis/postgis:17-3.5-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -50,6 +54,15 @@ jobs:
           bun-version: 1.3.13
 
       - run: bun install --frozen-lockfile
+
+      # The postgis image creates the extension in POSTGRES_DB on first init,
+      # but no migration in packages/db/drizzle declares it — production had it
+      # enabled out of band — so make it explicit rather than depending on the
+      # image's init scripts. Goes through pg, which this package already
+      # depends on, so it needs no psql on the runner.
+      - name: Enable PostGIS
+        working-directory: packages/db
+        run: bun run db:postgis:ci
 
       # `migrate` cannot run: packages/db/drizzle has no meta/_journal.json,
       # starts at 0006, and has two 0007_* files. `push` derives the schema from
