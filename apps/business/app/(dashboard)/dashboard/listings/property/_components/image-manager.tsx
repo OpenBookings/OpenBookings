@@ -96,10 +96,11 @@ export function ImageManager({
       setPending((p) => p.filter((u) => u.key !== key));
       URL.revokeObjectURL(previewUrl);
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Upload error:", err);
       setState("error");
-      toast.error("Upload failed", { description: err.message || `${file.name} was not saved. Try again.` });
+      const message = err instanceof Error ? err.message : "";
+      toast.error("Upload failed", { description: message || `${file.name} was not saved. Try again.` });
     }
   }
 

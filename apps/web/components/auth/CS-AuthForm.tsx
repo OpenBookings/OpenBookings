@@ -10,17 +10,29 @@ import { Kbd } from "@/components/ui/kbd";
 const NOT_LINKED_MESSAGE =
     "An account already exists for this email. Sign in with the method you used originally — or, if this email belongs to your host account, use a different address.";
 
-export function CS_AuthForm() {
-    const [openCSAuthForm, setOpenCSAuthForm] = useState(false);
-    const [initialError, setInitialError] = useState<string | null>(null);
+// OAuth failures come back as a full-page redirect to /?error=... . Read during
+// the initial render instead of setting state from an effect: false on the
+// server, and the overlay is portalled, so it contributes no server HTML and
+// there is nothing for hydration to mismatch.
+const isNotLinkedRedirect = () => {
+    if (typeof window === "undefined") return false;
+    return (
+        new URLSearchParams(window.location.search).get("error") ===
+        "account_not_linked"
+    );
+};
 
-    // OAuth failures come back as a full-page redirect to /?error=...; reopen
-    // the sign-in overlay with the message and strip the param from the URL.
+export function CS_AuthForm() {
+    const [openCSAuthForm, setOpenCSAuthForm] = useState(isNotLinkedRedirect);
+    const [initialError] = useState<string | null>(() =>
+        isNotLinkedRedirect() ? NOT_LINKED_MESSAGE : null,
+    );
+
+    // Strip the param so a reload does not reopen the overlay. This touches
+    // history, not state, so it stays out of the render path.
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get("error") !== "account_not_linked") return;
-        setInitialError(NOT_LINKED_MESSAGE);
-        setOpenCSAuthForm(true);
         params.delete("error");
         const query = params.toString();
         window.history.replaceState(

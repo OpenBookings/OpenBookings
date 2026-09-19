@@ -78,6 +78,10 @@ export function SecurityPanel() {
   }, []);
 
   useEffect(() => {
+    // Load-on-mount: refresh() fetches passkeys, sessions and the 2FA flag and
+    // sets them. Left as an effect deliberately; reworking it means
+    // restructuring the panel's data flow, which does not belong in a lint pass.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
