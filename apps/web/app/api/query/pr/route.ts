@@ -35,5 +35,6 @@ export async function GET(request: NextRequest) {
     ...row,
     gallery_images: row.gallery_images ?? [],
     highlights: row.highlights ?? [],
+    payment_methods: row.payment_methods ?? [],
   });
 }

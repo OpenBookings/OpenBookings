@@ -250,6 +250,26 @@ export const propertyContent = pgTable("property_content", {
 });
 
 /**
+ * The catalogue behind `property_content.payment_methods`.
+ *
+ * A lookup table rather than a hardcoded map in the listing page: adding a
+ * method, swapping a logo, or fixing a name is a row edit, not a deploy. The
+ * `code` is what the host's selection stores, so it is the primary key.
+ *
+ * `artworkUrl` is nullable because not every method has a logo — cash renders
+ * as its label. `note` is the tooltip shown beside the label; it is the reason
+ * cash needs one ("only available at the hotel") and cards do not.
+ */
+export const paymentMethods = pgTable("payment_methods", {
+  code: varchar("code", { length: 32 }).primaryKey(),
+  label: varchar("label", { length: 60 }).notNull(),
+  artworkUrl: text("artwork_url"),
+  note: varchar("note", { length: 160 }),
+  sortOrder: smallint("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+/**
  * "Nearby" rows on the listing page's Location section.
  *
  * `distance` is a display string ("50 m", "1.2 km"), not a number: the host is

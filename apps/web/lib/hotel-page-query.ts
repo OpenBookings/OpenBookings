@@ -1,5 +1,15 @@
 import { sql } from "@openbookings/db";
 
+/** One row of the `payment_methods` catalogue, as the listing page renders it. */
+export interface PaymentMethodArtwork {
+  code: string;
+  label: string;
+  /** NULL for methods with no logo (cash) — those render as their label. */
+  artwork_url: string | null;
+  /** Tooltip shown beside the label, e.g. cash being in-person only. */
+  note: string | null;
+}
+
 /**
  * Everything the public listing page renders about a property.
  *
@@ -45,7 +55,12 @@ export interface HotelPageData {
   cot_fee: string | null;
   extra_bed_fee: string | null;
   pets_allowed: boolean | null;
-  payment_methods: string[] | null;
+  /**
+   * Resolved from the `payment_methods` catalogue, not the raw codes the host
+   * selected: the listing page needs the artwork and display name, and those
+   * are a row edit rather than a deploy. Already ordered for display.
+   */
+  payment_methods: PaymentMethodArtwork[];
   legal_company_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
@@ -83,7 +98,7 @@ export function buildHeroQuery(slug: string) {
     c.cta_headline, c.cta_body, c.fine_print,
     c.reception_24h, c.free_cancellation_days, c.prepayment_required,
     c.children_welcome, c.min_check_in_age, c.cot_policy, c.cot_fee,
-    c.extra_bed_fee, c.pets_allowed, c.payment_methods,
+    c.extra_bed_fee, c.pets_allowed,
     c.legal_company_name, c.contact_email, c.contact_phone,
     c.company_registration, c.vat_number,
     (
@@ -92,6 +107,18 @@ export function buildHeroQuery(slug: string) {
       ) ORDER BY h.sort_order), '[]'::json)
       FROM property_highlights h WHERE h.property_id = p.id
     ) AS highlights,
+    -- The host stores codes; the page needs artwork and names. Resolving here
+    -- keeps that a catalogue row rather than a map in the component. A code
+    -- with no active catalogue row simply drops out, and a property with no
+    -- content row at all yields '[]' (= ANY(NULL) matches nothing).
+    (
+      SELECT COALESCE(json_agg(json_build_object(
+        'code', pm.code, 'label', pm.label,
+        'artwork_url', pm.artwork_url, 'note', pm.note
+      ) ORDER BY pm.sort_order, pm.label), '[]'::json)
+      FROM payment_methods pm
+      WHERE pm.is_active AND pm.code = ANY(c.payment_methods)
+    ) AS payment_methods,
     (
       SELECT pi.url
       FROM property_images pi

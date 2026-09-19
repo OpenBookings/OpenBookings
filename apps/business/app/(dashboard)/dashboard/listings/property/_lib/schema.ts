@@ -4,7 +4,11 @@ import { z } from "zod";
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const TIME_MESSAGE = "Use a 24-hour time like 15:00.";
 
-/** Payment methods the listing page has artwork for. */
+/**
+ * Codes a host may select. The display name, logo and tooltip for each live in
+ * the `payment_methods` table — this list is only the accept-set for the form,
+ * so a new code needs a catalogue row *and* an entry here.
+ */
 export const PAYMENT_METHODS = [
   "visa",
   "mastercard",

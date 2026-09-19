@@ -7,14 +7,6 @@ import { BusinessDetailsButton } from "./BusinessDetailsButton";
 /** Fees are stored in whole euros (`optionalMoney` in the editor's schema). */
 const money = (v: string | null) => (v === null ? null : `€${Number(v)}`);
 
-const PAYMENT_ARTWORK: Record<string, { src: string; alt: string }> = {
-  visa:       { src: "https://cdn.openbookings.co/media/visa.png",       alt: "Visa" },
-  mastercard: { src: "https://cdn.openbookings.co/media/mastercard.png", alt: "Mastercard" },
-  amex:       { src: "https://cdn.openbookings.co/media/amex.svg",       alt: "American Express" },
-  wero:       { src: "https://cdn.openbookings.co/media/wero-1.svg",     alt: "Wero" },
-  applepay:   { src: "https://cdn.openbookings.co/media/applepay.svg",   alt: "Apple Pay" },
-};
-
 export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
   // Formatting lives here rather than in the editor so every property phrases
   // these the same way, and so the wording survives a future translation pass.
@@ -63,9 +55,9 @@ export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
     { Icon: Dog, text: hotel.pets_allowed ? "Pets allowed" : "Pets not allowed" },
   ];
 
+  // Artwork, names and tooltips come from the `payment_methods` catalogue via
+  // the query — the page no longer knows which methods exist. Already ordered.
   const paymentMethods = hotel.payment_methods ?? [];
-  const cards = paymentMethods.map((m) => PAYMENT_ARTWORK[m]).filter(Boolean);
-  const acceptsCash = paymentMethods.includes("cash");
 
   const finePrint = hotel.fine_print ?? [];
 
@@ -131,21 +123,27 @@ export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/30">Payment Methods</p>
             <div className="flex flex-wrap gap-3">
-              {cards.map(({ src, alt }) => (
-                <div key={alt} className="flex items-center justify-center h-9 w-16 rounded-lg bg-white/6 border border-white/10">
-                  <img src={src} alt={alt} className="h-5 w-10 object-contain" draggable={false} />
+              {paymentMethods.map(({ code, label, artwork_url, note }) => (
+                <div
+                  key={code}
+                  className="group relative flex items-center justify-center h-9 w-16 rounded-lg bg-white/6 border border-white/10"
+                  style={note ? { cursor: "help" } : undefined}
+                >
+                  {artwork_url ? (
+                    <img src={artwork_url} alt={label} className="h-5 w-10 object-contain" draggable={false} />
+                  ) : (
+                    // No logo in the catalogue — the name is the tile.
+                    <span className={`text-xs font-medium text-white/55 tracking-wide${note ? " border-b border-dashed border-white/30" : ""}`}>
+                      {label}
+                    </span>
+                  )}
+                  {note && (
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-45 rounded-lg bg-[#1a1a1a] border border-white/12 px-3 py-2 text-xs text-white/70 leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20 text-center">
+                      {note}
+                    </div>
+                  )}
                 </div>
               ))}
-              {acceptsCash && (
-              <div className="group relative flex items-center justify-center h-9 w-16 rounded-lg bg-white/6 border border-white/10" style={{ cursor: "help" }}>
-                <span className="text-xs font-medium text-white/55 tracking-wide border-b border-dashed border-white/30">
-                  Cash
-                </span>
-                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[180px] rounded-lg bg-[#1a1a1a] border border-white/12 px-3 py-2 text-xs text-white/70 leading-snug opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20 text-center">
-                  Payment method only available at the hotel
-                </div>
-              </div>
-              )}
             </div>
           </div>
 

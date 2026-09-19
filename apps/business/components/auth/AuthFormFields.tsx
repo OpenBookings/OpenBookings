@@ -8,13 +8,13 @@ import {
     useState,
 } from "react";
 import posthog from "posthog-js";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
 
-export type AuthFormCardPhase = "idle" | "email_sent" | "social";
+export type AuthFormCardPhase = "idle" | "sending" | "email_sent" | "social";
 
 type AuthFormPhaseContextValue = {
     phase: AuthFormCardPhase;
@@ -76,10 +76,11 @@ export function AuthFormFields({
 
     useEffect(() => {
         if (!setCardPhase) return;
-        if (sentEmail) setCardPhase("email_sent");
+        if (loading) setCardPhase("sending");
+        else if (sentEmail) setCardPhase("email_sent");
         else if (socialState) setCardPhase("social");
         else setCardPhase("idle");
-    }, [sentEmail, socialState, setCardPhase]);
+    }, [loading, sentEmail, socialState, setCardPhase]);
 
     const resetSocialState = () => {
         setSocialState(null);
@@ -162,6 +163,19 @@ export function AuthFormFields({
     };
 
     const providerLabel = socialState?.provider === "microsoft" ? "Microsoft" : "Google";
+
+    if (loading) {
+        return (
+            <div
+                className="w-full min-h-59.5 flex flex-col justify-center items-center text-center gap-3"
+                role="status"
+                aria-live="polite"
+            >
+                <Loader2 className="size-8 animate-spin text-white/90" aria-hidden="true" />
+                <p className="text-white/85 max-w-xs">Sending your magic link...</p>
+            </div>
+        );
+    }
 
     if (sentEmail) {
         return (
