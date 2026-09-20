@@ -284,10 +284,13 @@ jobs:
     # deployment branch policy limiting this environment to `main`. Asked once
     # -- which is why migrations and container rolls are one job, not several.
     #
-    # Only DATABASE_URL_DIRECT and OB_PROBE_TOKEN are environment-scoped, so a
-    # pull_request run cannot reach them. SCW_SECRET_KEY is deliberately
-    # repo-scoped: the build-* jobs above need it to log in to the registry,
-    # and they are not gated on an environment.
+    # Every secret below is repo-scoped, not environment-scoped -- the
+    # environment's protection is the required reviewer and the main-only
+    # branch policy, not secret isolation. Nothing reachable from a
+    # pull_request references them (this job is push-only, and the build-*
+    # jobs use only SCW_SECRET_KEY, for registry login), so a PR still cannot
+    # reach them. Moving them onto the environment would make that structural
+    # rather than a property of how the jobs happen to be wired today.
     environment: production
     env:
       SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
