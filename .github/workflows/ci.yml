@@ -100,14 +100,18 @@ jobs:
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
-          # ci.yml is in every app filter: it defines the build args, so a
-          # change to it can change what lands in the image. Leaving it out
-          # is how a corrected build arg sits unapplied until something
-          # unrelated happens to trigger a rebuild.
+          # ci.yml and .github/scripts are in every app filter. ci.yml
+          # defines the build args, so changing it changes what lands in the
+          # image. The scripts are not a build input at all -- but rolling is
+          # gated on an image having been rebuilt, so without this a fix to
+          # roll-container.sh or check-release.sh can never reach production.
+          # Both omissions orphan a correction until some unrelated commit
+          # happens to trigger a rebuild.
           filters: |
             web:
               - 'apps/web/**'
               - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
@@ -115,6 +119,7 @@ jobs:
             business:
               - 'apps/business/**'
               - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
@@ -122,12 +127,14 @@ jobs:
             docs:
               - 'apps/docs/**'
               - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
             support:
               - 'apps/support-bot/**'
               - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
