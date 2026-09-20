@@ -1,0 +1,152 @@
+# Put an app back on an image it was already running.
+#
+# Every CI push tags its images with the commit SHA and those tags are
+# immutable, so a rollback is only ever "point the container at an older tag
+# and deploy" -- there is nothing to rebuild and no dependency on the state of
+# main.
+#
+# This rolls back CODE ONLY. Migrations are never reversed: an older image runs
+# against today's schema, which is precisely why every migration in
+# packages/db/drizzle/ has to be backward-compatible (expand/contract). If the
+# release you are undoing dropped or renamed a column, this will not save you.
+
+name: OpenBookings - Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Which app to roll back
+        required: true
+        type: choice
+        options:
+          - web
+          - business
+          - docs
+          - support
+      sha:
+        description: Commit SHA to roll back to (must already have been built and pushed)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  SCW_REGISTRY: rg.nl-ams.scw.cloud
+  SCW_NAMESPACE: namespace-distracted-saha
+
+jobs:
+  rollback:
+    name: Roll back ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    # Same gate as a release: this changes production, so it asks the same
+    # reviewer and reads the same environment-scoped credentials.
+    environment: production
+    env:
+      SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+      SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+      SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+      SCW_DEFAULT_REGION: ${{ vars.SCW_REGION || 'nl-ams' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # `sha` is free text from whoever ran the workflow and ends up in a shell
+      # command and an image reference, so constrain it to what a git SHA can
+      # actually be before it goes anywhere near either.
+      - name: Resolve the target image
+        id: target
+        env:
+          APP: ${{ inputs.app }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::'${SHA}' is not a full 40-character commit SHA. CI tags images with the full SHA; copy it from the run you want to return to."
+            exit 1
+          fi
+
+          case "$APP" in
+            web|business|docs|support) ;;
+            *) echo "::error::unknown app '${APP}'"; exit 1 ;;
+          esac
+
+          container_id_var="SCW_CONTAINER_ID_$(echo "$APP" | tr '[:lower:]' '[:upper:]')"
+          echo "image=${SCW_REGISTRY}/${SCW_NAMESPACE}/openbookings-${APP}:${SHA}" >> "$GITHUB_OUTPUT"
+          echo "container_id_var=${container_id_var}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+
+      # Fail here rather than leaving the container wedged pulling a tag that
+      # was never pushed -- the usual cause being a SHA whose CI run did not
+      # rebuild this particular app.
+      - name: Check the image exists
+        env:
+          IMAGE: ${{ steps.target.outputs.image }}
+        run: |
+          set -euo pipefail
+          if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "::error::${IMAGE} is not in the registry. That SHA may not have rebuilt ${{ inputs.app }} -- only apps whose paths changed are built."
+            exit 1
+          fi
+          echo "found ${IMAGE}"
+
+      - name: Install the Scaleway CLI
+        env:
+          SCW_CLI_VERSION: 2.62.0
+          SCW_CLI_SHA256: 7638c385c1a43a5d9022a63791769fd464e14314032a51411726f062f3053e67
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/scw \
+            "https://github.com/scaleway/scaleway-cli/releases/download/v${SCW_CLI_VERSION}/scaleway-cli_${SCW_CLI_VERSION}_linux_amd64"
+          echo "${SCW_CLI_SHA256}  /tmp/scw" | sha256sum -c -
+          chmod +x /tmp/scw
+          sudo mv /tmp/scw /usr/local/bin/scw
+
+      - name: Roll the container
+        env:
+          IMAGE: ${{ steps.target.outputs.image }}
+          WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
+          BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
+          DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
+          SUPPORT_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_SUPPORT }}
+          APP: ${{ inputs.app }}
+          OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+
+          case "$APP" in
+            web)      container_id="$WEB_CONTAINER_ID" ;;
+            business) container_id="$BUSINESS_CONTAINER_ID" ;;
+            docs)     container_id="$DOCS_CONTAINER_ID" ;;
+            support)  container_id="$SUPPORT_CONTAINER_ID" ;;
+          esac
+
+          if [ -z "$container_id" ]; then
+            echo "::error::repository variable ${{ steps.target.outputs.container_id_var }} is not set"
+            exit 1
+          fi
+
+          .github/scripts/roll-container.sh "$container_id" "$IMAGE"
+
+          if [ "$APP" = "web" ]; then
+            OB_PROBE_TOKEN="$OB_PROBE_TOKEN" \
+              .github/scripts/check-release.sh openbookings.co "$SHA"
+          fi
+
+          {
+            echo "### Rolled back \`${APP}\`"
+            echo
+            echo "- Image: \`${IMAGE}\`"
+            echo "- Triggered by: @${GITHUB_ACTOR}"
+            echo
+            echo "Code only -- the database schema was not touched."
+          } >> "$GITHUB_STEP_SUMMARY"

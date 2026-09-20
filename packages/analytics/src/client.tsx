@@ -16,6 +16,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, useContext, createContext, createElement, Suspense } from 'react'
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
+const RELEASE_SHA = process.env.NEXT_PUBLIC_RELEASE_SHA
 
 // ─── Cookie Consent ───────────────────────────────────────────────────────────
 
@@ -148,6 +149,14 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         maskTextSelector: '*',
       },
     })
+    // Tag every event with the image it came from, so a spike can be pinned to
+    // a release. Registered rather than passed per-capture: this is a super
+    // property, so it rides along on $pageview and everything downstream too.
+    // Only apps whose Dockerfile passes the build arg have it -- the rest would
+    // otherwise register `undefined` and put a useless key on every event.
+    if (RELEASE_SHA) {
+      posthog.register({ release: RELEASE_SHA })
+    }
     setInitialized(true)
   }, [consent])
 

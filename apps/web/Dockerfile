@@ -41,6 +41,10 @@
     ARG NEXT_PUBLIC_COOKIE_VERSION
     ARG NEXT_PUBLIC_SENTRY_DSN
     ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    # The commit this image was built from. NEXT_PUBLIC_ so the browser bundle
+    # carries it too: Sentry and PostHog both tag client-side events with it,
+    # which is what makes "which release served this?" answerable at all.
+    ARG NEXT_PUBLIC_RELEASE_SHA
 
     ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
     ENV NEXT_PUBLIC_BUSINESS_URL=$NEXT_PUBLIC_BUSINESS_URL
@@ -51,6 +55,7 @@
     ENV NEXT_PUBLIC_COOKIE_VERSION=$NEXT_PUBLIC_COOKIE_VERSION
     ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
     ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    ENV NEXT_PUBLIC_RELEASE_SHA=$NEXT_PUBLIC_RELEASE_SHA
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in
     # <workspace>/node_modules; the root node_modules only holds the store
