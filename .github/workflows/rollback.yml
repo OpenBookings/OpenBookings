@@ -9,6 +9,10 @@
 # against today's schema, which is precisely why every migration in
 # packages/db/drizzle/ has to be backward-compatible (expand/contract). If the
 # release you are undoing dropped or renamed a column, this will not save you.
+#
+# support-bot is absent from the choices below: it has no Serverless
+# Container, so there is nothing to point at an older tag. ci.yml does not
+# roll it either.
 
 name: OpenBookings - Rollback
 
@@ -23,7 +27,6 @@ on:
           - web
           - business
           - docs
-          - support
       sha:
         description: Commit SHA to roll back to (must already have been built and pushed)
         required: true
@@ -41,7 +44,7 @@ jobs:
     name: Roll back ${{ inputs.app }}
     runs-on: ubuntu-latest
     # Same gate as a release: this changes production, so it asks the same
-    # reviewer and reads the same environment-scoped credentials.
+    # reviewer and is limited to the same branch by the same environment.
     environment: production
     env:
       SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
@@ -70,7 +73,7 @@ jobs:
           fi
 
           case "$APP" in
-            web|business|docs|support) ;;
+            web|business|docs) ;;
             *) echo "::error::unknown app '${APP}'"; exit 1 ;;
           esac
 
@@ -116,7 +119,6 @@ jobs:
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
-          SUPPORT_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_SUPPORT }}
           APP: ${{ inputs.app }}
           OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
           SHA: ${{ inputs.sha }}
@@ -127,7 +129,6 @@ jobs:
             web)      container_id="$WEB_CONTAINER_ID" ;;
             business) container_id="$BUSINESS_CONTAINER_ID" ;;
             docs)     container_id="$DOCS_CONTAINER_ID" ;;
-            support)  container_id="$SUPPORT_CONTAINER_ID" ;;
           esac
 
           if [ -z "$container_id" ]; then

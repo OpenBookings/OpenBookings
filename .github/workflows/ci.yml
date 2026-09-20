@@ -23,27 +23,6 @@ jobs:
     name: Verify
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        # PostGIS, not plain postgres: properties.location is
-        # geography(point, 4326) and the ARI/search queries call ST_DWithin,
-        # ST_MakePoint and ST_X/ST_Y. Stock postgres has no `geography` type,
-        # so drizzle-kit push fails on the properties table.
-        image: postgis/postgis:17-3.5-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: openbookings_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/openbookings_test
-      DATABASE_URL_DIRECT: postgres://postgres:postgres@127.0.0.1:5432/openbookings_test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -55,17 +34,53 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # Enables PostGIS and applies the schema. See scripts/apply-schema-ci.ts
-      # for why this is neither `drizzle-kit push` nor `drizzle-kit migrate`.
-      - name: Prepare test database
-        working-directory: packages/db
-        run: bun run db:setup:ci
-
       - run: bun run lint
 
       - run: bun run typecheck
 
-      - run: bun run test
+      # A throwaway Neon branch, not a Postgres service container.
+      #
+      # The container could only ever hold what drizzle-kit export renders from
+      # src/schema.ts, and that is 24 tables -- it does not include `user`,
+      # `session`, `organization`, `property_access` or the other eleven
+      # Better Auth / IAM tables, because nothing in this repo creates them.
+      # Queries that join `"user"` (the ARI availability read, support.ts)
+      # therefore could not be tested at all, and 0007, 0011 and 0012 would
+      # fail to apply to a genuinely empty database.
+      #
+      # A branch is a copy-on-write clone of the real thing, so the schema is
+      # whatever production actually has, PostGIS included, with no schema step
+      # to keep in sync. It is writable, which the tests need -- they insert
+      # fixtures inside a transaction and roll it back.
+      - name: Create a throwaway database branch
+        id: neon
+        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          # The default branch of the openbookings-dev project, by id rather
+          # than name -- it is confusingly *called* "production".
+          parent_branch: br-frosty-wildflower-alcqwefl
+          branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      # The direct endpoint, not the pooled one: the pooler rewrites and
+      # batches statements, and these tests drive explicit transactions.
+      - name: Run tests
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+        run: bun run test
+
+      # Always, including when the tests failed -- an abandoned branch keeps
+      # billing. Skipped only if the branch was never created, where there is
+      # nothing to delete and the delete would itself fail.
+      - name: Delete the throwaway database branch
+        if: ${{ always() && steps.neon.outputs.branch_id != '' }}
+        uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ steps.neon.outputs.branch_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}
 
   detect:
     name: Detect changed apps
@@ -133,8 +148,13 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:main
           build-args: |
             # Both origins, under the same names the code reads. Every image
             # gets both because the two apps link at each other.
@@ -144,7 +164,7 @@ jobs:
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
-            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
@@ -173,8 +193,13 @@ jobs:
           context: .
           file: ./apps/business/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:main
           build-args: |
             # Both origins, under the same names the code reads. Every image
             # gets both because the two apps link at each other.
@@ -187,7 +212,7 @@ jobs:
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
-            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
@@ -211,8 +236,13 @@ jobs:
           context: .
           file: ./apps/docs/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:main
 
   build-support:
     needs: detect
@@ -233,8 +263,13 @@ jobs:
           context: .
           file: ./apps/support-bot/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:main
 
   release:
     name: Release
@@ -245,10 +280,17 @@ jobs:
     # paths did not change has no new image and simply is not rolled.
     if: ${{ github.event_name == 'push' && needs.detect.result == 'success' && !cancelled() && !failure() }}
     runs-on: ubuntu-latest
-    # The single gate for the whole release. Production credentials live on this
-    # environment rather than the repo, so a pull_request run cannot reach them,
-    # and a required reviewer here is asked once -- which is also why migrations
-    # and container rolls are one job and not several.
+    # The single gate for the whole release: a required reviewer, and a
+    # deployment branch policy limiting this environment to `main`. Asked once
+    # -- which is why migrations and container rolls are one job, not several.
+    #
+    # Every secret below is repo-scoped, not environment-scoped -- the
+    # environment's protection is the required reviewer and the main-only
+    # branch policy, not secret isolation. Nothing reachable from a
+    # pull_request references them (this job is push-only, and the build-*
+    # jobs use only SCW_SECRET_KEY, for registry login), so a PR still cannot
+    # reach them. Moving them onto the environment would make that structural
+    # rather than a property of how the jobs happen to be wired today.
     environment: production
     env:
       SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
@@ -299,17 +341,20 @@ jobs:
           chmod +x /tmp/scw
           sudo mv /tmp/scw /usr/local/bin/scw
 
+      # support-bot is built and pushed above but deliberately not rolled:
+      # there is no support-bot Serverless Container, so there is nothing to
+      # point at an image. Because `packages/**` is in the support paths
+      # filter, leaving it here would fail nearly every release on a missing
+      # SCW_CONTAINER_ID_SUPPORT. Add the roll back when the container exists.
       - name: Roll the containers whose images were rebuilt
         env:
           IMAGE_BASE: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}
           WEB_BUILT: ${{ needs.detect.outputs.web }}
           BUSINESS_BUILT: ${{ needs.detect.outputs.business }}
           DOCS_BUILT: ${{ needs.detect.outputs.docs }}
-          SUPPORT_BUILT: ${{ needs.detect.outputs.support }}
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
-          SUPPORT_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_SUPPORT }}
         run: |
           set -euo pipefail
 
@@ -336,7 +381,6 @@ jobs:
           roll_if_built web      "$WEB_BUILT"      "$WEB_CONTAINER_ID"
           roll_if_built business "$BUSINESS_BUILT" "$BUSINESS_CONTAINER_ID"
           roll_if_built docs     "$DOCS_BUILT"     "$DOCS_CONTAINER_ID"
-          roll_if_built support  "$SUPPORT_BUILT"  "$SUPPORT_CONTAINER_ID"
 
           echo "Released ${GITHUB_SHA}"
 
