@@ -32,8 +32,21 @@ container_status() {
 
 echo "Rolling ${CONTAINER_ID} to ${IMAGE}"
 
-scw container container update "$CONTAINER_ID" "registry-image=${IMAGE}" -o json > /dev/null
-scw container container deploy "$CONTAINER_ID" -o json > /dev/null
+# `image=`, not `registry-image=`, and `redeploy`, not `deploy` -- the CLI has
+# no `deploy` subcommand at all. Both were wrong here and each only surfaced
+# once the call before it succeeded. Verified against scw 2.62.0:
+#   scw container container update --help   -> [image]
+#   scw container container --help          -> create|delete|get|list|redeploy|update
+scw container container update "$CONTAINER_ID" "image=${IMAGE}" -o json > /dev/null
+
+# Changing the image is itself enough to start a deployment, so this can come
+# back "already deploying". That is the good case, not a failure, and the
+# two-phase wait below is what actually decides whether the roll worked -- so
+# only this one call tolerates an error, and says when it hit one.
+if ! redeploy_err="$(scw container container redeploy "$CONTAINER_ID" -o json 2>&1 >/dev/null)"; then
+  echo "  redeploy call returned an error; relying on the update-triggered deployment"
+  echo "  (${redeploy_err})"
+fi
 
 # Phase one: wait for the container to leave `ready`.
 #
