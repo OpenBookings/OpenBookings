@@ -133,8 +133,13 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-web:main
           build-args: |
             # Both origins, under the same names the code reads. Every image
             # gets both because the two apps link at each other.
@@ -173,8 +178,13 @@ jobs:
           context: .
           file: ./apps/business/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-business:main
           build-args: |
             # Both origins, under the same names the code reads. Every image
             # gets both because the two apps link at each other.
@@ -211,8 +221,13 @@ jobs:
           context: .
           file: ./apps/docs/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:main
 
   build-support:
     needs: detect
@@ -233,8 +248,13 @@ jobs:
           context: .
           file: ./apps/support-bot/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:main
 
   release:
     name: Release
@@ -245,10 +265,14 @@ jobs:
     # paths did not change has no new image and simply is not rolled.
     if: ${{ github.event_name == 'push' && needs.detect.result == 'success' && !cancelled() && !failure() }}
     runs-on: ubuntu-latest
-    # The single gate for the whole release. Production credentials live on this
-    # environment rather than the repo, so a pull_request run cannot reach them,
-    # and a required reviewer here is asked once -- which is also why migrations
-    # and container rolls are one job and not several.
+    # The single gate for the whole release: a required reviewer, and a
+    # deployment branch policy limiting this environment to `main`. Asked once
+    # -- which is why migrations and container rolls are one job, not several.
+    #
+    # Only DATABASE_URL_DIRECT and OB_PROBE_TOKEN are environment-scoped, so a
+    # pull_request run cannot reach them. SCW_SECRET_KEY is deliberately
+    # repo-scoped: the build-* jobs above need it to log in to the registry,
+    # and they are not gated on an environment.
     environment: production
     env:
       SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
@@ -299,17 +323,20 @@ jobs:
           chmod +x /tmp/scw
           sudo mv /tmp/scw /usr/local/bin/scw
 
+      # support-bot is built and pushed above but deliberately not rolled:
+      # there is no support-bot Serverless Container, so there is nothing to
+      # point at an image. Because `packages/**` is in the support paths
+      # filter, leaving it here would fail nearly every release on a missing
+      # SCW_CONTAINER_ID_SUPPORT. Add the roll back when the container exists.
       - name: Roll the containers whose images were rebuilt
         env:
           IMAGE_BASE: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}
           WEB_BUILT: ${{ needs.detect.outputs.web }}
           BUSINESS_BUILT: ${{ needs.detect.outputs.business }}
           DOCS_BUILT: ${{ needs.detect.outputs.docs }}
-          SUPPORT_BUILT: ${{ needs.detect.outputs.support }}
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
-          SUPPORT_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_SUPPORT }}
         run: |
           set -euo pipefail
 
@@ -336,7 +363,6 @@ jobs:
           roll_if_built web      "$WEB_BUILT"      "$WEB_CONTAINER_ID"
           roll_if_built business "$BUSINESS_BUILT" "$BUSINESS_CONTAINER_ID"
           roll_if_built docs     "$DOCS_BUILT"     "$DOCS_CONTAINER_ID"
-          roll_if_built support  "$SUPPORT_BUILT"  "$SUPPORT_CONTAINER_ID"
 
           echo "Released ${GITHUB_SHA}"
 

@@ -126,7 +126,7 @@ interface PropertyRow {
  * bookings deliberately do not: they have not been paid for and holding
  * inventory against them would show hosts a lower number than they can sell.
  */
-const AVAILABILITY_SQL = `
+export const AVAILABILITY_SQL = `
 WITH dates AS (
   SELECT generate_series($3::date, $4::date, INTERVAL '1 day')::date AS d
 ),
