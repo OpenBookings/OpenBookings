@@ -68,6 +68,7 @@ describeWithDb("AVAILABILITY_SQL", () => {
 
   /** Set by the fixture, read by the assertions. */
   let ownerUserId: string;
+  let guestUserId: string;
   let propertyId: string;
   let roomId: string;
   let ratePlanId: string;
@@ -84,7 +85,13 @@ describeWithDb("AVAILABILITY_SQL", () => {
   beforeEach(async () => {
     await db.query("BEGIN");
 
-    ownerUserId = `test-host-${crypto.randomUUID()}`;
+    // Both properties.owner_user_id and bookings.user_id are foreign keys to
+    // `"user"`. src/schema.ts declares neither as a reference -- it cannot,
+    // since it does not describe the Better Auth tables at all -- so a schema
+    // rendered from it accepts these inserts and the real database does not.
+    // Exactly the drift that running against a branch is here to catch.
+    ownerUserId = await createUser("business");
+    guestUserId = await createUser("private");
 
     // `location` is geography(Point, 4326), so this needs PostGIS — which a
     // Neon branch inherits. The coordinates are arbitrary; nothing reads them.
@@ -142,6 +149,20 @@ describeWithDb("AVAILABILITY_SQL", () => {
     return row;
   }
 
+  /**
+   * A Better Auth user row. id, name, email, emailVerified and account_type
+   * are all NOT NULL with no default; the rest of the table is nullable.
+   */
+  async function createUser(accountType: "private" | "business"): Promise<string> {
+    const id = `test-${accountType}-${crypto.randomUUID()}`;
+    await db.query(
+      `INSERT INTO "user" (id, name, email, "emailVerified", account_type)
+       VALUES ($1, $2, $3, true, $4::account_type)`,
+      [id, `Test ${accountType}`, `${id}@example.test`, accountType],
+    );
+    return id;
+  }
+
   /** A booking plus one reservation against the room, in the given status. */
   async function book(
     status: "pending" | "confirmed" | "cancelled" | "completed" | "no_show",
@@ -154,7 +175,7 @@ describeWithDb("AVAILABILITY_SQL", () => {
          (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
        VALUES ($1, $2, $3, $4, $5::booking_status, 10000)
        RETURNING id`,
-      [propertyId, `guest-${crypto.randomUUID()}`, checkIn, checkOut, status],
+      [propertyId, guestUserId, checkIn, checkOut, status],
     );
 
     for (let i = 0; i < units; i += 1) {
