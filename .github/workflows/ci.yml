@@ -100,26 +100,34 @@ jobs:
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
+          # ci.yml is in every app filter: it defines the build args, so a
+          # change to it can change what lands in the image. Leaving it out
+          # is how a corrected build arg sits unapplied until something
+          # unrelated happens to trigger a rebuild.
           filters: |
             web:
               - 'apps/web/**'
+              - '.github/workflows/ci.yml'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
             business:
               - 'apps/business/**'
+              - '.github/workflows/ci.yml'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
             docs:
               - 'apps/docs/**'
+              - '.github/workflows/ci.yml'
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
             support:
               - 'apps/support-bot/**'
+              - '.github/workflows/ci.yml'
               - 'packages/**'
               - 'package.json'
               - 'bun.lock'
@@ -386,7 +394,11 @@ jobs:
           roll_if_built business "$BUSINESS_BUILT" "$BUSINESS_CONTAINER_ID"
           roll_if_built docs     "$DOCS_BUILT"     "$DOCS_CONTAINER_ID"
 
-          echo "Released ${GITHUB_SHA}"
+          if [ "$WEB_BUILT" = "true" ] || [ "$BUSINESS_BUILT" = "true" ] || [ "$DOCS_BUILT" = "true" ]; then
+            echo "Released ${GITHUB_SHA}"
+          else
+            echo "Nothing to release: no app image was rebuilt for ${GITHUB_SHA}"
+          fi
 
       # Rolling to `ready` only proves Scaleway accepted the image. This proves
       # the thing actually answering openbookings.co is running this commit.
