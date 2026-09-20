@@ -12,6 +12,20 @@
  *
  * Uses the pg dependency this package already has, so it needs nothing
  * preinstalled on the runner.
+ *
+ * NOTE: CI no longer calls this. It runs against a throwaway Neon branch,
+ * because src/schema.ts does not describe the Better Auth / IAM tables
+ * (`user`, `session`, `organization`, `property_access`, ...) and so what this
+ * renders is missing fifteen of them -- enough that any query joining `"user"`
+ * cannot be tested. This remains the way to get a local database up without
+ * reaching for Neon:
+ *
+ *   docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5432:5432 \
+ *     --platform linux/amd64 postgis/postgis:17-3.5-alpine
+ *   DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres \
+ *     bun run db:setup:ci
+ *
+ * (`--platform` because that tag publishes no arm64 image.)
  */
 import { spawnSync } from "node:child_process";
 import { Pool } from "pg";

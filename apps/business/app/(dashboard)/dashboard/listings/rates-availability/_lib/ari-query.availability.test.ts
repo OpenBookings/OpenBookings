@@ -7,10 +7,15 @@
  * filter. Mocking the driver would only assert that the string we wrote is the
  * string we wrote.
  *
- * The connection is the ephemeral database CI already provisions (see
- * .github/workflows/ci.yml and packages/db/scripts/apply-schema-ci.ts). Every
- * test runs inside a transaction that is rolled back, so the suite leaves
- * nothing behind and the cases cannot see each other.
+ * The connection is a throwaway Neon branch CI creates per run and deletes
+ * afterwards (see .github/workflows/ci.yml). It has to be a branch and not a
+ * Postgres service container because AVAILABILITY_SQL joins `"user"`, which
+ * src/schema.ts does not describe and no migration creates -- a container
+ * built from the exported schema has no such table.
+ *
+ * Every test runs inside a transaction that is rolled back, so the suite
+ * leaves nothing behind and the cases cannot see each other. That matters more
+ * than usual here: the branch is cloned from a database with real rows in it.
  *
  * Scope note: this covers what the SQL itself decides. The precedence rule —
  * `available_override ?? computed` — lives in `loadAriGrid`, not in the query;
@@ -36,7 +41,8 @@ const describeWithDb = connectionString ? describe : describe.skip;
 if (!connectionString) {
   console.warn(
     "[ari-query.availability] DATABASE_URL not set — skipping. To run these:\n" +
-      "  docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgis/postgis:17-3.5-alpine\n" +
+      "  docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 5432:5432 \\\n" +
+      "    --platform linux/amd64 postgis/postgis:17-3.5-alpine\n" +
       "  cd packages/db && DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres bun run db:setup:ci",
   );
 }
@@ -80,8 +86,8 @@ describeWithDb("AVAILABILITY_SQL", () => {
 
     ownerUserId = `test-host-${crypto.randomUUID()}`;
 
-    // `location` is geography(Point, 4326) — the reason CI runs PostGIS and not
-    // stock postgres. The coordinates are arbitrary; nothing here reads them.
+    // `location` is geography(Point, 4326), so this needs PostGIS — which a
+    // Neon branch inherits. The coordinates are arbitrary; nothing reads them.
     const property = await db.query<{ id: string }>(
       `INSERT INTO properties
          (name, slug, address_line_1, city, country, timezone, location,

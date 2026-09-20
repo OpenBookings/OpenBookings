@@ -23,27 +23,6 @@ jobs:
     name: Verify
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        # PostGIS, not plain postgres: properties.location is
-        # geography(point, 4326) and the ARI/search queries call ST_DWithin,
-        # ST_MakePoint and ST_X/ST_Y. Stock postgres has no `geography` type,
-        # so drizzle-kit push fails on the properties table.
-        image: postgis/postgis:17-3.5-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: openbookings_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/openbookings_test
-      DATABASE_URL_DIRECT: postgres://postgres:postgres@127.0.0.1:5432/openbookings_test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -55,17 +34,53 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # Enables PostGIS and applies the schema. See scripts/apply-schema-ci.ts
-      # for why this is neither `drizzle-kit push` nor `drizzle-kit migrate`.
-      - name: Prepare test database
-        working-directory: packages/db
-        run: bun run db:setup:ci
-
       - run: bun run lint
 
       - run: bun run typecheck
 
-      - run: bun run test
+      # A throwaway Neon branch, not a Postgres service container.
+      #
+      # The container could only ever hold what drizzle-kit export renders from
+      # src/schema.ts, and that is 24 tables -- it does not include `user`,
+      # `session`, `organization`, `property_access` or the other eleven
+      # Better Auth / IAM tables, because nothing in this repo creates them.
+      # Queries that join `"user"` (the ARI availability read, support.ts)
+      # therefore could not be tested at all, and 0007, 0011 and 0012 would
+      # fail to apply to a genuinely empty database.
+      #
+      # A branch is a copy-on-write clone of the real thing, so the schema is
+      # whatever production actually has, PostGIS included, with no schema step
+      # to keep in sync. It is writable, which the tests need -- they insert
+      # fixtures inside a transaction and roll it back.
+      - name: Create a throwaway database branch
+        id: neon
+        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          # The default branch of the openbookings-dev project, by id rather
+          # than name -- it is confusingly *called* "production".
+          parent_branch: br-frosty-wildflower-alcqwefl
+          branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      # The direct endpoint, not the pooled one: the pooler rewrites and
+      # batches statements, and these tests drive explicit transactions.
+      - name: Run tests
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+        run: bun run test
+
+      # Always, including when the tests failed -- an abandoned branch keeps
+      # billing. Skipped only if the branch was never created, where there is
+      # nothing to delete and the delete would itself fail.
+      - name: Delete the throwaway database branch
+        if: ${{ always() && steps.neon.outputs.branch_id != '' }}
+        uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: ${{ steps.neon.outputs.branch_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}
 
   detect:
     name: Detect changed apps
@@ -149,7 +164,7 @@ jobs:
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
-            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
@@ -197,7 +212,7 @@ jobs:
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
-            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE }}
+            NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
