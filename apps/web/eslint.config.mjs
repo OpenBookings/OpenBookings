@@ -35,6 +35,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // maplibre's own minified dist, staged here by
+    // scripts/copy-maplibre-worker.mjs. Linting a vendored bundle reports on
+    // code nobody here wrote and cannot fix.
+    "public/maplibre/**",
   ]),
 ]);
 

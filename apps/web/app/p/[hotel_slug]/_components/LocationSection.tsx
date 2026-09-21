@@ -55,7 +55,6 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
                   }
                   center={[hotel.lon, hotel.lat]}
                   zoom={14}
-                  attributionControl={false}
                   interactive={false}
                 >
                   <MapMarker longitude={hotel.lon} latitude={hotel.lat}>

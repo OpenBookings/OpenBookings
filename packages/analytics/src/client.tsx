@@ -111,6 +111,11 @@ export function useCookieConsent() {
 
 // ─── PostHog Provider ─────────────────────────────────────────────────────────
 
+// Whether posthog.init() has actually run. Init is gated on consent and happens
+// in an effect, and child effects run before the parent's -- so anything that
+// needs a live client has to wait on this rather than read posthog.__loaded once.
+const PostHogReadyContext = createContext(false)
+
 function PostHogPageView() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -161,15 +166,61 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
   }, [consent])
 
   if (!initialized) {
-    return <>{children}</>
+    return <PostHogReadyContext.Provider value={false}>{children}</PostHogReadyContext.Provider>
   }
 
   return (
-    <PHProvider client={posthog}>
-      <Suspense fallback={null}>
-        <PostHogPageView />
-      </Suspense>
-      {children}
-    </PHProvider>
+    <PostHogReadyContext.Provider value={true}>
+      <PHProvider client={posthog}>
+        <Suspense fallback={null}>
+          <PostHogPageView />
+        </Suspense>
+        {children}
+      </PHProvider>
+    </PostHogReadyContext.Provider>
   )
+}
+
+// ─── Identity ─────────────────────────────────────────────────────────────────
+
+/**
+ * Links captured events to the signed-in account.
+ *
+ * Pass the user's UUID and nothing else. PostHog is a third-party processor and
+ * the privacy policy promises it never receives a name, email, or full IP; the
+ * UUID is a pseudonym only our own database can resolve back to a person. If a
+ * person property is ever worth adding, the policy's §2.3 and §5 have to say so
+ * first.
+ *
+ * Identity follows consent. With analytics declined PostHog is never
+ * initialised, so this is a no-op and a signed-in visitor stays untracked.
+ *
+ * Mount once per app, inside <PostHogProvider>. It covers a fresh sign-in (the
+ * session appears mid-visit) and a restored one (the cookie was already there
+ * on first paint) with the same code path -- both are just `userId` arriving.
+ */
+export function useAnalyticsIdentity(userId: string | null | undefined) {
+  const ready = useContext(PostHogReadyContext)
+  const identifiedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!ready) return
+
+    if (userId) {
+      // identify() reloads feature flags, so don't re-send an identity we
+      // already sent -- useSession() hands us a new object on every poll.
+      if (identifiedRef.current === userId) return
+      identifiedRef.current = userId
+      posthog.identify(userId)
+      return
+    }
+
+    // Signed out: by the button, by expiry, or revoked from another device.
+    // Only reset an identity this hook actually set -- a bare reset would throw
+    // away the anonymous distinct_id of every visitor who was never signed in.
+    if (identifiedRef.current !== null) {
+      identifiedRef.current = null
+      posthog.reset()
+    }
+  }, [ready, userId])
 }

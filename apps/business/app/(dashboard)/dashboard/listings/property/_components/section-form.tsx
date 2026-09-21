@@ -19,7 +19,19 @@ interface SectionFormProps<T> {
   initialValues: T;
   action: (prev: FormState<T>, formData: FormData) => Promise<FormState<T>>;
   onDirtyChange?: (dirty: boolean) => void;
-  children: (state: FormState<T>, pending: boolean) => React.ReactNode;
+  /**
+   * Called when the host discards. Only sections holding a field in React state
+   * rather than in the DOM need it: a form reset restores DOM defaults, but a
+   * controlled value re-renders straight back from state, so Discard would
+   * silently leave that field changed.
+   */
+  onReset?: () => void;
+  /**
+   * `markDirty` is for fields the form's own `onChange` cannot see. React
+   * writing a hidden input's `value` fires no input event, so a map pin or any
+   * other state-backed control has to say so itself.
+   */
+  children: (state: FormState<T>, pending: boolean, markDirty: () => void) => React.ReactNode;
 }
 
 /**
@@ -38,6 +50,7 @@ export function SectionForm<T>({
   initialValues,
   action,
   onDirtyChange,
+  onReset,
   children,
 }: SectionFormProps<T>) {
   const [state, formAction, pending] = React.useActionState(action, {
@@ -128,7 +141,7 @@ export function SectionForm<T>({
           </Alert>
         )}
 
-        {children(state, pending)}
+        {children(state, pending, markDirty)}
       </Form>
 
       <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
@@ -145,6 +158,7 @@ export function SectionForm<T>({
             onClick={() => {
               setDirty(false);
               onDirtyChange?.(false);
+              onReset?.();
             }}
           >
             Discard

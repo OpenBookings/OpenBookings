@@ -75,7 +75,7 @@ export default function PrivacyPage() {
               </h1>
               <p className="text-sm text-white/40">
                 Last updated:{" "}
-                <time dateTime="2026-07-27">July 27, 2026</time>
+                <time dateTime="2026-09-21">September 21, 2026</time>
                 &ensp;·&ensp;
                 Effective:{" "}
                 <time dateTime="2026-08-01">August 1, 2026</time>
@@ -154,6 +154,12 @@ export default function PrivacyPage() {
                     <p className="mb-4 text-sm text-white/40">
                       Via PostHog. We never pass your name, full IP address, or payment details
                       into analytics events.
+                    </p>
+                    <p className="mb-4 text-sm text-white/40">
+                      If you&apos;re signed in and accepted analytics cookies, events are linked to
+                      your account so we can understand usage across sessions and devices. The link
+                      is your account&apos;s internal ID &mdash; a random identifier, not your name
+                      or email.
                     </p>
                     <Meta
                       why="To understand usage and fix issues."
@@ -280,7 +286,7 @@ export default function PrivacyPage() {
                     ["Google Cloud", "Data processed by the app while it runs", "Application hosting and infrastructure", "EU (West)"],
                     ["Algolia", "Search queries, IP address", "Destination search", "EU (Central)"],
                     ["Lettermint", "Email address, booking details", "Sending transactional emails", "EU"],
-                    ["PostHog", "Usage events, session recordings (no PII)", "Product analytics", "EU"],
+                    ["PostHog", "Usage events, session recordings, account ID when signed in (no name or email)", "Product analytics", "EU"],
                     ["Sentry", "Error reports, stack traces, browser type", "Error tracking", "EU"],
                     ["Cloudflare", "IP address, request metadata", "CDN, DDoS and bot protection", "EU/US (SCCs)"],
                     ["Stripe", "Name, email, booking amount", "Payment processing and host payouts", "US/EU (SCCs)"],

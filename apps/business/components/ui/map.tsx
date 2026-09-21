@@ -28,6 +28,22 @@ import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
+ * after bundling is a hashed chunk under /_next/static/chunks/. It therefore
+ * requests /_next/static/chunks/maplibre-gl-worker.mjs, Next answers with its
+ * HTML 404 page, and the browser rejects the module worker on MIME type:
+ * "Failed to load module script: ... non-JavaScript MIME type of text/html".
+ *
+ * A map with no worker has nothing to parse tiles with, so `load` never fires
+ * and the surface sits on its loading state forever — with no error of its own,
+ * because the failure is the worker's, not the map's.
+ *
+ * scripts/copy-maplibre-worker.mjs stages the dist files into public/maplibre/
+ * on dev and build; this points MapLibre at that stable, same-origin path.
+ */
+MapLibreGL.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+
 const defaultStyles = {
   dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
   light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
@@ -150,7 +166,13 @@ type MapProps = {
   onViewportChange?: (viewport: MapViewport) => void;
   /** Show a loading indicator on the map */
   loading?: boolean;
-} & Omit<MapLibreGL.MapOptions, "container" | "style">;
+  /**
+   * `attributionControl` is deliberately not accepted. The tile providers
+   * require their credit to be shown — MapTiler's terms and OpenStreetMap's
+   * ODbL — so it is a licence obligation rather than a presentation choice,
+   * and the Map always renders it. Use `compact` styling if space is tight.
+   */
+} & Omit<MapLibreGL.MapOptions, "container" | "style" | "attributionControl">;
 
 function DefaultLoader() {
   return (
@@ -160,6 +182,15 @@ function DefaultLoader() {
         <span className="bg-muted-foreground/60 size-1.5 animate-pulse rounded-full [animation-delay:150ms]" />
         <span className="bg-muted-foreground/60 size-1.5 animate-pulse rounded-full [animation-delay:300ms]" />
       </div>
+    </div>
+  );
+}
+
+function MapFailure({ message }: { message: string }) {
+  return (
+    <div className="bg-background absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 p-4 text-center">
+      <p className="text-sm font-medium">The map could not be loaded</p>
+      <p className="text-muted-foreground max-w-xs text-xs">{message}</p>
     </div>
   );
 }
@@ -192,6 +223,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   const [mapInstance, setMapInstance] = useState<MapLibreGL.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
+  // MapLibre reports failures through an `error` event. With nothing bound to
+  // it, a map that can never finish loading presents as a spinner that turns
+  // forever with no way to tell whether it is slow, misconfigured or broken.
+  const [failure, setFailure] = useState<string | null>(null);
   const currentStyleRef = useRef<MapStyleOption | null>(null);
   const styleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const internalUpdateRef = useRef(false);
@@ -234,11 +269,11 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       container: containerRef.current,
       style: initialStyle,
       renderWorldCopies: false,
-      attributionControl: {
-        compact: true,
-      },
       ...props,
       ...viewport,
+      // After the spread, never before it: attribution carries the providers'
+      // required credit, so no caller gets to spread it away.
+      attributionControl: { compact: true },
     });
 
     const styleDataHandler = () => {
@@ -253,7 +288,18 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
         }
       }, 100);
     };
-    const loadHandler = () => setIsLoaded(true);
+    const loadHandler = () => {
+      setIsLoaded(true);
+      setFailure(null);
+    };
+
+    // Logged as well as surfaced: the event carries the only description of
+    // what went wrong, and tile-level failures that arrive after a successful
+    // load never reach the UI at all.
+    const errorHandler = (e: MapLibreGL.ErrorEvent) => {
+      console.error("[Map]", e.error);
+      setFailure(e.error?.message ?? "The map could not be loaded.");
+    };
 
     // Viewport change handler - skip if triggered by internal update
     const handleMove = () => {
@@ -261,7 +307,17 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       onViewportChangeRef.current?.(getViewport(map));
     };
 
+    // A handle to interrogate a map that will not finish loading. `load` only
+    // fires once MapLibre has completed a render frame with every source
+    // reporting loaded, so when it hangs the question is always "which one":
+    //   Object.entries(__obMap.style.tileManagers)
+    //     .map(([id, t]) => [id, t.loaded(), t._sourceLoaded, t._sourceErrored])
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __obMap?: MapLibreGL.Map }).__obMap = map;
+    }
+
     map.on("load", loadHandler);
+    map.on("error", errorHandler);
     map.on("styledata", styleDataHandler);
     map.on("move", handleMove);
     setMapInstance(map);
@@ -269,11 +325,13 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     return () => {
       clearStyleTimeout();
       map.off("load", loadHandler);
+      map.off("error", errorHandler);
       map.off("styledata", styleDataHandler);
       map.off("move", handleMove);
       map.remove();
       setIsLoaded(false);
       setIsStyleLoaded(false);
+      setFailure(null);
       setMapInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -337,7 +395,17 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
         ref={containerRef}
         className={cn("relative h-full w-full", className)}
       >
-        {(!isLoaded || loading) && <DefaultLoader />}
+        {/*
+          A failure only takes over the surface while the map has never
+          loaded. After a successful load the same event covers transient tile
+          errors, and blanking a working map over one missing tile is worse
+          than the missing tile.
+        */}
+        {!isLoaded && failure ? (
+          <MapFailure message={failure} />
+        ) : (
+          (!isLoaded || loading) && <DefaultLoader />
+        )}
         {/* SSR-safe: children render only when map is loaded on client */}
         {mapInstance && children}
       </div>

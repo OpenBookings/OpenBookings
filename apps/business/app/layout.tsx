@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Gloock, Allura, Libre_Franklin, Cormorant_Garamond, DM_Sans } from "next/font/google";
 import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
+import { AnalyticsIdentity } from "@/components/AnalyticsIdentity";
 import { CookieBanner } from "@/components/CookieBanner";
 import "./globals.css";
 
@@ -67,6 +68,7 @@ export default function RootLayout({
       <body>
         <CookieConsentProvider>
           <PostHogProvider>
+            <AnalyticsIdentity />
             <CookieBanner />
             {children}
           </PostHogProvider>

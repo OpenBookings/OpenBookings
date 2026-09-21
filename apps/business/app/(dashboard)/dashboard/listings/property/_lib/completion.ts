@@ -1,3 +1,4 @@
+import { hasPin } from "./geo";
 import { SECTION_IDS, type PropertyEditorData, type SectionId } from "./types";
 
 export interface SectionStatus {
@@ -67,18 +68,10 @@ const RULES: Record<SectionId, Rule[]> = {
     ["City", (d) => !isBlank(d.property.city)],
     ["Country", (d) => !isBlank(d.property.country)],
     ["Timezone", (d) => !isBlank(d.property.timezone)],
-    // `properties.location` is NOT NULL, so the onboarding promotion writes
-    // POINT(0 0) for a host who never placed a pin — the pin arrives here as
-    // 0,0 rather than null. Treating the exact origin as "no pin" is what
-    // stops that host publishing a listing whose map points at the Gulf of
-    // Guinea. Null Island is open ocean; no property is there.
-    [
-      "Map pin",
-      (d) =>
-        d.property.lat !== null &&
-        d.property.lon !== null &&
-        !(d.property.lat === 0 && d.property.lon === 0),
-    ],
+    // Via hasPin, so the checklist, the save schema and the editor's map all
+    // read the 0,0 sentinel the same way. What this buys: a host who never
+    // placed a pin cannot publish a listing pointing at the Gulf of Guinea.
+    ["Map pin", (d) => hasPin(d.property.lat, d.property.lon)],
   ],
   legal: [
     ["Legal company name", (d) => !isBlank(d.content.legalCompanyName)],

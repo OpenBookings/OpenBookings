@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { hasPin } from "./geo";
+
 /** 24-hour "HH:MM". Postgres `time` accepts more, but the editor renders a time input. */
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const TIME_MESSAGE = "Use a 24-hour time like 15:00.";
@@ -128,7 +130,10 @@ export const locationSchema = z.object({
     .transform((v) => Number(v))
     .refine((v) => v >= -180 && v <= 180, "That longitude is off the map."),
 })
-.refine((v) => !(v.lat === 0 && v.lon === 0), {
+// Shares hasPin with the checklist and the editor's map, so "the origin means
+// no pin" is stated once. The editor now renders its empty state from the same
+// rule, which is what stops this refusal arriving with no pin on screen to move.
+.refine((v) => hasPin(v.lat, v.lon), {
   path: ["lat"],
   message: "Drop a pin on the map.",
 });

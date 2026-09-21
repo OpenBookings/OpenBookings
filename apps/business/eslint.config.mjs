@@ -18,7 +18,10 @@ const eslintConfig = defineConfig([
       "no-return-assign": "error",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // public/maplibre/** is maplibre's own minified dist, staged there by
+  // scripts/copy-maplibre-worker.mjs. Linting a vendored bundle reports on
+  // code nobody here wrote and cannot fix.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/maplibre/**"]),
 ]);
 
 export default eslintConfig;

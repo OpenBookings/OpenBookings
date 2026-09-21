@@ -231,7 +231,6 @@ export function CoreInfoLocationStep({ values, onChange }: CoreInfoLocationStepP
           styles={{ light: MAP_STYLE, dark: MAP_STYLE }}
           center={values.coordinates ?? [8, 46]}
           zoom={values.coordinates ? 15 : 2}
-          attributionControl={false}
         >
           {values.coordinates && (
             <MapMarker longitude={values.coordinates[0]} latitude={values.coordinates[1]}>

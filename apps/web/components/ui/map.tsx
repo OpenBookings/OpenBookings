@@ -26,6 +26,22 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+/**
+ * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
+ * after bundling is a hashed chunk under /_next/static/chunks/. It therefore
+ * requests /_next/static/chunks/maplibre-gl-worker.mjs, Next answers with its
+ * HTML 404 page, and the browser rejects the module worker on MIME type:
+ * "Failed to load module script: ... non-JavaScript MIME type of text/html".
+ *
+ * A map with no worker has nothing to parse tiles with, so `load` never fires
+ * and the surface sits on its loading state forever — with no error of its own,
+ * because the failure is the worker's, not the map's.
+ *
+ * scripts/copy-maplibre-worker.mjs stages the dist files into public/maplibre/
+ * on dev and build; this points MapLibre at that stable, same-origin path.
+ */
+MapLibreGL.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 import React from "react";
 
 type MapContextValue = {
@@ -57,7 +73,13 @@ type MapProps = {
     light?: MapStyleOption;
     dark?: MapStyleOption;
   };
-} & Omit<MapLibreGL.MapOptions, "container" | "style">;
+  /**
+   * `attributionControl` is deliberately not accepted. The tile providers
+   * require their credit to be shown — MapTiler's terms and OpenStreetMap's
+   * ODbL — so it is a licence obligation rather than a presentation choice,
+   * and the Map always renders it. Use `compact` styling if space is tight.
+   */
+} & Omit<MapLibreGL.MapOptions, "container" | "style" | "attributionControl">;
 
 type MapRef = MapLibreGL.Map;
 
@@ -103,10 +125,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       container: containerRef.current,
       style: initialStyle,
       renderWorldCopies: false,
-      attributionControl: {
-        compact: true,
-      },
       ...props,
+      // After the spread, never before it: attribution carries the providers'
+      // required credit, so no caller gets to spread it away.
+      attributionControl: { compact: true },
     });
 
     const styleDataHandler = () => setIsStyleLoaded(true);

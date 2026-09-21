@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Gloock, Libre_Franklin } from "next/font/google";
 import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/client";
+import { AnalyticsIdentity } from "@/components/AnalyticsIdentity";
 import { CookieBanner } from "@/components/CookieBanner";
 import "./globals.css";
 
@@ -63,6 +64,7 @@ export default function RootLayout({
       <body>
         <CookieConsentProvider>
           <PostHogProvider>
+            <AnalyticsIdentity />
             <CookieBanner />
             {children}
           </PostHogProvider>

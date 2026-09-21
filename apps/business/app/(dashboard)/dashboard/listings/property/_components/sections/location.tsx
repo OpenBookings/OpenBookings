@@ -1,15 +1,17 @@
 "use client";
 
 import * as React from "react";
+import type { MapMouseEvent } from "maplibre-gl";
 import { toast } from "sonner";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { MapPinIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Map, MapMarker, MarkerContent } from "@/components/ui/map";
+import { Map, MapMarker, MarkerContent, useMap } from "@/components/ui/map";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveHighlights, saveLocation } from "../../_lib/actions";
+import { hasPin } from "../../_lib/geo";
 import { SectionForm } from "../section-form";
 import type { SectionProps } from "./props";
 
@@ -19,6 +21,50 @@ const HIGHLIGHT_ICONS = [
   "TreePine", "Train", "Plane", "Bus", "Car", "Bike", "MapPin",
 ] as const;
 
+/** Where the map opens for a host who has not placed a pin: most of Europe. */
+const UNPINNED_CENTER: [number, number] = [4.9, 52.37];
+const UNPINNED_ZOOM = 3;
+/** Close enough to pick a doorway rather than a district. */
+const PINNED_ZOOM = 15;
+
+/**
+ * Click-to-place, because `Map` exposes no click prop and a host whose property
+ * arrives without coordinates has no pin to drag. It reaches the map instance
+ * through the context `Map` publishes to its children, and lives here rather
+ * than in components/ui/map.tsx: placing a pin is this screen's job, not the
+ * map primitive's.
+ */
+function PinPlacer({ onPick }: { onPick: (lon: number, lat: number) => void }) {
+  const { map } = useMap();
+  const onPickRef = React.useRef(onPick);
+  React.useEffect(() => {
+    onPickRef.current = onPick;
+  });
+
+  React.useEffect(() => {
+    if (!map) return;
+
+    const handleClick = (e: MapMouseEvent) => {
+      // Markers are DOM siblings inside the map container, so a click on the
+      // pin itself bubbles here too. Only the canvas means "I meant that spot".
+      if (!(e.originalEvent.target instanceof HTMLCanvasElement)) return;
+
+      const { lng, lat } = e.lngLat;
+      onPickRef.current(lng, lat);
+      // Placing from the world view leaves the host too far out to judge what
+      // they picked, so close in — but never back out of a zoom they chose.
+      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), PINNED_ZOOM) });
+    };
+
+    map.on("click", handleClick);
+    return () => {
+      map.off("click", handleClick);
+    };
+  }, [map]);
+
+  return null;
+}
+
 export function LocationSection({ data, onDirtyChange }: SectionProps) {
   const { property, content, highlights } = data;
   const [lat, setLat] = React.useState(property.lat);
@@ -27,6 +73,22 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
     highlights.map((h) => ({ id: h.id, label: h.label, icon: h.icon, distance: h.distance })),
   );
   const [savingHighlights, setSavingHighlights] = React.useState(false);
+
+  // The editor used to ask `lat !== null`, but the pin never arrives as null:
+  // `properties.location` is NOT NULL, so onboarding stores the 0,0 sentinel
+  // (see _lib/geo.ts). That read opened the map at street zoom over open ocean
+  // and then refused to save it. hasPin is the same rule the checklist and the
+  // save schema use.
+  const pinned = hasPin(lat, lon);
+
+  function movePin(nextLon: number, nextLat: number, markDirty: () => void) {
+    setLon(nextLon);
+    setLat(nextLat);
+    // React writing a hidden input's value fires no input event, so the form's
+    // own onChange never sees this. Without saying so, a moved pin reads as
+    // "All changes saved" and the navigation guard lets it be thrown away.
+    markDirty();
+  }
 
   const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
   const styleId = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
@@ -54,8 +116,12 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
       initialValues={{} as Record<string, unknown>}
       action={saveLocation}
       onDirtyChange={onDirtyChange}
+      onReset={() => {
+        setLat(property.lat);
+        setLon(property.lon);
+      }}
     >
-      {(state, pending) => (
+      {(state, pending, markDirty) => (
         <FieldGroup className="max-w-3xl">
           <Field data-invalid={!!state.errors?.locationAbout}>
             <FieldLabel htmlFor="locationAbout">About</FieldLabel>
@@ -156,25 +222,31 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
 
           <Field data-invalid={!!state.errors?.lat || !!state.errors?.lon}>
             <FieldLabel>Map pin</FieldLabel>
-            <FieldDescription>Drag the pin to where guests should arrive.</FieldDescription>
-            <input type="hidden" name="lat" value={lat ?? ""} />
-            <input type="hidden" name="lon" value={lon ?? ""} />
-            <div className="h-80 overflow-hidden rounded-lg border">
+            <FieldDescription>
+              {pinned
+                ? "Drag the pin to where guests should arrive, or click the map to move it."
+                : "Click the map to drop a pin where guests should arrive."}
+            </FieldDescription>
+            {/*
+              Empty rather than "0" when there is no pin: the save schema reads
+              a blank as "not answered" and says so in the host's own words,
+              where a literal 0,0 would look like a deliberate answer.
+            */}
+            <input type="hidden" name="lat" value={pinned ? String(lat) : ""} />
+            <input type="hidden" name="lon" value={pinned ? String(lon) : ""} />
+            <div className="relative h-80 overflow-hidden rounded-lg border">
               <Map
                 styles={mapStyle ? { dark: mapStyle, light: mapStyle } : undefined}
-                center={[lon ?? 4.9, lat ?? 52.37]}
-                zoom={lat !== null ? 15 : 3}
-                attributionControl={false}
+                center={pinned ? [lon!, lat!] : UNPINNED_CENTER}
+                zoom={pinned ? PINNED_ZOOM : UNPINNED_ZOOM}
               >
-                {lat !== null && lon !== null && (
+                <PinPlacer onPick={(nextLon, nextLat) => movePin(nextLon, nextLat, markDirty)} />
+                {pinned && (
                   <MapMarker
-                    longitude={lon}
-                    latitude={lat}
+                    longitude={lon!}
+                    latitude={lat!}
                     draggable
-                    onDragEnd={({ lng, lat: newLat }) => {
-                      setLon(lng);
-                      setLat(newLat);
-                    }}
+                    onDragEnd={({ lng, lat: newLat }) => movePin(lng, newLat, markDirty)}
                   >
                     <MarkerContent>
                       <svg width="28" height="36" viewBox="0 0 24 30" fill="none" aria-hidden="true">
@@ -188,6 +260,22 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
                   </MapMarker>
                 )}
               </Map>
+
+              {/*
+                pointer-events-none throughout: the prompt says "click the map",
+                so it must not be the thing that swallows the click.
+              */}
+              {!pinned && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/60 backdrop-blur-[2px]">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-background/80 ring-1 ring-border">
+                    <MapPinIcon className="size-5 text-muted-foreground" />
+                  </div>
+                  <p className="font-medium text-sm">No pin yet</p>
+                  <p className="max-w-64 text-center text-muted-foreground text-xs">
+                    Click where guests should arrive. You can drag it afterwards.
+                  </p>
+                </div>
+              )}
             </div>
             {(state.errors?.lat || state.errors?.lon) && (
               <FieldError>{(state.errors.lat ?? state.errors.lon)![0]}</FieldError>
