@@ -111,11 +111,121 @@ function isEligible(
 // Calculation context (threaded through each step)
 // ─────────────────────────────────────────────
 
+/**
+ * One line of the price build-up, in the order it was applied.
+ *
+ * The ARI grid's detail panel renders these directly, so the contract is that
+ * the steps reconstruct the price rather than merely describe it: every step's
+ * `delta` is its contribution to the running total, and the last step's
+ * `result` is the resolved price. A host who adds the column up must land on
+ * the number in the cell, or the panel is not an explanation.
+ *
+ * Amounts are whole currency units, matching `bar` and `price_per_night`.
+ */
+export interface PriceStep {
+  /** 'Base rate', 'Rate override', 'Day of week'... */
+  label: string
+  /**
+   * `base` and `set` establish the starting figure — `set` meaning a
+   * rate_overrides row replaced the plan's BAR. `percent` and `flat` are the
+   * two ways a modifier adjusts it.
+   */
+  op: 'base' | 'set' | 'percent' | 'flat'
+  /** The figure behind the op: the amount itself, or the modifier's adjustment_value. */
+  value: number
+  /** Signed contribution to the running total. */
+  delta: number
+  /** Running total after this step. */
+  result: number
+  /** Absent on base and override steps. */
+  modifier_type?: ModifierType
+}
+
 interface CalculationState {
   nights: NightWithSurcharge[]
   subtotal: number
   total: number
   applied: Set<ModifierType>
+  /** Built as the executor runs. Modifiers that never fire leave no step. */
+  trace: PriceStep[]
+}
+
+/**
+ * Append a step for a modifier that fired, deriving its running total from
+ * what came before.
+ *
+ * A modifier that was eligible but moved the total by nothing — a weekend
+ * surcharge on a midweek-only window — leaves no step. It is still reported in
+ * `applied_modifiers`, which answers "did this rule match"; the trace answers
+ * "what made this price", and a "+€0" line answers neither.
+ */
+function traceModifier(
+  state: CalculationState,
+  label: string,
+  modifier: Modifier,
+  delta: number,
+): PriceStep[] {
+  if (delta === 0) return state.trace
+  const previous = state.trace[state.trace.length - 1]?.result ?? 0
+  return [
+    ...state.trace,
+    {
+      label,
+      op: modifier.adjustment_type === 'percent' ? 'percent' : 'flat',
+      value: modifier.adjustment_value,
+      delta,
+      result: previous + delta,
+      modifier_type: modifier.type,
+    },
+  ]
+}
+
+/**
+ * The starting figure, split by where it came from.
+ *
+ * One step in the ordinary case. A window that mixes overridden and
+ * un-overridden nights gets two, because collapsing them would report a stay
+ * as entirely on the BAR or entirely on an override when it is neither — and
+ * which nights a host has repriced is the thing they opened the panel to see.
+ */
+function baseSteps(nights: Night[]): PriceStep[] {
+  const overridden = nights.filter(n => n.has_override)
+  const standard = nights.filter(n => !n.has_override)
+
+  const steps: PriceStep[] = []
+  let running = 0
+
+  const push = (label: string, op: 'base' | 'set', rows: Night[]) => {
+    if (rows.length === 0) return
+    const amount = rows.reduce((sum, n) => sum + n.base_price, 0)
+    running += amount
+    steps.push({ label, op, value: amount, delta: amount, result: running })
+  }
+
+  push('Base rate', 'base', standard)
+  push('Rate override', 'set', overridden)
+
+  // Every night overridden, or none: either way a single step, and the label
+  // already says which.
+  return steps
+}
+
+/**
+ * Round for display *and* keep the column addable.
+ *
+ * Rounding each step independently lets a half-cent in two steps show a total
+ * a cent off the sum of what is printed above it. Rounding the running totals
+ * and re-deriving each delta from them cannot: the deltas are then differences
+ * between the numbers actually on screen.
+ */
+function roundTrace(trace: PriceStep[]): PriceStep[] {
+  let previous = 0
+  return trace.map(step => {
+    const result = round2(step.result)
+    const rounded = { ...step, value: round2(step.value), delta: round2(result - previous), result }
+    previous = result
+    return rounded
+  })
 }
 
 interface ModifierContext {
@@ -169,6 +279,7 @@ function applyExtraGuest(
     subtotal: state.subtotal + totalSurcharge,
     total: state.total + totalSurcharge,
     applied: new Set([...state.applied, 'extra_guest']),
+    trace: traceModifier(state, 'Extra guest', modifier, totalSurcharge),
   }
 }
 
@@ -202,6 +313,7 @@ function applyDayOfWeek(
     subtotal: state.subtotal + totalSurcharge,
     total: state.total + totalSurcharge,
     applied: new Set([...state.applied, 'day_of_week']),
+    trace: traceModifier(state, 'Day of week', modifier, totalSurcharge),
   }
 }
 
@@ -236,6 +348,7 @@ function applyLastMinute(
     subtotal: state.subtotal + totalSurcharge,
     total: state.total + totalSurcharge,
     applied: new Set([...state.applied, 'last_minute']),
+    trace: traceModifier(state, 'Last minute', modifier, totalSurcharge),
   }
 }
 
@@ -257,6 +370,7 @@ function applyLengthOfStay(
     ...state,
     total: state.total + discount,
     applied: new Set([...state.applied, 'length_of_stay']),
+    trace: traceModifier(state, 'Length of stay', modifier, discount),
   }
 }
 
@@ -278,6 +392,7 @@ function applyEarlyBird(
     ...state,
     total: state.total + discount,
     applied: new Set([...state.applied, 'early_bird']),
+    trace: traceModifier(state, 'Early bird', modifier, discount),
   }
 }
 
@@ -298,6 +413,7 @@ function executeModifiers(
     subtotal: initialSubtotal,
     total: initialSubtotal,
     applied: new Set(),
+    trace: baseSteps(nights),
   }
 
   // Sort by sort_order and execute each modifier
@@ -339,6 +455,8 @@ export interface ResolvedRoom extends Omit<RoomRow, 'nights' | 'modifiers'> {
   subtotal: number
   total_price: number
   applied_modifiers: ModifierType[]
+  /** Ordered build-up of `total_price`. See PriceStep. */
+  trace: PriceStep[]
 }
 
 export function resolveRoom(
@@ -367,6 +485,7 @@ export function resolveRoom(
     subtotal: round2(state.subtotal),
     total_price: round2(state.total),
     applied_modifiers: [...state.applied],
+    trace: roundTrace(state.trace),
   }
 }
 
@@ -382,6 +501,13 @@ export interface NightlyRate extends Night {
   /** Per-night average across the probe. This is what a grid cell displays. */
   price: number
   applied_modifiers: ModifierType[]
+  /**
+   * Ordered build-up of `total`, the probe stay's total — not of `price`.
+   * At the default stay length of 1 the two are the same number; above it the
+   * detail panel divides the last step by `stay_length` to reach the per-night
+   * figure, and says so.
+   */
+  trace: PriceStep[]
 }
 
 /** Modifiers that only ever fire on a multi-night stay. */
@@ -442,6 +568,7 @@ export function resolveNightlyRates(
       total: round2(state.total),
       price: round2(state.total / numNights),
       applied_modifiers: [...state.applied],
+      trace: roundTrace(state.trace),
     }
   })
 }

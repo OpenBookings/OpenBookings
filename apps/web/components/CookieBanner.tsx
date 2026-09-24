@@ -21,7 +21,7 @@ export function CookieBanner() {
   if (!isEU || !loaded || consent !== null) return null
 
   return createPortal(
-    <div className="fixed bottom-4 left-4 z-[2147483647] max-w-sm rounded-xl border border-white/10 bg-neutral-900 p-4 shadow-lg">
+    <div className="fixed bottom-4 left-4 z-2147483647 max-w-sm rounded-xl border border-white/10 bg-neutral-900 p-4 shadow-lg">
       <p className="text-sm text-neutral-300">
         We use analytics cookies and session recording to understand how you use
         our service and improve it. You can decline and nothing will be set.{' '}

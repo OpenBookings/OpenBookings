@@ -10,6 +10,8 @@ import {
   FilterX,
   Plus,
   PencilLine,
+  Undo2,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +68,11 @@ interface AriToolbarProps {
   onIssuesOnlyChange: (value: boolean) => void;
   onClearFilters: () => void;
   onOpenDialog: (kind: "availability" | "restrictions" | "rate-plan") => void;
+  /** Staged edits waiting to be published. */
+  draftCount: number;
+  publishing: boolean;
+  onPublish: () => void;
+  onDiscard: () => void;
 }
 
 export function AriToolbar({
@@ -85,6 +92,10 @@ export function AriToolbar({
   onIssuesOnlyChange,
   onClearFilters,
   onOpenDialog,
+  draftCount,
+  publishing,
+  onPublish,
+  onDiscard,
 }: AriToolbarProps) {
   const activeFilterCount = hiddenRoomIds.size + (issuesOnly ? 1 : 0);
 
@@ -238,6 +249,45 @@ export function AriToolbar({
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Only once there is something to publish. A permanently visible
+            Publish button on a screen that is usually read-only trains people
+            to ignore it, which is the opposite of what a staging model is
+            for. */}
+        {draftCount > 0 && (
+          <>
+            <span
+              className="flex items-center gap-2 pr-1 text-sm"
+              role="status"
+            >
+              {/* An unsaved draft is the one state on this screen that is lost
+                  by walking away, so it gets a live dot rather than sitting
+                  quietly in a corner. */}
+              <span
+                className="size-2 shrink-0 rounded-full bg-(--ari-avail-low)"
+                aria-hidden
+              />
+              {draftCount} unpublished change{draftCount === 1 ? "" : "s"}
+            </span>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={onDiscard}
+              disabled={publishing}
+            >
+              <Undo2 className="size-4" />
+              Discard
+            </Button>
+            <Button
+              className="rounded-full"
+              onClick={onPublish}
+              disabled={publishing}
+            >
+              <UploadCloud className="size-4" />
+              {publishing ? "Publishing…" : "Publish changes"}
+            </Button>
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+          </>
+        )}
         <Button
           variant="outline"
           className="rounded-full"

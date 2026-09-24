@@ -3,7 +3,7 @@ import {
   resolveNightlyRates,
   type Modifier,
 } from "@openbookings/pricing";
-import { applyLowestRates, deriveState, deriveStatus } from "./derive";
+import { applyLowestRates, deriveStatus, resolveStatus } from "./derive";
 import { addDays, enumerateDates, toIsoDate } from "./ari-query";
 import type {
   AriGridData,
@@ -11,6 +11,7 @@ import type {
   RateCell,
   RatePlanRow,
   RestrictionRule,
+  RoomClosureRule,
   RoomTypeRow,
 } from "./types";
 
@@ -51,6 +52,14 @@ interface RestrictionSpec {
   note?: string;
 }
 
+/** Closes the whole room type, cascading to every plan on it. */
+interface RoomClosureSpec {
+  from: number;
+  to: number;
+  by: string;
+  note?: string;
+}
+
 interface InventorySpec {
   from: number;
   to: number;
@@ -81,6 +90,7 @@ interface RoomSpec {
   inventory?: InventorySpec[];
   closures?: ClosureSpec[];
   restrictions?: RestrictionSpec[];
+  roomClosures?: RoomClosureSpec[];
 }
 
 // ─────────────────────────────────────────────
@@ -236,6 +246,12 @@ const ROOM_SPECS: RoomSpec[] = [
       // merely restates the plan default is correctly *not* a restricted cell.
       { planIndex: 2, from: 2, to: 8, minStay: 3, by: MANAGER, note: "Corporate rate is midweek-oriented." },
     ],
+    roomClosures: [
+      // Overlaps the corporate min-stay run on purpose: the closure wins the
+      // cell, the min stay stays in the reasons, and reopening the room has to
+      // surface it again rather than spring it on the host.
+      { from: 3, to: 5, by: MANAGER, note: "Floor closed for rewiring." },
+    ],
   },
   {
     name: "Junior Suites",
@@ -351,6 +367,21 @@ export function buildMockAriGrid(
   const rooms: RoomTypeRow[] = ROOM_SPECS.map((spec, roomOrdinal) => {
     const roomId = `demo-room-${roomOrdinal}`;
 
+    // ── Room-type closures, resolved per date and shared by every plan ──
+    const roomClosures: (RoomClosureRule | null)[] = dates.map((date, index) => {
+      const closureSpec = spec.roomClosures?.find((c) => covers(c, index));
+      if (!closureSpec) return null;
+      return {
+        id: `demo-room-closure-${roomOrdinal}-${closureSpec.from}`,
+        startDate: dates[closureSpec.from] ?? date,
+        endDate: dates[Math.min(closureSpec.to, dates.length - 1)] ?? date,
+        note: closureSpec.note ?? null,
+        createdBy: closureSpec.by,
+        createdByName: closureSpec.by,
+        createdAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+      };
+    });
+
     // ── Availability, computed then overridden, exactly as the query does ──
     const availability: AvailabilityCell[] = dates.map((date, index) => {
       const inventorySpec = spec.inventory?.find((i) => covers(i, index));
@@ -377,6 +408,7 @@ export function buildMockAriGrid(
         updatedAt: inventorySpec
           ? new Date(Date.now() - 2 * 86_400_000).toISOString()
           : null,
+        closure: roomClosures[index],
       };
     });
 
@@ -439,20 +471,21 @@ export function buildMockAriGrid(
 
         const available = availability[index].effective;
         const effectiveMinStay = restriction?.minStay ?? planMinStay;
-        const state = deriveState(
+        const status = resolveStatus({
           available,
+          roomClosure: roomClosures[index],
           closure,
           restriction,
           effectiveMinStay,
           planMinStay,
-        );
+        });
         const priced = resolvedByDate.get(date)!;
 
         return {
           date,
-          state,
-          price:
-            state === "open" || state === "restricted" ? priced.price : null,
+          state: status.state,
+          price: status.bookable ? priced.price : null,
+          indicativePrice: priced.price,
           basePrice: planSpec.bar,
           hasOverride: false,
           overrideLabel: null,
@@ -466,6 +499,10 @@ export function buildMockAriGrid(
           closedToDeparture: restriction?.closedToDeparture ?? false,
           rule: closure ?? restriction,
           available,
+          primary: status.primary,
+          reasons: status.reasons,
+          bookable: status.bookable,
+          trace: priced.trace,
         };
       });
 
@@ -506,5 +543,9 @@ export function buildMockAriGrid(
     dates,
     rooms,
     stayLength,
+    // The demo has nothing to publish against. A fixed sentinel rather than a
+    // plausible-looking digest, so a publish attempted here fails loudly
+    // instead of appearing to work.
+    version: "demo",
   };
 }

@@ -4,13 +4,14 @@ import {
   resolveNightlyRates,
   type Modifier,
 } from "@openbookings/pricing";
-import { applyLowestRates, deriveState, deriveStatus } from "./derive";
+import { applyLowestRates, deriveStatus, resolveStatus } from "./derive";
 import type {
   AriGridData,
   AvailabilityCell,
   RateCell,
   RatePlanRow,
   RestrictionRule,
+  RoomClosureRule,
   RoomTypeRow,
 } from "./types";
 
@@ -65,6 +66,13 @@ interface AvailabilityQueryRow {
   updated_by: string | null;
   updated_by_name: string | null;
   updated_at: string | null;
+  closure_id: string | null;
+  closure_start: string | null;
+  closure_end: string | null;
+  closure_note: string | null;
+  closure_by: string | null;
+  closure_by_name: string | null;
+  closure_at: string | null;
 }
 
 interface RateQueryRow {
@@ -161,12 +169,33 @@ SELECT
   inv.note,
   inv.updated_by,
   u.name                                       AS updated_by_name,
-  inv.updated_at
+  inv.updated_at,
+  rc.id                                        AS closure_id,
+  rc.start_date::text                          AS closure_start,
+  rc.end_date::text                            AS closure_end,
+  rc.note                                      AS closure_note,
+  rc.created_by                                AS closure_by,
+  cu.name                                      AS closure_by_name,
+  rc.created_at                                AS closure_at
 FROM scope_rooms sr
 CROSS JOIN dates d
 LEFT JOIN room_inventory inv ON inv.room_id = sr.id AND inv.date = d.d
 LEFT JOIN booked bk          ON bk.room_id  = sr.id AND bk.date = d.d
 LEFT JOIN "user" u           ON u.id = inv.updated_by
+-- The room-type closure, which cascades to every rate plan on the room. Read
+-- here rather than in the rates query: it is a room-type fact, and fetching it
+-- once per room-date beats fetching it again for each plan underneath.
+LEFT JOIN LATERAL (
+  SELECT id, start_date, end_date, note, created_by, created_at
+  FROM room_closures
+  WHERE room_id = sr.id
+    AND start_date <= d.d
+    AND end_date   >= d.d
+    AND is_active
+  ORDER BY priority DESC
+  LIMIT 1
+) rc ON TRUE
+LEFT JOIN "user" cu          ON cu.id = rc.created_by
 ORDER BY sr.name, d.d
 `;
 
@@ -298,6 +327,84 @@ WHERE p.owner_user_id = $1
 GROUP BY m.rate_plan_id
 `;
 
+/**
+ * A fingerprint of every host-set rule the rendered window depends on.
+ *
+ * Staged edits are published against the grid the host was looking at. If
+ * somebody else moved a price or reopened a date in the meantime, publishing
+ * blind would overwrite their work with decisions made about a screen that is
+ * no longer true — and on an inventory screen that means rooms sold at last
+ * week's rate, or closed dates quietly reopened.
+ *
+ * Digesting the mutable fields rather than a max timestamp is deliberate:
+ * `is_active` soft deletes touch no timestamp, so a "latest change" clock
+ * cannot see a reopened date at all.
+ *
+ * Scoped to the window, not the property: an edit to next winter has no
+ * bearing on a host publishing this week, and invalidating them against each
+ * other only teaches people to ignore the warning.
+ */
+export const VERSION_SQL = `
+WITH scope_rooms AS (
+  SELECT r.id
+  FROM rooms r
+  JOIN properties p ON p.id = r.property_id
+  WHERE p.owner_user_id = $1 AND p.id = $2 AND r.is_active
+),
+signatures AS (
+  SELECT 'o' || ro.id::text || ro.price_per_night::text || ro.is_active::text
+           || ro.start_date::text || ro.end_date::text || ro.priority::text AS sig
+  FROM rate_overrides ro
+  JOIN rate_plans rp ON rp.id = ro.rate_plan_id
+  JOIN scope_rooms sr ON sr.id = rp.room_id
+  WHERE ro.start_date <= $4::date AND ro.end_date >= $3::date
+
+  UNION ALL
+  SELECT 'r' || rs.id::text || rs.is_active::text || rs.is_closed::text
+           || COALESCE(rs.min_stay::text, '-') || COALESCE(rs.max_stay::text, '-')
+           || rs.closed_to_arrival::text || rs.closed_to_departure::text
+           || rs.start_date::text || rs.end_date::text || rs.priority::text AS sig
+  FROM rate_plan_restrictions rs
+  JOIN rate_plans rp ON rp.id = rs.rate_plan_id
+  JOIN scope_rooms sr ON sr.id = rp.room_id
+  WHERE rs.start_date <= $4::date AND rs.end_date >= $3::date
+
+  UNION ALL
+  SELECT 'c' || rc.id::text || rc.is_active::text
+           || rc.start_date::text || rc.end_date::text || rc.priority::text AS sig
+  FROM room_closures rc
+  JOIN scope_rooms sr ON sr.id = rc.room_id
+  WHERE rc.start_date <= $4::date AND rc.end_date >= $3::date
+
+  UNION ALL
+  SELECT 'i' || inv.id::text || COALESCE(inv.total_rooms::text, '-')
+           || inv.blocked_rooms::text || COALESCE(inv.available_override::text, '-') AS sig
+  FROM room_inventory inv
+  JOIN scope_rooms sr ON sr.id = inv.room_id
+  WHERE inv.date BETWEEN $3::date AND $4::date
+)
+SELECT COALESCE(md5(string_agg(sig, '|' ORDER BY sig)), 'empty') AS version
+FROM signatures
+`;
+
+/**
+ * The window's current fingerprint. Publishing compares the host's against
+ * this one and refuses rather than clobbering a concurrent edit.
+ */
+export async function loadAriVersion(
+  session: SessionLike,
+  propertyId: string,
+  range: AriRange,
+): Promise<string> {
+  const host = getHostScopedDb(session);
+  const row = await host.queryOne<{ version: string }>(VERSION_SQL, [
+    propertyId,
+    range.start,
+    range.end,
+  ]);
+  return row?.version ?? "empty";
+}
+
 // ─────────────────────────────────────────────
 // Assembly
 // ─────────────────────────────────────────────
@@ -389,10 +496,13 @@ export async function loadAriGrid(
 
   const params = [propertyId, range.start, range.end];
   const priceParams = [propertyId, range.start, priceRangeEnd];
-  const [availabilityRows, rateRows, modifierRows] = await Promise.all([
+  const [availabilityRows, rateRows, modifierRows, versionRow] = await Promise.all([
     host.query<AvailabilityQueryRow>(AVAILABILITY_SQL, params),
     host.query<RateQueryRow>(RATES_SQL, priceParams),
     host.query<ModifierQueryRow>(MODIFIERS_SQL, [propertyId]),
+    // Fetched with the grid, not after it: a version read later could see a
+    // write that landed between the two, and stamp stale data as current.
+    host.queryOne<{ version: string }>(VERSION_SQL, params),
   ]);
 
   const dates = enumerateDates(range);
@@ -404,6 +514,7 @@ export async function loadAriGrid(
   // ── Availability, keyed for the price pass to read back ──
   const rooms = new Map<string, RoomTypeRow>();
   const availabilityByRoomDate = new Map<string, number>();
+  const closureByRoomDate = new Map<string, RoomClosureRule>();
 
   for (const row of availabilityRows) {
     let room = rooms.get(row.room_id);
@@ -428,6 +539,19 @@ export async function loadAriGrid(
     const override = row.available_override;
     const effective = override ?? computed;
 
+    const closure: RoomClosureRule | null =
+      row.closure_id && row.closure_start && row.closure_end
+        ? {
+            id: row.closure_id,
+            startDate: row.closure_start,
+            endDate: row.closure_end,
+            note: row.closure_note,
+            createdBy: row.closure_by,
+            createdByName: row.closure_by_name,
+            createdAt: row.closure_at ?? row.closure_start,
+          }
+        : null;
+
     const cell: AvailabilityCell = {
       date: row.date,
       totalUnits: row.effective_total,
@@ -441,9 +565,11 @@ export async function loadAriGrid(
       updatedBy: row.updated_by,
       updatedByName: row.updated_by_name,
       updatedAt: row.updated_at,
+      closure,
     };
     room.availability.push(cell);
     availabilityByRoomDate.set(`${row.room_id}|${row.date}`, effective);
+    if (closure) closureByRoomDate.set(`${row.room_id}|${row.date}`, closure);
   }
 
   // ── Prices: group rows into plans, then resolve each plan's nights in one pass ──
@@ -520,20 +646,24 @@ export async function loadAriGrid(
         const available =
           availabilityByRoomDate.get(`${roomId}|${r.date}`) ?? 0;
         const effectiveMinStay = restriction?.minStay ?? r.plan_min_stay;
-        const state = deriveState(
+        const status = resolveStatus({
           available,
+          roomClosure: closureByRoomDate.get(`${roomId}|${r.date}`) ?? null,
           closure,
           restriction,
           effectiveMinStay,
-          r.plan_min_stay,
-        );
+          planMinStay: r.plan_min_stay,
+        });
 
         return {
           date: r.date,
-          state,
-          price: state === "open" || state === "restricted"
-            ? priced.price
-            : null,
+          state: status.state,
+          // Null is "nothing sellable here", which is what the collapsed-row
+          // summary and the lowest-rate pass need. The resolved figure is kept
+          // separately: a closed date still has a rate underneath it, and the
+          // cell shows it struck through rather than pretending it is gone.
+          price: status.bookable ? priced.price : null,
+          indicativePrice: priced.price,
           basePrice: toNumber(r.base_price),
           hasOverride: r.has_override,
           overrideLabel: r.override_label,
@@ -547,6 +677,10 @@ export async function loadAriGrid(
           closedToDeparture: restriction?.closedToDeparture ?? false,
           rule: closure ?? restriction,
           available,
+          primary: status.primary,
+          reasons: status.reasons,
+          bookable: status.bookable,
+          trace: priced.trace,
         };
       });
 
@@ -584,6 +718,7 @@ export async function loadAriGrid(
     dates,
     rooms: roomList,
     stayLength,
+    version: versionRow?.version ?? "empty",
   };
 }
 

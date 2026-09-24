@@ -3,15 +3,21 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Monitor } from "lucide-react";
+import { toast } from "sonner";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
 import { AriDetailPanel } from "./ari-detail-panel";
 import { AriEditDialogs, type DialogState } from "./edit-dialogs";
+import { RangeActionBar } from "./range-action-bar";
 import { roomHasIssues } from "../_lib/runs";
+import { useAriDraft } from "../_lib/use-ari-draft";
+import { publishAriChanges } from "../_lib/actions";
 import type {
   AriGridData,
   AriSelection,
   EditPrefill,
+  RangeSelection,
+  RatePlanRow,
   RoomTypeRow,
 } from "../_lib/types";
 
@@ -52,6 +58,46 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
   const [issuesOnly, setIssuesOnly] = React.useState(false);
   const [selection, setSelection] = React.useState<AriSelection | null>(null);
   const [dialog, setDialog] = React.useState<DialogState | null>(null);
+  const draft = useAriDraft();
+  const [publishing, setPublishing] = React.useState(false);
+  const [range, setRange] = React.useState<RangeSelection | null>(null);
+  /**
+   * Where the next shift-click measures from.
+   *
+   * State rather than a ref: it is reset in the same render-phase sync that
+   * drops the selection when new data arrives, and a ref cannot be written
+   * during render.
+   */
+  const [anchor, setAnchor] = React.useState<{
+    planId: string;
+    col: number;
+  } | null>(null);
+
+  /**
+   * Plain click moves the anchor; shift-click spans from it.
+   *
+   * The anchor is per rate plan, so shift-clicking on a different row starts
+   * that row's range rather than drawing a rectangle across two plans that
+   * have nothing to do with each other.
+   */
+  const selectRange = (
+    room: RoomTypeRow,
+    plan: RatePlanRow,
+    col: number,
+    extend: boolean,
+  ) => {
+    if (extend && anchor && anchor.planId === plan.id) {
+      setRange({
+        room,
+        plan,
+        startIndex: Math.min(anchor.col, col),
+        endIndex: Math.max(anchor.col, col),
+      });
+      return;
+    }
+    setAnchor({ planId: plan.id, col });
+    setRange(null);
+  };
 
   // A selection is a snapshot of a room and a cell from the data it was made
   // against. Once new data arrives the panel would be describing dates that are
@@ -60,7 +106,48 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
   if (renderedData !== data) {
     setRenderedData(data);
     setSelection(null);
+    setRange(null);
+    setAnchor(null);
   }
+
+  /**
+   * Publish the draft.
+   *
+   * The window and version travel with it: the server refuses the write
+   * outright if these dates changed while the host was staging, rather than
+   * letting one person's sweep silently overwrite another's.
+   */
+  const publish = async () => {
+    if (draft.count === 0 || publishing) return;
+    setPublishing(true);
+    try {
+      const result = await publishAriChanges({
+        propertyId: data.propertyId,
+        from: data.dates[0],
+        to: data.dates[data.dates.length - 1],
+        version: data.version,
+        changes: draft.changes,
+      });
+
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+
+      // Only now: a draft cleared before the write lands leaves the host with
+      // nothing to retry and no record of what they had queued.
+      draft.discard();
+      setSelection(null);
+      toast.success(
+        `Published ${draft.count} change${draft.count === 1 ? "" : "s"}.`,
+      );
+      startTransition(() => router.refresh());
+    } catch {
+      toast.error("Could not publish. Your changes are still here — try again.");
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const updateParams = (next: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -139,6 +226,10 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
           onIssuesOnlyChange={setIssuesOnly}
           onClearFilters={clearFilters}
           onOpenDialog={(kind) => openDialog(kind)}
+          draftCount={draft.count}
+          publishing={publishing}
+          onPublish={publish}
+          onDiscard={draft.discard}
         />
 
         <div className="flex min-h-0 flex-1 flex-col p-4 lg:p-6">
@@ -147,9 +238,22 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
             expandedRooms={expandedRooms}
             onToggleRoom={toggleRoom}
             onSelect={setSelection}
+            draftEditFor={draft.editFor}
+            onRangeSelect={selectRange}
+            rangeSelection={range}
+            selection={selection}
           />
         </div>
       </div>
+
+      <RangeActionBar
+        range={range}
+        onClear={() => setRange(null)}
+        onStage={(edits) => {
+          draft.stage(edits);
+          setRange(null);
+        }}
+      />
 
       <DesktopOnlyNotice />
 
@@ -161,6 +265,7 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
         onEditAvailability={(prefill) => openDialog("availability", prefill)}
         onEditRestrictions={(prefill) => openDialog("restrictions", prefill)}
         onReopen={(prefill) => openDialog("reopen", prefill)}
+        onStage={draft.stage}
       />
 
       <AriEditDialogs

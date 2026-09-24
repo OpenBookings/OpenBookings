@@ -84,6 +84,50 @@
   --ob-brand-light: oklch(67% 0.20 268);
   --ob-sidebar: oklch(10.5% 0.008 262);
 
+  /*
+   * Rates & availability grid.
+   *
+   * The grid needs distinctions the app-wide scale does not carry: a group
+   * card that sits *above* its own cells, and four cell states that have to
+   * stay apart at a glance across a dense wall of numbers. Naming them here
+   * rather than inlining hex in the feature keeps one definition per colour,
+   * so a state cannot drift between a cell, its bar, the detail sheet and the
+   * legend that explains them.
+   */
+  --ari-group: #262626;
+  --ari-cell: #222222;
+  --ari-border: #2e2e2e;
+  --ari-border-strong: #3a3a3a;
+
+  /* Availability bar. The number stays foreground; the bar carries the level. */
+  --ari-avail-ok: #3fae6e;
+  --ari-avail-low: #e8853a;
+
+  /* A price moved by an override or a modifier. */
+  --ari-adjusted-bg: #2a2342;
+  --ari-adjusted-fg: #b9a6ff;
+
+  /* Still bookable, just constrained — min/max stay, CTA/CTD. */
+  --ari-restricted-bg: #3a2a14;
+  --ari-restricted-fg: #f0a54a;
+
+  /* Closed by a person. Never used for sold out, which nobody chose. */
+  --ari-stopsell-bg: #3a1d1d;
+  --ari-stopsell-border: #5c2a2a;
+  --ari-stopsell-fg: #ff8a80;
+
+  /* Nothing left to sell. Grey, because it is arithmetic rather than a decision. */
+  --ari-soldout-chip: #333333;
+  --ari-soldout-fg: #c4c4c4;
+
+  /* The room type is shut. Hatched, so it reads apart from sold out in greyscale. */
+  --ari-closed-hatch-a: #242424;
+  --ari-closed-hatch-b: #2c2c2c;
+
+  /* Refundable tag, and the sheet's "bookable" pill. */
+  --ari-bookable-bg: #173024;
+  --ari-bookable-fg: #6fd69a;
+
   --font-sans: Libre Franklin, ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-gloock), serif;
   --font-mono: monospace;

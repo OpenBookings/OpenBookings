@@ -21,18 +21,19 @@ import {
 } from "@/components/dashboard/sidebar-08/nav-secondary";
 import { NavUser } from "@/components/dashboard/sidebar-08/nav-user";
 import { NotificationsDialog } from "@/components/dashboard/sidebar-08/notifications-dialog";
+import { SidebarBrand } from "@/components/dashboard/sidebar-08/sidebar-brand";
 import {
   type AttentionKey,
   useNavAttention,
 } from "@/components/dashboard/sidebar-08/use-nav-attention";
 import { WhatsNewDialog } from "@/components/dashboard/sidebar-08/whats-new-dialog";
+import type { PropertyBrand } from "@/lib/property-brand";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
@@ -76,8 +77,9 @@ const navMain: NavItem[] = [
 ];
 
 export function DashboardSidebar({
+  brand,
   ...props
-}: React.ComponentProps<typeof Sidebar>) {
+}: React.ComponentProps<typeof Sidebar> & { brand?: PropertyBrand | null }) {
   const { counts, markSeen } = useNavAttention();
   const [openDialog, setOpenDialog] = useState<AttentionKey | null>(null);
 
@@ -121,26 +123,7 @@ export function DashboardSidebar({
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem className="flex items-center gap-1">
-              <SidebarMenuButton
-                size="lg"
-                asChild
-                className="group-data-[collapsible=icon]:hidden"
-              >
-                <a href="/dashboard">
-                  <img
-                    src="https://cdn.openbookings.co/44ca5796-7461-488a-9613-be71394d4aaa/logo.svg"
-                    alt=""
-                    className="pointer-events-none size-8 shrink-0 rounded-lg object-contain select-none"
-                    draggable={false}
-                  />
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">OpenBookings</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      Property dashboard
-                    </span>
-                  </div>
-                </a>
-              </SidebarMenuButton>
+              <SidebarBrand brand={brand} />
               <SidebarTrigger className="shrink-0 group-data-[collapsible=icon]:mx-auto" />
             </SidebarMenuItem>
           </SidebarMenu>
