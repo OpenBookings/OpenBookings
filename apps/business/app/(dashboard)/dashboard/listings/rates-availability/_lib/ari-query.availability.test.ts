@@ -57,6 +57,12 @@ interface AvailabilityRow {
   blocked: number;
   available_override: number | null;
   note: string | null;
+  closure_id: string | null;
+  closure_start: string | null;
+  closure_end: string | null;
+  closure_note: string | null;
+  closure_by: string | null;
+  closure_by_name: string | null;
 }
 
 /** The window every test queries. Fixed, so nothing depends on today's date. */
@@ -291,5 +297,98 @@ describeWithDb("AVAILABILITY_SQL", () => {
     await db.query(`UPDATE rooms SET is_active = false WHERE id = $1`, [roomId]);
 
     expect(await rows()).toHaveLength(0);
+  });
+
+  // ── Room-type closures ──────────────────────────────────────────────
+  //
+  // The same shape of predicate as the rest of this file — a sparse table, an
+  // inclusive range, a soft-delete flag and a priority tie-break — and the
+  // same reason to test it here rather than in TypeScript: none of it is in
+  // TypeScript.
+
+  /** A room_closures row over an inclusive date range. */
+  async function closeRoom(
+    start: string,
+    end: string,
+    options: { note?: string; priority?: number; active?: boolean } = {},
+  ): Promise<string> {
+    const result = await db.query<{ id: string }>(
+      `INSERT INTO room_closures
+         (room_id, start_date, end_date, note, priority, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        roomId,
+        start,
+        end,
+        options.note ?? null,
+        options.priority ?? 0,
+        options.active ?? true,
+        ownerUserId,
+      ],
+    );
+    return result.rows[0].id;
+  }
+
+  test("a closure covers every date in its range, inclusive of both ends", async () => {
+    const id = await closeRoom("2031-03-10", "2031-03-12", { note: "Rewiring" });
+    const all = await rows();
+
+    expect(on(all, "2031-03-09").closure_id).toBeNull();
+    for (const date of ["2031-03-10", "2031-03-11", "2031-03-12"]) {
+      expect(on(all, date).closure_id).toBe(id);
+      expect(on(all, date).closure_note).toBe("Rewiring");
+    }
+    expect(on(all, "2031-03-13").closure_id).toBeNull();
+  });
+
+  test("a closure reports its own range, not the queried window", async () => {
+    // Deliberately starting before the window and ending after it: the detail
+    // panel reports the whole decision, and a bar clipped to the viewport
+    // would misstate how long the room is shut.
+    await closeRoom("2031-03-01", "2031-03-31");
+    const all = await rows();
+
+    expect(on(all, "2031-03-10").closure_start).toBe("2031-03-01");
+    expect(on(all, "2031-03-10").closure_end).toBe("2031-03-31");
+  });
+
+  test("a soft-deleted closure is gone from the grid", async () => {
+    await closeRoom("2031-03-10", "2031-03-12", { active: false });
+    const all = await rows();
+
+    expect(all.every((r) => r.closure_id === null)).toBe(true);
+  });
+
+  test("overlapping closures resolve by priority, highest first", async () => {
+    await closeRoom("2031-03-09", "2031-03-13", { note: "Standing", priority: 0 });
+    await closeRoom("2031-03-11", "2031-03-11", { note: "Specific", priority: 5 });
+
+    const all = await rows();
+
+    expect(on(all, "2031-03-10").closure_note).toBe("Standing");
+    expect(on(all, "2031-03-11").closure_note).toBe("Specific");
+  });
+
+  test("a closure names who set it", async () => {
+    await closeRoom("2031-03-10", "2031-03-10");
+    const all = await rows();
+
+    expect(on(all, "2031-03-10").closure_by).toBe(ownerUserId);
+    expect(on(all, "2031-03-10").closure_by_name).toBe("Test business");
+  });
+
+  test("a closure leaves the availability numbers alone", async () => {
+    // Closed is not sold out. The units are still there, still unbooked, and
+    // the grid has to be able to say so — a host reopening the room needs to
+    // know what they are reopening into.
+    await book("confirmed", "2031-03-10", "2031-03-11", 2);
+    await closeRoom("2031-03-10", "2031-03-10");
+
+    const row = on(await rows(), "2031-03-10");
+
+    expect(row.closure_id).not.toBeNull();
+    expect(row.effective_total).toBe(5);
+    expect(row.booked).toBe(2);
   });
 });

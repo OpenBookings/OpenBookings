@@ -167,6 +167,16 @@ export const rateOverrides = pgTable(
     priority: integer("priority").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Better Auth user id of the host who set this price. NULL on rows written
+     * before the column existed, and on any the system writes itself.
+     *
+     * The ARI grid's price build-up names the source of every step, and an
+     * override is the one step a person chose deliberately — without this it
+     * can only be reported as "an override exists", which is the question the
+     * host was asking, not the answer.
+     */
+    createdBy: text("created_by"),
   },
   (table) => [index("idx_rate_overrides_plan_dates").on(table.ratePlanId, table.startDate, table.endDate)],
 );
@@ -409,6 +419,54 @@ export const ratePlanRestrictions = pgTable(
   (table) => [
     index("idx_rate_plan_restrictions_plan_dates").on(
       table.ratePlanId,
+      table.startDate,
+      table.endDate,
+    ),
+  ],
+);
+
+/**
+ * Host-set date-range closure of a whole room type.
+ *
+ * Distinct from the three neighbouring concepts, and the distinction is the
+ * point of the table:
+ *
+ * - `room_inventory.blocked_rooms` withholds *some* units — a broken room.
+ *   The room type is still sellable on every rate plan that has stock left.
+ * - `room_inventory.available_override = 0` says "no units left", which the
+ *   grid reads as sold out. A host seeing that looks for the booking that
+ *   filled the room; there isn't one.
+ * - `rate_plan_restrictions.is_closed` closes one rate plan. Closing a room
+ *   type by closing each of its plans loses the fact that they were one
+ *   decision, and silently leaves the next plan added to the room open.
+ *
+ * A closure here cascades to every rate plan on the room for those dates, and
+ * the grid says so rather than repeating the reason on each row.
+ *
+ * Shaped like `rate_plan_restrictions` on purpose — same range semantics, same
+ * `priority DESC` overlap resolution, same soft delete — so the query layer
+ * reads both through the same kind of LATERAL and reopening preserves who
+ * closed what.
+ */
+export const roomClosures = pgTable(
+  "room_closures",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    priority: integer("priority").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    note: text("note"),
+    /** Better Auth user id of the host who closed it — the detail panel names them. */
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_room_closures_room_dates").on(
+      table.roomId,
       table.startDate,
       table.endDate,
     ),

@@ -25,12 +25,13 @@ describe("buildMockAriGrid", () => {
     expect(plans).toBeGreaterThanOrEqual(15);
   });
 
-  test("exercises all four cell states", () => {
+  test("exercises every cell state", () => {
     const states = new Set<CellState>(allCells.map((c) => c.state));
     expect([...states].sort()).toEqual([
       "closed",
       "open",
       "restricted",
+      "room_closed",
       "sold_out",
     ]);
   });
@@ -53,7 +54,7 @@ describe("buildMockAriGrid", () => {
   test("sold out cascades across every plan on the room type", () => {
     for (const room of grid.rooms) {
       const soldOutDates = room.availability
-        .filter((a) => a.effective <= 0)
+        .filter((a) => a.effective <= 0 && !a.closure)
         .map((a) => a.date);
       for (const date of soldOutDates) {
         for (const plan of room.ratePlans) {
@@ -61,6 +62,54 @@ describe("buildMockAriGrid", () => {
           expect(cell?.state).toBe("sold_out");
         }
       }
+    }
+  });
+
+  test("a room closure cascades to every plan, outranking sold out", () => {
+    const closedDates = grid.rooms.flatMap((room) =>
+      room.availability.filter((a) => a.closure).map((a) => ({ room, date: a.date })),
+    );
+    expect(closedDates.length).toBeGreaterThan(0);
+
+    for (const { room, date } of closedDates) {
+      for (const plan of room.ratePlans) {
+        const cell = plan.cells.find((c) => c.date === date);
+        expect(cell?.state).toBe("room_closed");
+        expect(cell?.primary).toBe("ROOM_CLOSED");
+        expect(cell?.reasons[0].inherited).toBe(true);
+      }
+    }
+  });
+
+  test("a closed cell keeps the rate underneath it", () => {
+    const closed = allCells.filter((c) => !c.bookable);
+    expect(closed.length).toBeGreaterThan(0);
+    for (const cell of closed) {
+      expect(cell.price).toBeNull();
+      expect(cell.indicativePrice).toBeGreaterThan(0);
+    }
+  });
+
+  test("every non-open cell can say why, and name a source", () => {
+    for (const cell of allCells) {
+      if (cell.state === "open") {
+        expect(cell.reasons).toEqual([]);
+        continue;
+      }
+      expect(cell.reasons.length).toBeGreaterThan(0);
+      expect(cell.primary).toBe(cell.reasons[0].code);
+      for (const reason of cell.reasons) {
+        expect(["host", "system"]).toContain(reason.source.kind);
+      }
+    }
+  });
+
+  test("the build-up adds up to the price on the cell", () => {
+    for (const cell of allCells) {
+      const summed = cell.trace.reduce((total, step) => total + step.delta, 0);
+      expect(Number(summed.toFixed(2))).toBe(
+        Number((cell.indicativePrice * grid.stayLength).toFixed(2)),
+      );
     }
   });
 
@@ -74,7 +123,7 @@ describe("buildMockAriGrid", () => {
 
   test("unsellable cells carry no price, sellable ones do", () => {
     for (const cell of allCells) {
-      if (cell.state === "closed" || cell.state === "sold_out") {
+      if (!cell.bookable) {
         expect(cell.price).toBeNull();
       } else {
         expect(cell.price).toBeGreaterThan(0);
