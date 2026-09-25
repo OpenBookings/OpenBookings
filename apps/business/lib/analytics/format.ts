@@ -3,14 +3,22 @@ import type { Point } from "./types";
 /** An absent number is an em dash everywhere. €0 and "we cannot say" are different claims. */
 export const EM_DASH = "—";
 
-const money = new Intl.NumberFormat("en-NL", {
+/**
+ * en-GB, not en-NL. "en-NL" is a hybrid CLDR resolves differently per engine:
+ * Bun renders "€ 4.523,90" and Node "€4,523.90" from the same call, and a
+ * browser is a third implementation — which would mismatch hydration on every
+ * money figure on the page, and make the unit tests describe something the host
+ * never sees. en-GB is stable across all three and matches what this app already
+ * renders on the server today.
+ */
+const money = new Intl.NumberFormat("en-GB", {
   style: "currency",
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
-const counts = new Intl.NumberFormat("en-NL");
+const counts = new Intl.NumberFormat("en-GB");
 
 export function formatCents(cents: number | null): string {
   return cents === null ? EM_DASH : money.format(cents / 100);
