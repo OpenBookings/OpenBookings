@@ -205,7 +205,7 @@ database outage is a worse failure than showing an error.
 
 | Variable | Web | Business | Notes |
 | --- | --- | --- | --- |
-| `UPSTASH_REDIS_REST_URL` | yes | yes | Existing database, AWS `eu-central-1` |
+| `UPSTASH_REDIS_REST_URL` | yes | yes | Existing database (see region note below) |
 | `UPSTASH_REDIS_REST_TOKEN` | yes | yes | |
 | `CACHE_TTL_PROPERTY_PAGE_S` | yes | — | default 3600 |
 | `CACHE_MAX_AGE_PROPERTY_PAGE_S` | yes | — | default 86400 |
@@ -215,10 +215,23 @@ Set on both Scaleway Serverless Containers (`nl-ams`) out of band, as the other
 runtime secrets are — CI passes no application env at deploy time, it only rolls
 images. Absent, both apps behave exactly as they do today.
 
-Region note: Amsterdam to AWS `eu-central-1` is roughly 8–12ms, comfortably
-below the three-query cost being replaced. A cache in a US region would have
-made the page slower than it is now; this is worth stating because it is the
-assumption the latency goal rests on.
+Region note, because the latency goal rests on it. The database is an Upstash
+**Global** database with a single region, whose endpoint
+(`global-latency.upstash.io` → `global-euw2.upstash.io`) resolves to AWS
+`eu-west-2`, London — not Frankfurt, as first assumed. Amsterdam to London is
+roughly 7–10ms, near-identical to Frankfurt, so the latency argument holds
+unchanged. A cache in a US region would have made the page slower than it is
+today, which is why the region is recorded rather than left implicit.
+
+Being single-region also settles a question a multi-region Global database would
+have raised: Upstash replicates writes to read replicas asynchronously, so a
+`DEL` issued by `apps/business` could have been invisible to a read served to
+`apps/web` from another replica for the replication window. Upstash's
+Read-Your-Writes sync token cannot close that gap here, because it is a
+checkpoint held inside a single client instance and these are two clients in two
+containers. With one region there is one node, so no such window exists. Should
+read regions ever be added, this paragraph is the warning that invalidation
+becomes eventually consistent at that moment.
 
 ## Observability
 
