@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { getRedis, resetRedisForTests } from "./redis";
+import { getRedis, REDIS_RETRY_POLICY, resetRedisForTests, withDeadline } from "./redis";
 
 const URL_VAR = "UPSTASH_REDIS_REST_URL";
 const TOKEN_VAR = "UPSTASH_REDIS_REST_TOKEN";
@@ -68,5 +68,37 @@ describe("getRedis", () => {
     process.env[TOKEN_VAR] = "token";
     resetRedisForTests();
     expect(getRedis()).not.toBeNull();
+  });
+});
+
+describe("withDeadline", () => {
+  /**
+   * Finding #1. The Upstash SDK defaults to 5 retries with an exp(i)*50ms
+   * backoff — ~4.3s per failing operation, and a read plus a write makes ~8.6s.
+   * It also passes no signal, so the underlying fetch has no timeout at all.
+   * Either one turns "Redis is down" into a page far slower than the uncached
+   * path, which is the exact inversion of this package's invariant.
+   */
+  test("rejects when the work outruns the deadline", async () => {
+    const never = new Promise<string>(() => {});
+    await expect(withDeadline(never, 20, "get")).rejects.toThrow(/exceeded 20ms/);
+  });
+
+  test("resolves with the work's value when it finishes in time", async () => {
+    await expect(withDeadline(Promise.resolve("v"), 50, "get")).resolves.toBe("v");
+  });
+
+  test("propagates the work's own rejection rather than masking it", async () => {
+    await expect(
+      withDeadline(Promise.reject(new Error("upstash 500")), 50, "get"),
+    ).rejects.toThrow("upstash 500");
+  });
+});
+
+describe("REDIS_RETRY_POLICY", () => {
+  test("caps retries so a failing call cannot cost seconds of backoff", () => {
+    expect(REDIS_RETRY_POLICY.retries).toBe(1);
+    const worst = REDIS_RETRY_POLICY.backoff(0) + REDIS_RETRY_POLICY.backoff(1);
+    expect(worst).toBeLessThan(250);
   });
 });

@@ -1,3 +1,4 @@
+import { purgeGuardKey } from "./keys";
 import { getRedis } from "./redis";
 import type { CacheOutcome, CacheReporter, Envelope, RedisLike } from "./types";
 
@@ -22,7 +23,19 @@ export interface PurgeOptions {
   onError?: CacheReporter;
   redis?: RedisLike | null;
   log?: (line: string) => void;
+  /** How long the guard outlives the purge. Must exceed a plausible loader. */
+  guardSeconds?: number;
+  now?: () => number;
 }
+
+/**
+ * How long a purge guard survives.
+ *
+ * It only has to outlive a loader that was already running when the purge
+ * landed. Thirty seconds covers a Neon cold start with room to spare, and the
+ * guard is a single short string, so there is no reason to be stingy.
+ */
+const PURGE_GUARD_SECONDS = 30;
 
 /**
  * Is this the shape we wrote?
@@ -61,14 +74,23 @@ export async function cached<T>(
 ): Promise<T | null> {
   const now = opts.now ?? Date.now;
   const log = opts.log ?? ((line: string) => console.log(line));
-  const report = opts.onError;
+  // One report per invocation, not one per failed operation: during an outage
+  // every request fails both its read and its write, and two unsampled events
+  // per page view buries the issue stream exactly when it must stay legible.
+  let alreadyReported = false;
+  const report: CacheReporter = (error, context) => {
+    if (alreadyReported) return;
+    alreadyReported = true;
+    opts.onError?.(error, context);
+  };
   // `undefined` means "use the shared client"; an explicit `null` means "no
   // cache". Distinguishing them is what lets a test force the bypass path.
   const redis = opts.redis !== undefined ? opts.redis : getRedis();
 
-  const emit = (outcome: CacheOutcome, startedAt: number | null) => {
+  const emit = (outcome: CacheOutcome, startedAt: number | null, suppressed = false) => {
     const took = startedAt === null ? "" : ` loader_ms=${Math.round(now() - startedAt)}`;
-    log(`[cache] outcome=${outcome} key=${key}${took}`);
+    const note = suppressed ? " write=suppressed-by-purge" : "";
+    log(`[cache] outcome=${outcome} key=${key}${took}${note}`);
   };
 
   if (!redis) {
@@ -87,7 +109,7 @@ export async function cached<T>(
     }
   } catch (error) {
     // Unreachable store, or a value we cannot use. Same consequence either way.
-    report?.(error, { key, phase: "read" });
+    report(error, { key, phase: "read" });
   }
 
   if (envelope && now() < envelope.freshUntil) {
@@ -103,7 +125,7 @@ export async function cached<T>(
     // The stale window earns its keep here: past freshness we asked the
     // database, and the database is the thing that is broken.
     if (envelope) {
-      report?.(error, { key, phase: "load" });
+      report(error, { key, phase: "load" });
       emit("stale", startedAt);
       return envelope.data;
     }
@@ -114,15 +136,37 @@ export async function cached<T>(
   const fresh = isAbsent ? (opts.missFreshSeconds ?? opts.freshSeconds) : opts.freshSeconds;
   const maxAge = isAbsent ? (opts.missMaxAgeSeconds ?? fresh) : opts.maxAgeSeconds;
 
+  // Did a purge land while the loader was running? If so this result is
+  // already out of date, and writing it would give pre-edit content a fresh
+  // lease that nothing will revoke — the purge that would have has been and
+  // gone. The caller still gets its data; only the cache write is skipped.
+  //
+  // The comparison is between two app clocks (the purging container's and
+  // this one's). Both run in one region under NTP, so the skew is far below
+  // the loader durations this guards, but it is the reason this is a
+  // narrowing of the race rather than a proof against it.
+  let suppressedByPurge = false;
   try {
-    const next: Envelope<T> = { data, freshUntil: now() + fresh * 1000 };
-    await redis.set(key, JSON.stringify(next), { ex: maxAge });
+    const guard = await redis.get(purgeGuardKey(key));
+    if (guard !== null && guard !== undefined) {
+      const purgedAt = Number(guard);
+      if (Number.isFinite(purgedAt) && purgedAt >= startedAt) suppressedByPurge = true;
+    }
   } catch (error) {
-    // An oversized payload, a quota, a blip. The caller already has its data.
-    report?.(error, { key, phase: "write" });
+    report(error, { key, phase: "read" });
   }
 
-  emit(envelope ? "stale" : "miss", startedAt);
+  if (!suppressedByPurge) {
+    try {
+      const next: Envelope<T> = { data, freshUntil: now() + fresh * 1000 };
+      await redis.set(key, JSON.stringify(next), { ex: maxAge });
+    } catch (error) {
+      // An oversized payload, a quota, a blip. The caller already has its data.
+      report(error, { key, phase: "write" });
+    }
+  }
+
+  emit(envelope ? "stale" : "miss", startedAt, suppressedByPurge);
   return data;
 }
 
@@ -146,9 +190,19 @@ export async function purge(keys: string[], opts: PurgeOptions = {}): Promise<vo
   if (!redis) return;
 
   const log = opts.log ?? ((line: string) => console.log(line));
+  const now = opts.now ?? Date.now;
+  const guardSeconds = opts.guardSeconds ?? PURGE_GUARD_SECONDS;
   try {
     await redis.del(...keys);
-    log(`[cache] outcome=purge keys=${keys.length}`);
+    // The guard goes down after the delete, so a loader can never see a guard
+    // for a key that is still present and decline to refresh it.
+    const purgedAt = String(now());
+    await Promise.all(
+      keys.map((key) =>
+        redis.set(purgeGuardKey(key), purgedAt, { ex: guardSeconds }),
+      ),
+    );
+    log(`[cache] outcome=purge keys=${keys.join(",")}`);
   } catch (error) {
     opts.onError?.(error, { key: keys.join(","), phase: "purge" });
   }

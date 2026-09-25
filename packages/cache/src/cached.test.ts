@@ -323,3 +323,84 @@ describe("purge", () => {
     expect(reported).toEqual(["purge"]);
   });
 });
+
+describe("error reporting is bounded per invocation", () => {
+  /**
+   * Finding #3. The spec is explicit: at most one report per request, not one
+   * per failed operation. During an outage every request fails both its read
+   * and its write, and two unsampled events per page view buries the issue
+   * stream in the window where it most needs to be legible.
+   */
+  test("reports once when both the read and the write fail", async () => {
+    const { redis } = fakeRedis();
+    redis.get = async () => {
+      throw new Error("upstash unreachable");
+    };
+    redis.set = async () => {
+      throw new Error("upstash unreachable");
+    };
+    const reported: string[] = [];
+
+    const result = await cached<{ n: number }>("k", async () => ({ n: 2 }), {
+      ...TTL,
+      ...silent,
+      redis,
+      now: () => 1_000,
+      onError: (_error, ctx) => reported.push(ctx.phase),
+    });
+
+    expect(result).toEqual({ n: 2 });
+    expect(reported).toEqual(["read"]);
+  });
+});
+
+describe("a purge landing mid-load", () => {
+  /**
+   * Finding #2. The sequence that loses a host's edit for a full hour:
+   * a loader reads pre-edit rows, the host saves and the purge deletes a key
+   * that is not there yet, and then the in-flight loader writes the pre-edit
+   * payload back with a fresh one-hour lease. Nothing will purge it again,
+   * because the write that would have has already happened.
+   */
+  test("a purge during the loader suppresses the write-through", async () => {
+    const { redis, store } = fakeRedis();
+
+    const result = await cached<{ n: number }>(
+      "k",
+      async () => {
+        // The host saves while we are reading pre-edit rows.
+        await purge(["k"], { redis, ...silent, now: () => 1_500 });
+        return { n: 1 };
+      },
+      { ...TTL, ...silent, redis, now: () => 1_000 },
+    );
+
+    // The caller still gets what it loaded — only the cache write is skipped.
+    expect(result).toEqual({ n: 1 });
+    expect(store.has("k")).toBe(false);
+  });
+
+  test("a purge that finished before the loader started does not suppress it", async () => {
+    const { redis, store } = fakeRedis();
+    await purge(["k"], { redis, ...silent, now: () => 500 });
+
+    const result = await cached<{ n: number }>("k", async () => ({ n: 2 }), {
+      ...TTL,
+      ...silent,
+      redis,
+      now: () => 1_000,
+    });
+
+    expect(result).toEqual({ n: 2 });
+    expect(store.has("k")).toBe(true);
+  });
+
+  test("purge leaves a guard alongside the delete", async () => {
+    const { redis, store } = fakeRedis({ k: envelope({ n: 1 }, 2_000) });
+
+    await purge(["k"], { redis, ...silent, now: () => 1_500 });
+
+    expect(store.has("k")).toBe(false);
+    expect(store.get("ob:v1:purged:k")?.value).toBe("1500");
+  });
+});

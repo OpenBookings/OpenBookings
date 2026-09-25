@@ -124,6 +124,37 @@ A cache outage therefore degrades to exactly today's behaviour. It can never
 take the page down — the failure mode of a performance optimisation must not be
 an outage.
 
+### Bounding the failure, not just catching it
+
+Catching every Redis error is necessary and not sufficient. The Upstash SDK
+defaults to five attempts with a `Math.exp(i) * 50` backoff — about 4.3 seconds
+of sleeping before a failing call gives up, and roughly 8.6 seconds for a
+request that fails both its read and its write — and it passes no `signal`, so
+the underlying fetch has no timeout at all. Left alone those defaults make a
+Redis outage *far* more expensive than having no cache, which inverts the
+invariant above.
+
+So the client caps retries at one with a flat 50 ms backoff, and every call
+carries its own 250 ms deadline (`CACHE_REDIS_TIMEOUT_MS`). The deadline is
+per call rather than a client-level `signal` because one `AbortSignal` is
+shared across a client's whole lifetime, so a timeout there would abort every
+later request.
+
+### The purge guard
+
+A `DEL` cannot invalidate a value that has not been written yet. If a loader is
+already reading pre-edit rows when a host saves, the purge deletes nothing and
+the loader then writes the pre-edit payload back with a fresh hour-long lease
+that nothing will revoke — the write that would have purged it has already
+happened.
+
+`purge` therefore also leaves a short-lived guard (`ob:v1:purged:<key>`, 30 s)
+recording when the purge happened, and a loader declines to write through when
+the guard is newer than its own start. The comparison is between two app
+clocks, so this narrows the race rather than closing it; both containers run in
+one region under NTP, where the skew is orders of magnitude below the loader
+durations being guarded.
+
 ### Negative caching
 
 A slug with no active property is cached as an explicit negative entry with a

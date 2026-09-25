@@ -22,3 +22,14 @@ export const CACHE_SCHEMA_VERSION = "v1";
 export function propertyPageKey(slug: string): string {
   return `ob:${CACHE_SCHEMA_VERSION}:prop-page:${slug.toLowerCase()}`;
 }
+
+/**
+ * The key marking that `key` was purged, and when.
+ *
+ * A purge deletes a key that an in-flight loader is about to write back. The
+ * guard is how that loader finds out: it records the moment of the purge, and
+ * a loader that started earlier declines to write its now-stale result.
+ */
+export function purgeGuardKey(key: string): string {
+  return `ob:${CACHE_SCHEMA_VERSION}:purged:${key}`;
+}
