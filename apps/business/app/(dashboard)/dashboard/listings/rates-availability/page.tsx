@@ -52,7 +52,12 @@ export default async function RatesAvailabilityPage({
   return (
     // No header of its own: the listings layout already puts the section name
     // and search in a bar above this, and a second one only steals grid height.
-    <div className="flex min-h-0 flex-1 flex-col">
+    //
+    // The negative bottom margin cancels that layout's bottom padding, which
+    // every other listings tab wants and this one cannot have: the legend is
+    // pinned to the floor of the grid, and 24px of dead space under it reads
+    // as the legend having come loose.
+    <div className="-mb-4 flex min-h-0 flex-1 flex-col md:-mb-6">
       <Suspense fallback={<GridSkeleton />}>
         <AriContent searchParams={searchParams} />
       </Suspense>
