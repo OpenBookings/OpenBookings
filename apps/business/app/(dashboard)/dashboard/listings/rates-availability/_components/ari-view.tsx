@@ -232,7 +232,12 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
           onDiscard={draft.discard}
         />
 
-        <div className="flex min-h-0 flex-1 flex-col p-4 lg:p-6">
+        {/*
+          No bottom padding: the legend is pinned to the bottom of the grid and
+          reads as its edge, so padding under it would only push it off the
+          floor it is supposed to sit on.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col px-4 pt-4 lg:px-6 lg:pt-6">
           <AriGrid
             data={filteredData}
             expandedRooms={expandedRooms}

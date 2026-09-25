@@ -126,6 +126,26 @@ export function AriGrid({
   const shouldFocus = React.useRef(false);
   const today = useToday();
 
+  /**
+   * The legend overlays the bottom of the scroll area, so the rows need to be
+   * able to clear it. Measured rather than assumed: it wraps to a second line
+   * on narrower screens, and a guessed padding either strands the last row
+   * under the legend or leaves dead space below it.
+   */
+  const legendRef = React.useRef<HTMLDivElement | null>(null);
+  const [legendHeight, setLegendHeight] = React.useState(0);
+
+  React.useEffect(() => {
+    const legend = legendRef.current;
+    if (!legend) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setLegendHeight(entry.contentRect.height);
+    });
+    observer.observe(legend);
+    return () => observer.disconnect();
+  }, []);
+
   const registerCell = React.useCallback(
     (rowIndex: number, colIndex: number, node: HTMLElement | null) => {
       const key = `${rowIndex}:${colIndex}`;
@@ -247,7 +267,7 @@ export function AriGrid({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         className="min-h-0 flex-1 overflow-auto"
         role="grid"
@@ -256,7 +276,10 @@ export function AriGrid({
         aria-colcount={columnCount + 1}
         onKeyDown={handleKeyDown}
       >
-        <div style={{ minWidth }} className="space-y-2.5 pb-1">
+        <div
+          style={{ minWidth, paddingBottom: legendHeight + 4 }}
+          className="space-y-2.5"
+        >
           <HeaderRow
             dates={data.dates}
             gridTemplate={gridTemplate}
@@ -285,7 +308,7 @@ export function AriGrid({
         </div>
       </div>
 
-      <GridLegend />
+      <GridLegend ref={legendRef} />
     </div>
   );
 }
