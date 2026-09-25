@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { purgePropertyPage } from "@/lib/purge-property-page";
 import { z } from "zod";
 import { query, withTransaction } from "@openbookings/db";
 import { userOwnsRatePlan, userOwnsRoom } from "@openbookings/authz";
@@ -311,6 +312,13 @@ export async function createRatePlan(
   );
 
   revalidatePath(ROUTE);
+  // rate_plans.bar is on the public listing page; the per-date ARI tables are
+  // not, which is why setAvailability, setRestriction, clearRestrictions and
+  // publishAriChanges deliberately do not purge. Nor do closeRoomType and
+  // reopenRoomType: room_closures is not queried by that page either. When the
+  // listing page starts showing live availability, this is the comment that
+  // says what has to change.
+  await purgePropertyPage({ roomId: data.roomId });
   return { ok: true, affected: rows.length };
 }
 
