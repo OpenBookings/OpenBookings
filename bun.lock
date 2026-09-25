@@ -130,6 +130,7 @@
         "@maplibre/maplibre-gl-style-spec": "^26.4.2",
         "@openbookings/analytics": "workspace:*",
         "@openbookings/auth": "workspace:*",
+        "@openbookings/cache": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/mailing": "workspace:*",
         "@openbookings/pricing": "workspace:*",
@@ -163,6 +164,7 @@
       "devDependencies": {
         "@openbookings/config": "workspace:*",
         "@tailwindcss/postcss": "^4.3.3",
+        "@types/bun": "^1.3.14",
         "@types/geojson": "^7946.0.16",
         "@types/node": "^22.20.1",
         "@types/pg": "^8.20.0",
