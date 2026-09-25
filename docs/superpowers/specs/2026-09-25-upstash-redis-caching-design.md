@@ -238,6 +238,42 @@ becomes eventually consistent at that moment.
 `cached` emits one structured line per resolution — outcome (`hit` / `stale` /
 `miss` / `negative` / `bypass`), key, and loader duration when it ran.
 
+### Measured, 2026-09-25
+
+Seven in-process calls to `getHotelPage("terme-di-saturnia")` from a developer
+laptop in the Netherlands, median of each run, rendering excluded:
+
+| Path | Median |
+| --- | --- |
+| Warm cache hit (Upstash, London) | 12 ms |
+| Cache disabled, straight to Postgres (Neon, Frankfurt) | 12 ms |
+
+**The cache does not currently make this page faster, and the reason is worth
+recording.** The three queries run under one `Promise.all`, so they cost one
+round trip, not three — and Neon's pooled endpoint in `eu-central-1` is about
+as far from the caller as Upstash's node in `eu-west-2`. Replacing one ~12 ms
+round trip with another ~12 ms round trip is a wash. The same holds in
+production: from `nl-ams` both are roughly 10 ms away.
+
+What the work does buy, on this evidence:
+
+- **Goal 2, load and cost: fully met.** Every hit is three Postgres queries that
+  do not run. That was always the larger of the two motivations.
+- **Goal 3, resilience: verified.** With `UPSTASH_REDIS_REST_URL` pointed at an
+  unreachable host the page still rendered from Postgres, and the stale-window
+  path is unit-tested.
+- **Goal 1, latency: not met at the median.** It should still improve the tail —
+  a Neon cold start or a loaded pool is what the stale window absorbs — but no
+  measurement here supports a median improvement, and none should be claimed.
+
+The consequence for the deferred `"use cache"` approach is the opposite of what
+was assumed when it was deferred. If the data fetch is only ~12 ms, then page
+latency is dominated by React rendering, which this design explicitly does not
+cache. Rendered-output caching is therefore the option that would actually move
+latency — it is now the recommended next step rather than a speculative one, and
+it should be measured against a production build rather than `next dev`, whose
+render times are not representative.
+
 **`console.log` initially, by decision, then Sentry.** The first deploy is about
 learning the real hit ratio and loader timings from container logs; the shape of
 the Sentry instrumentation should be chosen once those numbers exist rather than
