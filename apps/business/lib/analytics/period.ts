@@ -146,7 +146,7 @@ export function parsePeriodParams(
  * each chose their own granularity they would eventually disagree, and a host
  * comparing the two would be comparing different weeks.
  */
-export function granularityFor(period: Pick<Period, "from" | "to">): Granularity {
+export function granularityFor(period: Period): Granularity {
   const days = daysBetween(period.from, period.to);
   if (days <= 31) return "day";
   // 182 days is 26 whole weeks, so the weekly chart never draws more than 26
