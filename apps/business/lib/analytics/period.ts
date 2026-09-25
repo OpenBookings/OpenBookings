@@ -112,8 +112,9 @@ export function resolvePeriod(
       // Swapped rather than rejected: a host dragging backwards through the
       // Calendar produces from > to for the length of the drag, and blanking
       // the page mid-gesture is not a useful answer to a half-finished range.
-      let [from, to] =
-        custom.from <= custom.to ? [custom.from, custom.to] : [custom.to, custom.from];
+      const forwards = custom.from <= custom.to;
+      const to = forwards ? custom.to : custom.from;
+      let from = forwards ? custom.from : custom.to;
       if (daysBetween(from, to) > MAX_CUSTOM_DAYS) from = addDays(to, -(MAX_CUSTOM_DAYS - 1));
       return { preset, from, to };
     }

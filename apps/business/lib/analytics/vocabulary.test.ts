@@ -30,6 +30,14 @@ const ROOTS = ["lib/analytics", "app/(dashboard)/dashboard/analytics"];
  */
 const SELF = "vocabulary.test.ts";
 
+/**
+ * `baseOccupancy` is the option name in @openbookings/pricing's own signature,
+ * so it cannot be renamed from here and never reaches a host. It is scrubbed
+ * from the line rather than excused for the whole line, so a line carrying both
+ * it and the forbidden word still fails.
+ */
+const ALLOWED_IDENTIFIER = /baseOccupancy/g;
+
 describe("analytics vocabulary", () => {
   test("says sell-through, never occupancy", async () => {
     const offenders: string[] = [];
@@ -38,7 +46,8 @@ describe("analytics vocabulary", () => {
         if (file.endsWith(SELF)) continue;
         const source = await readFile(file, "utf8");
         source.split("\n").forEach((line, i) => {
-          if (/occupanc/i.test(line)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+          const scrubbed = line.replace(ALLOWED_IDENTIFIER, "");
+          if (/occupanc/i.test(scrubbed)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
         });
       }
     }
