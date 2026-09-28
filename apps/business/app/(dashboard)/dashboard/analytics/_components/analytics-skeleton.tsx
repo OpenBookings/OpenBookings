@@ -32,22 +32,47 @@ function ChartSkeleton({ height = "h-64" }: { height?: string }) {
   );
 }
 
-export function AnalyticsSkeleton() {
+/**
+ * One section's shape, which each page states for itself — counts guessed in one
+ * place for five different layouts is what made the old page jump on load. The
+ * grids mirror SectionShell's exactly: KPIs four across, charts two, and
+ * `fullWidth` for the widgets that sit outside both (the heatmap, the country
+ * list).
+ */
+export function SectionSkeleton({
+  kpis,
+  charts,
+  fullWidth = 0,
+}: {
+  kpis: number;
+  charts: number;
+  fullWidth?: number;
+}) {
   return (
-    <div className="space-y-8 px-4 lg:px-6" aria-busy="true" aria-label="Loading analytics">
-      {[4, 2, 3, 2, 3].map((kpis, section) => (
-        <section key={section} className="space-y-4">
-          <Skeleton className="h-5 w-32" />
-          <div className="grid gap-4 @lg/main:grid-cols-2 @4xl/main:grid-cols-4">
-            {Array.from({ length: kpis }, (_, i) => (
-              <KpiSkeleton key={i} />
-            ))}
-          </div>
-          <div className="grid gap-4 @4xl/main:grid-cols-2">
-            <ChartSkeleton />
-            <ChartSkeleton />
-          </div>
-        </section>
+    <div className="space-y-4 px-4 lg:px-6" aria-busy="true" aria-label="Loading analytics">
+      <div className="space-y-1.5">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+
+      {kpis > 0 ? (
+        <div className="grid gap-4 @lg/main:grid-cols-2 @4xl/main:grid-cols-4">
+          {Array.from({ length: kpis }, (_, i) => (
+            <KpiSkeleton key={i} />
+          ))}
+        </div>
+      ) : null}
+
+      {charts > 0 ? (
+        <div className="grid gap-4 @4xl/main:grid-cols-2">
+          {Array.from({ length: charts }, (_, i) => (
+            <ChartSkeleton key={i} />
+          ))}
+        </div>
+      ) : null}
+
+      {Array.from({ length: fullWidth }, (_, i) => (
+        <ChartSkeleton key={i} />
       ))}
     </div>
   );

@@ -71,8 +71,15 @@ const navMain: NavItem[] = [
   },
   {
     title: "Analytics",
-    url: "/dashboard/analytics",
+    url: "#",
     icon: TrendingUp,
+    items: [
+      { title: "Revenue", url: "/dashboard/analytics/revenue" },
+      { title: "Sell-through", url: "/dashboard/analytics/sell-through" },
+      { title: "Bookings", url: "/dashboard/analytics/bookings" },
+      { title: "Pricing", url: "/dashboard/analytics/pricing" },
+      { title: "Guests", url: "/dashboard/analytics/guests" },
+    ],
   },
 ];
 

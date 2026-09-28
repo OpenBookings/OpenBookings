@@ -101,7 +101,7 @@ export const commandMenuGroups: CommandMenuGroup[] = [
         icon: "arrow-right",
         label: "Go to Analytics",
         keywords: ["reports", "performance"],
-        action: { type: "navigate", href: "/dashboard/analytics" },
+        action: { type: "navigate", href: "/dashboard/analytics/revenue" },
       },
       {
         icon: "arrow-right",
