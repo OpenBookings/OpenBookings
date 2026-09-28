@@ -1,17 +1,16 @@
-import { SiteHeader } from "@/components/dashboard/site-header";
-import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { redirect } from "next/navigation";
+import type { AnalyticsPageProps } from "./_components/analytics-section";
 
-export default function AnalyticsPage() {
-  return (
-    <>
-      <SiteHeader title="Analytics" />
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4 md:gap-6 md:py-6">
-            <ComingSoon title="Analytics" />
-          </div>
-        </div>
-      </div>
-    </>
+/**
+ * The tab itself is a dead end: the sidebar entry only expands its sub-items, so
+ * nothing in the app links here. This exists for the old bookmark and the pasted
+ * link, and it carries whatever period, property or demo flag came with them
+ * rather than dropping the host on an unfiltered page.
+ */
+export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
+  const entries = Object.entries(await searchParams).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
   );
+  const query = new URLSearchParams(entries).toString();
+  redirect(`/dashboard/analytics/revenue${query ? `?${query}` : ""}`);
 }

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty } from "@openbookings/authz";
+import { purgePropertyPage } from "@/lib/purge-property-page";
 import { NextResponse } from "next/server";
 
 /** Resolve the image's owning property so ownership is checked, not assumed. */
@@ -50,6 +51,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     await query(`UPDATE property_images SET "group" = 'hero-image' WHERE id = $1`, [id]);
   }
 
+  await purgePropertyPage({ propertyId: image.property_id });
   return NextResponse.json({ ok: true });
 }
 
@@ -64,5 +66,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   // The stored object is deliberately left in place: an accidental delete should
   // cost a database row, not the host's only copy of a photograph.
   await query(`DELETE FROM property_images WHERE id = $1`, [id]);
+  await purgePropertyPage({ propertyId: image.property_id });
   return NextResponse.json({ ok: true });
 }

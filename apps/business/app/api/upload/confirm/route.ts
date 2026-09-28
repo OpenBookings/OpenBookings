@@ -2,6 +2,7 @@ import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty, userOwnsRoom } from "@openbookings/authz";
 import { publicUrl } from "@/lib/s3";
+import { purgePropertyPage } from "@/lib/purge-property-page";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
       `INSERT INTO room_images (id, room_id, url, sort_order) VALUES ($1, $2, $3, $4)`,
       [id, roomId, url, (maxRow?.max_order ?? -1) + 1],
     );
+    await purgePropertyPage({ roomId });
     return NextResponse.json({ id, url });
   }
 
@@ -89,6 +91,7 @@ export async function POST(req: Request) {
        VALUES ($1, $2, $3, $4, $5)`,
       [id, propertyId, url, group, (maxRow?.max_order ?? -1) + 1],
     );
+    await purgePropertyPage({ propertyId });
     return NextResponse.json({ id, url, group });
   }
 
