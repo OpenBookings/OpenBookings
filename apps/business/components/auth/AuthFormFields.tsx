@@ -98,10 +98,22 @@ export function AuthFormFields({
         try {
             posthog.capture("magic_link_requested");
 
+            // The proxy parks the destination it blocked in ?redirect= before
+            // bouncing the host here, so carry it into the emailed link —
+            // otherwise clicking that link lands them back on this form having
+            // lost where they were going. Read straight off the URL to match
+            // how login-client.tsx reads its own params. The value is
+            // untrusted: the route validates it before it reaches the email.
+            const redirectParam = new URLSearchParams(
+                window.location.search,
+            ).get("redirect");
+
             const response = await fetch("/api/auth/login-link", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify(
+                    redirectParam ? { email, callbackURL: redirectParam } : { email },
+                ),
             });
 
             const data = await response.json();

@@ -25,7 +25,7 @@ export function CookieBanner() {
       <p className="text-sm text-neutral-300">
         We use analytics cookies and session recording to understand how you use
         our service and improve it. You can decline and nothing will be set.{' '}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-white">
+        <Link href="/legal/en/privacy" className="underline underline-offset-2 hover:text-white">
           Learn more
         </Link>
       </p>

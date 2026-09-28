@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
@@ -197,12 +198,12 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
               <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Contact</p>
               <a href="/support" className="text-sm text-white/65 hover:text-white transition-colors">Booking Support</a>
               <a href="/press" className="text-sm text-white/65 hover:text-white transition-colors">Press & Media</a>
-              <a href="/legal" className="text-sm text-white/65 hover:text-white transition-colors">Legal Questions</a>
+              <Link href="/legal" className="text-sm text-white/65 hover:text-white transition-colors">Legal Questions</Link>
               <a href="/suggestions" className="text-sm text-white/65 hover:text-white transition-colors">Suggestions</a>
             </div>
             <div className="flex flex-col gap-2">
               <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Legal</p>
-              <a href="/privacy" className="text-sm text-white/65 hover:text-white transition-colors">Privacy Notice</a>
+              <Link href="/legal/en/privacy" className="text-sm text-white/65 hover:text-white transition-colors">Privacy Notice</Link>
               <a href="/terms" className="text-sm text-white/65 hover:text-white transition-colors">Terms of Service</a>
               <a href="/disputes" className="text-sm text-white/65 hover:text-white transition-colors">Dispute Resolution</a>
               <button

@@ -1,0 +1,226 @@
+{/*
+  TRADUCTION — fr (registre standard : vous)
+
+  Traduit depuis en.mdx, version 2026-09-21. PAS encore relu juridiquement :
+  laissez cette langue marquée `status: "draft"` dans lib/legal/documents.ts
+  jusqu'à validation par un relecteur qualifié. Les langues en brouillon sont
+  servies avec une bannière visible et en noindex, afin qu'une version non
+  relue ne puisse jamais être prise pour la version faisant foi.
+
+  Ne modifiez aucun `id` de <Section>. Ces ancres sont citées à l'extérieur et
+  doivent rester identiques dans toutes les langues.
+*/}
+
+export const title = "Politique de confidentialité";
+
+<Lead>
+
+Écrite pour être lue, pas déchiffrée. Ce que nous collectons, pourquoi, et ce que nous en faisons.
+
+Cette politique s'applique à [openbookings.co](https://openbookings.co) et à tous les services associés exploités par OpenBookings B.V., société enregistrée aux Pays-Bas.
+
+</Lead>
+
+<Section id="who-we-are" number="1" title="Qui nous sommes">
+
+OpenBookings B.V. est le responsable du traitement pour tout ce qui est décrit dans la présente politique. Nous sommes une société néerlandaise : le RGPD s'applique donc.
+
+Des questions ? Écrivez-nous à [privacy@openbookings.co](mailto:privacy@openbookings.co). Nous vous répondons sous 5 jours ouvrables.
+
+</Section>
+
+<Section id="what-we-collect" number="2" title="Ce que nous collectons et pourquoi">
+
+Nous ne collectons que les données dont nous avons réellement besoin. Voici la liste complète.
+
+<CardGroup>
+
+<DataCard title="2.1 Données de compte">
+
+Votre adresse e-mail, votre nom et votre photo de profil lorsque vous vous connectez avec Google.
+
+<Meta why="Un compte est nécessaire pour utiliser la plateforme." basis="Exécution d'un contrat." />
+
+</DataCard>
+
+<DataCard title="2.2 Données de réservation">
+
+Nom du client, coordonnées et détails de la réservation : dates de séjour, établissement, nombre de personnes, référence de paiement et statut.
+
+Les données de carte n'atteignent jamais nos serveurs. Stripe les traite ; nous ne recevons que la référence de paiement.
+
+<Meta why="Pour traiter votre réservation et gérer tout ce qui s'y rapporte." basis="Exécution d'un contrat ; obligation légale de conservation des documents financiers." />
+
+</DataCard>
+
+<DataCard title="2.3 Données d'analyse">
+
+Pages consultées, parcours de navigation, type d'appareil approximatif, navigateur et pays.
+
+Via PostHog. Nous ne transmettons jamais votre nom, votre adresse IP complète ni vos données de paiement dans les événements d'analyse.
+
+Si vous êtes connecté et que vous avez accepté les cookies analytiques, les événements sont liés à votre compte afin que nous puissions comprendre l'usage entre les sessions et les appareils. Ce lien est l'identifiant interne de votre compte — un identifiant aléatoire, ni votre nom ni votre adresse e-mail.
+
+<Meta why="Pour comprendre l'usage et corriger les problèmes." basis="Consentement, via la bannière de cookies. Sans acceptation, aucun suivi." />
+
+<Callout title="Enregistrement de session">
+
+Nous enregistrons les interactions à l'écran afin de repérer les problèmes d'utilisabilité dans le parcours de réservation.
+
+<DashList items={[
+  "Tout le texte est masqué. Nous ne voyons jamais ce que vous saisissez dans les formulaires.",
+  "Les enregistrements sont supprimés automatiquement après 30 jours.",
+  "Actif uniquement si vous acceptez les cookies analytiques.",
+]} />
+
+</Callout>
+
+</DataCard>
+
+<DataCard title="2.4 Données d'erreur">
+
+En cas de dysfonctionnement, Sentry reçoit l'erreur, une trace d'appels, la page sur laquelle vous vous trouviez et votre type de navigateur. Aucun contenu de formulaire, aucune donnée de paiement.
+
+<Meta why="Pour détecter et corriger les bogues." basis="Intérêt légitime au bon fonctionnement de la plateforme." />
+
+</DataCard>
+
+<DataCard title="2.5 E-mails transactionnels">
+
+Votre adresse e-mail et les informations nécessaires au message : confirmations de réservation, informations d'arrivée, reçus et liens de connexion.
+
+<Meta basis="Exécution d'un contrat." />
+
+_Aucun e-mail marketing. Chaque e-mail est déclenché par une action de votre part._
+
+</DataCard>
+
+</CardGroup>
+
+</Section>
+
+<Section id="cookies" number="3" title="Cookies">
+
+Lors de votre première visite, une bannière de cookies s'affiche. Vos choix sont simples :
+
+<ChoiceList>
+  <Choice label="Accepter">PostHog démarre et collecte des données d'usage et des enregistrements de session.</Choice>
+  <Choice label="Refuser">Rien n'est déposé à des fins d'analyse. PostHog ne s'exécute pas du tout.</Choice>
+</ChoiceList>
+
+<Note>Les visiteurs de l'UE/EEE voient cette bannière jusqu'à ce qu'ils fassent un choix. Vous avez changé d'avis ? Effacez les données de stockage de ce site et la bannière réapparaît.</Note>
+
+**Ce que nous déposons réellement :**
+
+| Type | Nom | Rôle | Expiration | Consentement requis ? |
+| --- | --- | --- | --- | --- |
+| Essentiel | `session token` | Vous garde connecté | Session / configurable | Non |
+| Essentiel | `cf_clearance` | Protection anti-bots de Cloudflare | 30 minutes | Non |
+| Essentiel | `ob_cookie_consent` | Mémorise votre choix de consentement (stockage local, notre propre bannière) | 90 jours | Non |
+| Analytique | `ph_*` | Analyse PostHog et enregistrement de session | 1 an | Oui, UE/EEE |
+
+<Note>Aucun cookie publicitaire. Aucun pixel de suivi. Aucun cookie de réseaux sociaux.</Note>
+
+</Section>
+
+<Section id="retention" number="4" title="Combien de temps nous conservons les données">
+
+Nous ne conservons pas les données plus longtemps que nécessaire.
+
+| Données | Durée de conservation | Pourquoi |
+| --- | --- | --- |
+| Données de compte | 3 ans après la dernière connexion | Au cas où vous reveniez |
+| Dossiers de réservation | 7 ans à compter de la date de réservation | Obligation fiscale et comptable néerlandaise |
+| Données d'analyse | 13 mois (glissants) | Analyse des tendances d'une année sur l'autre |
+| Enregistrements de session | 30 jours | Analyse d'utilisabilité uniquement |
+| Rapports d'erreur | 90 jours | Débogage |
+| Journaux d'e-mails | 90 jours | Débogage des problèmes de distribution |
+
+<Note>Une fois ces délais écoulés, les données sont supprimées ou anonymisées. Les données anonymisées peuvent être conservées à des fins statistiques.</Note>
+
+</Section>
+
+<Section id="sharing" number="5" title="Avec qui nous partageons vos données">
+
+Nous ne vendons pas vos données. Nous ne les partageons qu'avec les prestataires nécessaires au fonctionnement de la plateforme :
+
+| Prestataire | Ce qu'il reçoit | Pourquoi | Où |
+| --- | --- | --- | --- |
+| **Neon** | Données de compte et de réservation | Hébergement de la base de données | UE (Ouest) |
+| **Google Cloud** | Données traitées par l'application pendant son exécution | Hébergement applicatif et infrastructure | UE (Ouest) |
+| **Algolia** | Requêtes de recherche, adresse IP | Recherche de destinations | UE (Centre) |
+| **Lettermint** | Adresse e-mail, détails de réservation | Envoi des e-mails transactionnels | UE |
+| **PostHog** | Événements d'usage, enregistrements de session, identifiant de compte lorsque vous êtes connecté (ni nom ni e-mail) | Analyse produit | UE |
+| **Sentry** | Rapports d'erreur, traces d'appels, type de navigateur | Suivi des erreurs | UE |
+| **Cloudflare** | Adresse IP, métadonnées de requête | CDN, protection anti-DDoS et anti-bots | UE/États-Unis (CCT) |
+| **Stripe** | Nom, e-mail, montant de la réservation | Traitement des paiements et versements aux établissements | États-Unis/UE (CCT) |
+
+<Note>Pour les deux derniers, lorsque des données peuvent quitter l'UE, nous recourons aux clauses contractuelles types approuvées par la Commission européenne.</Note>
+
+<Note>Nous communiquons également des données sur décision de justice.</Note>
+
+</Section>
+
+<Section id="security" number="6" title="Sécurité">
+
+Voici ce que nous faisons pour protéger vos données :
+
+- Tout transite par des connexions chiffrées (TLS).
+- Les secrets sont stockés dans un gestionnaire de secrets, pas dans le code.
+- L'infrastructure est hébergée sur Google Cloud, avec contrôles d'accès et journalisation d'audit.
+- Les données de carte ne touchent jamais nos serveurs. Stripe gère l'ensemble.
+- Les enregistrements de session sont masqués, afin de ne jamais capter de saisies sensibles.
+
+<Note>Aucun système n'est totalement inviolable. Si nous constatons un jour que vos données ont été compromises, nous vous en informerons, ainsi que l'autorité compétente, conformément à la loi.</Note>
+
+</Section>
+
+<Section id="your-rights" number="7" title="Vos droits au titre du RGPD">
+
+Si vous résidez dans l'EEE, vous disposez de droits opposables sur vos données.
+
+| Droit | Ce que cela signifie pour vous |
+| --- | --- |
+| **Accès** | Obtenir une copie de tout ce que nous détenons à votre sujet. |
+| **Rectification** | Nous demander de corriger toute donnée inexacte ou incomplète. |
+| **Effacement** | Nous demander de supprimer vos données. Nous le ferons, dans les limites de ce que la loi nous impose de conserver. |
+| **Limitation** | Nous demander de suspendre le traitement pendant qu'une question est examinée. |
+| **Portabilité** | Recevoir vos données dans un format lisible par machine. |
+| **Opposition** | Vous opposer à un traitement fondé sur l'intérêt légitime. |
+| **Retrait du consentement** | Retirer à tout moment votre consentement à l'analyse. Sans effet sur ce qui a déjà eu lieu. |
+
+<Note>Écrivez à [privacy@openbookings.co](mailto:privacy@openbookings.co) et nous répondrons sous **30 jours**. Sans frais, sauf si votre demande est manifestement excessive.</Note>
+
+</Section>
+
+<Section id="automated-decisions" number="8" title="Décision automatisée">
+
+Nous ne prenons pas de décisions automatisées vous concernant qui produisent des effets juridiques ou vous affectent de manière significative. Nous n'établissons pas de profils à des fins publicitaires. Aucun algorithme ne vous juge en silence.
+
+</Section>
+
+<Section id="children" number="9" title="Vie privée des mineurs">
+
+OpenBookings ne s'adresse pas aux personnes de moins de 16 ans. Si vous pensez qu'un enfant a créé un compte, écrivez à [privacy@openbookings.co](mailto:privacy@openbookings.co) et nous le supprimerons.
+
+</Section>
+
+<Section id="changes" number="10" title="Modifications de cette politique">
+
+Nous mettons cette politique à jour de temps à autre. En cas de changement important :
+
+- La date « Dernière mise à jour » en haut de page change.
+- Nous affichons à nouveau la bannière de cookies.
+- Continuer à utiliser la plateforme après cela vaut acceptation de la mise à jour.
+
+</Section>
+
+<Section id="contact" number="11" title="Nous contacter">
+
+<Panel>
+
+Questions relatives à la vie privée ou demandes d'accès aux données : [privacy@openbookings.co](mailto:privacy@openbookings.co).
+
+</Panel>
+
+</Section>

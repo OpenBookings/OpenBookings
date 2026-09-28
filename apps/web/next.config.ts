@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
+import createMDX from "@next/mdx";
 
 // Stripe.js and the Payment Element load scripts, open iframes and call the
 // API from Stripe-owned origins, so each needs allowing explicitly.
@@ -62,6 +63,21 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  async redirects() {
+    return [
+      // `/privacy` was the canonical URL before legal documents became
+      // versioned and localised. It is cited in external places we do not
+      // control, so it keeps working permanently. It points at the English
+      // document because that is the only reviewed translation; revisit when
+      // a locale-negotiating entry point exists.
+      {
+        source: "/privacy",
+        destination: "/legal/en/privacy",
+        permanent: true,
+      },
+    ];
+  },
+
   skipTrailingSlashRedirect: true,
 
   async headers() {
@@ -88,7 +104,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// Legal documents live in `content/legal` as MDX and are imported by the
+// `/legal/[locale]/[doc]` routes. They are not pages themselves, so
+// `pageExtensions` is deliberately left alone — this only registers the
+// loader for `.mdx` imports.
+// `remark-gfm` enables tables, which legal documents lean on heavily. The
+// plugin is named as a string rather than imported: Turbopack serialises the
+// MDX config across to its Rust side, so a function reference cannot be
+// passed through.
+const withMDX = createMDX({
+  options: {
+    remarkPlugins: [["remark-gfm", {}]],
+  },
+});
+
+export default withSentryConfig(withMDX(nextConfig), {
   org: "openbookings",
   project: "openbookings-guests",
   authToken: process.env.SENTRY_AUTH_TOKEN,

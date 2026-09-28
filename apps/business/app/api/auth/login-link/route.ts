@@ -3,6 +3,18 @@ import { auth } from "@/lib/auth";
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 import { queryOne } from "@openbookings/db";
 import { getPostHogClient } from "@openbookings/analytics/server";
+import { resolveCallbackPath, resolveCallbackURL } from "@openbookings/auth/callback-url";
+
+const APP_URL = process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co";
+
+/**
+ * Where the emailed link lands when the request named no destination, or named
+ * one we refused. Not the origin root: that is the marketing page, whereas
+ * /login carries the session check that forwards a host on to /onboarding or
+ * /dashboard. Signing in successfully and landing on the sales pitch reads as
+ * a failure.
+ */
+const DEFAULT_CALLBACK_PATH = "/login";
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -16,7 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { email } = body as { email?: unknown };
+  const { email, callbackURL } = body as { email?: unknown; callbackURL?: unknown };
 
   if (!email || typeof email !== "string") {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -71,7 +83,12 @@ export async function POST(request: NextRequest) {
       headers: request.headers,
       body: {
         email: normalizedEmail,
-        callbackURL: `${process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co"}/login`,
+        // Inner call collapses "absent" and "refused" to /login; outer call
+        // turns the surviving path into the absolute URL the email needs.
+        callbackURL: resolveCallbackURL(
+          resolveCallbackPath(callbackURL, DEFAULT_CALLBACK_PATH),
+          APP_URL,
+        ),
       },
     });
   } catch (err) {
