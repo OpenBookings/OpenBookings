@@ -1,4 +1,4 @@
-import type { Point } from "./types";
+import type { IsoDate, Point } from "./types";
 
 /** An absent number is an em dash everywhere. €0 and "we cannot say" are different claims. */
 export const EM_DASH = "—";
@@ -36,6 +36,32 @@ export function formatNights(value: number | null): string {
   if (value === null) return EM_DASH;
   const rounded = Math.round(value * 10) / 10;
   return `${rounded} ${rounded === 1 ? "night" : "nights"}`;
+}
+
+/**
+ * Month names written here rather than asked of Intl. CLDR 42 renamed the
+ * English abbreviation for September from "Sep" to "Sept", so `month: "short"`
+ * returns whichever of the two the running engine's ICU happens to carry: Bun
+ * on macOS says "21 Sep", Bun on Linux (what CI runs) and Node say "21 Sept".
+ * That is an axis label that changes between a developer's machine, CI, the
+ * server render and the browser — the same hazard the money formatter above
+ * documents. Three letters, fixed here, read the same everywhere.
+ */
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/** "2026-09-21" -> "21 Sep". Reads the ISO parts directly; no Date, no timezone. */
+export function formatDayMonth(date: IsoDate): string {
+  const [, month, day] = date.split("-");
+  return `${Number(day)} ${MONTHS[Number(month) - 1]}`;
+}
+
+/** "2026-09-01" -> "Sep 2026". */
+export function formatMonthYear(date: IsoDate): string {
+  const [year, month] = date.split("-");
+  return `${MONTHS[Number(month) - 1]} ${year}`;
 }
 
 /**

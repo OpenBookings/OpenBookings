@@ -1,16 +1,6 @@
+import { formatDayMonth, formatMonthYear } from "../format";
 import { addDays, startOfMonth, startOfWeek } from "../period";
 import type { Granularity, IsoDate, Point } from "../types";
-
-const dayLabel = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-});
-const monthLabel = new Intl.DateTimeFormat("en-GB", {
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 export function bucketKey(date: IsoDate, granularity: Granularity): IsoDate {
   if (granularity === "day") return date;
@@ -19,8 +9,7 @@ export function bucketKey(date: IsoDate, granularity: Granularity): IsoDate {
 }
 
 export function bucketLabel(bucket: IsoDate, granularity: Granularity): string {
-  const at = new Date(`${bucket}T00:00:00Z`);
-  return granularity === "month" ? monthLabel.format(at) : dayLabel.format(at);
+  return granularity === "month" ? formatMonthYear(bucket) : formatDayMonth(bucket);
 }
 
 /**

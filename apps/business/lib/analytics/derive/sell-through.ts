@@ -1,3 +1,4 @@
+import { formatDayMonth } from "../format";
 import { addDays, comparisonRange, granularityFor, type Period } from "../period";
 import type { Facts, Heatmap, HeatCell, NightFact, SellThroughSection } from "../types";
 import { emptyBuckets, toSeries } from "./buckets";
@@ -51,14 +52,8 @@ export function buildHeatmap(nights: NightFact[], period: Period): Heatmap {
   return { weeks, cells };
 }
 
-const weekFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-});
-
 function weekLabel(start: string): string {
-  return weekFormatter.format(new Date(`${start}T00:00:00Z`));
+  return formatDayMonth(start);
 }
 
 export function deriveSellThrough(facts: Facts, period: Period): SellThroughSection {

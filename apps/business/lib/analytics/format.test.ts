@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { formatCents, formatCount, formatNights, formatPercent, trendSentence } from "./format";
+import {
+  formatCents,
+  formatCount,
+  formatDayMonth,
+  formatMonthYear,
+  formatNights,
+  formatPercent,
+  trendSentence,
+} from "./format";
 
 /**
  * These exact strings are the point, not decoration. The locale has to render
@@ -8,6 +16,32 @@ import { formatCents, formatCount, formatNights, formatPercent, trendSentence } 
  * and React reports a mismatch. en-NL does not: Bun gives "€ 4.523,90" where
  * Node gives "€4,523.90".
  */
+/**
+ * These abbreviations must not come from Intl. CLDR 42 renamed English
+ * abbreviated September, so `month: "short"` gives "Sep" under Bun on macOS and
+ * "Sept" under Bun on Linux and Node — a label that differs between a laptop,
+ * CI, the server render and the browser. Spelling all twelve out here is what
+ * keeps that from coming back.
+ */
+describe("formatDayMonth and formatMonthYear", () => {
+  test("every month abbreviates to the same three letters on every engine", () => {
+    const labels = Array.from({ length: 12 }, (_, i) =>
+      formatDayMonth(`2026-${String(i + 1).padStart(2, "0")}-01`),
+    );
+    expect(labels).toEqual([
+      "1 Jan", "1 Feb", "1 Mar", "1 Apr", "1 May", "1 Jun",
+      "1 Jul", "1 Aug", "1 Sep", "1 Oct", "1 Nov", "1 Dec",
+    ]);
+  });
+
+  test("days are not zero-padded, and months carry their year", () => {
+    expect(formatDayMonth("2026-09-21")).toBe("21 Sep");
+    expect(formatDayMonth("2026-09-01")).toBe("1 Sep");
+    expect(formatMonthYear("2026-09-01")).toBe("Sep 2026");
+    expect(formatMonthYear("2027-01-01")).toBe("Jan 2027");
+  });
+});
+
 describe("formatCents", () => {
   test("renders euros from cents", () => {
     expect(formatCents(452_390)).toBe("€4,523.90");
