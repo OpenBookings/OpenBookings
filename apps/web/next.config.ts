@@ -123,6 +123,15 @@ export default withSentryConfig(withMDX(nextConfig), {
   project: "openbookings-guests",
   authToken: process.env.SENTRY_AUTH_TOKEN,
 
+  // Name the release explicitly. Left to the plugin, it falls back to the
+  // git HEAD SHA -- but the builder stage holds `turbo prune` output, which
+  // has no .git, so detection finds nothing and the artifacts upload with no
+  // release attached while events at runtime are tagged NEXT_PUBLIC_RELEASE_SHA.
+  // Naming it here is what makes the two line up in the Releases view.
+  release: {
+    name: process.env.NEXT_PUBLIC_RELEASE_SHA,
+  },
+
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 

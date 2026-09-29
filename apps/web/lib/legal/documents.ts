@@ -1,3 +1,4 @@
+import type { MDXProps } from "mdx/types";
 import type { ComponentType } from "react";
 
 /**
@@ -30,6 +31,33 @@ export const LEGAL_LOCALE_LABELS: Record<LegalLocale, string> = {
 };
 
 /**
+ * BCP-47 tag per locale, which drives date formatting, `lang` and `hreflang`.
+ *
+ * The regional subtags are the markets these documents are written for, not
+ * the languages' largest ones: Dutch and French here mean the Netherlands and
+ * Belgium.
+ */
+export const LEGAL_LOCALE_TAGS: Record<LegalLocale, string> = {
+  en: "en-GB",
+  nl: "nl-NL",
+  fr: "fr-BE",
+};
+
+/**
+ * Flag shown beside the language code in the switcher.
+ *
+ * Each one follows the regional subtag above, so French is Belgian — a
+ * tricolour would contradict the `fr-BE` date formatting on the same page.
+ * A flag is a country, not a language, so it is decorative only: the code
+ * beside it is what actually identifies the option.
+ */
+export const LEGAL_LOCALE_FLAGS: Record<LegalLocale, string> = {
+  en: "🇬🇧",
+  nl: "🇳🇱",
+  fr: "🇧🇪",
+};
+
+/**
  * `draft` means the file exists but has not been through translation review.
  * Draft locales are served (so a translator can preview them in context) but
  * are marked `noindex` and carry a banner, because a half-translated policy is
@@ -38,7 +66,12 @@ export const LEGAL_LOCALE_LABELS: Record<LegalLocale, string> = {
 export type TranslationStatus = "translated" | "draft";
 
 type LoadedDocument = {
-  default: ComponentType;
+  /**
+   * Takes MDX's `components` prop, which is how the page substitutes a
+   * localised component for a compiled-in one without touching the global
+   * mapping in `mdx-components.tsx`.
+   */
+  default: ComponentType<MDXProps>;
   title: string;
 };
 

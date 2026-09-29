@@ -45,6 +45,10 @@
     ARG NEXT_PUBLIC_MAPTILER_STYLE_ID
     ARG NEXT_PUBLIC_SENTRY_DSN
     ARG NEXT_PUBLIC_REALTIME_WORKER_URL
+    # The commit this image was built from. NEXT_PUBLIC_ so the browser bundle
+    # carries it too: Sentry and PostHog both tag client-side events with it,
+    # which is what makes "which release served this?" answerable at all.
+    ARG NEXT_PUBLIC_RELEASE_SHA
 
     ENV NEXT_PUBLIC_BUSINESS_URL=$NEXT_PUBLIC_BUSINESS_URL
     ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
@@ -55,6 +59,7 @@
     ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
     ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
     ENV NEXT_PUBLIC_REALTIME_WORKER_URL=$NEXT_PUBLIC_REALTIME_WORKER_URL
+    ENV NEXT_PUBLIC_RELEASE_SHA=$NEXT_PUBLIC_RELEASE_SHA
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in
     # <workspace>/node_modules; the root node_modules only holds the store
@@ -65,7 +70,20 @@
     # npm is only a script runner here: the install was Bun's, and npm just
     # puts apps/business/node_modules/.bin on PATH and runs the same `build`
     # script, so package.json stays the single source of truth.
-    RUN cd apps/business && npm run build
+    #
+    # SENTRY_AUTH_TOKEN is mounted rather than passed as an ARG: build args are
+    # recorded in build metadata and provenance attestations, and this token can
+    # write to every project in the org. Nothing reads it at runtime -- it is
+    # only needed here, to upload the source maps `next build` generates.
+    #
+    # When the secret is not supplied (a local build, a forked PR) the mount
+    # is simply not created, and withSentryConfig skips the upload rather
+    # than failing the build -- so `cat` has to be guarded, not assumed.
+    RUN --mount=type=secret,id=sentry_auth_token \
+        if [ -f /run/secrets/sentry_auth_token ]; then \
+          export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+        fi; \
+        cd apps/business && npm run build
     
     # ---------- Production ----------
     FROM oven/bun:1.3-alpine

@@ -63,18 +63,38 @@ export function CardGroup({ children }: { children: ReactNode }) {
   return <div className="space-y-6">{children}</div>;
 }
 
-/** The "Why / Legal basis" footnote inside a `DataCard`. */
-export function Meta({ why, basis }: { why?: string; basis?: string }) {
+export type MetaLabels = { why: string; legalBasis: string };
+
+const DEFAULT_META_LABELS: MetaLabels = { why: "Why:", legalBasis: "Legal basis:" };
+
+/**
+ * The "Why / Legal basis" footnote inside a `DataCard`.
+ *
+ * `why` and `basis` come from the document, but the two labels are part of the
+ * chrome, and a document written in Dutch must not be annotated in English.
+ * They are a prop rather than a lookup so this file stays presentational: the
+ * page substitutes a localised `Meta` through the MDX `components` prop (see
+ * `LegalPage`), and the English default keeps the component usable on its own.
+ */
+export function Meta({
+  why,
+  basis,
+  labels = DEFAULT_META_LABELS,
+}: {
+  why?: string;
+  basis?: string;
+  labels?: MetaLabels;
+}) {
   return (
     <div className="mt-3 space-y-1 text-sm text-white/40">
       {why && (
         <p>
-          <strong className="text-white/50">Why:</strong> {why}
+          <strong className="text-white/50">{labels.why}</strong> {why}
         </p>
       )}
       {basis && (
         <p>
-          <strong className="text-white/50">Legal basis:</strong> {basis}
+          <strong className="text-white/50">{labels.legalBasis}</strong> {basis}
         </p>
       )}
     </div>

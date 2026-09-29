@@ -163,6 +163,12 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # A mounted secret, not a build arg: build args are recorded in build
+          # metadata and provenance attestations, and this token can write to
+          # every project in the org. It is only needed to upload source maps --
+          # without it the build still succeeds, it just ships minified traces.
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -176,13 +182,20 @@ jobs:
             NEXT_PUBLIC_WEB_URL=${{ vars.NEXT_PUBLIC_WEB_URL }}
             NEXT_PUBLIC_BUSINESS_URL=${{ vars.NEXT_PUBLIC_BUSINESS_URL }}
 
+            # App specific Args
+            #
+            # The DSN picks which Sentry project an event lands in, so each app
+            # needs its own -- one shared var piles both apps' errors into a
+            # single project. Web reports to `openbookings-guests` and business
+            # to `openbookings-business`, matching `project` in next.config.ts.
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_WEB_SENTRY_DSN }}
+
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
             NEXT_PUBLIC_MAPTILER_API_KEY=${{ vars.NEXT_PUBLIC_MAPTILER_API_KEY }}
             NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
-            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
             NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
 
             # Baked into the image so /api/health, Sentry and PostHog can all
@@ -208,6 +221,12 @@ jobs:
           context: .
           file: ./apps/business/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # A mounted secret, not a build arg: build args are recorded in build
+          # metadata and provenance attestations, and this token can write to
+          # every project in the org. It is only needed to upload source maps --
+          # without it the build still succeeds, it just ships minified traces.
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -223,6 +242,8 @@ jobs:
 
             # App specific Args
             NEXT_PUBLIC_REALTIME_WORKER_URL=${{ vars.NEXT_PUBLIC_BUSINESS_REALTIME_WORKER_URL }}
+            # Its own Sentry project -- see build-web for why these are split.
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_BUSINESS_SENTRY_DSN }}
 
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}
@@ -230,7 +251,10 @@ jobs:
             NEXT_PUBLIC_MAPTILER_STYLE_ID=${{ vars.NEXT_PUBLIC_MAPTILER_STYLE_ID }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
             NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
-            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+
+            # Baked into the image so /api/health, Sentry and PostHog can all
+            # name the commit serving a request.
+            NEXT_PUBLIC_RELEASE_SHA=${{ github.sha }}
 
   build-docs:
     needs: detect
@@ -409,8 +433,11 @@ jobs:
 
       # Rolling to `ready` only proves Scaleway accepted the image. This proves
       # the thing actually answering openbookings.co is running this commit.
-      # Only web reports a release: the other three images do not take the
-      # NEXT_PUBLIC_RELEASE_SHA build arg.
+      # Only web is probed here. Business now takes the NEXT_PUBLIC_RELEASE_SHA
+      # build arg and reports it from /api/health too, so it could be probed the
+      # same way; docs and support-bot still cannot. Adding that step gates a
+      # business release on the probe, so it is a deliberate choice, not a
+      # consequence of this build arg existing.
       - name: Confirm web is serving this commit
         if: needs.detect.outputs.web == 'true'
         env:

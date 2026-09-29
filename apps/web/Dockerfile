@@ -66,7 +66,20 @@
     # npm is only a script runner here: the install was Bun's, and npm just
     # puts apps/web/node_modules/.bin on PATH and runs the same `build`
     # script, so package.json stays the single source of truth.
-    RUN cd apps/web && npm run build
+    #
+    # SENTRY_AUTH_TOKEN is mounted rather than passed as an ARG: build args are
+    # recorded in build metadata and provenance attestations, and this token can
+    # write to every project in the org. Nothing reads it at runtime -- it is
+    # only needed here, to upload the source maps `next build` generates.
+    #
+    # When the secret is not supplied (a local build, a forked PR) the mount
+    # is simply not created, and withSentryConfig skips the upload rather
+    # than failing the build -- so `cat` has to be guarded, not assumed.
+    RUN --mount=type=secret,id=sentry_auth_token \
+        if [ -f /run/secrets/sentry_auth_token ]; then \
+          export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+        fi; \
+        cd apps/web && npm run build
     
     # ---------- Production ----------
     FROM oven/bun:1.3-alpine

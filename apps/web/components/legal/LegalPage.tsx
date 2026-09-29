@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import type { MDXComponents } from "mdx/types";
+import type { ComponentProps } from "react";
 import { LegalDocument } from "@/components/legal/LegalDocument";
+import { Meta } from "@/components/legal/elements";
+import { LEGAL_STRINGS } from "@/lib/legal/strings";
 import {
   DEFAULT_LEGAL_LOCALE,
   getCurrentVersion,
@@ -75,6 +79,26 @@ export async function generateLegalMetadata(params: Params): Promise<Metadata> {
   };
 }
 
+/**
+ * Per-render overrides layered on top of the global mapping in
+ * `mdx-components.tsx`.
+ *
+ * `Meta` renders two labels of its own ("Why", "Legal basis") that the
+ * document does not supply, so it is the one component whose output depends on
+ * the locale being rendered. MDX merges a component's `components` prop over
+ * the global mapping, which gives a per-request substitution without a client
+ * boundary or a request-scoped store.
+ */
+function localisedMdxComponents(locale: LegalLocale): MDXComponents {
+  const { why, legalBasis } = LEGAL_STRINGS[locale];
+
+  return {
+    Meta: (props: ComponentProps<typeof Meta>) => (
+      <Meta {...props} labels={{ why, legalBasis }} />
+    ),
+  };
+}
+
 export async function renderLegalPage(params: Params) {
   const resolved = await resolve(params);
   if (!resolved) notFound();
@@ -90,7 +114,7 @@ export async function renderLegalPage(params: Params) {
       title={title}
       isArchived={isArchived}
     >
-      <Body />
+      <Body components={localisedMdxComponents(locale)} />
     </LegalDocument>
   );
 }

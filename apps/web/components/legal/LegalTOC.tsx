@@ -15,8 +15,12 @@ type Entry = { id: string; label: string };
  * The read is deferred to an animation frame: it waits until layout has settled
  * before measuring, and it keeps the state update out of the effect body so
  * mounting does not trigger a cascading render.
+ *
+ * The entry labels therefore come out in the document's language for free. The
+ * heading and the landmark label do not, so they are passed in already
+ * translated — this is a client component, so it cannot read them itself.
  */
-export function LegalTOC() {
+export function LegalTOC({ heading, navLabel }: { heading: string; navLabel: string }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [active, setActive] = useState<string>("");
 
@@ -57,9 +61,9 @@ export function LegalTOC() {
   if (entries.length === 0) return null;
 
   return (
-    <nav aria-label="Table of contents">
+    <nav aria-label={navLabel}>
       <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-white/30">
-        On this page
+        {heading}
       </p>
       <ul className="space-y-1">
         {entries.map(({ id, label }) => (
