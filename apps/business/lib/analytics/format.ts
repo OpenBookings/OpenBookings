@@ -71,13 +71,14 @@ export function formatMonthYear(date: IsoDate): string {
  */
 export function trendSentence(
   label: string,
-  points: Point[],
+  points: Pick<Point, "label" | "value">[],
   format: (value: number) => string,
 ): string {
-  if (points.length === 0) return `${label} has no data in this period.`;
-  const first = points[0];
-  const last = points[points.length - 1];
-  if (points.length === 1) {
+  const known = points.filter((p): p is { label: string; value: number } => p.value !== null);
+  if (known.length === 0) return `${label} has no data in this period.`;
+  const first = known[0];
+  const last = known[known.length - 1];
+  if (known.length === 1) {
     return `${label} was ${format(first.value)} on ${first.label}, the only point in this period.`;
   }
   const verb =

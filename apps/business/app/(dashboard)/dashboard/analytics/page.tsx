@@ -1,16 +1,17 @@
 import { redirect } from "next/navigation";
-import type { AnalyticsPageProps } from "./_components/analytics-section";
+import { carryQuery } from "@/lib/analytics/pages";
+
+type RawParams = Record<string, string | string[] | undefined>;
 
 /**
- * The tab itself is a dead end: the sidebar entry only expands its sub-items, so
- * nothing in the app links here. This exists for the old bookmark and the pasted
- * link, and it carries whatever period, property or demo flag came with them
- * rather than dropping the host on an unfiltered page.
+ * Nothing links here: the sidebar entry only expands its sub-items. This exists
+ * for the old bookmark and the pasted link, and carries the filters with it.
  */
-export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
-  const entries = Object.entries(await searchParams).filter(
-    (entry): entry is [string, string] => entry[1] !== undefined,
-  );
-  const query = new URLSearchParams(entries).toString();
-  redirect(`/dashboard/analytics/revenue${query ? `?${query}` : ""}`);
+export default async function AnalyticsIndex({ searchParams }: { searchParams: Promise<RawParams> }) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (first !== undefined) search.set(key, first);
+  }
+  redirect(`/dashboard/analytics/revenue${carryQuery(search)}`);
 }

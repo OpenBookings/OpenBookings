@@ -37,6 +37,21 @@ const nextConfig: NextConfig = {
 
   allowedDevOrigins: ["127.0.0.1"],
 
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/analytics/sell-through",
+        destination: "/dashboard/analytics/occupancy",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/analytics/bookings",
+        destination: "/dashboard/analytics/booking-patterns",
+        permanent: true,
+      },
+    ];
+  },
+
   async rewrites() {
     return [
       {
