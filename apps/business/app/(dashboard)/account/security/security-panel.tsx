@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { describeDevice } from "@/lib/device";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,15 +33,6 @@ type SessionRow = {
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
   return new Date(value).toLocaleString();
-}
-
-/** Trim a user-agent down to something a hotel owner can recognise. */
-function describeDevice(userAgent: string | null | undefined): string {
-  if (!userAgent) return "Unknown device";
-  const browser =
-    userAgent.match(/(Edg|Firefox|Chrome|Safari)\/[\d.]+/)?.[1] ?? "Browser";
-  const os = userAgent.match(/\(([^);]+)/)?.[1] ?? "";
-  return [browser === "Edg" ? "Edge" : browser, os].filter(Boolean).join(" · ");
 }
 
 export function SecurityPanel() {

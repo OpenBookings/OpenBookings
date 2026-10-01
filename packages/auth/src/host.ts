@@ -19,6 +19,9 @@ import {
   userAdditionalFields,
   type BaseAuthConfig,
 } from "./shared";
+import { locationFromHeaders, type SignInLocation } from "./location";
+
+export type { SignInLocation } from "./location";
 
 export type SecurityAlert = {
   event: "new-device-sign-in";
@@ -27,6 +30,8 @@ export type SecurityAlert = {
   userEmail: string;
   ip: string | null;
   userAgent: string | null;
+  /** From Cloudflare's geolocation headers; null when unavailable. */
+  location: SignInLocation | null;
   /** Emails of the org's owners (includes the user if they are one). */
   ownerEmails: string[];
 };
@@ -117,11 +122,14 @@ export function createHostAuth(config: HostAuthConfig) {
    * all org owners. audit_log survives session expiry, so a routine
    * next-day sign-in from the same browser is not a false positive.
    */
-  const recordSignInAndAlert = async (session: {
-    userId: string;
-    ipAddress?: string | null;
-    userAgent?: string | null;
-  }) => {
+  const recordSignInAndAlert = async (
+    session: {
+      userId: string;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    },
+    headers: Headers | null | undefined,
+  ) => {
     const ua = session.userAgent ?? null;
     const seen = await pool.query(
       `SELECT 1 FROM audit_log
@@ -171,6 +179,7 @@ export function createHostAuth(config: HostAuthConfig) {
       userEmail,
       ip: session.ipAddress ?? null,
       userAgent: ua,
+      location: locationFromHeaders(headers),
       ownerEmails: owners.rows.map((row) => row.email),
     });
   };
@@ -225,9 +234,12 @@ export function createHostAuth(config: HostAuthConfig) {
             // Signing in IS a verification: the step-up clock starts now.
             return { data: { ...result.data, lastVerifiedAt: new Date() } };
           },
-          after: async (session) => {
+          after: async (session, ctx) => {
             try {
-              await recordSignInAndAlert(session);
+              await recordSignInAndAlert(
+                session,
+                ctx?.headers ?? ctx?.request?.headers,
+              );
             } catch (err) {
               // Alerting must never block a sign-in.
               console.error("[auth] new-device alert failed:", err);
