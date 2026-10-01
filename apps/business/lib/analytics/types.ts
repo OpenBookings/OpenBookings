@@ -1,3 +1,6 @@
+import type { PageId } from "./pages";
+import type { CompareMode, DateRange, Period } from "./period";
+
 /** Calendar date, `YYYY-MM-DD`. Every date in this module is one of these. */
 export type IsoDate = string;
 
@@ -209,3 +212,43 @@ export interface GuestsView {
   countries: Widget<Share[]>;
   groupTypes: Widget<Share[]>;
 }
+
+// ─────────────────────────────────────────────
+// Derivation context and page payload
+// ─────────────────────────────────────────────
+
+/** Everything a page derivation needs. Note what is absent: any property. */
+export interface DeriveContext {
+  facts: Facts;
+  period: Period;
+  /** Null when no comparison was asked for or none is possible. */
+  comparison: DateRange | null;
+  today: IsoDate;
+  granularity: Granularity;
+}
+
+export interface PageViews {
+  revenue: RevenueView;
+  occupancy: OccupancyView;
+  "booking-patterns": BookingPatternsView;
+  pricing: PricingView;
+  guests: GuestsView;
+}
+
+export interface PageData<P extends PageId = PageId> {
+  page: P;
+  /** True when the facts were generated. Drives the banner and the export button only. */
+  isDemo: boolean;
+  /** False only for a host who has never had a booking. */
+  hasAnyBookings: boolean;
+  range: DateRange;
+  comparison: DateRange | null;
+  /** The comparison actually applied, after any fallback. */
+  compare: CompareMode;
+  canCompareLastYear: boolean;
+  granularity: Granularity;
+  view: PageViews[P];
+}
+
+/** Discriminated on `page`, so a switch narrows `view`. */
+export type AnyPageData = { [P in PageId]: PageData<P> }[PageId];

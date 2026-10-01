@@ -13,8 +13,6 @@ import {
   parseCompareParam,
 } from "./period";
 
-const TODAY = "2026-09-25"; // a Friday
-
 describe("date helpers", () => {
   test("addDays crosses months and years without a Date local getter", () => {
     expect(addDays("2026-01-31", 1)).toBe("2026-02-01");

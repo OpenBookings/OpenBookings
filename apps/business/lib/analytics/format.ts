@@ -88,3 +88,30 @@ export function trendSentence(
   }
   return `${label} ${verb} from ${format(first.value)} on ${first.label} to ${format(last.value)} on ${last.label}.`;
 }
+
+const wholeEuros = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** Stats and chart axes. Cents belong in tables and the CSV: use formatCents there. */
+export function formatEuros(cents: number | null): string {
+  return cents === null ? EM_DASH : wholeEuros.format(Math.round(cents / 100));
+}
+
+/** "2026-10-01" -> "1 Oct 2026". */
+export function formatDate(date: IsoDate): string {
+  return `${formatDayMonth(date)} ${date.slice(0, 4)}`;
+}
+
+export function formatRange(range: { from: IsoDate; to: IsoDate }): string {
+  return `${formatDate(range.from)} – ${formatDate(range.to)}`;
+}
+
+export function formatDays(value: number | null): string {
+  if (value === null) return EM_DASH;
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded} ${rounded === 1 ? "day" : "days"}`;
+}

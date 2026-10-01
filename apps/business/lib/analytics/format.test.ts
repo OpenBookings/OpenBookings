@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatDate,
+  formatDays,
+  formatEuros,
+  formatRange,
   formatCents,
   formatCount,
   formatDayMonth,
@@ -99,5 +103,23 @@ describe("trendSentence", () => {
       "Revenue was €5.00 on 1 Sep, the only point in this period.",
     );
     expect(trendSentence("Revenue", [], formatCents)).toBe("Revenue has no data in this period.");
+  });
+});
+
+describe("whole-euro and date formatting", () => {
+  test("stats show whole euros, rounded", () => {
+    expect(formatEuros(33_804_729)).toBe("€338,047");
+    expect(formatEuros(null)).toBe("—");
+  });
+
+  test("dates read day, month, year", () => {
+    expect(formatDate("2026-10-01")).toBe("1 Oct 2026");
+    expect(formatRange({ from: "2026-07-02", to: "2026-10-01" })).toBe("2 Jul 2026 – 1 Oct 2026");
+  });
+
+  test("days pluralise", () => {
+    expect(formatDays(1)).toBe("1 day");
+    expect(formatDays(12.5)).toBe("12.5 days");
+    expect(formatDays(null)).toBe("—");
   });
 });
