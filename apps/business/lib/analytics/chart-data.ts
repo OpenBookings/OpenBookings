@@ -1,4 +1,4 @@
-import type { Point } from "./types";
+import type { Point, Widget } from "./types";
 
 /** Below this a time series is a table: a chart with two points is a sentence. */
 export const MIN_CHART_POINTS = 7;
@@ -22,4 +22,14 @@ export function lineRows(points: Point[]): LineRow[] {
     dashed: firstIncomplete !== -1 && index >= firstIncomplete - 1 ? p.value : null,
     compare: p.compare,
   }));
+}
+
+/** What a widget says in place of itself when it declines to render. */
+export function declinedMessage(
+  widget: Exclude<Widget<unknown>, { ok: true }>,
+  unit?: string,
+): string {
+  if (widget.reason === "error") return widget.message;
+  const counted = unit ?? (widget.basis === "booking" ? "bookings" : "nights sold");
+  return `Needs at least ${widget.needed} ${counted} (${widget.have} so far)`;
 }
