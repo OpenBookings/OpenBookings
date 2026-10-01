@@ -2,9 +2,11 @@
 
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import type * as React from "react";
 import { useMemo, useState } from "react";
 
+import { carryQuery } from "@/lib/analytics/pages";
 import {
   Collapsible,
   CollapsibleContent,
@@ -32,6 +34,23 @@ export type NavItem = {
     url: string;
   }[];
 };
+
+const ANALYTICS_ROOT = "/dashboard/analytics/";
+
+/**
+ * Between two analytics pages the period, comparison and demo flag come along.
+ * Every other link is untouched. Props and ref pass straight through, because
+ * the sidebar button renders this as its child.
+ */
+function CarriedLink({ href, ...props }: Omit<React.ComponentProps<typeof Link>, "href"> & { href: string }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const carried =
+    href.startsWith(ANALYTICS_ROOT) && pathname.startsWith(ANALYTICS_ROOT)
+      ? carryQuery(new URLSearchParams(searchParams.toString()))
+      : "";
+  return <Link href={`${href}${carried}`} {...props} />;
+}
 
 export function NavMain({ items }: { items: NavItem[] }) {
   const { state, setOpen } = useSidebar();
@@ -127,9 +146,9 @@ export function NavMain({ items }: { items: NavItem[] }) {
                           asChild
                           isActive={subItem.url === activeLink}
                         >
-                          <Link href={subItem.url} prefetch={true}>
+                          <CarriedLink href={subItem.url} prefetch={true}>
                             <span>{subItem.title}</span>
-                          </Link>
+                          </CarriedLink>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     ))}
