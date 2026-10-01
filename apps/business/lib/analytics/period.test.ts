@@ -9,6 +9,8 @@ import {
   resolvePeriod,
   startOfWeek,
   weekdayOf,
+  amsterdamToday,
+  parseCompareParam,
 } from "./period";
 
 const TODAY = "2026-09-25"; // a Friday
@@ -64,144 +66,107 @@ describe("date helpers", () => {
   });
 });
 
+describe("granularityFor", () => {
+  test("31 days buckets by day, 32 by week", () => {
+    expect(granularityFor({ from: "2026-01-01", to: "2026-01-31" })).toBe("day");
+    expect(granularityFor({ from: "2026-01-01", to: "2026-02-01" })).toBe("week");
+  });
+
+  test("six months buckets by week, a day more by month", () => {
+    expect(granularityFor({ from: "2026-01-01", to: "2026-06-30" })).toBe("week");
+    expect(granularityFor({ from: "2026-01-01", to: "2026-07-02" })).toBe("month");
+  });
+});
+
+
 describe("resolvePeriod", () => {
-  test("this month runs from the 1st to today, not to month end", () => {
-    expect(resolvePeriod("this-month", TODAY)).toMatchObject({
-      from: "2026-09-01",
-      to: "2026-09-25",
+  const TODAY = "2026-10-01";
+
+  test("last 7 and last 30 days are inclusive of today", () => {
+    expect(resolvePeriod("last-7-days", TODAY)).toEqual({ preset: "last-7-days", from: "2026-09-25", to: TODAY });
+    expect(resolvePeriod("last-30-days", TODAY)).toEqual({ preset: "last-30-days", from: "2026-09-02", to: TODAY });
+  });
+
+  test("last 3 and last 12 months start the day after the same date back", () => {
+    expect(resolvePeriod("last-3-months", TODAY).from).toBe("2026-07-02");
+    expect(resolvePeriod("last-12-months", TODAY).from).toBe("2025-10-02");
+  });
+
+  test("year to date starts on 1 January", () => {
+    expect(resolvePeriod("ytd", TODAY)).toEqual({ preset: "ytd", from: "2026-01-01", to: TODAY });
+  });
+
+  test("a custom range the wrong way round is swapped", () => {
+    expect(resolvePeriod("custom", TODAY, { from: "2026-03-10", to: "2026-03-01" })).toEqual({
+      preset: "custom", from: "2026-03-01", to: "2026-03-10",
     });
   });
 
-  test("last month is the whole previous calendar month", () => {
-    expect(resolvePeriod("last-month", TODAY)).toMatchObject({
-      from: "2026-08-01",
-      to: "2026-08-31",
-    });
-  });
-
-  test("last month handles a January today by stepping into last year", () => {
-    expect(resolvePeriod("last-month", "2026-01-15")).toMatchObject({
-      from: "2025-12-01",
-      to: "2025-12-31",
-    });
-  });
-
-  test("last 3 months ends today", () => {
-    expect(resolvePeriod("last-3-months", TODAY)).toMatchObject({
-      from: "2026-06-26",
-      to: "2026-09-25",
-    });
-  });
-
-  test("year to date starts 1 January", () => {
-    expect(resolvePeriod("ytd", TODAY)).toMatchObject({
-      from: "2026-01-01",
-      to: "2026-09-25",
-    });
-  });
-
-  test("last 12 months ends today", () => {
-    expect(resolvePeriod("last-12-months", TODAY)).toMatchObject({
-      from: "2025-09-26",
-      to: "2026-09-25",
-    });
+  test("a custom range with a malformed date falls back to the default preset", () => {
+    expect(resolvePeriod("custom", TODAY, { from: "2026-13-45", to: "2026-03-01" }).preset).toBe("last-3-months");
   });
 });
 
 describe("parsePeriodParams", () => {
-  test("defaults to this month", () => {
-    expect(parsePeriodParams({}, TODAY).preset).toBe("this-month");
+  const TODAY = "2026-10-01";
+
+  test("defaults to the last 3 months", () => {
+    expect(parsePeriodParams({}, TODAY).preset).toBe("last-3-months");
   });
 
-  test("an unknown preset falls back to this month rather than throwing", () => {
-    expect(parsePeriodParams({ period: "since-forever" }, TODAY).preset).toBe(
-      "this-month",
-    );
+  test("an unknown or retired preset falls back", () => {
+    expect(parsePeriodParams({ period: "this-month" }, TODAY).preset).toBe("last-3-months");
+    expect(parsePeriodParams({ period: "'; drop table" }, TODAY).preset).toBe("last-3-months");
   });
 
-  test("a custom range is honoured", () => {
-    expect(
-      parsePeriodParams(
-        { period: "custom", from: "2026-07-01", to: "2026-07-31" },
-        TODAY,
-      ),
-    ).toMatchObject({ preset: "custom", from: "2026-07-01", to: "2026-07-31" });
-  });
-
-  /**
-   * Review Focus 2. A host dragging backwards through the Calendar popover
-   * produces from > to for as long as the drag lasts. Rejecting it blanks the
-   * page mid-gesture; swapping shows them the range they are drawing.
-   */
-  test("a reversed custom range is swapped, not rejected", () => {
-    expect(
-      parsePeriodParams(
-        { period: "custom", from: "2026-07-31", to: "2026-07-01" },
-        TODAY,
-      ),
-    ).toMatchObject({ from: "2026-07-01", to: "2026-07-31" });
-  });
-
-  test("a single-day custom range survives", () => {
-    const period = parsePeriodParams(
-      { period: "custom", from: "2026-07-04", to: "2026-07-04" },
-      TODAY,
-    );
-    expect(period).toMatchObject({ from: "2026-07-04", to: "2026-07-04" });
-    expect(granularityFor(period)).toBe("day");
-  });
-
-  test("a custom range spanning the year boundary survives intact", () => {
-    expect(
-      parsePeriodParams(
-        { period: "custom", from: "2025-12-15", to: "2026-01-15" },
-        TODAY,
-      ),
-    ).toMatchObject({ from: "2025-12-15", to: "2026-01-15" });
-  });
-
-  test("a malformed custom date falls back to this month", () => {
-    expect(
-      parsePeriodParams({ period: "custom", from: "yesterday" }, TODAY).preset,
-    ).toBe("this-month");
-    expect(
-      parsePeriodParams({ period: "custom", from: "2026-13-45", to: "2026-07-01" }, TODAY)
-        .preset,
-    ).toBe("this-month");
-  });
-
-  test("a custom range is clamped to five years so one URL cannot ask for everything", () => {
-    const period = parsePeriodParams(
-      { period: "custom", from: "1999-01-01", to: "2026-09-25" },
-      TODAY,
-    );
-    expect(daysBetween(period.from, period.to)).toBeLessThanOrEqual(366 * 5);
+  test("a repeated param uses its first value", () => {
+    expect(parsePeriodParams({ period: ["last-7-days", "ytd"] }, TODAY).preset).toBe("last-7-days");
   });
 });
 
-describe("granularityFor", () => {
-  test("31 days buckets by day, 32 by week", () => {
-    expect(granularityFor({ preset: "custom", from: "2026-01-01", to: "2026-01-31" })).toBe("day");
-    expect(granularityFor({ preset: "custom", from: "2026-01-01", to: "2026-02-01" })).toBe("week");
+describe("parseCompareParam", () => {
+  test("defaults to the previous period", () => {
+    expect(parseCompareParam(undefined)).toBe("previous");
+    expect(parseCompareParam("foo")).toBe("previous");
   });
 
-  test("six months buckets by week, a day more by month", () => {
-    expect(granularityFor({ preset: "custom", from: "2026-01-01", to: "2026-06-30" })).toBe("week");
-    expect(granularityFor({ preset: "custom", from: "2026-01-01", to: "2026-07-02" })).toBe("month");
+  test("accepts each mode, and the first of a repeated param", () => {
+    expect(parseCompareParam("none")).toBe("none");
+    expect(parseCompareParam(["last-year", "none"])).toBe("last-year");
   });
 });
 
 describe("comparisonRange", () => {
-  test("an ordinary period compares against the equal-length span before it", () => {
-    expect(
-      comparisonRange({ preset: "this-month", from: "2026-09-01", to: "2026-09-25" }),
-    ).toEqual({ from: "2026-08-07", to: "2026-08-31" });
+  const range = { from: "2026-09-01", to: "2026-09-30" };
+
+  test("none has no comparison", () => {
+    expect(comparisonRange(range, "none")).toBeNull();
   });
 
-  test("year to date compares against the same span last year", () => {
-    expect(comparisonRange({ preset: "ytd", from: "2026-01-01", to: "2026-09-25" })).toEqual({
-      from: "2025-01-01",
-      to: "2025-09-25",
+  test("previous is the equal-length span immediately before", () => {
+    expect(comparisonRange(range, "previous")).toEqual({ from: "2026-08-02", to: "2026-08-31" });
+  });
+
+  test("last-year shifts both ends back one year, clamping 29 February", () => {
+    expect(comparisonRange(range, "last-year")).toEqual({ from: "2025-09-01", to: "2025-09-30" });
+    expect(comparisonRange({ from: "2024-02-29", to: "2024-02-29" }, "last-year")).toEqual({
+      from: "2023-02-28", to: "2023-02-28",
     });
+  });
+});
+
+describe("amsterdamToday", () => {
+  test("late evening UTC in summer is already tomorrow in Amsterdam", () => {
+    expect(amsterdamToday(new Date("2026-07-01T22:30:00Z"))).toBe("2026-07-02");
+  });
+
+  test("in winter the day turns at 23:00 UTC", () => {
+    expect(amsterdamToday(new Date("2026-01-15T22:59:00Z"))).toBe("2026-01-15");
+    expect(amsterdamToday(new Date("2026-01-15T23:00:00Z"))).toBe("2026-01-16");
+  });
+
+  test("the last-7-days range follows the Amsterdam day, not the UTC one", () => {
+    const today = amsterdamToday(new Date("2026-07-01T22:30:00Z"));
+    expect(resolvePeriod("last-7-days", today)).toEqual({ preset: "last-7-days", from: "2026-06-26", to: "2026-07-02" });
   });
 });

@@ -95,7 +95,7 @@ describe("trendSentence", () => {
   });
 
   test("a single point and an empty series still yield a usable sentence", () => {
-    expect(trendSentence("Revenue", [{ bucket: "x", label: "1 Sep", value: 500 }], formatCents)).toBe(
+    expect(trendSentence("Revenue", [{ label: "1 Sep", value: 500 }], formatCents)).toBe(
       "Revenue was €5.00 on 1 Sep, the only point in this period.",
     );
     expect(trendSentence("Revenue", [], formatCents)).toBe("Revenue has no data in this period.");
