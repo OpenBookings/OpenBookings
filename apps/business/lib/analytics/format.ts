@@ -115,3 +115,8 @@ export function formatDays(value: number | null): string {
   const rounded = Math.round(value * 10) / 10;
   return `${rounded} ${rounded === 1 ? "day" : "days"}`;
 }
+
+/** Index 0 is Monday, matching `weekdayOf(date) - 1`. */
+export const WEEKDAY_NAMES = [
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+] as const;
