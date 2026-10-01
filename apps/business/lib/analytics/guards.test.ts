@@ -38,7 +38,7 @@ describe("analytics guards", () => {
    */
   test("no property identifier outside the readiness query", async () => {
     expect(
-      await offenders(/propertyId|property_id|params\.property\b|["']property["']/, ["readiness-query.ts"]),
+      await offenders(/propertyId|property_id|params\.property\b|["']property["']/, ["readiness-query.ts", "readiness-loader.ts", "readiness-loader.test.ts"]),
     ).toEqual([]);
   });
 

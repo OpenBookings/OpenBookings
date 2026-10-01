@@ -28,9 +28,10 @@ function nextKey(key: IsoDate, granularity: Granularity): IsoDate {
 
 /**
  * Every bucket the range touches, including the ones nothing happened in. A
- * bucket is incomplete when it is still in progress (it ends today or later)
- * or when the range stops before it does: either way its total is partial,
- * and drawn as a solid line it reads as a collapse.
+ * bucket is incomplete when it is still in progress (it ends today or later),
+ * when the range stops before it does, or when the range starts after it
+ * does: each way its total is partial, and drawn as a solid line it reads as a
+ * collapse at one end or a ramp at the other.
  */
 export function buckets(range: DateRange, granularity: Granularity, today: IsoDate): Bucket[] {
   const out: Bucket[] = [];
@@ -40,7 +41,7 @@ export function buckets(range: DateRange, granularity: Granularity, today: IsoDa
     out.push({
       key,
       label: granularity === "month" ? formatMonthYear(key) : formatDayMonth(key),
-      incomplete: end >= today || end > range.to,
+      incomplete: end >= today || end > range.to || key < range.from,
     });
   }
   return out;

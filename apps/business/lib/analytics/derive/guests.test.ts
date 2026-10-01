@@ -35,15 +35,29 @@ describe("deriveGuests", () => {
     expect(view.groupTypes).toMatchObject({ ok: false, reason: "below-minimum" });
   });
 
-  test("group types are suppressed by the same rule", () => {
+  test("in a closed set, one folded group would be named by elimination, so a second joins it", () => {
     const f = facts([
       ...from("NL", 6, { adults: 2 }),
       ...from("NL", 5, { adults: 1 }),
       ...from("NL", 2, { adults: 2, children: 1 }),
     ]);
+    // Family alone as Other would be readable as "2 family bookings". Solo, the next smallest, joins it.
     expect(ok(deriveGuests(ctx(f, SEPT)).groupTypes).map((r) => [r.key, r.value])).toEqual([
-      ["couple", 6], ["solo", 5], ["OTHER", 2],
+      ["couple", 6], ["OTHER", 7],
     ]);
+  });
+
+  test("Other itself is never backed by fewer than five guests", () => {
+    const f = facts([...from("NL", 7), ...from("BE", 6), ...from("DE", 2)]);
+    // DE alone would leave Other at 2 guests. BE joins it.
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries).map((r) => [r.key, r.value])).toEqual([
+      ["NL", 7], ["OTHER", 8],
+    ]);
+  });
+
+  test("when everything must fold, the whole population is Other", () => {
+    const f = facts([...from("NL", 4), ...from("BE", 3)]);
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries).map((r) => [r.key, r.value])).toEqual([["OTHER", 7]]);
   });
 
   test("cancelled bookings brought nobody and are counted nowhere", () => {

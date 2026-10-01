@@ -146,7 +146,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
                           asChild
                           isActive={subItem.url === activeLink}
                         >
-                          <CarriedLink href={subItem.url} prefetch={true}>
+                          <CarriedLink href={subItem.url} prefetch={!subItem.url.startsWith(ANALYTICS_ROOT)}>
                             <span>{subItem.title}</span>
                           </CarriedLink>
                         </SidebarMenuSubButton>

@@ -3,7 +3,7 @@
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { lineRows, MIN_CHART_POINTS } from "@/lib/analytics/chart-data";
+import { lineRows, MIN_CHART_POINTS, tooltipLine } from "@/lib/analytics/chart-data";
 import { EM_DASH, trendSentence } from "@/lib/analytics/format";
 import type { Point } from "@/lib/analytics/types";
 
@@ -40,7 +40,7 @@ export function TimeLine({ points, label, compareLabel, format }: TimeLineProps)
             <TableRow key={p.bucket}>
               <TableCell>
                 {p.label}
-                {p.incomplete ? <span className="text-muted-foreground"> (in progress)</span> : null}
+                {p.incomplete ? <span className="text-muted-foreground"> (partial)</span> : null}
               </TableCell>
               <TableCell className="text-right tabular-nums">{show(p.value)}</TableCell>
               {hasCompare ? <TableCell className="text-right tabular-nums">{show(p.compare)}</TableCell> : null}
@@ -52,14 +52,15 @@ export function TimeLine({ points, label, compareLabel, format }: TimeLineProps)
   }
 
   const hasIncomplete = points.some((p) => p.incomplete);
+  const labels = { solid: label, dashed: `${label}, not finished`, compare: compareLabel };
 
   return (
     <div>
       <ChartContainer
         config={{
-          solid: { label, color: "var(--chart-1)" },
-          dashed: { label: `${label}, in progress`, color: "var(--chart-1)" },
-          compare: { label: compareLabel, color: "var(--muted-foreground)" },
+          solid: { label: labels.solid, color: "var(--chart-1)" },
+          dashed: { label: labels.dashed, color: "var(--chart-1)" },
+          compare: { label: labels.compare, color: "var(--muted-foreground)" },
         }}
         className="h-64 w-full"
         role="img"
@@ -77,7 +78,14 @@ export function TimeLine({ points, label, compareLabel, format }: TimeLineProps)
             tickFormatter={(value: number) => format(value)}
           />
           <ChartTooltip
-            content={<ChartTooltipContent labelKey="label" formatter={(value) => format(Number(value))} />}
+            content={
+              <ChartTooltipContent
+                labelKey="label"
+                formatter={(value, name, item) =>
+                  tooltipLine(String(name), Number(value), item.payload, labels, format)
+                }
+              />
+            }
           />
           {hasCompare ? (
             <Line
@@ -106,7 +114,7 @@ export function TimeLine({ points, label, compareLabel, format }: TimeLineProps)
         <p className="mt-2 text-muted-foreground text-xs">
           {[
             hasCompare ? `Grey line: ${compareLabel.toLowerCase()}.` : null,
-            hasIncomplete ? "Dashed: not finished yet." : null,
+            hasIncomplete ? "Dashed: a partial week or month." : null,
           ]
             .filter(Boolean)
             .join(" ")}

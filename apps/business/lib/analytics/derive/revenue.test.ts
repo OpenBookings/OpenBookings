@@ -72,7 +72,9 @@ describe("deriveRevenue", () => {
     const points = ok(view.overTime);
     expect(points.reduce((t, p) => t + (p.value ?? 0), 0)).toBe(ok(view.revenue).value!);
     expect(points.at(-1)!.incomplete).toBe(true);
-    expect(points[0].incomplete).toBe(false);
+    // 1 July 2026 is a Wednesday: the first week is partial too.
+    expect(points[0].incomplete).toBe(true);
+    expect(points[1].incomplete).toBe(false);
   });
 
   test("both breakdowns sum to the revenue and carry shares", () => {

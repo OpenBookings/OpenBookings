@@ -56,8 +56,10 @@ export function evaluateReadiness(facts: ReadinessFacts): ReadinessItem[] {
       key: "payments",
       label: "Payments connected",
       state: state(facts.paymentsConnected),
-      href: "/onboarding/stripe",
-      action: "Connect payments",
+      // Onboarding routes send a host who finished onboarding straight back to
+      // the dashboard, so the fix has to live on the dashboard side.
+      href: "/dashboard/finance",
+      action: "Check payments",
     },
   ];
 }

@@ -11,17 +11,41 @@ export interface LineRow {
 }
 
 /**
- * Splits one series into a solid and a dashed line. The dashed line starts at
- * the last complete point so the two meet, and covers every incomplete bucket.
+ * Splits one series into a solid and a dashed line. A point is solid when its
+ * bucket is complete. The dashed line carries every incomplete point plus the
+ * complete point beside it, so the two lines meet, at either end of the chart.
  */
 export function lineRows(points: Point[]): LineRow[] {
-  const firstIncomplete = points.findIndex((p) => p.incomplete);
-  return points.map((p, index) => ({
-    label: p.label,
-    solid: firstIncomplete === -1 || index < firstIncomplete ? p.value : null,
-    dashed: firstIncomplete !== -1 && index >= firstIncomplete - 1 ? p.value : null,
-    compare: p.compare,
-  }));
+  return points.map((p, index) => {
+    const besidePartial = points[index - 1]?.incomplete || points[index + 1]?.incomplete;
+    return {
+      label: p.label,
+      solid: p.incomplete ? null : p.value,
+      dashed: p.incomplete || besidePartial ? p.value : null,
+      compare: p.compare,
+    };
+  });
+}
+
+/**
+ * One tooltip line: the series name beside its value. Where the solid and
+ * dashed lines meet, both carry the same value; the dashed copy is dropped.
+ */
+export function tooltipLine(
+  series: string,
+  value: number,
+  row: Pick<LineRow, "solid" | "dashed">,
+  labels: Record<string, string>,
+  format: (value: number) => string,
+): string | null {
+  if (series === "dashed" && row.solid !== null) return null;
+  return `${labels[series] ?? series}: ${format(value)}`;
+}
+
+/** True when the period held nothing at all for this widget, minimum or no minimum. */
+export function isEmptySample(widget: Widget<unknown>): boolean {
+  if (widget.ok) return widget.sample === 0;
+  return widget.reason === "below-minimum" && widget.have === 0;
 }
 
 /** What a widget says in place of itself when it declines to render. */

@@ -31,4 +31,9 @@ describe("evaluateReadiness", () => {
     expect(items[3].state).toBe("unknown");
     expect(isReady(items)).toBe(false);
   });
+
+  test("every fix link is reachable after onboarding: none points back into it", () => {
+    // The proxy sends a host who finished onboarding from /onboarding to /dashboard.
+    for (const item of evaluateReadiness(NOT_STARTED)) expect(item.href.startsWith("/dashboard/")).toBe(true);
+  });
 });

@@ -44,12 +44,18 @@ describe("buckets", () => {
   test("weekly buckets cover the range and start on Monday", () => {
     const b = buckets({ from: "2026-09-01", to: "2026-09-20" }, "week", "2026-12-31");
     expect(b.map((x) => x.key)).toEqual(["2026-08-31", "2026-09-07", "2026-09-14"]);
-    expect(b.every((x) => !x.incomplete)).toBe(true);
+    // The range starts on a Tuesday, so the first week is one day short.
+    expect(b.map((x) => x.incomplete)).toEqual([true, false, false]);
+  });
+
+  test("a range that starts on a bucket boundary has a complete first bucket", () => {
+    const b = buckets({ from: "2026-09-07", to: "2026-09-20" }, "week", "2026-12-31");
+    expect(b.map((x) => x.incomplete)).toEqual([false, false]);
   });
 
   test("the bucket containing today is incomplete", () => {
     const b = buckets({ from: "2026-09-01", to: "2026-09-24" }, "week", "2026-09-24");
-    expect(b.map((x) => x.incomplete)).toEqual([false, false, false, true]);
+    expect(b.map((x) => x.incomplete)).toEqual([true, false, false, true]);
   });
 
   test("a bucket cut short by the range end is incomplete even in the past", () => {

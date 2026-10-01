@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { declinedMessage } from "@/lib/analytics/chart-data";
+import { declinedMessage, isEmptySample } from "@/lib/analytics/chart-data";
 import type { Basis, Widget } from "@/lib/analytics/types";
 import { cn } from "@/lib/utils";
 
@@ -56,10 +56,10 @@ export function ChartCard<T>({
         {action}
       </CardHeader>
       <CardContent>
-        {!widget.ok ? (
-          <p className="text-muted-foreground text-sm">{declinedMessage(widget, sampleUnit)}</p>
-        ) : widget.sample === 0 ? (
+        {isEmptySample(widget) ? (
           <p className="text-muted-foreground text-sm">{emptyMessage}</p>
+        ) : !widget.ok ? (
+          <p className="text-muted-foreground text-sm">{declinedMessage(widget, sampleUnit)}</p>
         ) : (
           children(widget.value)
         )}
