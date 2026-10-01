@@ -8,7 +8,7 @@ function GhostVisual({ kind }: { kind: GhostFrame["kind"] }) {
     return (
       <div className="space-y-2">
         {[0, 1, 2, 3].map((row) => (
-          <div key={row} className="h-4 rounded-sm border border-dashed" />
+          <div key={row} className="h-4 rounded-sm border border-dashed border-muted-foreground" />
         ))}
       </div>
     );
@@ -17,16 +17,16 @@ function GhostVisual({ kind }: { kind: GhostFrame["kind"] }) {
     return (
       <div className="flex gap-1">
         {Array.from({ length: 30 }, (_, day) => (
-          <div key={day} className="h-10 flex-1 rounded-[1px] border border-dashed" />
+          <div key={day} className="h-10 flex-1 rounded-[1px] border border-dashed border-muted-foreground" />
         ))}
       </div>
     );
   }
   if (kind === "bars") {
     return (
-      <div className="flex h-28 items-end gap-3 border-b border-dashed">
+      <div className="flex h-28 items-end gap-3 border-b border-dashed border-muted-foreground">
         {[0, 1, 2, 3, 4].map((bar) => (
-          <div key={bar} className="h-3/5 flex-1 border border-b-0 border-dashed" />
+          <div key={bar} className="h-3/5 flex-1 border border-b-0 border-dashed border-muted-foreground" />
         ))}
       </div>
     );
@@ -37,7 +37,7 @@ function GhostVisual({ kind }: { kind: GhostFrame["kind"] }) {
         <span>High</span>
         <span>0</span>
       </div>
-      <div className="flex-1 border-b border-l border-dashed" />
+      <div className="flex-1 border-b border-l border-dashed border-muted-foreground" />
     </div>
   );
 }
@@ -60,7 +60,7 @@ export function GhostPage({
     // Both children share one grid cell, so the container is as tall as the taller of the two.
     <div className="grid min-w-0 px-4 lg:px-6 [&>*]:col-start-1 [&>*]:row-start-1">
       <div aria-hidden className="pointer-events-none min-w-0 select-none opacity-40">
-        <dl className="flex flex-wrap gap-x-10 gap-y-5 border-b border-dashed pb-5">
+        <dl className="flex flex-wrap gap-x-10 gap-y-5 border-b border-dashed border-muted-foreground pb-5">
           {meta.ghost.stats.map((label) => (
             <div key={label}>
               <dt className="text-muted-foreground text-xs">{label}</dt>
@@ -70,7 +70,7 @@ export function GhostPage({
         </dl>
         <div className="mt-6 grid gap-4 @4xl/main:grid-cols-2">
           {meta.ghost.frames.map((frame) => (
-            <div key={frame.title} className="min-w-0 rounded-lg border border-dashed p-4">
+            <div key={frame.title} className="min-w-0 rounded-lg border border-dashed border-muted-foreground p-4">
               <p className="font-medium text-sm">{frame.title}</p>
               <p className="text-muted-foreground text-xs">{frame.caption}</p>
               <div className="mt-4">
@@ -80,7 +80,7 @@ export function GhostPage({
           ))}
         </div>
       </div>
-      <div className="z-10 mt-20 w-full max-w-xl self-start justify-self-center">
+      <div className="z-10 mt-40 w-full max-w-xl self-start justify-self-center">
         <ReadinessCard readiness={readiness} demoHref={demoHref} />
       </div>
     </div>
