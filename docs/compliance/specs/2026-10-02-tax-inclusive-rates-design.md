@@ -2,7 +2,7 @@
 
 **Date:** 2 October 2026
 **Closes:** audit B1 (all-in price), B2 (tourist tax)
-**Status:** approved, not yet implemented
+**Status:** approved and implemented (branch `compliance/tax-inclusive-rates`)
 
 ## Decision (from Wouter)
 
