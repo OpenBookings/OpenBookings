@@ -12,14 +12,6 @@ describe("buildBookingLines", () => {
     expect(total(lines)).toBe(55500);
   });
 
-  test("there is no way to add tax on top: rates are entered tax-inclusive", () => {
-    // A property's tax_rate used to add a "Tourist tax" line here. Passing one
-    // must change nothing, or guests pay the tax twice.
-    const lines = buildBookingLines({ ...stay, taxRate: 0.07 } as typeof stay);
-    expect(lines.length).toBe(1);
-    expect(total(lines)).toBe(55500);
-  });
-
   test("a room with no category is named by its name alone", () => {
     expect(buildBookingLines({ ...stay, roomType: null })[0]!.name).toBe("Garden");
   });

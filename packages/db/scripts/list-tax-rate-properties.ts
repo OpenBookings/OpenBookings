@@ -12,6 +12,7 @@
  */
 import { Pool } from "pg";
 
+// Keep in step with RATES_TAX_INCLUSIVE_DOC_ID in packages/authz/src/rates-doc.ts.
 const DOC_ID = "rates-tax-inclusive@2026-10-02";
 const all = process.argv.includes("--all");
 

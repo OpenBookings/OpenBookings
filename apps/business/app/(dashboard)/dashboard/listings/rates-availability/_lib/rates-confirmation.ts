@@ -21,3 +21,18 @@ export const RATE_INCLUSIVE_NOTICE =
 export function changesTouchPrice(changes: ReadonlyArray<{ type: string }>): boolean {
   return changes.some((change) => change.type === "price");
 }
+
+/**
+ * The rate plans a draft would price. The gate is checked against these, not
+ * against the property id the client sends: that id is only a claim, and a
+ * crafted request could name someone else's confirmed property.
+ */
+export function pricedRatePlanIds(
+  changes: ReadonlyArray<{ type: string; ratePlanId?: string }>,
+): string[] {
+  const ids = new Set<string>();
+  for (const change of changes) {
+    if (change.type === "price" && change.ratePlanId) ids.add(change.ratePlanId);
+  }
+  return [...ids];
+}

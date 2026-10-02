@@ -6,7 +6,7 @@ import { z } from "zod";
 import { query, withTransaction } from "@openbookings/db";
 import {
   RATES_TAX_INCLUSIVE_DOC_ID,
-  propertyRatesConfirmed,
+  ratePlanRatesConfirmed,
   roomRatesConfirmed,
   userCanConfirmRates,
   userOwnsProperty,
@@ -17,7 +17,7 @@ import { headers } from "next/headers";
 import {
   RATES_CONFIRMATION_MESSAGE,
   RATES_CONFIRMATION_REQUIRED,
-  changesTouchPrice,
+  pricedRatePlanIds,
 } from "./rates-confirmation";
 import { VERSION_SQL } from "./ari-query";
 import { groupConsecutiveDates } from "./runs";
@@ -371,23 +371,47 @@ export async function confirmInclusiveRates(propertyId: string): Promise<ActionR
     hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? hdrs.get("x-real-ip") ?? null;
   const user = session.user as { id: string; name?: string | null; email?: string | null };
 
-  const rows = await query<{ id: string }>(
-    `INSERT INTO org_consent
-       (organization_id, doc_id, signed_by_user_id, signer_full_name, signer_ip, signed_at)
-     SELECT p.organization_id, $2, $3, $4, $5, now()
-     FROM properties p
-     WHERE p.id = $1
-       AND p.organization_id IS NOT NULL
-       AND NOT EXISTS (
-         SELECT 1 FROM org_consent oc
-         WHERE oc.organization_id = p.organization_id AND oc.doc_id = $2
+  const signer = user.name?.trim() || user.email || user.id;
+
+  const affected = await withTransaction(async (client) => {
+    const org = await client.query<{ organization_id: string }>(
+      `SELECT organization_id FROM properties WHERE id = $1 AND organization_id IS NOT NULL`,
+      [parsed.data],
+    );
+    const organizationId = org.rows[0]?.organization_id;
+    if (!organizationId) return 0;
+
+    // org_consent has no unique key on (organisation, document). Serialise
+    // confirmations for this organisation so two admins confirming at once
+    // leave one legal record, not two.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `${organizationId}:${RATES_TAX_INCLUSIVE_DOC_ID}`,
+    ]);
+
+    const inserted = await client.query(
+      `INSERT INTO org_consent
+         (organization_id, doc_id, signed_by_user_id, signer_full_name, signer_ip, signed_at)
+       SELECT $1, $2, $3, $4, $5, now()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM org_consent WHERE organization_id = $1 AND doc_id = $2
        )
-     RETURNING id`,
-    [parsed.data, RATES_TAX_INCLUSIVE_DOC_ID, user.id, user.name?.trim() || user.email || user.id, ip],
-  );
+       RETURNING id`,
+      [organizationId, RATES_TAX_INCLUSIVE_DOC_ID, user.id, signer, ip],
+    );
+    if (inserted.rowCount) {
+      await client.query(
+        `INSERT INTO audit_log (action, actor_user_id, organization_id, ip, detail)
+         VALUES ('rates.inclusive-confirmed', $1, $2, $3, $4)`,
+        [user.id, organizationId, ip, JSON.stringify({ docId: RATES_TAX_INCLUSIVE_DOC_ID })],
+      );
+    }
+    return inserted.rowCount ?? 0;
+  });
 
   revalidatePath(ROUTE);
-  return { ok: true, affected: rows.length };
+  // The public listing says whether its prices include tax; that just changed.
+  await purgePropertyPage({ propertyId: parsed.data });
+  return { ok: true, affected };
 }
 
 // ─────────────────────────────────────────────
@@ -612,11 +636,13 @@ export async function publishAriChanges(
       // a host who has not confirmed yet must still be able to close dates.
       // Refusing here refuses the whole draft, which is the point of one
       // transaction — half a publish is worse than none.
-      if (
-        changesTouchPrice(data.changes) &&
-        !(await propertyRatesConfirmed(data.propertyId, { queryOne: one }))
-      ) {
-        throw new PublishError(RATES_CONFIRMATION_MESSAGE, { code: RATES_CONFIRMATION_REQUIRED });
+      //
+      // Checked per rate plan being priced, never against `data.propertyId`:
+      // that id comes from the client and nothing ties it to these plans.
+      for (const ratePlanId of pricedRatePlanIds(data.changes)) {
+        if (!(await ratePlanRatesConfirmed(ratePlanId, { queryOne: one }))) {
+          throw new PublishError(RATES_CONFIRMATION_MESSAGE, { code: RATES_CONFIRMATION_REQUIRED });
+        }
       }
 
       // Read the version inside the transaction, so nothing can slip in

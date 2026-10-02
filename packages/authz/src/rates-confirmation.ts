@@ -79,3 +79,21 @@ export async function userCanConfirmRates(
   );
   return row?.ok === true;
 }
+
+/**
+ * Whether the property belongs to an organisation at all. One that does not
+ * can never be confirmed (there is nobody to confirm for it), which needs a
+ * different message from "ask your admin".
+ */
+export async function propertyHasOrganisation(
+  propertyId: string,
+  deps: AuthzDeps = {},
+): Promise<boolean> {
+  if (!propertyId) return false;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const row = await queryOne<{ has_org: boolean }>(
+    `SELECT (p.organization_id IS NOT NULL) AS has_org FROM properties p WHERE p.id = $1`,
+    [propertyId],
+  );
+  return row?.has_org === true;
+}

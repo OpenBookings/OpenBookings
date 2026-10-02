@@ -1,4 +1,5 @@
 import { sql } from "@openbookings/db";
+import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 
 /** One row of the `payment_methods` catalogue, as the listing page renders it. */
 export interface PaymentMethodArtwork {
@@ -68,6 +69,12 @@ export interface HotelPageData {
   vat_number: string | null;
 
   highlights: { label: string; icon: string; distance: string }[];
+
+  /**
+   * Whether the host's organisation has confirmed its rates include tax. The
+   * listing may only say "incl. tax" when this is true.
+   */
+  rates_confirmed: boolean;
 }
 
 /**
@@ -91,6 +98,10 @@ export function buildHeroQuery(slug: string) {
     ST_Y(p.location::geometry) AS lat,
     ST_X(p.location::geometry) AS lon,
     p.address_line_1, p.address_line_2, p.postal_code, p.city, p.country,
+    EXISTS (
+      SELECT 1 FROM org_consent oc
+      WHERE oc.organization_id = p.organization_id AND oc.doc_id = ${RATES_TAX_INCLUSIVE_DOC_ID}
+    ) AS rates_confirmed,
     to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,

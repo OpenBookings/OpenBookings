@@ -154,6 +154,18 @@ async function main() {
       [PROPERTY_ID, RATES_TAX_INCLUSIVE_DOC_ID],
     );
     if (confirmed) console.log("Recorded the inclusive-rates confirmation for the demo organisation.");
+    const { rows: [state] } = await pool.query<{ ok: boolean }>(
+      `select exists (
+         select 1 from org_consent oc join properties p on p.organization_id = oc.organization_id
+         where p.id = $1 and oc.doc_id = $2) as ok`,
+      [PROPERTY_ID, RATES_TAX_INCLUSIVE_DOC_ID],
+    );
+    if (!state?.ok) {
+      console.warn(
+        "WARNING: the demo property's organisation has NOT confirmed inclusive rates " +
+          "(no organisation, or no owner member). Checkout will refuse this booking.",
+      );
+    }
 
     console.log(
       `Seeded booking ${DEMO_BOOKING_ID}: ${NIGHTS} nights, ${ADULTS} adults, €${TOTAL} total (€${BOOKING_FEE} fee).`,

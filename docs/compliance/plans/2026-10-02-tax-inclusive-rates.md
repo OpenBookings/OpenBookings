@@ -79,3 +79,5 @@ export function ratePlanRatesConfirmed(ratePlanId: string, deps?: AuthzDeps): Pr
 - Run `list-tax-rate-properties.ts` and contact those hosts before release.
 - On release day every existing organisation is unconfirmed, so their properties are not bookable until an owner confirms.
 - Partner Agreement: rates are entered tax-inclusive; remitting tax is the host's responsibility; commission is taken on the full guest price.
+- Properties with no organisation (`organization_id IS NULL`) can never be confirmed and are not bookable; the listing script marks them "(none: cannot confirm)". They need an organisation backfilled by hand.
+- Not built: database-backed tests for the gate (`createRatePlan`, `publishAriChanges`, checkout refusal). The suite has such tests but they need a database, which was not available when this was written.

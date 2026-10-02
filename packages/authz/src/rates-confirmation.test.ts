@@ -4,6 +4,7 @@ import {
   propertyRatesConfirmed,
   ratePlanRatesConfirmed,
   roomRatesConfirmed,
+  propertyHasOrganisation,
   userCanConfirmRates,
 } from "./rates-confirmation";
 
@@ -37,6 +38,10 @@ const fakeQueryOne = async <T>(text: string, values: unknown[] = []): Promise<T 
     const org = properties.find((p) => p.id === propertyId)?.org;
     const hit = members.find((m) => m.org === org && m.user === userId && ["owner", "admin"].includes(m.role));
     return (hit ? { ok: true } : null) as T | null;
+  }
+  if (text.includes("AS has_org")) {
+    const property = properties.find((p) => p.id === values[0]);
+    return (property ? { has_org: property.org !== null } : null) as T | null;
   }
   const [id, docId] = values as [string, string];
   let propertyId: string | undefined = id;
@@ -103,5 +108,13 @@ describe("who may confirm", () => {
 
   test("no session fails closed", async () => {
     expect(await userCanConfirmRates(null, "prop-no", deps)).toBe(false);
+  });
+});
+
+describe("propertyHasOrganisation", () => {
+  test("tells a property that can be confirmed from one that cannot", async () => {
+    expect(await propertyHasOrganisation("prop-no", deps)).toBe(true);
+    expect(await propertyHasOrganisation("prop-none", deps)).toBe(false);
+    expect(await propertyHasOrganisation("nope", deps)).toBe(false);
   });
 });

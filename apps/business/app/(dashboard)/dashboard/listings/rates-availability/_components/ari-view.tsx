@@ -47,7 +47,7 @@ interface AriViewProps {
    * and whether this user may confirm it. The server enforces the rule; this
    * only decides what the host is shown.
    */
-  rates: { confirmed: boolean; canConfirm: boolean };
+  rates: { confirmed: boolean; canConfirm: boolean; hasOrganisation: boolean };
 }
 
 export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
@@ -68,7 +68,11 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
   const [dialog, setDialog] = React.useState<DialogState | null>(null);
   // Asked up front for an organisation that has not confirmed yet, rather
   // than only after a publish has been refused.
-  const [confirmOpen, setConfirmOpen] = React.useState(!rates.confirmed);
+  // Only for someone who can act on it: for everyone else the line above the
+  // grid says why prices are locked, without a dialog on every visit.
+  const [confirmOpen, setConfirmOpen] = React.useState(
+    !rates.confirmed && rates.canConfirm,
+  );
   const draft = useAriDraft();
   const [publishing, setPublishing] = React.useState(false);
   const [range, setRange] = React.useState<RangeSelection | null>(null);
@@ -307,6 +311,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         open={confirmOpen}
         propertyId={data.propertyId}
         canConfirm={rates.canConfirm}
+        hasOrganisation={rates.hasOrganisation}
         onClose={() => setConfirmOpen(false)}
         onConfirmed={() => {
           setConfirmOpen(false);

@@ -28,12 +28,15 @@ export function RatesConfirmationDialog({
   open,
   propertyId,
   canConfirm,
+  hasOrganisation,
   onClose,
   onConfirmed,
 }: {
   open: boolean;
   propertyId: string;
   canConfirm: boolean;
+  /** False for a property not yet attached to an organisation: nobody can confirm. */
+  hasOrganisation: boolean;
   onClose: () => void;
   onConfirmed: () => void;
 }) {
@@ -85,8 +88,9 @@ export function RatesConfirmationDialog({
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">
-            Prices cannot be changed until this is confirmed. Ask an owner or
-            admin of your organisation to confirm it.
+            {hasOrganisation
+              ? "Prices cannot be changed until this is confirmed. Ask an owner or admin of your organisation to confirm it."
+              : "Prices cannot be changed until this is confirmed, and this property is not linked to an organisation yet, so nobody can confirm it. Please contact OpenBookings support."}
           </p>
         )}
 

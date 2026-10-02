@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { changesTouchPrice } from "./rates-confirmation";
+import { changesTouchPrice, pricedRatePlanIds } from "./rates-confirmation";
 
 const price = { type: "price" as const, ratePlanId: "p", dates: ["2026-10-10"], price: 120 };
 const clearPrice = { ...price, price: null };
@@ -20,5 +20,16 @@ describe("changesTouchPrice", () => {
 
   test("clearing an override changes what guests pay, so it counts", () => {
     expect(changesTouchPrice([clearPrice])).toBe(true);
+  });
+});
+
+describe("pricedRatePlanIds", () => {
+  test("names each rate plan a draft would price, once", () => {
+    const other = { ...price, ratePlanId: "q" };
+    expect(pricedRatePlanIds([price, clearPrice, other, closure, block])).toEqual(["p", "q"]);
+  });
+
+  test("a rate plan that is only closed or restricted is not being priced", () => {
+    expect(pricedRatePlanIds([closure, restriction, roomClosure, block])).toEqual([]);
   });
 });

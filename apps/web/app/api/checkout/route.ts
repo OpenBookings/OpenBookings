@@ -57,7 +57,9 @@ const MINIMUM_CHARGE: Record<string, number> = {
 class CheckoutError extends Error {
   constructor(
     readonly code: CheckoutErrorCode,
-    message: string
+    message: string,
+    /** Overrides the Sentry level the code would otherwise get. */
+    readonly level?: 'warning'
   ) {
     super(message);
     this.name = 'CheckoutError';
@@ -78,7 +80,9 @@ function assertChargeable(summary: BookingSummary): number {
   if (!summary.ratesConfirmed) {
     throw new CheckoutError(
       'config_error',
-      'Property organisation has not confirmed tax-inclusive rates'
+      'Property organisation has not confirmed tax-inclusive rates',
+      // An expected state on release day, not a broken deployment.
+      'warning'
     );
   }
 
@@ -313,7 +317,12 @@ export async function POST(request: Request) {
     // both mean the deployment is broken rather than the guest, so they are
     // worth a louder level than a transient Stripe blip.
     Sentry.captureException(err, {
-      level: code === 'config_error' || code === 'booking_invalid' ? 'fatal' : 'error',
+      level:
+        err instanceof CheckoutError && err.level
+          ? err.level
+          : code === 'config_error' || code === 'booking_invalid'
+            ? 'fatal'
+            : 'error',
       tags: { area: 'checkout', checkoutErrorCode: code },
       extra: { intentId: summary?.intentId, roomId: summary?.roomId },
     });
