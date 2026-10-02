@@ -38,7 +38,7 @@ const CHILDREN = 0;
 /** Tax-inclusive, like every rate: this is what the guest pays per night. */
 const PRICE_PER_NIGHT = 185;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-tax-inclusive@2026-10-02";
-const BOOKING_FEE_RATE = 0.035;
+const BOOKING_FEE_RATE = 0.045;
 
 /**
  * The sentence the checkout page quotes verbatim. The 7 days here is the same

@@ -88,7 +88,11 @@ export const properties = pgTable(
     /** End of the arrival window. NULL = no stated cut-off. */
     checkInUntil: time("check_in_until"),
     stripeAccountId: varchar("stripe_account_id", { length: 255 }).unique(),
-    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.035"),
+    /**
+     * OpenBookings' commission, taken as a Stripe application fee on the full
+     * guest price. The one authoritative rate: checkout reads it per property.
+     */
+    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.045"),
     /**
      * Informational only. Rates are entered tax-inclusive (every organisation
      * confirms it before it can set a price), so this must never be added to

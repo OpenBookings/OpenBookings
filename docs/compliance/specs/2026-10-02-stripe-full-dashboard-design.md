@@ -2,7 +2,7 @@
 
 **Date:** 2 October 2026
 **Affects:** audit A1, A3, A5, A7, A8, F2a; doc drift #1, #10
-**Status:** approved, not yet implemented
+**Status:** approved and implemented (branch `compliance/stripe-full-dashboard`)
 
 ## Decisions (from Wouter)
 
