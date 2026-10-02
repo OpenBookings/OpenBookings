@@ -102,8 +102,27 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "privacy",
     fallbackLocale: "en",
-    currentVersion: "2026-09-21",
+    currentVersion: "2026-10-02",
     versions: [
+      {
+        version: "2026-10-02",
+        effectiveFrom: "2026-10-02",
+        lastUpdated: "2026-10-02",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/privacy/2026-10-02/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-10-02/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-10-02/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-09-21",
         effectiveFrom: "2026-08-01",
@@ -173,7 +192,7 @@ export function resolveLocaleEntry(
 
 /**
  * The identifier to persist alongside a consent decision, e.g.
- * `privacy@2026-09-21/nl`.
+ * `privacy@2026-10-02/nl`.
  */
 export function documentVersionId(
   slug: string,

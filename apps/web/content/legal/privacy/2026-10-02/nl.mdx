@@ -1,0 +1,232 @@
+{/*
+  TRANSLATION — nl (formal register: u / uw)
+
+  Translated from en.mdx at version 2026-10-02. NOT yet legally reviewed:
+  leave this locale marked `status: "draft"` in lib/legal/documents.ts until a
+  qualified reviewer has signed it off. Draft locales are served with a visible
+  banner and noindex, so an unreviewed policy can never be mistaken for the
+  authoritative one.
+
+  Do not change any `id` on a <Section>. Those anchors are cited externally and
+  must stay identical across all languages.
+*/}
+
+export const title = "Privacybeleid";
+
+<Lead>
+
+Geschreven om gelezen te worden, niet om ontcijferd te worden. Wat wij verzamelen, waarom, en wat wij ermee doen.
+
+Dit beleid is bedoeld voor gasten: mensen die [openbookings.co](https://openbookings.co) gebruiken om een verblijf te zoeken en te boeken. Het platform wordt geleverd door OpenBookings B.V., gevestigd in Nederland.
+
+Beheert u een accommodatie op OpenBookings? Voor het zakelijke portaal geldt uw Partnerovereenkomst, niet dit beleid.
+
+</Lead>
+
+<Section id="who-we-are" number="1" title="Wie wij zijn">
+
+OpenBookings B.V. is de verwerkingsverantwoordelijke voor alles wat in dit beleid wordt beschreven. Wij zijn een Nederlands bedrijf, dus de AVG is van toepassing.
+
+Vragen? Mail ons op [privacy@openbookings.co](mailto:privacy@openbookings.co). Wij reageren binnen 5 werkdagen.
+
+</Section>
+
+<Section id="what-we-collect" number="2" title="Wat wij verzamelen en waarom">
+
+Wij verzamelen alleen gegevens die wij echt nodig hebben. Hieronder staat de volledige lijst.
+
+<CardGroup>
+
+<DataCard title="2.1 Accountgegevens">
+
+Uw e-mailadres en naam. Als u inlogt met Google of Apple, ontvangen wij ook de naam en profielfoto die die aanbieder met ons deelt.
+
+<Meta why="U heeft een account nodig om het platform te gebruiken." basis="Uitvoering van een overeenkomst." />
+
+</DataCard>
+
+<DataCard title="2.2 Boekingsgegevens">
+
+Naam van de gast, contactgegevens en boekingsgegevens: verblijfsdata, accommodatie, aantal gasten, betalingsreferentie en status.
+
+Kaartgegevens bereiken onze servers nooit. Stripe verwerkt die; wij ontvangen alleen de betalingsreferentie.
+
+<Meta why="Om uw boeking te verwerken en alles af te handelen wat daarbij komt kijken." basis="Uitvoering van een overeenkomst; wettelijke verplichting voor financiële administratie." />
+
+</DataCard>
+
+<DataCard title="2.3 Analysegegevens">
+
+Paginaweergaven, navigatiepaden, globaal apparaattype, browser en land.
+
+Via PostHog. Wij geven uw naam, volledige IP-adres of betalingsgegevens nooit door aan analyse-events.
+
+Als u bent ingelogd en analytische cookies heeft geaccepteerd, worden events gekoppeld aan uw account, zodat wij het gebruik over sessies en apparaten heen kunnen begrijpen. De koppeling is het interne ID van uw account — een willekeurige identificator, niet uw naam of e-mailadres.
+
+<Meta why="Om het gebruik te begrijpen en problemen op te lossen." basis="Toestemming, via de cookiebanner. Geen acceptatie, niets gevolgd." />
+
+<Callout title="Sessie-opnames">
+
+Wij leggen interacties op het scherm vast om bruikbaarheidsproblemen in het boekingsproces op te sporen.
+
+<DashList items={[
+  "Alle tekst wordt gemaskeerd. Wij zien nooit wat u in formulieren typt.",
+  "Opnames worden automatisch na 30 dagen verwijderd.",
+  "Werkt alleen als u analytische cookies accepteert.",
+]} />
+
+</Callout>
+
+</DataCard>
+
+<DataCard title="2.4 Foutgegevens">
+
+Wanneer er iets misgaat, ontvangt Sentry de fout, een stacktrace, de pagina waarop u zich bevond en uw browsertype. Geen formulierinhoud, geen betalingsgegevens.
+
+<Meta why="Om bugs te vinden en op te lossen." basis="Gerechtvaardigd belang bij een werkend platform." />
+
+</DataCard>
+
+<DataCard title="2.5 Transactionele e-mails">
+
+Uw e-mailadres en de gegevens die nodig zijn voor het bericht: boekingsbevestigingen, incheckgegevens, bonnen en inloglinks.
+
+<Meta basis="Uitvoering van een overeenkomst." />
+
+_Geen marketingmails. Elke e-mail wordt veroorzaakt door iets dat u heeft gedaan._
+
+</DataCard>
+
+</CardGroup>
+
+</Section>
+
+<Section id="cookies" number="3" title="Cookies">
+
+Bij uw eerste bezoek ziet u een cookiebanner. Uw keuzes zijn eenvoudig:
+
+<ChoiceList>
+  <Choice label="Accepteren">PostHog start en verzamelt gebruiksgegevens en sessie-opnames.</Choice>
+  <Choice label="Weigeren">Er wordt niets analytisch geplaatst. PostHog draait helemaal niet.</Choice>
+</ChoiceList>
+
+<Note>Bezoekers uit de EU/EER zien deze banner totdat zij een keuze maken. Van gedachten veranderd? Wis de opslag van deze site en de banner komt terug.</Note>
+
+**Wat wij daadwerkelijk plaatsen:**
+
+| Type | Naam | Wat het doet | Vervalt | Toestemming nodig? |
+| --- | --- | --- | --- | --- |
+| Noodzakelijk | `session token` | Houdt u ingelogd | Sessie / instelbaar | Nee |
+| Noodzakelijk | `cf_clearance` | Botbescherming van Cloudflare | 30 minuten | Nee |
+| Noodzakelijk | `ob_cookie_consent` | Onthoudt uw toestemmingskeuze (lokale opslag, onze eigen banner) | 90 dagen | Nee |
+| Analytisch | `ph_*` | PostHog-analyse en sessie-opnames | 1 jaar | Ja, EU/EER |
+
+<Note>Geen advertentiecookies. Geen trackingpixels. Geen socialmediacookies.</Note>
+
+</Section>
+
+<Section id="retention" number="4" title="Hoe lang wij dingen bewaren">
+
+Wij bewaren gegevens niet langer dan nodig is.
+
+| Gegevens | Bewaartermijn | Waarom |
+| --- | --- | --- |
+| Accountgegevens | 3 jaar na laatste login | Voor het geval u terugkomt |
+| Boekingsgegevens | 7 jaar vanaf boekingsdatum | Nederlandse fiscale en administratieve bewaarplicht |
+| Analysegegevens | 13 maanden (doorlopend) | Trendanalyse jaar op jaar |
+| Sessie-opnames | 30 dagen | Uitsluitend bruikbaarheidsanalyse |
+| Foutrapporten | 90 dagen | Foutopsporing |
+| E-maillogs | 90 dagen | Foutopsporing bij bezorgproblemen |
+
+<Note>Nadat deze termijnen zijn verstreken, worden gegevens verwijderd of geanonimiseerd. Geanonimiseerde gegevens kunnen bewaard blijven voor statistieken.</Note>
+
+</Section>
+
+<Section id="sharing" number="5" title="Met wie wij uw gegevens delen">
+
+Wij verkopen uw gegevens niet. Wij delen ze alleen met de leveranciers die wij nodig hebben om het platform te laten draaien:
+
+| Leverancier | Wat zij ontvangen | Waarvoor | Waar |
+| --- | --- | --- | --- |
+| **Neon** | Account- en boekingsgegevens | Databasehosting | EU (Frankfurt) |
+| **Scaleway** | Gegevens die de applicatie tijdens gebruik verwerkt | Applicatiehosting | EU (Amsterdam) |
+| **Upstash** | Gecachte zoekresultaten | Caching | VK (adequaatheidsbesluit) |
+| **Algolia** | Zoekopdrachten, IP-adres | Bestemmingszoekfunctie | EU |
+| **MapTiler** | IP-adres, het kaartgebied dat u bekijkt | Kaarttegels | EU (Frankrijk en Ierland) |
+| **Lettermint** | E-mailadres, boekingsgegevens | Versturen van transactionele e-mails | EU |
+| **PostHog** | Gebruiksevents, sessie-opnames, account-ID bij inloggen (geen naam of e-mailadres) | Productanalyse, alleen met uw toestemming | EU |
+| **Sentry** | Foutrapporten, stacktraces, browsertype | Foutregistratie | EU (Duitsland) |
+| **Cloudflare** | IP-adres, verzoekmetadata, berichten tijdens de aflevering | CDN, botbescherming, snelheidsbeperking, berichtaflevering | EU/VS (SCC's) |
+| **Stripe** | Naam, e-mailadres, boekingsbedrag | Betalingsverwerking | VS/EU (SCC's) |
+
+<Note>Voor Cloudflare en Stripe, waar gegevens de EU kunnen verlaten, gebruiken wij standaardcontractbepalingen die zijn goedgekeurd door de Europese Commissie. Upstash slaat gegevens op in het Verenigd Koninkrijk, dat volgens de Europese Commissie een passend beschermingsniveau biedt.</Note>
+
+**Inlogaanbieders.** Als u ervoor kiest in te loggen met Google of Apple, handelt dat bedrijf het inloggen af onder zijn eigen privacybeleid en geeft het ons uw e-mailadres en naam door. U kunt altijd inloggen met een e-maillink.
+
+<Note>Wij geven gegevens ook af als een rechter daartoe opdracht geeft.</Note>
+
+</Section>
+
+<Section id="security" number="6" title="Beveiliging">
+
+Dit doen wij om uw gegevens veilig te houden:
+
+- Alles gaat over versleutelde verbindingen (TLS).
+- Geheimen staan in een Secret Manager, niet in code.
+- De infrastructuur wordt in de EU gehost bij Scaleway, met toegangscontrole en auditlogging.
+- Kaartgegevens raken onze servers nooit. Stripe handelt dat volledig af.
+- Sessie-opnames worden gemaskeerd, zodat wij nooit gevoelige invoer vastleggen.
+
+<Note>Geen enkel systeem is volledig waterdicht. Als wij ooit vaststellen dat uw gegevens zijn gecompromitteerd, melden wij dat aan u en aan de bevoegde autoriteit zoals de wet voorschrijft.</Note>
+
+</Section>
+
+<Section id="your-rights" number="7" title="Uw rechten onder de AVG">
+
+Als u zich in de EER bevindt, heeft u afdwingbare rechten met betrekking tot uw gegevens.
+
+| Recht | Wat het voor u betekent |
+| --- | --- |
+| **Inzage** | Een kopie opvragen van alles wat wij over u bewaren. |
+| **Rectificatie** | Ons vragen om onjuiste of onvolledige gegevens te corrigeren. |
+| **Verwijdering** | Ons vragen uw gegevens te wissen. Wij doen dat, binnen de grenzen van wat de wet ons verplicht te bewaren. |
+| **Beperking** | Ons vragen de verwerking te pauzeren terwijl iets wordt uitgezocht. |
+| **Overdraagbaarheid** | Uw gegevens ontvangen in een machineleesbaar formaat. |
+| **Bezwaar** | Bezwaar maken tegen verwerking op basis van gerechtvaardigde belangen. |
+| **Toestemming intrekken** | Uw toestemming voor analyse op elk moment intrekken. Dit heeft geen gevolgen voor wat al is gebeurd. |
+
+<Note>Mail [privacy@openbookings.co](mailto:privacy@openbookings.co) en wij reageren binnen **30 dagen**. Geen kosten, tenzij uw verzoek kennelijk buitensporig is.</Note>
+
+</Section>
+
+<Section id="automated-decisions" number="8" title="Geautomatiseerde besluitvorming">
+
+Wij nemen geen geautomatiseerde besluiten over u met rechtsgevolgen of vergelijkbare aanzienlijke gevolgen. Wij stellen geen profielen op voor advertenties. Er is geen algoritme dat stilletjes over u oordeelt.
+
+</Section>
+
+<Section id="children" number="9" title="Privacy van kinderen">
+
+OpenBookings is niet bedoeld voor personen onder de 16 jaar. Denkt u dat een kind toch een account heeft aangemaakt? Mail dan [privacy@openbookings.co](mailto:privacy@openbookings.co) en wij verwijderen het.
+
+</Section>
+
+<Section id="changes" number="10" title="Wijzigingen in dit beleid">
+
+Wij werken dit beleid van tijd tot tijd bij. Wanneer er iets wezenlijks verandert:
+
+- De datum "Laatst bijgewerkt" bovenaan verandert.
+- Wij tonen de cookiebanner opnieuw.
+- Als u het platform daarna blijft gebruiken, gaat u akkoord met de wijziging.
+
+</Section>
+
+<Section id="contact" number="11" title="Neem contact op">
+
+<Panel>
+
+Privacyvragen of gegevensverzoeken: [privacy@openbookings.co](mailto:privacy@openbookings.co).
+
+</Panel>
+
+</Section>
