@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { DEFAULT_MAP_STYLE } from "@/lib/map-style";
 
 /**
  * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
@@ -59,16 +60,11 @@ function useMap() {
   return context;
 }
 
-const defaultStyles = {
-  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-};
-
 type MapStyleOption = string | StyleSpecification;
 
 type MapProps = {
   children?: ReactNode;
-  /** Custom map styles for light and dark themes. Overrides the default Carto styles. */
+  /** Custom map styles for light and dark themes. Overrides the default MapTiler style. */
   styles?: {
     light?: MapStyleOption;
     dark?: MapStyleOption;
@@ -93,6 +89,12 @@ const DefaultLoader = () => (
   </div>
 );
 
+const MapUnavailable = () => (
+  <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
+    <p className="text-sm text-muted-foreground">Map unavailable</p>
+  </div>
+);
+
 const Map = forwardRef<MapRef, MapProps>(function Map(
   { children, styles, ...props },
   ref
@@ -106,11 +108,14 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
   const mapStyles = useMemo(
     () => ({
-      dark: styles?.dark ?? defaultStyles.dark,
-      light: styles?.light ?? defaultStyles.light,
+      dark: styles?.dark ?? DEFAULT_MAP_STYLE,
+      light: styles?.light ?? DEFAULT_MAP_STYLE,
     }),
     [styles]
   );
+  // MapTiler is the only tile vendor. With no style there is nothing to
+  // render, and falling back to another provider is not allowed.
+  const hasStyle = mapStyles.dark !== null && mapStyles.light !== null;
 
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
 
@@ -119,6 +124,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
     const initialStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
+    if (!initialStyle) return;
     currentStyleRef.current = initialStyle;
 
     const map = new MapLibreGL.Map({
@@ -159,7 +165,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     const newStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
 
-    if (currentStyleRef.current === newStyle) return;
+    if (!newStyle || currentStyleRef.current === newStyle) return;
 
     currentStyleRef.current = newStyle;
     setIsStyleLoaded(false);
@@ -184,7 +190,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   return (
     <MapContext.Provider value={contextValue}>
       <div ref={containerRef} className="relative w-full h-full">
-        {isLoading && <DefaultLoader />}
+        {!hasStyle ? <MapUnavailable /> : isLoading && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}
         {mapInstance && children}
       </div>
