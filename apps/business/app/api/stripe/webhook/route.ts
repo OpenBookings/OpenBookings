@@ -1,8 +1,49 @@
-import { stripe } from "@openbookings/stripe";
+import { constructWebhookEvent, refundCommissionForCharge, type StripeEvent } from "@openbookings/stripe";
 import { query } from "@openbookings/db";
 import { NextResponse } from "next/server";
+import { handleStripeEvent, type StripeEventDeps } from "@/lib/stripe-events";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Stripe's Connect webhook: events about hosts' connected accounts and the
+ * payments made on them. What each event does lives in lib/stripe-events.ts;
+ * this route proves the event came from Stripe and wires in the database.
+ *
+ * `processed_events` is shared with the support bot's Chatwoot ledger, hence
+ * the `stripe:` prefix on the id.
+ */
+const deps: StripeEventDeps = {
+  claim: async (eventId) => {
+    const rows = await query<{ event_id: string }>(
+      `INSERT INTO processed_events (event_id) VALUES ($1)
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING event_id`,
+      [`stripe:${eventId}`],
+    );
+    return rows.length > 0;
+  },
+  release: async (eventId) => {
+    await query(`DELETE FROM processed_events WHERE event_id = $1`, [`stripe:${eventId}`]);
+  },
+  markOnboardingComplete: async (stripeAccountId) => {
+    await query(
+      `UPDATE host_onboarding
+       SET onboarding_completed_at = NOW()
+       WHERE step_data->>'stripe_account_id' = $1
+         AND onboarding_completed_at IS NULL`,
+      [stripeAccountId],
+    );
+  },
+  refundCommission: refundCommissionForCharge,
+  audit: async ({ action, stripeAccountId, detail }) => {
+    await query(
+      `INSERT INTO audit_log (action, organization_id, detail)
+       VALUES ($1, (SELECT organization_id FROM org_profile WHERE stripe_account_id = $2), $3)`,
+      [action, stripeAccountId, JSON.stringify({ ...detail, stripeAccountId })],
+    );
+  },
+};
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -10,26 +51,25 @@ export async function POST(req: Request) {
 
   if (!sig) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
 
-  let event: ReturnType<typeof stripe.webhooks.constructEvent>;
+  let event: StripeEvent;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = constructWebhookEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  if (event.type === "account.updated") {
-    const account = event.data.object;
-    const currentlyDue = account.requirements?.currently_due ?? [];
-    if (currentlyDue.length === 0 && account.charges_enabled) {
-      await query(
-        `UPDATE host_onboarding
-         SET onboarding_completed_at = NOW()
-         WHERE step_data->>'stripe_account_id' = $1
-           AND onboarding_completed_at IS NULL`,
-        [account.id]
-      );
-    }
+  try {
+    const outcome = await handleStripeEvent(event, deps);
+    return NextResponse.json({ received: true, outcome });
+  } catch (error) {
+    // A 500 makes Stripe retry, and the claim was released so the retry runs.
+    // The event type and id only: never the body.
+    console.error(
+      "[stripe-webhook]",
+      event.type,
+      event.id,
+      error instanceof Error ? error.message : "unknown error",
+    );
+    return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
-
-  return NextResponse.json({ received: true });
 }

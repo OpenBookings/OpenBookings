@@ -82,3 +82,21 @@ export async function createBookingCheckout(
   });
   return { id: session.id, clientSecret: session.client_secret, expiresAt: session.expires_at };
 }
+
+/**
+ * Read a booking's Checkout Session back, with its PaymentIntent — which
+ * carries `last_payment_error`, the only place a decline reason survives.
+ *
+ * The Session lives on the host's connected account (direct charge), so it
+ * can only be found there.
+ */
+export function retrieveBookingCheckout(
+  sessionId: string,
+  stripeAccountId: string,
+): Promise<Stripe.Checkout.Session> {
+  return stripe.checkout.sessions.retrieve(
+    sessionId,
+    { expand: ['payment_intent'] },
+    { stripeAccount: stripeAccountId },
+  );
+}

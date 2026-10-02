@@ -6,6 +6,7 @@ export { getPaymentSummary, type PaymentSummary, type PaymentRefund } from './pa
 export {
   buildBookingCheckoutParams,
   createBookingCheckout,
+  retrieveBookingCheckout,
   type BookingCheckoutInput,
   type BookingCheckoutLine,
 } from './payments/checkout';
