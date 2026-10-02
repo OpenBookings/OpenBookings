@@ -33,7 +33,7 @@ function setup(replies: Reply[], initial?: Record<string, string>) {
       const r = replies.shift() ?? 200;
       if (r === "network") throw new TypeError("Failed to fetch");
       return Response.json(r === 200 ? { ok: true, expiresAt: "2027-01-01T00:00:00.000Z" } : {}, { status: r });
-    }) as unknown as typeof fetch,
+    }),
     endpoint: "/api/consent",
     onDrop: (e, status) => dropped.push([e.idempotencyKey, status]),
   };
@@ -110,7 +110,7 @@ describe("consent outbox", () => {
           throw new Error("QuotaExceededError");
         },
       },
-      fetch: (async () => Response.json({})) as unknown as typeof fetch,
+      fetch: (async () => Response.json({})),
       endpoint: "/api/consent",
     };
     expect(() => enqueueConsentEvent(deps, event(1))).not.toThrow();
@@ -131,7 +131,7 @@ describe("consent outbox", () => {
     t.deps.fetch = ((url: string, init: RequestInit) => {
       seen = init;
       return inner(url, init);
-    }) as unknown as typeof fetch;
+    });
     enqueueConsentEvent(t.deps, event(1));
     await flushConsentOutbox(t.deps);
     expect(seen?.method).toBe("POST");

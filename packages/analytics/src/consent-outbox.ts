@@ -19,7 +19,8 @@ const MAX_QUEUED = 20;
 
 export type OutboxDeps = {
   storage: Pick<Storage, "getItem" | "setItem">;
-  fetch: typeof fetch;
+  /** Narrower than `typeof fetch` on purpose: it is all the outbox needs. */
+  fetch: (input: string, init: RequestInit) => Promise<Response>;
   endpoint: string;
   /** Called when the server rejects an event for good (a 4xx other than 429). */
   onDrop?: (event: ConsentEvent, status: number) => void;

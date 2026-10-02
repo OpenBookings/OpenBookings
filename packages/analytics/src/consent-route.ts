@@ -1,4 +1,5 @@
-import { consentEventSchema, type ConsentEvent } from "./consent-events";
+import type { ConsentEvent } from "./consent-events";
+import { consentEventSchema } from "./consent-schema";
 
 export type ConsentEventRow = ConsentEvent & {
   app: "web" | "business";

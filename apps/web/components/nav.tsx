@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
+import { useCookieConsent } from "@openbookings/analytics/client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 
@@ -22,6 +23,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
   const router = useRouter();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const { reopen: reopenCookieBanner } = useCookieConsent();
   const [cookiesEnabled, setCookiesEnabled] = useState<boolean | null>(null);
   const profileMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -209,8 +211,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
               <button
                 type="button"
                 onClick={() => {
-                  const btn = document.querySelector(".cky-revisit-btn") as HTMLElement | null;
-                  btn?.click();
+                  reopenCookieBanner();
                   setHelpOpen(false);
                 }}
                 className="text-sm text-white/65 hover:text-white transition-colors text-left"
