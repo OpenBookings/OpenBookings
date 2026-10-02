@@ -113,6 +113,18 @@ Password Manager — most users assume they are device-bound. An org can set
 `org_profile.auth_policy = '{"requirePasskey": true}'` to block members
 from deleting their last passkey (enforced server-side).
 
+**Two clocks.** `lastVerifiedAt` (below) is stamped at every sign-in, and
+hosts sign in by magic link or OAuth, so on its own "recently verified" can
+mean "clicked an email link". `session.lastFactorVerifiedAt` is stamped only
+when a passkey, authenticator code or backup code is verified. A host who has
+a factor must have a fresh *factor* verification for gated actions; a host
+with none falls back to sign-in recency, which keeps them able to enrol their
+first one (`stepUpSatisfied` in `shared.ts`). Also gated now: inviting a
+member, storing or deleting a passkey, enabling or disabling two-factor, and
+regenerating backup codes. Payout bank details are not gated here: they are
+changed in the host's own Stripe Dashboard, behind Stripe's login, and owners
+are emailed when they change.
+
 **Step-up**: `session.lastVerifiedAt` is stamped at sign-in and refreshed
 by a successful passkey/TOTP/backup-code verification. Sensitive actions
 require it fresher than 15 minutes — recency is the mechanism; merely

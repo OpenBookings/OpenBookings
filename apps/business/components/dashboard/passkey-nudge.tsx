@@ -39,9 +39,9 @@ export function PasskeyNudge() {
   return (
     <div className="flex items-center justify-between gap-3 border-b bg-muted/50 px-4 py-2 text-sm lg:px-6">
       <p className="min-w-0">
-        <span className="font-medium">Protect your payouts:</span> add a
-        passkey so sensitive changes need your fingerprint or face, not just
-        an email link. Passkeys sync via iCloud Keychain / Google Password
+        <span className="font-medium">Protect your account:</span> add a
+        passkey so team and security changes need your fingerprint or face,
+        not just an email link. Passkeys sync via iCloud Keychain / Google Password
         Manager.
       </p>
       <div className="flex shrink-0 items-center gap-2">

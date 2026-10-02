@@ -9,7 +9,7 @@ import {
   accountTypeHooksForPool,
   advancedConfig,
   createAuthPool,
-  isStepUpFresh,
+  stepUpSatisfied,
   magicLinkOptions,
   microsoftEmailFromProfile,
   sharedSessionOptions,
@@ -107,13 +107,29 @@ export function createHostAuth(config: HostAuthConfig) {
     }
   };
 
-  /** Authoritative step-up freshness: DB read, never the cookie cache. */
+  /**
+   * Authoritative step-up check: DB read, never the cookie cache. Reads both
+   * clocks and whether the user has a factor in one query, so the answer is
+   * about one consistent moment. A missing row is a refusal.
+   */
   const sessionHasFreshStepUp = async (sessionId: string) => {
-    const result = await pool.query<{ lastVerifiedAt: Date | null }>(
-      `SELECT "lastVerifiedAt" FROM "session" WHERE id = $1`,
+    const result = await pool.query<{
+      lastVerifiedAt: Date | null;
+      lastFactorVerifiedAt: Date | null;
+      hasFactor: boolean;
+    }>(
+      `SELECT s."lastVerifiedAt",
+              s."lastFactorVerifiedAt",
+              (COALESCE(u."twoFactorEnabled", FALSE)
+                OR EXISTS (SELECT 1 FROM "passkey" p WHERE p."userId" = s."userId")) AS "hasFactor"
+       FROM "session" s
+       JOIN "user" u ON u.id = s."userId"
+       WHERE s.id = $1`,
       [sessionId],
     );
-    return isStepUpFresh(result.rows[0]?.lastVerifiedAt);
+    const row = result.rows[0];
+    if (!row) return false;
+    return stepUpSatisfied(row);
   };
 
   /**
@@ -205,6 +221,12 @@ export function createHostAuth(config: HostAuthConfig) {
       additionalFields: {
         ...sharedSessionOptions.additionalFields,
         lastVerifiedAt: {
+          type: "date",
+          required: false,
+          input: false,
+        },
+        // Stamped only by a passkey / authenticator / backup-code check.
+        lastFactorVerifiedAt: {
           type: "date",
           required: false,
           input: false,
@@ -303,7 +325,9 @@ export function createHostAuth(config: HostAuthConfig) {
           const session = await getSessionFromCtx(ctx);
           if (session) {
             await pool.query(
-              `UPDATE "session" SET "lastVerifiedAt" = NOW() WHERE id = $1`,
+              `UPDATE "session"
+                 SET "lastVerifiedAt" = NOW(), "lastFactorVerifiedAt" = NOW()
+               WHERE id = $1`,
               [session.session.id],
             );
           }

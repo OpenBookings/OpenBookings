@@ -2,6 +2,7 @@ import { constructWebhookEvent, refundCommissionForCharge, type StripeEvent } fr
 import { query } from "@openbookings/db";
 import { NextResponse } from "next/server";
 import { handleStripeEvent, type StripeEventDeps } from "@/lib/stripe-events";
+import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,41 @@ const deps: StripeEventDeps = {
       [action, stripeAccountId, JSON.stringify({ ...detail, stripeAccountId, dedupeKey }), dedupeKey],
     );
   },
+};
+
+/**
+ * A host's payout bank account changed in Stripe. Bank details live behind
+ * the host's own Stripe login, where OpenBookings cannot stop a takeover; what
+ * it can do is make sure every owner hears about a change, so one that nobody
+ * made is noticed.
+ */
+deps.onExternalAccountChanged = async ({ stripeAccountId, change, last4, country }) => {
+  const rows = await query<{ organization_id: string; name: string; email: string }>(
+    `SELECT op.organization_id, o.name, u.email
+     FROM org_profile op
+     JOIN "organization" o ON o.id = op.organization_id
+     JOIN "member" m ON m."organizationId" = op.organization_id AND m.role = 'owner'
+     JOIN "user" u ON u.id = m."userId"
+     WHERE op.stripe_account_id = $1`,
+    [stripeAccountId],
+  );
+
+  await query(
+    `INSERT INTO audit_log (action, organization_id, detail)
+     VALUES ('payout.external-account-changed', $1, $2)`,
+    // Last four digits and country only. Never the account number.
+    [rows[0]?.organization_id ?? null, JSON.stringify({ stripeAccountId, change, last4, country })],
+  );
+
+  if (rows.length === 0) return;
+  // Sent after the audit row, and never allowed to fail the webhook: a
+  // bounced email must not make Stripe retry and write the row twice.
+  await sendPayoutChangeAlert(
+    rows.map((row) => row.email),
+    { organisationName: rows[0]!.name, change, last4, country },
+  ).catch((error) => {
+    console.error("[stripe-webhook] payout alert failed:", error instanceof Error ? error.message : error);
+  });
 };
 
 export async function POST(req: Request) {

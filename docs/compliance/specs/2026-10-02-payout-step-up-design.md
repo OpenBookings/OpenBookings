@@ -3,7 +3,7 @@
 **Date:** 2 October 2026
 **Closes:** audit F2a (payout changes), F2c (`invite-member` not gated)
 **Depends on:** `2026-10-02-stripe-full-dashboard-design.md`
-**Status:** approved, not yet implemented
+**Status:** approved and implemented (branch `compliance/payout-step-up`)
 
 ## How the Stripe change moves the problem
 

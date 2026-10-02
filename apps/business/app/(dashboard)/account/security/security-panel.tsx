@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useStepUp } from "@/components/security/step-up-dialog";
 
 type PasskeyRow = {
   id: string;
@@ -52,6 +53,10 @@ export function SecurityPanel() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [currentToken, setCurrentToken] = useState<string | null>(null);
 
+  // Adding or removing a factor is gated: the server asks for a fresh check
+  // first, and this turns that refusal into a prompt instead of an error.
+  const { guard, dialog: stepUpDialog } = useStepUp(passkeys.length > 0 || twoFactorEnabled);
+
   const refresh = useCallback(async () => {
     setError(null);
     const [passkeyResult, sessionsResult, current] = await Promise.all([
@@ -81,9 +86,9 @@ export function SecurityPanel() {
     setAddingPasskey(true);
     setError(null);
     try {
-      const result = await authClient.passkey.addPasskey({
-        name: passkeyName.trim() || undefined,
-      });
+      const result = await guard(() =>
+        authClient.passkey.addPasskey({ name: passkeyName.trim() || undefined }),
+      );
       if (result?.error) {
         setError(result.error.message ?? "Could not add the passkey.");
       } else {
@@ -99,7 +104,7 @@ export function SecurityPanel() {
 
   const deletePasskey = async (id: string) => {
     setError(null);
-    const result = await authClient.passkey.deletePasskey({ id });
+    const result = await guard(() => authClient.passkey.deletePasskey({ id }));
     if (result?.error) {
       setError(result.error.message ?? "Could not delete the passkey.");
     }
@@ -109,7 +114,9 @@ export function SecurityPanel() {
   const enableTwoFactor = async () => {
     setTotpPending(true);
     setError(null);
-    const result = await authClient.twoFactor.enable({});
+    const result = (await guard(() => authClient.twoFactor.enable({}))) as Awaited<
+      ReturnType<typeof authClient.twoFactor.enable>
+    >;
     if (result.error || !result.data) {
       setError(result.error?.message ?? "Could not start two-factor setup.");
     } else {
@@ -137,8 +144,8 @@ export function SecurityPanel() {
   const disableTwoFactor = async () => {
     setTotpPending(true);
     setError(null);
-    const result = await authClient.twoFactor.disable({});
-    if (result.error) {
+    const result = await guard(() => authClient.twoFactor.disable({}));
+    if (result?.error) {
       setError(result.error.message ?? "Could not disable two-factor.");
     } else {
       setTwoFactorEnabled(false);
@@ -166,6 +173,7 @@ export function SecurityPanel() {
 
   return (
     <div className="flex flex-col gap-6 px-4 lg:px-6">
+      {stepUpDialog}
       {error ? (
         <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
@@ -185,7 +193,7 @@ export function SecurityPanel() {
         <CardContent className="flex flex-col gap-4">
           {passkeys.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No passkeys yet. Add one to protect payouts and team changes.
+              No passkeys yet. Add one to protect your team and account changes.
             </p>
           ) : (
             <ul className="flex flex-col divide-y">
