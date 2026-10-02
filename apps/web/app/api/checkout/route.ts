@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import { headers } from 'next/headers';
-import { stripe } from '@openbookings/stripe';
+import { createBookingCheckout } from '@openbookings/stripe';
 import { auth } from '@/lib/auth';
 import {
   BookingNotFoundError,
@@ -154,15 +154,14 @@ function resolveAppUrl(): string {
 /**
  * An explicit payment method configuration for checkout, if one is set.
  *
- * These charges are made on the platform with no merchant of record, so it is
- * the platform's own configuration set that decides what the guest is offered
- * — the connected-account set, and the per-host child configurations under it,
- * never come into play while hosts hold `transfers` alone.
+ * Bookings are direct charges on the host's connected account, so it is the
+ * connected-account configuration that decides what the guest is offered: the
+ * platform's "your connected accounts" preset, as each host's account inherits
+ * it. A `pmc_` id set here must be one that exists on the connected account.
  *
- * Left unset, Stripe uses the platform's default configuration, which is a
- * perfectly good answer. This exists so the booking form can be pointed at a
- * configuration of its own without a deploy. Test and live mode hold different
- * `pmc_` objects, hence an environment variable rather than a constant.
+ * Left unset, Stripe uses the connected account's default configuration,
+ * which is the normal case. Test and live mode hold different `pmc_` objects,
+ * hence an environment variable rather than a constant.
  */
 function resolvePaymentMethodConfiguration(): string | undefined {
   return process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || undefined;
@@ -229,81 +228,52 @@ export async function POST(request: Request) {
     const paymentMethodConfiguration = resolvePaymentMethodConfiguration();
     const expiresAt = resolveExpiry(booking.holdMinutes);
 
-    session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      ui_mode: 'form',
-      // Prefills the contact block, and locks it: Stripe renders a
-      // `customer_email` as read-only. That is the behaviour we want. The
-      // booking is being attached to this account, so letting the guest type a
-      // different address into the payment form would produce a confirmation
-      // sent somewhere the account holder cannot see.
-      //
-      // This is the payoff for putting sign-in ahead of the Session rather
-      // than beside it — by the time we get here there is an address to send.
-      customer_email: authSession.user.email,
-      line_items: booking.lines.map((line) => ({
-        price_data: {
-          currency: booking.currency,
-          unit_amount: line.unitAmountCents,
-          product_data: {
-            name: line.name,
-            description: `${booking.propertyName} — ${booking.roomName}`,
-          },
-        },
+    // A direct charge: created on the host's own Stripe account, with
+    // OpenBookings' commission as an application fee. Without an account
+    // there is nowhere to charge, and the platform's own account is never a
+    // substitute.
+    if (!booking.stripeAccountId) {
+      throw new CheckoutError('config_error', 'Property has no connected Stripe account');
+    }
+
+    session = await createBookingCheckout({
+      stripeAccountId: booking.stripeAccountId,
+      // Prefilled and locked: the booking is attached to this account, so the
+      // confirmation must not go somewhere the account holder cannot see.
+      customerEmail: authSession.user.email,
+      currency: booking.currency,
+      // Every priced row goes across as its own line item; the page renders
+      // the breakdown back out of the session, so the guest cannot be shown a
+      // split that differs from what is charged.
+      lines: booking.lines.map((line) => ({
+        name: line.name,
+        description: `${booking.propertyName} — ${booking.roomName}`,
+        unitAmountCents: line.unitAmountCents,
         quantity: line.quantity,
       })),
-      // Hosts need a number to reach the guest about arrival. Under
-      // `ui_mode: 'form'` Stripe renders and validates the field itself, which
-      // is why this no longer needs a hand-built input beside the Elements.
-      phone_number_collection: { enabled: true },
-      // Previously asked for by the Billing Address Element's own options,
-      // which the form does not read — it takes its fields from the Session
-      // instead. Without this the guest is charged without ever giving a name
-      // or an address, and the booking reaches the host anonymous.
-      //
-      // This covers the name too. `name_collection` would also add one, but to
-      // the contact block, leaving the guest looking at two "Full name" fields
-      // and no way to tell which one Stripe wanted.
-      billing_address_collection: 'required',
-      ...(paymentMethodConfiguration
-        ? { payment_method_configuration: paymentMethodConfiguration }
-        : {}),
-      payment_intent_data: booking.stripeAccountId
-        ? {
-            transfer_data: { destination: booking.stripeAccountId },
-            // No `on_behalf_of`. It would hand the host merchant-of-record
-            // status and with it their own payment method configuration, but
-            // Stripe refuses it for an account holding `transfers` without
-            // `card_payments` — and hosts here are deliberately payout-only.
-            // The refusal also lands at confirm time rather than on session
-            // creation, so the guest would fill in a card before seeing it.
-            // Platform fee temporarily disabled — restore with
-            // `application_fee_amount: booking.platformFeeCents` when needed.
-          }
-        : {},
+      applicationFeeCents: booking.platformFeeCents,
+      paymentMethodConfiguration,
       metadata: {
         bookingIntentId: booking.intentId,
         roomId: booking.roomId,
-        // Who the booking belongs to. `customer_details` still carries the
-        // name, phone and billing address the guest types into the form, but
-        // that is whatever they typed — this is the account the webhook should
-        // attach the booking to.
+        // Who the booking belongs to. `customer_details` still carries what
+        // the guest types into the form; this is the account the webhook
+        // should attach the booking to.
         //
         // TODO: once booking intents are real rows, the intent should carry
-        // this and the webhook should read it from there. Metadata is the only
-        // place to put it while `getBookingSummary` is pinned to a seeded id.
+        // this and the webhook should read it from there.
         userId: authSession.user.id,
         totalCents: String(total),
       },
-      return_url: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
-      expires_at: expiresAt,
+      returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+      expiresAt,
     });
 
     // Typed as nullable, and a session without one is unusable client-side.
     // Better to fail here than to hand the browser `null` and watch Stripe.js
     // fail with something less traceable.
-    if (!session.client_secret) {
-      throw new CheckoutError('session_failed', `Session ${session.id} has no client_secret`);
+    if (!session.clientSecret) {
+      throw new CheckoutError('session_failed', `Session ${session.id} has no client secret`);
     }
   } catch (err) {
     const code =
@@ -333,10 +303,10 @@ export async function POST(request: Request) {
 
   return Response.json(
     {
-      clientSecret: session.client_secret,
+      clientSecret: session.clientSecret,
       // Drives the client-side hold countdown, so a guest who leaves the tab
       // open is told the hold lapsed instead of being declined by Stripe.
-      expiresAt: session.expires_at,
+      expiresAt: session.expiresAt,
     },
     // A cached client secret would hand a second guest someone else's session.
     { headers: { 'Cache-Control': 'no-store' } }

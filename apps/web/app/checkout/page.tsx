@@ -55,6 +55,7 @@ export default async function CheckoutPage() {
   return (
     <CheckoutClient
       viewer={viewer}
+      stripeAccountId={summary.stripeAccountId}
       heroImageUrl={summary.heroImageUrl}
       logoUrl={summary.logoUrl}
       propertyName={summary.propertyName}

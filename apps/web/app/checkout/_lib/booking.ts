@@ -18,6 +18,7 @@
 import { queryOne } from '@openbookings/db';
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
 import { buildBookingLines, type BookingLine } from './booking-lines';
+import { applicationFeeCents } from '@openbookings/stripe';
 
 /** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
 const CHECKOUT_BOOKING_ID = 'b0000000-0000-4000-8000-000000000001';
@@ -96,6 +97,7 @@ type BookingRow = {
   check_in_time: string | null;
   check_out_time: string | null;
   rates_confirmed: boolean;
+  commission_rate: string;
   stripe_account_id: string | null;
   room_id: string;
   room_name: string;
@@ -141,6 +143,7 @@ const BOOKING_QUERY = `
       select 1 from org_consent oc
       where oc.organization_id = p.organization_id and oc.doc_id = $2
     )                   as rates_confirmed,
+    p.commission_rate,
     p.stripe_account_id,
     r.id                as room_id,
     r.name              as room_name,
@@ -252,6 +255,14 @@ function trimSeconds(value: string | null): string | null {
   return value ? value.slice(0, 5) : null;
 }
 
+/**
+ * Whether the commission is taken as an application fee yet. Off by default,
+ * so direct charges can be verified in test mode before any fee is live.
+ */
+function applicationFeeEnabled(): boolean {
+  return process.env.STRIPE_APPLICATION_FEE_ENABLED === 'true';
+}
+
 export async function getBookingSummary(): Promise<StaySummary> {
   const row = await queryOne<BookingRow>(BOOKING_QUERY, [
     CHECKOUT_BOOKING_ID,
@@ -303,8 +314,11 @@ export async function getBookingSummary(): Promise<StaySummary> {
     children: row.children,
 
     lines,
-    // The fee we would take on a Connect booking, in the units Stripe wants.
-    platformFeeCents: 0,
+    // OpenBookings' commission on the full guest price, in the units Stripe
+    // wants. Zero until the fee is switched on for this deployment.
+    platformFeeCents: applicationFeeEnabled()
+      ? applicationFeeCents(totalCents(lines), Number(row.commission_rate))
+      : 0,
     currency: row.currency.toLowerCase(),
 
     cancellationPolicy:
@@ -314,8 +328,13 @@ export async function getBookingSummary(): Promise<StaySummary> {
         : 'This reservation is non-refundable.'),
     freeCancellationUntil,
 
-    // Env still wins: the seeded property has no Connect account of its own.
-    stripeAccountId: row.stripe_account_id ?? process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '',
+    // The host's own connected account: the booking is charged on it. The env
+    // fallback exists for the seeded demo property in development only — in
+    // production a property without an account is not chargeable, and must
+    // never be charged on somebody else's.
+    stripeAccountId:
+      row.stripe_account_id ??
+      (process.env.NODE_ENV === 'production' ? '' : (process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '')),
     ratesConfirmed: row.rates_confirmed === true,
     holdMinutes: HOLD_MINUTES,
   };

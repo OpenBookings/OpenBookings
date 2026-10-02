@@ -203,17 +203,14 @@ export async function provisionStripeAccount(): Promise<string> {
   if (!legal) throw new Error("Legal step data is missing");
   if (!location) throw new Error("Location step data is missing");
 
+  // The country decides which regulator the account sits under and cannot be
+  // changed afterwards, so it is never defaulted.
+  if (!location.country) throw new Error("Property country is missing");
+
   const accountId = await createConnectAccount({
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
-    fullName: legal.fullName,
-    roleTitle: legal.roleTitle,
-    vatNumber: legal.vatNumber,
-    cocNumber: legal.cocNumber ?? "",
-    city: location.city,
-    country: location.country || "NL",
-    postalCode: location.postalCode,
-    streetAddress: location.streetAddress,
+    country: location.country,
   });
 
   await query(

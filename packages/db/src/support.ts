@@ -26,6 +26,11 @@ export type SupportReservation = {
   total_amount: number;
   currency: string;
   stripe_payment_intent_id: string | null;
+  /**
+   * The host's connected account, where the payment lives (direct charges).
+   * For looking the payment up only; never shown to the guest or the model.
+   */
+  stripe_account_id: string | null;
   cancellation_reason: string | null;
   cancelled_at: string | null;
   created_at: string;
@@ -49,6 +54,7 @@ const RESERVATION_SELECT = `
     b.total_amount::bigint AS total_amount,
     b.currency,
     b.stripe_payment_intent_id,
+    p.stripe_account_id,
     b.cancellation_reason,
     b.cancelled_at::text AS cancelled_at,
     b.created_at::text AS created_at,
