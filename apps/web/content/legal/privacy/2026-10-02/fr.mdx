@@ -81,7 +81,7 @@ Nous enregistrons les interactions à l'écran afin de repérer les problèmes d
 
 <DataCard title="2.4 Données d'erreur">
 
-En cas de dysfonctionnement, Sentry reçoit l'erreur, une trace d'appels, la page sur laquelle vous vous trouviez et votre type de navigateur. Aucun contenu de formulaire, aucune donnée de paiement.
+En cas de dysfonctionnement, Sentry reçoit l'erreur, une trace d'appels, la page sur laquelle vous vous trouviez et votre type de navigateur. Sentry reçoit également les temps de chargement des pages que vous ouvrez, afin que nous puissions voir quand le site est lent. Aucun contenu de formulaire, aucune donnée de paiement.
 
 <Meta why="Pour détecter et corriger les bogues." basis="Intérêt légitime au bon fonctionnement de la plateforme." />
 
@@ -150,16 +150,15 @@ Nous ne vendons pas vos données. Nous ne les partageons qu'avec les prestataire
 | --- | --- | --- | --- |
 | **Neon** | Données de compte et de réservation | Hébergement de la base de données | UE (Francfort) |
 | **Scaleway** | Données traitées par l'application pendant son exécution | Hébergement applicatif | UE (Amsterdam) |
-| **Upstash** | Résultats de requêtes mis en cache | Mise en cache | Royaume-Uni (décision d'adéquation) |
 | **Algolia** | Requêtes de recherche, adresse IP | Recherche de destinations | UE |
 | **MapTiler** | Adresse IP, zone de la carte consultée | Tuiles cartographiques | UE (France et Irlande) |
 | **Lettermint** | Adresse e-mail, détails de réservation | Envoi des e-mails transactionnels | UE |
 | **PostHog** | Événements d'usage, enregistrements de session, identifiant de compte lorsque vous êtes connecté (ni nom ni e-mail) | Analyse produit, uniquement avec votre consentement | UE |
-| **Sentry** | Rapports d'erreur, traces d'appels, type de navigateur | Suivi des erreurs | UE (Allemagne) |
-| **Cloudflare** | Adresse IP, métadonnées de requête, messages pendant leur acheminement | CDN, protection anti-bots, limitation de débit, acheminement des messages | UE/États-Unis (CCT) |
+| **Sentry** | Rapports d'erreur, traces d'appels, type de navigateur, temps de chargement des pages | Suivi des erreurs et des performances | UE (Allemagne) |
+| **Cloudflare** | Adresse IP, métadonnées de requête | CDN, protection anti-DDoS et anti-bots | UE/États-Unis (CCT) |
 | **Stripe** | Nom, e-mail, montant de la réservation | Traitement des paiements | États-Unis/UE (CCT) |
 
-<Note>Pour Cloudflare et Stripe, lorsque des données peuvent quitter l'UE, nous recourons aux clauses contractuelles types approuvées par la Commission européenne. Upstash conserve les données au Royaume-Uni, dont la Commission européenne reconnaît le niveau de protection adéquat.</Note>
+<Note>Pour Cloudflare et Stripe, lorsque des données peuvent quitter l'UE, nous recourons aux clauses contractuelles types approuvées par la Commission européenne.</Note>
 
 **Fournisseurs de connexion.** Si vous choisissez de vous connecter avec Google ou Apple, cette société gère la connexion selon sa propre politique de confidentialité et nous transmet votre adresse e-mail et votre nom. Vous pouvez toujours vous connecter par lien e-mail.
 

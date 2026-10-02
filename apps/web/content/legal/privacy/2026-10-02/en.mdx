@@ -68,7 +68,7 @@ We record on-screen interactions to spot usability issues in the booking flow.
 
 <DataCard title="2.4 Error data">
 
-When something breaks, Sentry receives the error, a stack trace, the page you were on, and your browser type. No form contents, no payment details.
+When something breaks, Sentry receives the error, a stack trace, the page you were on, and your browser type. Sentry also receives timing data for the pages you load, so we can see when the site is slow. No form contents, no payment details.
 
 <Meta why="To find and fix bugs." basis="Legitimate interest in keeping the platform working." />
 
@@ -137,16 +137,15 @@ We don't sell your data. We share it only with the vendors we need to run the pl
 | --- | --- | --- | --- |
 | **Neon** | Account and booking records | Database hosting | EU (Frankfurt) |
 | **Scaleway** | Data processed by the app while it runs | Application hosting | EU (Amsterdam) |
-| **Upstash** | Cached query results | Caching | UK (adequacy decision) |
 | **Algolia** | Search queries, IP address | Destination search | EU |
 | **MapTiler** | IP address, the map area you look at | Map tiles | EU (France and Ireland) |
 | **Lettermint** | Email address, booking details | Sending transactional emails | EU |
 | **PostHog** | Usage events, session recordings, account ID when signed in (no name or email) | Product analytics, only with your consent | EU |
-| **Sentry** | Error reports, stack traces, browser type | Error tracking | EU (Germany) |
-| **Cloudflare** | IP address, request metadata, messages while they are being delivered | CDN, bot protection, rate limiting, message delivery | EU/US (SCCs) |
+| **Sentry** | Error reports, stack traces, browser type, page-load timing | Error and performance tracking | EU (Germany) |
+| **Cloudflare** | IP address, request metadata | CDN, DDoS and bot protection | EU/US (SCCs) |
 | **Stripe** | Name, email, booking amount | Payment processing | US/EU (SCCs) |
 
-<Note>For Cloudflare and Stripe, where data can leave the EU, we use Standard Contractual Clauses approved by the European Commission. Upstash stores data in the United Kingdom, which the European Commission recognises as providing adequate protection.</Note>
+<Note>For Cloudflare and Stripe, where data can leave the EU, we use Standard Contractual Clauses approved by the European Commission.</Note>
 
 **Sign-in providers.** If you choose to sign in with Google or Apple, that company handles the sign-in under its own privacy policy and tells us your email address and name. You can always sign in with an email link instead.
 

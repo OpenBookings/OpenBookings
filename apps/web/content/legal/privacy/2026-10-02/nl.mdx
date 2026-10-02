@@ -81,7 +81,7 @@ Wij leggen interacties op het scherm vast om bruikbaarheidsproblemen in het boek
 
 <DataCard title="2.4 Foutgegevens">
 
-Wanneer er iets misgaat, ontvangt Sentry de fout, een stacktrace, de pagina waarop u zich bevond en uw browsertype. Geen formulierinhoud, geen betalingsgegevens.
+Wanneer er iets misgaat, ontvangt Sentry de fout, een stacktrace, de pagina waarop u zich bevond en uw browsertype. Sentry ontvangt ook de laadtijden van de pagina's die u opent, zodat wij kunnen zien wanneer de site traag is. Geen formulierinhoud, geen betalingsgegevens.
 
 <Meta why="Om bugs te vinden en op te lossen." basis="Gerechtvaardigd belang bij een werkend platform." />
 
@@ -150,16 +150,15 @@ Wij verkopen uw gegevens niet. Wij delen ze alleen met de leveranciers die wij n
 | --- | --- | --- | --- |
 | **Neon** | Account- en boekingsgegevens | Databasehosting | EU (Frankfurt) |
 | **Scaleway** | Gegevens die de applicatie tijdens gebruik verwerkt | Applicatiehosting | EU (Amsterdam) |
-| **Upstash** | Gecachte zoekresultaten | Caching | VK (adequaatheidsbesluit) |
 | **Algolia** | Zoekopdrachten, IP-adres | Bestemmingszoekfunctie | EU |
 | **MapTiler** | IP-adres, het kaartgebied dat u bekijkt | Kaarttegels | EU (Frankrijk en Ierland) |
 | **Lettermint** | E-mailadres, boekingsgegevens | Versturen van transactionele e-mails | EU |
 | **PostHog** | Gebruiksevents, sessie-opnames, account-ID bij inloggen (geen naam of e-mailadres) | Productanalyse, alleen met uw toestemming | EU |
-| **Sentry** | Foutrapporten, stacktraces, browsertype | Foutregistratie | EU (Duitsland) |
-| **Cloudflare** | IP-adres, verzoekmetadata, berichten tijdens de aflevering | CDN, botbescherming, snelheidsbeperking, berichtaflevering | EU/VS (SCC's) |
+| **Sentry** | Foutrapporten, stacktraces, browsertype, laadtijden van pagina's | Fout- en prestatieregistratie | EU (Duitsland) |
+| **Cloudflare** | IP-adres, verzoekmetadata | CDN, DDoS- en botbescherming | EU/VS (SCC's) |
 | **Stripe** | Naam, e-mailadres, boekingsbedrag | Betalingsverwerking | VS/EU (SCC's) |
 
-<Note>Voor Cloudflare en Stripe, waar gegevens de EU kunnen verlaten, gebruiken wij standaardcontractbepalingen die zijn goedgekeurd door de Europese Commissie. Upstash slaat gegevens op in het Verenigd Koninkrijk, dat volgens de Europese Commissie een passend beschermingsniveau biedt.</Note>
+<Note>Voor Cloudflare en Stripe, waar gegevens de EU kunnen verlaten, gebruiken wij standaardcontractbepalingen die zijn goedgekeurd door de Europese Commissie.</Note>
 
 **Inlogaanbieders.** Als u ervoor kiest in te loggen met Google of Apple, handelt dat bedrijf het inloggen af onder zijn eigen privacybeleid en geeft het ons uw e-mailadres en naam door. U kunt altijd inloggen met een e-maillink.
 
