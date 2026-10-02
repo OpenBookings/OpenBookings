@@ -2,7 +2,7 @@
 
 **Date:** 2 October 2026
 **Closes:** audit D3 (consent evidence)
-**Status:** approved, not yet implemented
+**Status:** approved and implemented (branch `compliance/consent-log`)
 
 ## Goal
 

@@ -1,0 +1,219 @@
+export const title = "Privacy Policy";
+
+<Lead>
+
+Written to be read, not decoded. What we collect, why, and what we do with it.
+
+This policy is for guests: people who use [openbookings.co](https://openbookings.co) to search for and book a stay. It is operated by OpenBookings B.V., registered in the Netherlands.
+
+Run a property on OpenBookings? The business portal is covered by your Partner Agreement, not by this policy.
+
+</Lead>
+
+<Section id="who-we-are" number="1" title="Who we are">
+
+OpenBookings B.V. is the data controller for everything described in this policy. We're a Dutch company, so GDPR applies.
+
+Questions? Email us at [privacy@openbookings.co](mailto:privacy@openbookings.co). We'll get back to you within 5 business days.
+
+</Section>
+
+<Section id="what-we-collect" number="2" title="What we collect and why">
+
+We only collect data we actually need. Here's the full list.
+
+<CardGroup>
+
+<DataCard title="2.1 Account data">
+
+Your email address and name. If you sign in with Google or Apple, we also receive the name and profile picture that provider shares with us.
+
+<Meta why="You need an account to use the platform." basis="Performance of a contract." />
+
+</DataCard>
+
+<DataCard title="2.2 Booking data">
+
+Guest name, contact details, and booking details: stay dates, property, number of guests, payment reference, and status.
+
+Card details never reach our servers. Stripe handles those; we only receive the payment reference.
+
+<Meta why="To process your booking and handle anything that comes up around it." basis="Performance of a contract; legal obligation for financial records." />
+
+</DataCard>
+
+<DataCard title="2.3 Analytics data">
+
+Page views, navigation paths, approximate device type, browser, and country.
+
+Via PostHog. We never pass your name, full IP address, or payment details into analytics events.
+
+If you're signed in and accepted analytics cookies, events are linked to your account so we can understand usage across sessions and devices. The link is your account's internal ID — a random identifier, not your name or email.
+
+<Meta why="To understand usage and fix issues." basis="Consent, via the cookie banner. No acceptance, nothing tracked." />
+
+<Callout title="Session replay">
+
+We record on-screen interactions to spot usability issues in the booking flow.
+
+<DashList items={[
+  "All text is masked. We never see what you type into forms.",
+  "Recordings are deleted automatically after 30 days.",
+  "Only runs if you accept analytics cookies.",
+]} />
+
+</Callout>
+
+</DataCard>
+
+<DataCard title="2.4 Error data">
+
+When something breaks, Sentry receives the error, a stack trace, the page you were on, and your browser type. Sentry also receives timing data for the pages you load, so we can see when the site is slow. No form contents, no payment details.
+
+<Meta why="To find and fix bugs." basis="Legitimate interest in keeping the platform working." />
+
+</DataCard>
+
+<DataCard title="2.5 Transactional emails">
+
+Your email address and the details needed for the message: booking confirmations, check-in details, receipts, and sign-in links.
+
+<Meta basis="Performance of a contract." />
+
+_No marketing emails. Every email is triggered by something you did._
+
+</DataCard>
+
+</CardGroup>
+
+</Section>
+
+<Section id="cookies" number="3" title="Cookies">
+
+When you first visit, you'll see a cookie banner. Your choices are simple:
+
+<ChoiceList>
+  <Choice label="Accept">PostHog starts, collecting usage data and session recordings.</Choice>
+  <Choice label="Decline">Nothing analytics-related gets set. PostHog doesn't run at all.</Choice>
+</ChoiceList>
+
+<Note>EU/EEA visitors see this banner until they make a choice. Changed your mind? Open Help and choose Cookie Settings to decide again.</Note>
+
+**What we actually set:**
+
+| Type | Name | What it does | Expires | Needs consent? |
+| --- | --- | --- | --- | --- |
+| Essential | `session token` | Keeps you signed in | Session / configurable | No |
+| Essential | `cf_clearance` | Cloudflare bot protection | 30 minutes | No |
+| Essential | `ob_cookie_consent` | Remembers your consent choice (local storage, our own banner). The choice is also recorded on our servers as proof, without your IP address | 90 days | No |
+| Analytics | `ph_*` | PostHog analytics and session replay | 1 year | Yes, EU/EEA |
+
+<Note>No advertising cookies. No tracking pixels. No social media cookies.</Note>
+
+</Section>
+
+<Section id="retention" number="4" title="How long we keep things">
+
+We don't hold onto data longer than we need to.
+
+| Data | Kept for | Why |
+| --- | --- | --- |
+| Account data | 3 years after last login | In case you come back |
+| Booking records | 7 years from booking date | Dutch tax and financial records law |
+| Analytics data | 13 months (rolling) | Year-over-year trend analysis |
+| Session recordings | 30 days | Usability analysis only |
+| Error reports | 90 days | Debugging |
+| Email logs | 90 days | Debugging delivery issues |
+| Consent records | 5 years | Proof of the cookie choice you made |
+
+<Note>After these windows close, data is deleted or anonymised. Anonymised data may stick around for statistics.</Note>
+
+</Section>
+
+<Section id="sharing" number="5" title="Who we share your data with">
+
+We don't sell your data. We share it only with the vendors we need to run the platform:
+
+| Vendor | What they get | What for | Where |
+| --- | --- | --- | --- |
+| **Neon** | Account and booking records | Database hosting | EU (Frankfurt) |
+| **Scaleway** | Data processed by the app while it runs | Application hosting | EU (Amsterdam) |
+| **Algolia** | Search queries, IP address | Destination search | EU |
+| **MapTiler** | IP address, the map area you look at | Map tiles | EU (France and Ireland) |
+| **Lettermint** | Email address, booking details | Sending transactional emails | EU |
+| **PostHog** | Usage events, session recordings, account ID when signed in (no name or email) | Product analytics, only with your consent | EU |
+| **Sentry** | Error reports, stack traces, browser type, page-load timing | Error and performance tracking | EU (Germany) |
+| **Cloudflare** | IP address, request metadata | CDN, DDoS and bot protection | EU/US (SCCs) |
+| **Stripe** | Name, email, booking amount | Payment processing | US/EU (SCCs) |
+
+<Note>For Cloudflare and Stripe, where data can leave the EU, we use Standard Contractual Clauses approved by the European Commission.</Note>
+
+**Sign-in providers.** If you choose to sign in with Google or Apple, that company handles the sign-in under its own privacy policy and tells us your email address and name. You can always sign in with an email link instead.
+
+<Note>We'll also hand over data if a court orders it.</Note>
+
+</Section>
+
+<Section id="security" number="6" title="Security">
+
+Here's what we do to keep your data safe:
+
+- Everything travels over encrypted connections (TLS).
+- Secrets live in a Secret Manager, not in code.
+- Infrastructure is hosted in the EU on Scaleway, with access controls and audit logging.
+- Card details never touch our servers. Stripe handles all of that.
+- Session recordings are masked, so we never capture sensitive inputs.
+
+<Note>No system is completely bulletproof. If we ever find out your data was compromised, we'll tell you and the relevant authority as required by law.</Note>
+
+</Section>
+
+<Section id="your-rights" number="7" title="Your rights under GDPR">
+
+If you're in the EEA, you have enforceable rights over your data.
+
+| Right | What it means for you |
+| --- | --- |
+| **Access** | Get a copy of everything we hold about you. |
+| **Rectification** | Ask us to fix anything that's wrong or incomplete. |
+| **Erasure** | Ask us to delete your data. We'll do it, within the limits of what the law requires us to keep. |
+| **Restriction** | Ask us to pause processing while something's being sorted out. |
+| **Portability** | Get your data in a machine-readable format. |
+| **Object** | Push back on processing based on legitimate interests. |
+| **Withdraw consent** | Pull back your consent for analytics at any time. Doesn't affect anything that already happened. |
+
+<Note>Email [privacy@openbookings.co](mailto:privacy@openbookings.co) and we'll respond within **30 days**. No fee, unless your request is clearly excessive.</Note>
+
+</Section>
+
+<Section id="automated-decisions" number="8" title="Automated decision-making">
+
+We don't make automated decisions about you that have legal or significant effects. We don't profile you for advertising. There's no algorithm quietly judging you.
+
+</Section>
+
+<Section id="children" number="9" title="Children's privacy">
+
+OpenBookings is not for anyone under 16. If you think a child has somehow ended up with an account, email [privacy@openbookings.co](mailto:privacy@openbookings.co) and we'll delete it.
+
+</Section>
+
+<Section id="changes" number="10" title="Changes to this policy">
+
+We'll update this from time to time. When something material changes:
+
+- The "Last updated" date at the top changes.
+- We'll re-show the cookie banner.
+- Continuing to use the platform after that means you're good with the update.
+
+</Section>
+
+<Section id="contact" number="11" title="Get in touch">
+
+<Panel>
+
+Privacy questions or data requests: [privacy@openbookings.co](mailto:privacy@openbookings.co).
+
+</Panel>
+
+</Section>
