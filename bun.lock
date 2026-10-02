@@ -23,6 +23,7 @@
         "@openbookings/cache": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/mailing": "workspace:*",
+        "@openbookings/maps": "workspace:*",
         "@openbookings/messaging": "workspace:*",
         "@openbookings/pricing": "workspace:*",
         "@openbookings/stripe": "workspace:*",
@@ -140,6 +141,7 @@
         "@openbookings/cache": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/mailing": "workspace:*",
+        "@openbookings/maps": "workspace:*",
         "@openbookings/pricing": "workspace:*",
         "@openbookings/stripe": "workspace:*",
         "@radix-ui/react-label": "^2.1.11",
@@ -273,6 +275,16 @@
       },
       "devDependencies": {
         "@openbookings/config": "workspace:*",
+        "@types/node": "^22.20.1",
+        "typescript": "^5.9.3",
+      },
+    },
+    "packages/maps": {
+      "name": "@openbookings/maps",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@openbookings/config": "workspace:*",
+        "@types/bun": "^1.3.14",
         "@types/node": "^22.20.1",
         "typescript": "^5.9.3",
       },
@@ -737,6 +749,8 @@
     "@openbookings/docs": ["@openbookings/docs@workspace:apps/docs"],
 
     "@openbookings/mailing": ["@openbookings/mailing@workspace:packages/mailing"],
+
+    "@openbookings/maps": ["@openbookings/maps@workspace:packages/maps"],
 
     "@openbookings/messaging": ["@openbookings/messaging@workspace:packages/messaging"],
 

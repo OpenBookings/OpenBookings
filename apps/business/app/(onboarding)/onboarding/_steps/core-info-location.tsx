@@ -6,6 +6,7 @@ import { Map, MapMarker, MarkerContent, type MapRef } from "@/components/ui/map"
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { maptilerGeocodingUrl } from "@openbookings/maps";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 
@@ -97,7 +98,9 @@ function AddressSearch({
     if (q.length < 3) { setSuggestions([]); return; }
     setLoading(true);
     try {
-      const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&types=address&limit=5&language=en`;
+      const url = maptilerGeocodingUrl(q, MAPTILER_KEY);
+      // No key, no search: the request could only fail.
+      if (!url) { setSuggestions([]); return; }
       const res = await fetch(url);
       const data = await res.json();
       setSuggestions((data.features ?? []).map(parseGeocodeFeature));

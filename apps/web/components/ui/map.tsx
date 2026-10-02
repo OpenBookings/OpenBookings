@@ -26,7 +26,7 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { DEFAULT_MAP_STYLE } from "@/lib/map-style";
+import { DEFAULT_MAP_STYLE, resolveMapStyles } from "@openbookings/maps";
 
 /**
  * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
@@ -106,25 +106,21 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   const { resolvedTheme } = useTheme();
   const currentStyleRef = useRef<MapStyleOption | null>(null);
 
+  // MapTiler is the only tile vendor. With no style for either theme there
+  // is nothing to render, and falling back to another provider is not allowed.
   const mapStyles = useMemo(
-    () => ({
-      dark: styles?.dark ?? DEFAULT_MAP_STYLE,
-      light: styles?.light ?? DEFAULT_MAP_STYLE,
-    }),
-    [styles]
+    () => resolveMapStyles<StyleSpecification>(styles, DEFAULT_MAP_STYLE),
+    [styles],
   );
-  // MapTiler is the only tile vendor. With no style there is nothing to
-  // render, and falling back to another provider is not allowed.
-  const hasStyle = mapStyles.dark !== null && mapStyles.light !== null;
+  const hasStyle = mapStyles !== null;
 
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !mapStyles) return;
 
     const initialStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
-    if (!initialStyle) return;
     currentStyleRef.current = initialStyle;
 
     const map = new MapLibreGL.Map({
@@ -160,12 +156,12 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   }, []);
 
   useEffect(() => {
-    if (!mapInstance || !resolvedTheme) return;
+    if (!mapInstance || !resolvedTheme || !mapStyles) return;
 
     const newStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
 
-    if (!newStyle || currentStyleRef.current === newStyle) return;
+    if (currentStyleRef.current === newStyle) return;
 
     currentStyleRef.current = newStyle;
     setIsStyleLoaded(false);

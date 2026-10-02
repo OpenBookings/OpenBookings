@@ -28,13 +28,13 @@ const localDevSrc = isDev
 
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline'${DEV_SCRIPT_SRC} https://cdn-cookieyes.com https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC} ${TURNSTILE_SRC};
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.openbookings.co https://eu-assets.i.posthog.com;
-  img-src 'self' data: blob: https://cdn.openbookings.co https://cdn-cookieyes.com https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
-  font-src 'self' https://fonts.gstatic.com;
+  script-src 'self' 'unsafe-inline'${DEV_SCRIPT_SRC} https://*.openbookings.co https://eu-assets.i.posthog.com https://internal-j.posthog.com ${STRIPE_SCRIPT_SRC} ${TURNSTILE_SRC};
+  style-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com;
+  img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
+  font-src 'self';
   connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC}${localDevSrc};
   worker-src 'self' blob:;
-  frame-src 'self' https://cdn-cookieyes.com https://*.posthog.com ${STRIPE_FRAME_SRC} ${TURNSTILE_SRC};
+  frame-src 'self' https://*.posthog.com ${STRIPE_FRAME_SRC} ${TURNSTILE_SRC};
   frame-ancestors 'none';
   object-src 'none';
   base-uri 'self';
@@ -44,7 +44,7 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@openbookings/analytics"],
+  transpilePackages: ["@openbookings/analytics", "@openbookings/maps"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
 
