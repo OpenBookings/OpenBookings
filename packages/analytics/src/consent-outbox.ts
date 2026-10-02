@@ -50,13 +50,23 @@ export function enqueueConsentEvent(deps: OutboxDeps, event: ConsentEvent): void
   write(deps, queue.slice(-MAX_QUEUED));
 }
 
+export type FlushResult = {
+  /** Server-set expiry per delivered event, keyed by its idempotency key. */
+  expiries: Record<string, string>;
+  remaining: number;
+};
+
+// Statuses that mean this event can never be accepted. Everything else that
+// is not a success is kept and retried: a 403 in particular is more likely a
+// firewall challenge or a proxy misconfiguration than a fault in the event,
+// and dropping on it would lose the evidence for good.
+const PERMANENT_REJECTIONS = new Set([400, 401, 413, 415, 422]);
+
 // One flush at a time per page. Two would each read the same head of the
 // queue and send it twice; the server would dedupe, but there is no reason to.
-let flushing: Promise<{ expiresAt: string | null; remaining: number }> | null = null;
+let flushing: Promise<FlushResult> | null = null;
 
-export function flushConsentOutbox(
-  deps: OutboxDeps,
-): Promise<{ expiresAt: string | null; remaining: number }> {
+export function flushConsentOutbox(deps: OutboxDeps): Promise<FlushResult> {
   if (flushing) return flushing;
   flushing = run(deps).finally(() => {
     flushing = null;
@@ -64,13 +74,13 @@ export function flushConsentOutbox(
   return flushing;
 }
 
-async function run(deps: OutboxDeps) {
-  let expiresAt: string | null = null;
+async function run(deps: OutboxDeps): Promise<FlushResult> {
+  const expiries: Record<string, string> = {};
 
   for (;;) {
     const queue = read(deps);
     const head = queue[0];
-    if (!head) return { expiresAt, remaining: 0 };
+    if (!head) return { expiries, remaining: 0 };
 
     let res: Response;
     try {
@@ -83,20 +93,23 @@ async function run(deps: OutboxDeps) {
         body: JSON.stringify(head),
       });
     } catch {
-      return { expiresAt, remaining: queue.length };
+      return { expiries, remaining: queue.length };
     }
 
     if (res.ok) {
-      const body = (await res.json().catch(() => null)) as { expiresAt?: unknown } | null;
-      if (typeof body?.expiresAt === "string") expiresAt = body.expiresAt;
-    } else if (res.status === 429 || res.status >= 500) {
-      // Try again later, in order. Stopping here keeps older events ahead of
-      // newer ones, which is what makes the log read as a history.
-      return { expiresAt, remaining: queue.length };
-    } else {
+      // Only our own answer counts. A captive portal or an intermediary can
+      // return a 200 that never reached the server.
+      const body = (await res.json().catch(() => null)) as { ok?: unknown; expiresAt?: unknown } | null;
+      if (body?.ok !== true) return { expiries, remaining: queue.length };
+      if (typeof body.expiresAt === "string") expiries[head.idempotencyKey] = body.expiresAt;
+    } else if (PERMANENT_REJECTIONS.has(res.status)) {
       // A malformed event will never be accepted; keeping it would block
       // everything queued behind it.
       deps.onDrop?.(head, res.status);
+    } else {
+      // Try again later, in order. Stopping here keeps older events ahead of
+      // newer ones, which is what makes the log read as a history.
+      return { expiries, remaining: queue.length };
     }
 
     // Re-read before removing: an event may have been queued while this one
@@ -105,5 +118,11 @@ async function run(deps: OutboxDeps) {
       deps,
       read(deps).filter((e) => e.idempotencyKey !== head.idempotencyKey),
     );
+    // If storage refused the write the same head is still there. Stop rather
+    // than send it again on every turn of this loop.
+    const after = read(deps);
+    if (after[0]?.idempotencyKey === head.idempotencyKey) {
+      return { expiries, remaining: after.length };
+    }
   }
 }

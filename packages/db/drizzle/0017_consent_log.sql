@@ -17,10 +17,10 @@
 CREATE TABLE IF NOT EXISTS consent_log (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   consent_id      uuid        NOT NULL,
-  event_type      text        NOT NULL CHECK (event_type IN ('granted', 'denied', 'withdrawn', 'linked')),
+  event_type      text        NOT NULL CONSTRAINT consent_log_event_type_check CHECK (event_type IN ('granted', 'denied', 'withdrawn', 'linked')),
   categories      jsonb       NOT NULL,
   banner_version  text        NOT NULL,
-  app             text        NOT NULL CHECK (app IN ('web', 'business')),
+  app             text        NOT NULL CONSTRAINT consent_log_app_check CHECK (app IN ('web', 'business')),
   user_id         text        NULL,
   -- Minted by the client per event, so a retried request cannot write twice.
   idempotency_key uuid        NOT NULL UNIQUE,

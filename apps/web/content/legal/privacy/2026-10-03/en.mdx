@@ -105,7 +105,8 @@ When you first visit, you'll see a cookie banner. Your choices are simple:
 | --- | --- | --- | --- | --- |
 | Essential | `session token` | Keeps you signed in | Session / configurable | No |
 | Essential | `cf_clearance` | Cloudflare bot protection | 30 minutes | No |
-| Essential | `ob_cookie_consent` | Remembers your consent choice (local storage, our own banner). The choice is also recorded on our servers as proof, without your IP address | 90 days | No |
+| Essential | `ob_cookie_consent` | Remembers your consent choice (local storage, our own banner). The choice is also recorded on our servers as proof, without your IP address, and linked to your account if you are signed in | 90 days | No |
+| Essential | `ob_consent_outbox`, `ob_consent_linked` | Delivers that record to our servers and remembers it was linked to your account (local storage) | Until delivered / until you clear site data | No |
 | Analytics | `ph_*` | PostHog analytics and session replay | 1 year | Yes, EU/EEA |
 
 <Note>No advertising cookies. No tracking pixels. No social media cookies.</Note>

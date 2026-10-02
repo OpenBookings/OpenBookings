@@ -118,7 +118,8 @@ Lors de votre première visite, une bannière de cookies s'affiche. Vos choix so
 | --- | --- | --- | --- | --- |
 | Essentiel | `session token` | Vous garde connecté | Session / configurable | Non |
 | Essentiel | `cf_clearance` | Protection anti-bots de Cloudflare | 30 minutes | Non |
-| Essentiel | `ob_cookie_consent` | Mémorise votre choix de consentement (stockage local, notre propre bannière). Ce choix est également enregistré sur nos serveurs à titre de preuve, sans votre adresse IP | 90 jours | Non |
+| Essentiel | `ob_cookie_consent` | Mémorise votre choix de consentement (stockage local, notre propre bannière). Ce choix est également enregistré sur nos serveurs à titre de preuve, sans votre adresse IP, et associé à votre compte si vous êtes connecté | 90 jours | Non |
+| Essentiel | `ob_consent_outbox`, `ob_consent_linked` | Transmet cet enregistrement à nos serveurs et mémorise son association à votre compte (stockage local) | Jusqu'à la transmission / jusqu'à l'effacement des données du site | Non |
 | Analytique | `ph_*` | Analyse PostHog et enregistrement de session | 1 an | Oui, UE/EEE |
 
 <Note>Aucun cookie publicitaire. Aucun pixel de suivi. Aucun cookie de réseaux sociaux.</Note>

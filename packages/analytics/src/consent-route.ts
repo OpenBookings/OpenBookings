@@ -21,6 +21,34 @@ function reply(body: unknown, status: number): Response {
 }
 
 /**
+ * Whether the request came from this site's own pages.
+ *
+ * Not `new URL(req.url).origin`: behind the production proxy Next builds that
+ * from the address the container is bound to (`0.0.0.0:8080`), so it never
+ * equals the public origin and every real browser would be refused.
+ *
+ * `Sec-Fetch-Site` is the browser's own statement and cannot be set by page
+ * script, so it decides when present. Otherwise the Origin's host must be the
+ * host the request was addressed to. A request with no Origin is not a
+ * browser, and gets no more than a browser would: the same strict schema.
+ */
+function isSameOrigin(req: Request): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host.split(",")[0]!.trim();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * `POST /api/consent` — records one consent event as evidence.
  *
  * Public by necessity: most visitors deciding about cookies are not signed in.
@@ -36,16 +64,17 @@ function reply(body: unknown, status: number): Response {
  */
 export function createConsentHandler(deps: ConsentHandlerDeps) {
   return async function handleConsent(req: Request): Promise<Response> {
-    // Browsers send Origin on every POST. A request without one is not a
-    // browser, and it gets no more than a browser would: the same schema.
-    const origin = req.headers.get("origin");
-    if (origin && origin !== new URL(req.url).origin) {
-      return reply({ error: "forbidden" }, 403);
-    }
+    if (!isSameOrigin(req)) return reply({ error: "forbidden" }, 403);
 
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().startsWith("application/json")) {
       return reply({ error: "unsupported_media_type" }, 415);
+    }
+
+    // Refuse on the declared length first, so an oversized body is never read.
+    const declared = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      return reply({ error: "payload_too_large" }, 413);
     }
 
     const raw = await req.text();
@@ -74,7 +103,14 @@ export function createConsentHandler(deps: ConsentHandlerDeps) {
 
       const { expiresAt } = await deps.insert({ ...event, app: deps.app, userId });
       return reply({ ok: true, expiresAt }, 200);
-    } catch {
+    } catch (err) {
+      // Without this a missing table or a dead database fails silently and
+      // evidence stops being written with nothing to show for it. The error
+      // only: never the body, the consent id or anything about the caller.
+      console.error(
+        "[consent] failed to store event:",
+        err instanceof Error ? `${err.name}: ${err.message}` : "unknown error",
+      );
       return reply({ error: "server_error" }, 500);
     }
   };

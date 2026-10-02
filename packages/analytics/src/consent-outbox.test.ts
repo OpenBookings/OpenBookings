@@ -55,7 +55,13 @@ describe("consent outbox", () => {
     const result = await flushConsentOutbox(t.deps);
     expect(t.sent.map((e) => e.idempotencyKey)).toEqual([event(1).idempotencyKey, event(2).idempotencyKey]);
     expect(t.queued()).toEqual([]);
-    expect(result).toEqual({ expiresAt: "2027-01-01T00:00:00.000Z", remaining: 0 });
+    expect(result).toEqual({
+      expiries: {
+        [event(1).idempotencyKey]: "2027-01-01T00:00:00.000Z",
+        [event(2).idempotencyKey]: "2027-01-01T00:00:00.000Z",
+      },
+      remaining: 0,
+    });
   });
 
   test("a visitor with no network keeps the event for the next page load", async () => {
@@ -63,11 +69,13 @@ describe("consent outbox", () => {
     enqueueConsentEvent(t.deps, event(1));
     const result = await flushConsentOutbox(t.deps);
     expect(t.queued()).toEqual([event(1).idempotencyKey]);
-    expect(result).toEqual({ expiresAt: null, remaining: 1 });
+    expect(result).toEqual({ expiries: {}, remaining: 1 });
   });
 
   test("a rate limit or server error keeps the event and stops, preserving order", async () => {
-    for (const status of [429, 500, 503]) {
+    // 403 included: a firewall challenge or a misconfigured origin check is
+    // not the event's fault, and dropping it would lose the evidence for good.
+    for (const status of [403, 429, 500, 503]) {
       const t = setup([status]);
       enqueueConsentEvent(t.deps, event(1));
       enqueueConsentEvent(t.deps, event(2));
@@ -86,6 +94,25 @@ describe("consent outbox", () => {
     expect(t.queued()).toEqual([]);
   });
 
+  test("a 200 that is not ours does not count as delivered", async () => {
+    const t = setup([]);
+    t.deps.fetch = async () => new Response("<html>Sign in to Wi-Fi</html>", { status: 200 });
+    enqueueConsentEvent(t.deps, event(1));
+    const result = await flushConsentOutbox(t.deps);
+    expect(t.queued()).toEqual([event(1).idempotencyKey]);
+    expect(result).toEqual({ expiries: {}, remaining: 1 });
+  });
+
+  test("does not resend forever when a delivered event cannot be removed", async () => {
+    const t = setup([200, 200, 200, 200, 200]);
+    enqueueConsentEvent(t.deps, event(1));
+    t.storage.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    await flushConsentOutbox(t.deps);
+    expect(t.sent.length).toBe(1);
+  });
+
   test("keeps at most 20 events, dropping the oldest", () => {
     const t = setup([]);
     for (let i = 1; i <= 25; i++) enqueueConsentEvent(t.deps, event(i));
@@ -95,7 +122,7 @@ describe("consent outbox", () => {
 
   test("corrupt stored data is treated as an empty queue", async () => {
     const t = setup([200], { [OUTBOX_KEY]: "{not json" });
-    expect(await flushConsentOutbox(t.deps)).toEqual({ expiresAt: null, remaining: 0 });
+    expect(await flushConsentOutbox(t.deps)).toEqual({ expiries: {}, remaining: 0 });
     enqueueConsentEvent(t.deps, event(1));
     expect(t.queued()).toEqual([event(1).idempotencyKey]);
   });
@@ -114,7 +141,7 @@ describe("consent outbox", () => {
       endpoint: "/api/consent",
     };
     expect(() => enqueueConsentEvent(deps, event(1))).not.toThrow();
-    expect(await flushConsentOutbox(deps)).toEqual({ expiresAt: null, remaining: 0 });
+    expect(await flushConsentOutbox(deps)).toEqual({ expiries: {}, remaining: 0 });
   });
 
   test("two flushes at once do not send the same event twice", async () => {

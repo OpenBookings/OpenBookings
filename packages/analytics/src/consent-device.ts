@@ -76,10 +76,49 @@ export async function loadConsent(
       return { consent: record.v, cid: record.cid, backfill: false };
     }
 
-    const cid = crypto.randomUUID();
+    const cid = newConsentUuid();
     await saveConsent(storage, { consent: record.v, version, cid, expiresAt: record.exp });
     return { consent: record.v, cid, backfill: true };
   } catch {
     return none;
   }
+}
+
+/**
+ * Take the server's expiry for a decision, so device and log agree on when it
+ * lapses — but only if the stored record is still that decision. Another tab
+ * may have changed the choice since; its record is not ours to overwrite.
+ */
+export async function adoptExpiry(
+  storage: DeviceStorage,
+  input: { consent: Exclude<ConsentState, null>; cid: string; expiresAt: number },
+): Promise<void> {
+  try {
+    const raw = storage.getItem(CONSENT_STORAGE_KEY);
+    if (!raw) return;
+    const record: ConsentRecord = JSON.parse(raw);
+    if (record.cid !== input.cid || record.v !== input.consent) return;
+    if (!Number.isFinite(input.expiresAt)) return;
+    await saveConsent(storage, {
+      consent: input.consent,
+      version: record.ver,
+      cid: input.cid,
+      expiresAt: input.expiresAt,
+    });
+  } catch {
+    // Keep the expiry the device already has.
+  }
+}
+
+/**
+ * A random UUID. `crypto.randomUUID` is missing in older Safari and on pages
+ * served from a non-secure origin; the banner must still be dismissable there.
+ */
+export function newConsentUuid(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

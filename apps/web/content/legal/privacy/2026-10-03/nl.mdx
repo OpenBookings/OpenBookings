@@ -118,7 +118,8 @@ Bij uw eerste bezoek ziet u een cookiebanner. Uw keuzes zijn eenvoudig:
 | --- | --- | --- | --- | --- |
 | Noodzakelijk | `session token` | Houdt u ingelogd | Sessie / instelbaar | Nee |
 | Noodzakelijk | `cf_clearance` | Botbescherming van Cloudflare | 30 minuten | Nee |
-| Noodzakelijk | `ob_cookie_consent` | Onthoudt uw toestemmingskeuze (lokale opslag, onze eigen banner). De keuze wordt ook als bewijs vastgelegd op onze servers, zonder uw IP-adres | 90 dagen | Nee |
+| Noodzakelijk | `ob_cookie_consent` | Onthoudt uw toestemmingskeuze (lokale opslag, onze eigen banner). De keuze wordt ook als bewijs vastgelegd op onze servers, zonder uw IP-adres, en gekoppeld aan uw account als u bent ingelogd | 90 dagen | Nee |
+| Noodzakelijk | `ob_consent_outbox`, `ob_consent_linked` | Stuurt die registratie naar onze servers en onthoudt dat deze aan uw account is gekoppeld (lokale opslag) | Tot aflevering / tot u de sitegegevens wist | Nee |
 | Analytisch | `ph_*` | PostHog-analyse en sessie-opnames | 1 jaar | Ja, EU/EER |
 
 <Note>Geen advertentiecookies. Geen trackingpixels. Geen socialmediacookies.</Note>

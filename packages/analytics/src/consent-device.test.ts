@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CONSENT_STORAGE_KEY, loadConsent, saveConsent } from "./consent-device";
+import { CONSENT_STORAGE_KEY, adoptExpiry, loadConsent, newConsentUuid, saveConsent } from "./consent-device";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = { ...initial };
@@ -71,5 +71,33 @@ describe("device consent record", () => {
     };
     expect(await loadConsent(storage, "1.1", NOW)).toEqual({ consent: null, cid: null, backfill: false });
     await saveConsent(storage, { consent: "accepted", version: "1.1", cid: "cid-1", expiresAt: NOW + DAY });
+  });
+
+  test("the server's expiry is adopted for the decision it belongs to", async () => {
+    const storage = memoryStorage();
+    await saveConsent(storage, { consent: "accepted", version: "1.1", cid: "cid-1", expiresAt: NOW + 90 * DAY });
+    await adoptExpiry(storage, { consent: "accepted", cid: "cid-1", expiresAt: NOW + 80 * DAY });
+    expect(JSON.parse(storage.data[CONSENT_STORAGE_KEY]!).exp).toBe(NOW + 80 * DAY);
+    expect((await loadConsent(storage, "1.1", NOW)).consent).toBe("accepted");
+  });
+
+  test("an expiry for a decision another tab has since replaced is ignored", async () => {
+    const storage = memoryStorage();
+    await saveConsent(storage, { consent: "declined", version: "1.1", cid: "cid-1", expiresAt: NOW + 5 * DAY });
+    await adoptExpiry(storage, { consent: "accepted", cid: "cid-1", expiresAt: NOW + 90 * DAY });
+    await adoptExpiry(storage, { consent: "declined", cid: "other", expiresAt: NOW + 90 * DAY });
+    expect(await loadConsent(storage, "1.1", NOW)).toEqual({ consent: "declined", cid: "cid-1", backfill: false });
+    expect(JSON.parse(storage.data[CONSENT_STORAGE_KEY]!).exp).toBe(NOW + 5 * DAY);
+  });
+
+  test("ids can be minted where crypto.randomUUID is missing", () => {
+    const original = crypto.randomUUID;
+    // Older Safari, or a page served from a non-secure origin.
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+    try {
+      expect(newConsentUuid()).toMatch(UUID);
+    } finally {
+      Object.defineProperty(crypto, "randomUUID", { value: original, configurable: true });
+    }
   });
 });

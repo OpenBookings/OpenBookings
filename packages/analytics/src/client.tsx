@@ -14,9 +14,9 @@ export type {
 } from 'posthog-js'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, useContext, useCallback, createContext, createElement, Suspense } from 'react'
-import { CONSENT_TTL_MS, loadConsent, saveConsent, type ConsentState } from './consent-device'
+import { CONSENT_TTL_MS, adoptExpiry, loadConsent, newConsentUuid, saveConsent, type ConsentState } from './consent-device'
 import { CONSENT_VERSION, consentEventType, type ConsentEvent } from './consent-events'
-import { enqueueConsentEvent, flushConsentOutbox, type OutboxDeps } from './consent-outbox'
+import { enqueueConsentEvent, flushConsentOutbox, type FlushResult, type OutboxDeps } from './consent-outbox'
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const RELEASE_SHA = process.env.NEXT_PUBLIC_RELEASE_SHA
@@ -50,6 +50,34 @@ export const CookieConsentContext = createContext<CookieConsentContextValue>({
   reopen: () => {},
   link: () => {},
 })
+
+/**
+ * Stop PostHog and remove what it stored. Used when consent is withdrawn:
+ * "declined" has to mean nothing analytics-related is left on the device,
+ * including PostHog's own opt-out marker, so a later Accept starts clean.
+ */
+function stopAnalytics() {
+  try {
+    if (posthog.__loaded) posthog.opt_out_capturing()
+  } catch {
+    // Not initialised or already torn down.
+  }
+  try {
+    const mine = (name: string) => name.startsWith('ph_') || name.startsWith('__ph_opt_in_out_')
+    for (const key of Object.keys(localStorage)) if (mine(key)) localStorage.removeItem(key)
+    const host = window.location.hostname
+    const parent = host.split('.').slice(-2).join('.')
+    for (const part of document.cookie.split(';')) {
+      const name = part.split('=')[0]!.trim()
+      if (!mine(name)) continue
+      for (const domain of ['', `; domain=${host}`, `; domain=.${parent}`]) {
+        document.cookie = `${name}=; Max-Age=0; path=/${domain}`
+      }
+    }
+  } catch {
+    // Storage unavailable: nothing was stored to remove.
+  }
+}
 
 function outboxDeps(): OutboxDeps {
   return {
@@ -85,38 +113,33 @@ export function CookieConsentProvider({
   const cidRef = useRef<string | null>(null)
   const consentRef = useRef<ConsentState>(null)
 
-  /** Deliver what is queued; adopt the server's expiry so device and log agree. */
-  const flush = useCallback(async () => {
+  /** Deliver what is queued. Never throws: evidence can be lost, the page cannot. */
+  const flush = useCallback(async (): Promise<FlushResult> => {
     try {
-      const { expiresAt } = await flushConsentOutbox(outboxDeps())
-      const current = consentRef.current
-      if (expiresAt && current) {
-        await saveConsent(localStorage, {
-          consent: current,
-          version: CONSENT_VERSION,
-          cid: cidRef.current,
-          expiresAt: Date.parse(expiresAt),
-        })
-      }
+      return await flushConsentOutbox(outboxDeps())
     } catch {
-      // localStorage itself can be unreachable; evidence is lost, the page is not.
+      // localStorage itself can be unreachable.
+      return { expiries: {}, remaining: 0 }
     }
   }, [])
 
+  /** Queue one event; returns its idempotency key, or null if it could not be queued. */
   const send = useCallback(
-    (eventType: ConsentEvent['eventType'], analytics: boolean) => {
+    (eventType: ConsentEvent['eventType'], analytics: boolean): string | null => {
       const cid = cidRef.current
-      if (!cid) return
+      if (!cid) return null
       try {
+        const idempotencyKey = newConsentUuid()
         enqueueConsentEvent(outboxDeps(), {
           consentId: cid,
           eventType,
           categories: { analytics },
           bannerVersion,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
         })
+        return idempotencyKey
       } catch {
-        // See flush.
+        return null
       }
     },
     [bannerVersion],
@@ -155,14 +178,17 @@ export function CookieConsentProvider({
     (next: Exclude<ConsentState, null>) => {
       const previous = consentRef.current
       const eventType = consentEventType(next, previous)
-      cidRef.current ??= crypto.randomUUID()
       consentRef.current = next
 
       // Device first: the choice must hold even if nothing below succeeds.
       setConsent(next)
       setReviewing(false)
+      // A withdrawal stops analytics now, not after the network has answered.
+      if (eventType === 'withdrawn') stopAnalytics()
+
       void (async () => {
         try {
+          cidRef.current ??= newConsentUuid()
           await saveConsent(localStorage, {
             consent: next,
             version: CONSENT_VERSION,
@@ -172,14 +198,28 @@ export function CookieConsentProvider({
         } catch {
           // See flush.
         }
-        send(eventType, next === 'accepted')
-        await flush()
+        const key = send(eventType, next === 'accepted')
 
         if (eventType === 'withdrawn') {
-          // Analytics is already running on this page. Stop it, then reload so
-          // nothing initialised under the old consent survives.
-          if (posthog.__loaded) posthog.opt_out_capturing()
+          // Give delivery a moment (the request is keepalive, so it survives
+          // the reload anyway), then reload so nothing initialised under the
+          // old consent is still running.
+          await Promise.race([flush(), new Promise((resolve) => setTimeout(resolve, 1500))])
           window.location.reload()
+          return
+        }
+
+        // Take the server's expiry for this decision only, so device and log
+        // agree. Events from other tabs or sign-in links never extend it.
+        const { expiries } = await flush()
+        const expiresAt = key ? expiries[key] : undefined
+        const cid = cidRef.current
+        if (expiresAt && cid) {
+          try {
+            await adoptExpiry(localStorage, { consent: next, cid, expiresAt: Date.parse(expiresAt) })
+          } catch {
+            // See flush.
+          }
         }
       })()
     },
@@ -269,6 +309,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     // property, so it rides along on $pageview and everything downstream too.
     // Only apps whose Dockerfile passes the build arg have it -- the rest would
     // otherwise register `undefined` and put a useless key on every event.
+    // Belt for stopAnalytics(): if an opt-out marker survived a withdrawal,
+    // an explicit Accept must still turn capturing back on.
+    if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing()
     if (RELEASE_SHA) {
       posthog.register({ release: RELEASE_SHA })
     }

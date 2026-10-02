@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   boolean,
   char,
   customType,
@@ -698,5 +700,8 @@ export const consentLog = pgTable(
   },
   (table) => [
     index("consent_log_consent_id_idx").on(table.consentId, table.createdAt),
+    index("consent_log_user_id_idx").on(table.userId).where(sql`${table.userId} IS NOT NULL`),
+    check("consent_log_event_type_check", sql`${table.eventType} IN ('granted', 'denied', 'withdrawn', 'linked')`),
+    check("consent_log_app_check", sql`${table.app} IN ('web', 'business')`),
   ],
 );

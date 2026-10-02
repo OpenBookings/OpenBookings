@@ -28,10 +28,14 @@ function setup(over: { userId?: string | null; insert?: (row: ConsentEventRow) =
   return { handler, rows };
 }
 
-function post(body: unknown, headers: Record<string, string> = {}) {
-  return new Request(`${ORIGIN}/api/consent`, {
+// What the container actually sees: Next's standalone server builds req.url
+// from its bind address, not from the public host the browser used.
+const INTERNAL_URL = "http://0.0.0.0:8080/api/consent";
+
+function post(body: unknown, headers: Record<string, string> = {}, url = INTERNAL_URL) {
+  return new Request(url, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: ORIGIN, ...headers },
+    headers: { "content-type": "application/json", origin: ORIGIN, host: "openbookings.co", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -111,6 +115,53 @@ describe("consent handler", () => {
     const res = await handler(post(valid, { origin: "https://evil.example" }));
     expect(res.status).toBe(403);
     expect(rows).toEqual([]);
+  });
+
+  test("accepts the public origin although the server sees an internal URL", async () => {
+    const { handler, rows } = setup();
+    expect((await handler(post(valid))).status).toBe(200);
+    expect(rows.length).toBe(1);
+  });
+
+  test("honours the forwarded host when a proxy rewrites Host", async () => {
+    const { handler } = setup();
+    const res = await handler(post(valid, { host: "10.0.0.7:8080", "x-forwarded-host": "openbookings.co" }));
+    expect(res.status).toBe(200);
+  });
+
+  test("trusts the browser's own verdict when it sends one", async () => {
+    const { handler, rows } = setup();
+    expect((await handler(post(valid, { "sec-fetch-site": "cross-site" }))).status).toBe(403);
+    expect((await handler(post(valid, { "sec-fetch-site": "same-site" }))).status).toBe(403);
+    expect(rows).toEqual([]);
+    expect((await handler(post(valid, { "sec-fetch-site": "same-origin", origin: "https://whatever.example" }))).status).toBe(200);
+  });
+
+  test("refuses an oversized body from its declared length, before reading it", async () => {
+    const { handler } = setup();
+    let read = false;
+    const req = post(valid, { "content-length": "999999" });
+    Object.defineProperty(req, "text", { value: async () => ((read = true), "{}") });
+    expect((await handler(req)).status).toBe(413);
+    expect(read).toBe(false);
+  });
+
+  test("a storage failure is logged without the request body", async () => {
+    const logged: unknown[][] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args);
+    try {
+      const { handler } = setup({
+        insert: async () => {
+          throw new Error("relation consent_log does not exist");
+        },
+      });
+      await handler(post(valid));
+    } finally {
+      console.error = original;
+    }
+    expect(JSON.stringify(logged)).toContain("consent_log does not exist");
+    expect(JSON.stringify(logged)).not.toContain(CID);
   });
 
   test("a linked event needs a signed-in session", async () => {
