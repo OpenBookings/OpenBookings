@@ -14,6 +14,7 @@ const EMPTY_LEGAL: LegalNBoringValues = {
   cocNumber: "",
   partnerAgreementSignedAt: null,
   dpaSignedAt: null,
+  ratesInclusiveConfirmedAt: null,
 };
 
 function toValues(saved: LegalNBoringData | undefined): LegalNBoringValues {
@@ -26,6 +27,7 @@ function toValues(saved: LegalNBoringData | undefined): LegalNBoringValues {
     cocNumber: saved.cocNumber ?? "",
     partnerAgreementSignedAt: saved.partnerAgreement?.signedAt ?? null,
     dpaSignedAt: saved.dpa?.signedAt ?? null,
+    ratesInclusiveConfirmedAt: saved.ratesInclusive?.signedAt ?? null,
   };
 }
 
@@ -50,7 +52,8 @@ export function LegalClient({ initialValues }: { initialValues?: LegalNBoringDat
     !values.fullName.trim() ||
     !values.roleTitle.trim() ||
     !values.vatNumber.trim() ||
-    !values.partnerAgreementSignedAt;
+    !values.partnerAgreementSignedAt ||
+    !values.ratesInclusiveConfirmedAt;
 
   return (
     <>

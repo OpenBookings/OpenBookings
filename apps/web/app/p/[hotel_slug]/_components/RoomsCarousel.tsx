@@ -375,7 +375,7 @@ function RoomsCarousel({ rooms, activeIndex, onNavigate, liked, onToggleLike, on
 
 // ── Rate card ─────────────────────────────────────────────────────────────────
 
-function RateCard({ rate, maxOccupancy, qty, onQtyChange }: { rate: DbRatePlan; maxOccupancy: number | null; qty: number; onQtyChange: (v: number) => void }) {
+function RateCard({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: { rate: DbRatePlan; maxOccupancy: number | null; qty: number; onQtyChange: (v: number) => void; ratesConfirmed: boolean }) {
   const cancellationText = rate.cancellation_policy ?? (rate.is_refundable ? "Free cancellation" : "Non-refundable");
 
   return (
@@ -416,7 +416,11 @@ function RateCard({ rate, maxOccupancy, qty, onQtyChange }: { rate: DbRatePlan; 
             <span className="font-serif text-2xl text-white">€{rate.bar}</span>
             <span className="text-sm text-white/40">,-</span>
           </div>
-          <p className="text-[11px] text-white/30 mt-0.5">Incl. Tax &amp; Fees</p>
+          {/* Only claimed once the host has confirmed, on record, that their
+              rates include tax. Until then the property cannot be booked. */}
+          <p className="text-[11px] text-white/30 mt-0.5">
+            {ratesConfirmed ? "Incl. Tax & Fees" : "Not bookable yet"}
+          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -493,7 +497,7 @@ type RatesViewProps = {
   onNavigate: (i: number) => void;
 };
 
-function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
+function RatesView({ rooms, activeIndex, onNavigate, ratesConfirmed }: RatesViewProps & { ratesConfirmed: boolean }) {
   const count = rooms.length;
   const room = rooms[activeIndex];
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -530,6 +534,7 @@ function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
                         maxOccupancy={room.max_occupancy}
                         qty={quantities[rate.id] ?? 0}
                         onQtyChange={(v) => setQty(rate.id, v)}
+                        ratesConfirmed={ratesConfirmed}
                       />
                     </div>
                   ))}
@@ -547,7 +552,7 @@ function RatesView({ rooms, activeIndex, onNavigate }: RatesViewProps) {
 
 // ── Section export ────────────────────────────────────────────────────────────
 
-export function RoomsSection({ rooms }: { rooms: DbRoom[] }) {
+export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; ratesConfirmed: boolean }) {
   const [viewMode, setViewMode] = useState<ViewMode>("images");
   const [activeIndex, setActiveIndex] = useState(0);
   const [liked, setLiked] = useState<Set<number>>(new Set());
@@ -614,6 +619,7 @@ export function RoomsSection({ rooms }: { rooms: DbRoom[] }) {
             rooms={rooms}
             activeIndex={activeIndex}
             onNavigate={setActiveIndex}
+            ratesConfirmed={ratesConfirmed}
           />
         </motion.div>
       </div>

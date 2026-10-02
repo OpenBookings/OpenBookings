@@ -13,6 +13,8 @@ import {
   sessionForApp,
   stampMicrosoftTenantId,
   stepUpRequiredForRequest,
+  stepUpSatisfied,
+  isFactorStepUpFresh,
 } from "./server";
 
 // These hooks are what Better Auth runs on every sign-in path — password,
@@ -395,7 +397,7 @@ describe("step-up (task 14)", () => {
     expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
     expect(stepUpRequiredForRequest("/sign-in/magic-link", {})).toBe(false);
     expect(stepUpRequiredForRequest("/organization/create", {})).toBe(false);
-    expect(stepUpRequiredForRequest("/organization/invite-member", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/passkey/list-user-passkeys", {})).toBe(false);
   });
 });
 
@@ -458,5 +460,57 @@ describe("IP_ADDRESS_HEADERS", () => {
     const a = resolveIp({ "cf-connecting-ip": "203.0.113.7" });
     const b = resolveIp({ "cf-connecting-ip": "203.0.113.8" });
     expect(a).not.toBe(b);
+  });
+});
+
+describe("factor step-up", () => {
+  const now = new Date("2026-10-02T12:00:00Z");
+  const fresh = new Date("2026-10-02T11:55:00Z");
+  const stale = new Date("2026-10-02T11:00:00Z");
+
+  test("the factor clock has the same 15-minute window", () => {
+    expect(isFactorStepUpFresh(fresh, now)).toBe(true);
+    expect(isFactorStepUpFresh(new Date("2026-10-02T11:44:59Z"), now)).toBe(false);
+    expect(isFactorStepUpFresh(null, now)).toBe(false);
+    expect(isFactorStepUpFresh("garbage", now)).toBe(false);
+  });
+
+  test("a host with a factor must have used it recently; a fresh sign-in is not enough", () => {
+    // Signed in by magic link a minute ago, never touched the passkey.
+    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: fresh, lastFactorVerifiedAt: null }, now)).toBe(false);
+    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: fresh, lastFactorVerifiedAt: stale }, now)).toBe(false);
+    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: stale, lastFactorVerifiedAt: fresh }, now)).toBe(true);
+  });
+
+  test("a host with no factor falls back to sign-in recency, so they are never locked out", () => {
+    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: fresh, lastFactorVerifiedAt: null }, now)).toBe(true);
+    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: stale, lastFactorVerifiedAt: null }, now)).toBe(false);
+    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: null, lastFactorVerifiedAt: null }, now)).toBe(false);
+  });
+
+  test("removing the last factor drops back to sign-in recency rather than to nothing", () => {
+    // Factor clock is fresh from the deletion's own step-up, but no factor is left.
+    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: fresh, lastFactorVerifiedAt: fresh }, now)).toBe(true);
+    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: stale, lastFactorVerifiedAt: fresh }, now)).toBe(false);
+  });
+
+  test("inviting members and changing factors are gated", () => {
+    for (const path of [
+      "/organization/invite-member",
+      // Storing a new passkey; generating the options for one writes nothing.
+      "/passkey/verify-registration",
+      "/passkey/delete-passkey",
+      "/two-factor/enable",
+      "/two-factor/disable",
+      "/two-factor/generate-backup-codes",
+    ]) {
+      expect(stepUpRequiredForRequest(path, {})).toBe(true);
+    }
+  });
+
+  test("the verification endpoints themselves are never gated, or nobody could step up", () => {
+    for (const path of ["/passkey/verify-authentication", "/two-factor/verify-totp", "/two-factor/verify-backup-code", "/passkey/generate-authenticate-options"]) {
+      expect(stepUpRequiredForRequest(path, {})).toBe(false);
+    }
   });
 });

@@ -6,10 +6,9 @@ import { Map, MapMarker, MarkerContent, type MapRef } from "@/components/ui/map"
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { maptilerGeocodingUrl } from "@openbookings/maps";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
-const MAPTILER_STYLE_ID = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID ?? "";
-const MAP_STYLE = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID}/style.json?key=${MAPTILER_KEY}`;
 
 interface GeocodeSuggestion {
   id: string;
@@ -99,7 +98,9 @@ function AddressSearch({
     if (q.length < 3) { setSuggestions([]); return; }
     setLoading(true);
     try {
-      const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${MAPTILER_KEY}&types=address&limit=5&language=en`;
+      const url = maptilerGeocodingUrl(q, MAPTILER_KEY);
+      // No key, no search: the request could only fail.
+      if (!url) { setSuggestions([]); return; }
       const res = await fetch(url);
       const data = await res.json();
       setSuggestions((data.features ?? []).map(parseGeocodeFeature));
@@ -228,7 +229,6 @@ export function CoreInfoLocationStep({ values, onChange }: CoreInfoLocationStepP
       <div className="relative h-[380px] overflow-hidden rounded-xl border border-white/10">
         <Map
           ref={mapRef}
-          styles={{ light: MAP_STYLE, dark: MAP_STYLE }}
           center={values.coordinates ?? [8, 46]}
           zoom={values.coordinates ? 15 : 2}
         >

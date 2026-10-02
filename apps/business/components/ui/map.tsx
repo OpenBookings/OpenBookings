@@ -27,6 +27,7 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { DEFAULT_MAP_STYLE, resolveMapStyles } from "@openbookings/maps";
 
 /**
  * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
@@ -43,11 +44,6 @@ import { cn } from "@/lib/utils";
  * on dev and build; this points MapLibre at that stable, same-origin path.
  */
 MapLibreGL.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
-
-const defaultStyles = {
-  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-};
 
 type Theme = "light" | "dark";
 
@@ -146,7 +142,7 @@ type MapProps = {
    * Pass your theme value here.
    */
   theme?: Theme;
-  /** Custom map styles for light and dark themes. Overrides the default Carto styles. */
+  /** Custom map styles for light and dark themes. Overrides the default MapTiler style. */
   styles?: {
     light?: MapStyleOption;
     dark?: MapStyleOption;
@@ -239,13 +235,13 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     onViewportChangeRef.current = onViewportChange;
   });
 
+  // MapTiler is the only tile vendor. With no style for either theme there
+  // is nothing to render, and falling back to another provider is not allowed.
   const mapStyles = useMemo(
-    () => ({
-      dark: styles?.dark ?? defaultStyles.dark,
-      light: styles?.light ?? defaultStyles.light,
-    }),
+    () => resolveMapStyles<StyleSpecification>(styles, DEFAULT_MAP_STYLE),
     [styles],
   );
+  const hasStyle = mapStyles !== null;
 
   // Expose the map instance to the parent component
   useImperativeHandle(ref, () => mapInstance as MapLibreGL.Map, [mapInstance]);
@@ -259,7 +255,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
   // Initialize the map
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !mapStyles) return;
 
     const initialStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
@@ -367,7 +363,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
   // Handle style change
   useEffect(() => {
-    if (!mapInstance || !resolvedTheme) return;
+    if (!mapInstance || !resolvedTheme || !mapStyles) return;
 
     const newStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
@@ -401,7 +397,9 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
           errors, and blanking a working map over one missing tile is worse
           than the missing tile.
         */}
-        {!isLoaded && failure ? (
+        {!hasStyle ? (
+          <MapFailure message="Map tiles are not configured." />
+        ) : !isLoaded && failure ? (
           <MapFailure message={failure} />
         ) : (
           (!isLoaded || loading) && <DefaultLoader />

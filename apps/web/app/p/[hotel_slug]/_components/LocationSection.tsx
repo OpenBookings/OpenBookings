@@ -4,8 +4,6 @@ import type { HotelPageData } from "@/app/api/query/pr/route";
 import { getIcon } from "./icons";
 
 export function LocationSection({ hotel }: { hotel: HotelPageData }) {
-  const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
-  const MTStyleKey = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
   const hasCoords = typeof hotel.lon === "number" && typeof hotel.lat === "number";
   const highlights = hotel.highlights ?? [];
 
@@ -45,14 +43,6 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
             {hasCoords && (
               <div className="relative w-full h-full pointer-events-none select-none">
                 <Map
-                  styles={
-                    maptilerKey && MTStyleKey
-                      ? {
-                          dark: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
-                          light: `https://api.maptiler.com/maps/${MTStyleKey}/style.json?key=${maptilerKey}`,
-                        }
-                      : undefined
-                  }
                   center={[hotel.lon, hotel.lat]}
                   zoom={14}
                   interactive={false}

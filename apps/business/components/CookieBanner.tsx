@@ -14,11 +14,14 @@ const detectEU = () => {
 }
 
 export function CookieBanner() {
-  const { consent, loaded, accept, decline } = useCookieConsent()
+  const { consent, loaded, reviewing, accept, decline } = useCookieConsent()
   // Read once during the initial render rather than set from an effect.
   const [isEU] = useState(detectEU)
 
-  if (!isEU || !loaded || consent !== null) return null
+  // A visitor who reopened the banner to change their mind sees it wherever
+  // they are; the EU check only decides who is asked unprompted.
+  if (!loaded) return null
+  if (!reviewing && (!isEU || consent !== null)) return null
 
   return createPortal(
     <div className="fixed bottom-4 left-4 z-[2147483647] max-w-sm rounded-xl border border-white/10 bg-neutral-900 p-4 shadow-lg">

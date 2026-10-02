@@ -21,10 +21,25 @@ import { TripSummary, type TripSummaryProps } from './TripSummary';
 
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
-// Created once per page load, not per render. Without a key there is nothing
-// to load: `loadStripe('')` rejects asynchronously, which would surface as a
-// blocked-script error rather than the configuration failure it really is.
-const stripePromise = PUBLISHABLE_KEY ? loadStripe(PUBLISHABLE_KEY) : null;
+// Bookings are direct charges on the host's connected account, so Stripe.js
+// has to be initialised for that account: the Session's client secret belongs
+// to it and means nothing to the platform's own instance.
+//
+// Created once per account per page load, not per render. Without a key or an
+// account there is nothing to load: `loadStripe('')` rejects asynchronously,
+// which would surface as a blocked-script error rather than the configuration
+// failure it really is.
+const stripePromises = new Map<string, Promise<Stripe | null>>();
+
+function stripeFor(stripeAccountId: string): Promise<Stripe | null> | null {
+  if (!PUBLISHABLE_KEY || !stripeAccountId) return null;
+  let promise = stripePromises.get(stripeAccountId);
+  if (!promise) {
+    promise = loadStripe(PUBLISHABLE_KEY, { stripeAccount: stripeAccountId });
+    stripePromises.set(stripeAccountId, promise);
+  }
+  return promise;
+}
 
 /** Everything the summary renders, plus the photograph behind the whole page. */
 export type CheckoutClientProps = TripSummaryProps & {
@@ -34,6 +49,8 @@ export type CheckoutClientProps = TripSummaryProps & {
    * whether sign-in is still owed. Null means nobody is signed in.
    */
   viewer: GateViewer | null;
+  /** The host's connected account the booking is charged on. Empty = not chargeable. */
+  stripeAccountId: string;
 };
 
 function Shell({ heroImageUrl, children }: { heroImageUrl: string; children: React.ReactNode }) {
@@ -181,10 +198,10 @@ async function createSession(
  * Resolves Stripe.js, turning both of its failure modes — a rejected load and
  * a `null` instance — into one message that names the likely cause.
  */
-async function loadStripeOrFail(): Promise<Stripe> {
+async function loadStripeOrFail(stripeAccountId: string): Promise<Stripe> {
   let stripe: Stripe | null;
   try {
-    stripe = await stripePromise;
+    stripe = await stripeFor(stripeAccountId);
   } catch {
     throw new SessionFailure(STRIPE_JS_UNAVAILABLE);
   }
@@ -198,7 +215,13 @@ function CheckoutSession({
   ...props
 }: CheckoutClientProps & { appearance: Omit<Appearance, 'rules'> }) {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<SessionState>({ status: 'loading' });
+  // A property with no connected Stripe account cannot be charged at all. Say
+  // so straight away, with copy that does not invite a retry, instead of
+  // loading nothing and blaming the guest's ad blocker.
+  const chargeable = props.stripeAccountId !== '';
+  const [state, setState] = useState<SessionState>(() =>
+    chargeable ? { status: 'loading' } : { status: 'error', copy: checkoutErrorCopy('config_error') }
+  );
   const [stripe, setStripe] = useState<Stripe | null>(null);
   const {
     token: turnstileToken,
@@ -226,7 +249,7 @@ function CheckoutSession({
     // No token yet — either the gate is still waiting on sign-in, or the
     // challenge is running. Neither is a failure; the effect re-runs as soon
     // as a token is issued.
-    if (!turnstileToken) return;
+    if (!turnstileToken || !chargeable) return;
 
     // Aborting on cleanup keeps React's development double-mount from leaving
     // a second, orphaned Session holding the same room.
@@ -235,7 +258,10 @@ function CheckoutSession({
 
     // Stripe.js and the Session are independent, so a slow script does not
     // delay the request that puts the room on hold.
-    Promise.all([loadStripeOrFail(), createSession(turnstileToken, controller.signal)])
+    Promise.all([
+      loadStripeOrFail(props.stripeAccountId),
+      createSession(turnstileToken, controller.signal),
+    ])
       .then(([loaded, session]) => {
         if (!active) return;
         setStripe(loaded);
@@ -255,7 +281,7 @@ function CheckoutSession({
       active = false;
       controller.abort();
     };
-  }, [attempt, turnstileToken]);
+  }, [attempt, turnstileToken, props.stripeAccountId, chargeable]);
 
   // A blocked script or a failed challenge is terminal for this attempt: there
   // is no token to send, so the Session is never requested. Derived rather than

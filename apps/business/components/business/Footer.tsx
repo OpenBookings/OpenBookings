@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { CookieSettingsButton } from "@/components/CookieSettingsButton";
 
 const productLinks = ["Features", "Pricing", "Documentation", "Security"];
 const companyLinks = ["About", "Blog", "Privacy", "Terms"];
@@ -48,7 +49,10 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
         </div>
         <div className="flex items-center justify-between border-t border-white/5 pt-6">
           <span className="text-[12px] text-white/20">© {new Date().getFullYear()} OpenBookings. All rights reserved.</span>
-          <span className="text-[12px] text-white/20">Built in Europe.</span>
+          <span className="flex items-center gap-4 text-[12px] text-white/20">
+            <CookieSettingsButton className="hover:text-white/50 transition-colors" />
+            <span>Built in Europe.</span>
+          </span>
         </div>
       </div>
     </footer>

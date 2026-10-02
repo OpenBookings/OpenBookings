@@ -193,10 +193,10 @@ export const TOOLS = {
       if (!guestEmail) return NO_VERIFIED_GUEST;
       const r = await findOwnedReservation(args.booking_reference, guestEmail);
       if (!r) return NO_MATCHING_BOOKING;
-      if (!r.stripe_payment_intent_id) {
+      if (!r.stripe_payment_intent_id || !r.stripe_account_id) {
         return { found: false, note: "This booking has no payment on record yet." };
       }
-      const summary = await getPaymentSummary(r.stripe_payment_intent_id);
+      const summary = await getPaymentSummary(r.stripe_payment_intent_id, r.stripe_account_id);
       return summary ?? { found: false, note: "No payment found for that booking." };
     },
   },

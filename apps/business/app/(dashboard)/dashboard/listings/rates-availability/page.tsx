@@ -3,6 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { getServerSession } from "@/lib/auth";
+import {
+  propertyHasOrganisation,
+  propertyRatesConfirmed,
+  userCanConfirmRates,
+} from "@openbookings/authz";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AriView } from "./_components/ari-view";
 import {
@@ -85,6 +90,7 @@ async function AriContent({ searchParams }: PageProps) {
           data={demo}
           startDate={start}
           windowDays={windowDays}
+          rates={{ confirmed: true, canConfirm: false, hasOrganisation: true }}
         />
       </>
     );
@@ -105,6 +111,12 @@ async function AriContent({ searchParams }: PageProps) {
 
   if (!data) return <EmptyState />;
 
+  const [ratesConfirmed, canConfirmRates, hasOrganisation] = await Promise.all([
+    propertyRatesConfirmed(property.id),
+    userCanConfirmRates(session, property.id),
+    propertyHasOrganisation(property.id),
+  ]);
+
   // Keyed on the property alone: moving through weeks, ranges or stay lengths
   // must not remount the shell, or the host's filters and expanded rows are
   // thrown away on every chevron press. Switching property is a different
@@ -115,6 +127,7 @@ async function AriContent({ searchParams }: PageProps) {
       data={data}
       startDate={start}
       windowDays={windowDays}
+      rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
     />
   );
 }

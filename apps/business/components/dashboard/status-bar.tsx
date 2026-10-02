@@ -87,14 +87,6 @@ const WHATS_NEW_ITEMS: WhatsNewItem[] = [
       'Compare booking sources side-by-side and track conversion per channel in the new Analytics overview.',
     href: '#',
   },
-  {
-    id: 'adyen-transition',
-    date: 'Jun 24',
-    title: 'Stripe to Adyen transition',
-    excerpt:
-      'We are migrating payment processing to Adyen. No action needed — payouts continue as usual.',
-    href: '#',
-  },
 ];
 
 // ─── Panels ───────────────────────────────────────────────────────────────────

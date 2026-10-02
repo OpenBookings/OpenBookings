@@ -5,7 +5,9 @@ import { InfoIcon, CheckCircle2Icon, XIcon, Signature } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { signLegalDocument } from "../actions";
+import { RATES_TAX_INCLUSIVE_STATEMENT } from "@openbookings/authz/rates-doc";
+import { Checkbox } from "@/components/ui/checkbox";
+import { setInclusiveRatesConfirmation, signLegalDocument } from "../actions";
 
 export interface LegalNBoringValues {
   legalCompanyName: string;
@@ -15,6 +17,7 @@ export interface LegalNBoringValues {
   cocNumber: string;
   partnerAgreementSignedAt: string | null;
   dpaSignedAt: string | null;
+  ratesInclusiveConfirmedAt: string | null;
 }
 
 const DOCUMENTS = [
@@ -261,6 +264,26 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
           <p className="text-sm text-white/50 leading-relaxed">
             Your <span className="text-white/70 font-medium">IP address</span> is recorded at the moment of signing and stored as part of the legally binding record.
           </p>
+        </div>
+
+        {/* Inclusive rates: guests are shown the host's price as the total. */}
+        <div className="flex items-start gap-3 rounded-lg border border-white/10 px-4 py-3">
+          <Checkbox
+            id="rates-inclusive"
+            className="mt-0.5"
+            checked={Boolean(values.ratesInclusiveConfirmedAt)}
+            disabled={isPending}
+            onCheckedChange={(value) => {
+              const confirmed = value === true;
+              startTransition(async () => {
+                await setInclusiveRatesConfirmation(confirmed);
+                onChange({ ratesInclusiveConfirmedAt: confirmed ? new Date().toISOString() : null });
+              });
+            }}
+          />
+          <Label htmlFor="rates-inclusive" className="text-sm font-normal text-white/60 leading-relaxed">
+            {RATES_TAX_INCLUSIVE_STATEMENT} <span className="text-destructive">*</span>
+          </Label>
         </div>
 
         {/* Sign CTA */}

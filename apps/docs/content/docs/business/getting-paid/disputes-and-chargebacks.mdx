@@ -3,17 +3,26 @@ title: Disputes and chargebacks
 description: How chargebacks are handled and who covers them.
 ---
 
-*Last updated: 10 September 2026*
+*Last updated: 2 October 2026*
 
 ## Overview
 
-A dispute (or chargeback) occurs when a guest challenges a payment with their bank. 
+A dispute (or chargeback) occurs when a guest challenges a payment with their bank.
 
-## How we handle chargebacks
+## Who handles a dispute
 
-The platform absorbs disputes. Your host payouts are strictly payout-only; you do not process cards directly and do not deal with chargebacks or their associated financial penalties.
+Guest payments are made directly to your own Stripe account, so a dispute is raised against your account and you are the one who responds to it.
 
-If a guest uses dispute vocabulary in a message (e.g. threatening a chargeback), the support bot automatically escalates the conversation to human support for a dedicated review.
+- Stripe notifies you by email and shows the dispute in your Stripe Dashboard, with a deadline for your response.
+- You submit your evidence (the booking confirmation, your cancellation policy, messages with the guest) in the Stripe Dashboard.
+- If the dispute is lost, the disputed amount and Stripe's dispute fee are taken from your Stripe balance.
+
+OpenBookings does not decide disputes and cannot respond to them for you.
+
+## What OpenBookings does
+
+- If a dispute is lost, we return our commission on the disputed amount to your Stripe account. If the booking did not happen, we do not earn.
+- If a guest uses dispute vocabulary in a message (for example, threatening a chargeback), the support bot escalates the conversation to human support.
 
 ---
 

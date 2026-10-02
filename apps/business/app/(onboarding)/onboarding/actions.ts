@@ -33,6 +33,12 @@ export interface LegalNBoringData {
   cocNumber?: string;
   partnerAgreement?: LegalSignatureRecord;
   dpa?: LegalSignatureRecord;
+  /**
+   * Confirmation that the host's rates include tax (see
+   * RATES_TAX_INCLUSIVE_STATEMENT). Becomes an org_consent row when the
+   * organisation is provisioned.
+   */
+  ratesInclusive?: LegalSignatureRecord;
   previousAttempts?: LegalAttemptRecord[];
 }
 
@@ -127,6 +133,29 @@ export async function signLegalDocument(
   await saveStepData("legal-n-boring", updated);
 }
 
+/**
+ * Record (or withdraw) the host's confirmation that their rates include tax.
+ * Captured like a signature, with time and IP, because guests are told the
+ * price includes tax on the strength of it.
+ */
+export async function setInclusiveRatesConfirmation(confirmed: boolean): Promise<void> {
+  await getSession();
+  const hdrs = await headers();
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    hdrs.get("x-real-ip") ??
+    "unknown";
+
+  const existing = await loadStepData();
+  const legal = { ...(existing["legal-n-boring"] ?? ({} as LegalNBoringData)) };
+  delete legal.ratesInclusive;
+
+  await saveStepData("legal-n-boring", {
+    ...legal,
+    ...(confirmed && { ratesInclusive: { signedAt: new Date().toISOString(), signerIp: ip } }),
+  });
+}
+
 /** Archive current legal data as a previous attempt and clear the active fields. */
 export async function resetLegalData(): Promise<void> {
   await getSession();
@@ -174,17 +203,14 @@ export async function provisionStripeAccount(): Promise<string> {
   if (!legal) throw new Error("Legal step data is missing");
   if (!location) throw new Error("Location step data is missing");
 
+  // The country decides which regulator the account sits under and cannot be
+  // changed afterwards, so it is never defaulted.
+  if (!location.country) throw new Error("Property country is missing");
+
   const accountId = await createConnectAccount({
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
-    fullName: legal.fullName,
-    roleTitle: legal.roleTitle,
-    vatNumber: legal.vatNumber,
-    cocNumber: legal.cocNumber ?? "",
-    city: location.city,
-    country: location.country || "NL",
-    postalCode: location.postalCode,
-    streetAddress: location.streetAddress,
+    country: location.country,
   });
 
   await query(

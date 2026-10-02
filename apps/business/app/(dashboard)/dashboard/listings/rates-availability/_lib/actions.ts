@@ -4,7 +4,21 @@ import { revalidatePath } from "next/cache";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import { z } from "zod";
 import { query, withTransaction } from "@openbookings/db";
-import { userOwnsRatePlan, userOwnsRoom } from "@openbookings/authz";
+import {
+  RATES_TAX_INCLUSIVE_DOC_ID,
+  ratePlanRatesConfirmed,
+  roomRatesConfirmed,
+  userCanConfirmRates,
+  userOwnsProperty,
+  userOwnsRatePlan,
+  userOwnsRoom,
+} from "@openbookings/authz";
+import { headers } from "next/headers";
+import {
+  RATES_CONFIRMATION_MESSAGE,
+  RATES_CONFIRMATION_REQUIRED,
+  pricedRatePlanIds,
+} from "./rates-confirmation";
 import { VERSION_SQL } from "./ari-query";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
@@ -23,7 +37,7 @@ const ROUTE = "/dashboard/listings/rates-availability";
 
 export type ActionResult =
   | { ok: true; affected: number }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: typeof RATES_CONFIRMATION_REQUIRED };
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
 
@@ -293,6 +307,11 @@ export async function createRatePlan(
   if (!(await userOwnsRoom(session, data.roomId))) {
     return failed("Room type not found");
   }
+  // A rate plan carries a price. No price is stored until the organisation
+  // has confirmed, on record, that its rates include tax.
+  if (!(await roomRatesConfirmed(data.roomId))) {
+    return { ok: false, error: RATES_CONFIRMATION_MESSAGE, code: RATES_CONFIRMATION_REQUIRED };
+  }
 
   const rows = await query<{ id: string }>(
     `INSERT INTO rate_plans
@@ -320,6 +339,79 @@ export async function createRatePlan(
   // says what has to change.
   await purgePropertyPage({ roomId: data.roomId });
   return { ok: true, affected: rows.length };
+}
+
+// ─────────────────────────────────────────────
+// Inclusive-rates confirmation
+// ─────────────────────────────────────────────
+
+/**
+ * Record that this property's organisation enters tax-inclusive rates.
+ *
+ * It speaks for the whole organisation, so only an owner or admin may do it.
+ * Stored in org_consent beside the signed Partner Agreement, with who
+ * confirmed and from where, because it is the basis on which guests are told
+ * the price includes tax.
+ *
+ * Idempotent: a second confirmation (a double click, a second admin) writes
+ * nothing.
+ */
+export async function confirmInclusiveRates(propertyId: string): Promise<ActionResult> {
+  const parsed = z.string().uuid().safeParse(propertyId);
+  if (!parsed.success) return failed("Property not found");
+
+  const session = await requireSession();
+  if (!(await userOwnsProperty(session, parsed.data))) return failed("Property not found");
+  if (!(await userCanConfirmRates(session, parsed.data))) {
+    return failed("Only an owner or admin of your organisation can confirm this.");
+  }
+
+  const hdrs = await headers();
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? hdrs.get("x-real-ip") ?? null;
+  const user = session.user as { id: string; name?: string | null; email?: string | null };
+
+  const signer = user.name?.trim() || user.email || user.id;
+
+  const affected = await withTransaction(async (client) => {
+    const org = await client.query<{ organization_id: string }>(
+      `SELECT organization_id FROM properties WHERE id = $1 AND organization_id IS NOT NULL`,
+      [parsed.data],
+    );
+    const organizationId = org.rows[0]?.organization_id;
+    if (!organizationId) return 0;
+
+    // org_consent has no unique key on (organisation, document). Serialise
+    // confirmations for this organisation so two admins confirming at once
+    // leave one legal record, not two.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `${organizationId}:${RATES_TAX_INCLUSIVE_DOC_ID}`,
+    ]);
+
+    const inserted = await client.query(
+      `INSERT INTO org_consent
+         (organization_id, doc_id, signed_by_user_id, signer_full_name, signer_ip, signed_at)
+       SELECT $1, $2, $3, $4, $5, now()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM org_consent WHERE organization_id = $1 AND doc_id = $2
+       )
+       RETURNING id`,
+      [organizationId, RATES_TAX_INCLUSIVE_DOC_ID, user.id, signer, ip],
+    );
+    if (inserted.rowCount) {
+      await client.query(
+        `INSERT INTO audit_log (action, actor_user_id, organization_id, ip, detail)
+         VALUES ('rates.inclusive-confirmed', $1, $2, $3, $4)`,
+        [user.id, organizationId, ip, JSON.stringify({ docId: RATES_TAX_INCLUSIVE_DOC_ID })],
+      );
+    }
+    return inserted.rowCount ?? 0;
+  });
+
+  revalidatePath(ROUTE);
+  // The public listing says whether its prices include tax; that just changed.
+  await purgePropertyPage({ propertyId: parsed.data });
+  return { ok: true, affected };
 }
 
 // ─────────────────────────────────────────────
@@ -474,7 +566,13 @@ export type PublishInput = z.input<typeof publishSchema>;
 
 export type PublishResult =
   | { ok: true; affected: number; version: string }
-  | { ok: false; error: string; stale?: true; version?: string };
+  | {
+      ok: false;
+      error: string;
+      stale?: true;
+      version?: string;
+      code?: typeof RATES_CONFIRMATION_REQUIRED;
+    };
 
 /**
  * Apply a draft in one transaction.
@@ -534,6 +632,19 @@ export async function publishAriChanges(
         }
       }
 
+      // The inclusive-rates gate. Only a draft that changes a price is held:
+      // a host who has not confirmed yet must still be able to close dates.
+      // Refusing here refuses the whole draft, which is the point of one
+      // transaction — half a publish is worse than none.
+      //
+      // Checked per rate plan being priced, never against `data.propertyId`:
+      // that id comes from the client and nothing ties it to these plans.
+      for (const ratePlanId of pricedRatePlanIds(data.changes)) {
+        if (!(await ratePlanRatesConfirmed(ratePlanId, { queryOne: one }))) {
+          throw new PublishError(RATES_CONFIRMATION_MESSAGE, { code: RATES_CONFIRMATION_REQUIRED });
+        }
+      }
+
       // Read the version inside the transaction, so nothing can slip in
       // between the check and the writes it is guarding.
       const current = await one<{ version: string }>(VERSION_SQL, [
@@ -577,10 +688,16 @@ export async function publishAriChanges(
   }
 }
 
+type PublishRefusal = {
+  stale?: true;
+  version?: string;
+  code?: typeof RATES_CONFIRMATION_REQUIRED;
+};
+
 /** Carries a refusal out of the transaction without committing it. */
 class PublishError extends Error {
-  readonly detail: { stale?: true; version?: string };
-  constructor(message: string, detail: { stale?: true; version?: string } = {}) {
+  readonly detail: PublishRefusal;
+  constructor(message: string, detail: PublishRefusal = {}) {
     super(message);
     this.detail = detail;
   }

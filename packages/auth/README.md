@@ -113,6 +113,36 @@ Password Manager — most users assume they are device-bound. An org can set
 `org_profile.auth_policy = '{"requirePasskey": true}'` to block members
 from deleting their last passkey (enforced server-side).
 
+**Two clocks.** `lastVerifiedAt` (below) is stamped at every sign-in, and
+hosts sign in by magic link or OAuth, so on its own "recently verified" can
+mean "clicked an email link". `session.lastFactorVerifiedAt` is stamped only
+when a passkey, authenticator code or backup code is verified. A host who has
+a factor must have a fresh *factor* verification for gated actions; a host
+with none falls back to sign-in recency, which keeps them able to enrol their
+first one (`stepUpSatisfied` in `shared.ts`). Also gated now: inviting a
+member, storing or deleting a passkey, enabling or disabling two-factor, and
+regenerating backup codes (and asking for passkey registration options, so
+the refusal comes before the device ceremony).
+
+The hooks live in `step-up-hooks.ts` and are tested against the real Better
+Auth dispatch (`step-up-hooks.test.ts`). Three things that are easy to get
+wrong and that those tests pin:
+
+- Better Auth runs after-hooks for **failed** requests too. The hook checks
+  the returned value and stamps nothing on failure; otherwise a wrong code
+  would unlock the gate.
+- `/passkey/verify-authentication` always creates a **new** session for the
+  passkey's owner. The hook stamps that new session, and retires the old one
+  when it belonged to the same user. It never stamps the session the request
+  arrived with, or anyone's passkey could vouch for a stolen cookie.
+- `/two-factor/get-totp-uri` is blocked: with passwordless hosts it returns
+  the authenticator secret to any session.
+
+Wrong codes from a signed-in session are counted in `audit_log`
+(`auth.factor-failed`); after five in 15 minutes further tries are refused. Payout bank details are not gated here: they are
+changed in the host's own Stripe Dashboard, behind Stripe's login, and owners
+are emailed when they change.
+
 **Step-up**: `session.lastVerifiedAt` is stamped at sign-in and refreshed
 by a successful passkey/TOTP/backup-code verification. Sensitive actions
 require it fresher than 15 minutes — recency is the mechanism; merely

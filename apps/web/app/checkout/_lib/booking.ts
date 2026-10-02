@@ -16,17 +16,14 @@
  */
 
 import { queryOne } from '@openbookings/db';
+import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
+import { buildBookingLines, type BookingLine } from './booking-lines';
+import { applicationFeeCents } from '@openbookings/stripe';
 
 /** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
 const CHECKOUT_BOOKING_ID = 'b0000000-0000-4000-8000-000000000001';
 
-/** Rows the guest is shown, and Stripe is charged, one for one. */
-export type BookingLine = {
-  name: string;
-  /** What one unit costs, in minor units. */
-  unitAmountCents: number;
-  quantity: number;
-};
+export type { BookingLine } from './booking-lines';
 
 export type StaySummary = {
   intentId: string;
@@ -70,6 +67,12 @@ export type StaySummary = {
   freeCancellationUntil: Date | null;
 
   stripeAccountId: string;
+  /**
+   * Whether the property's organisation has confirmed, on record, that its
+   * rates include tax. The price is sold as "incl. tax" on the strength of
+   * that, so a booking without it is not chargeable.
+   */
+  ratesConfirmed: boolean;
   /** How long the room is held, in minutes, before the Session expires. */
   holdMinutes: number;
 };
@@ -93,7 +96,8 @@ type BookingRow = {
   country: string | null;
   check_in_time: string | null;
   check_out_time: string | null;
-  tax_rate: string;
+  rates_confirmed: boolean;
+  commission_rate: string;
   stripe_account_id: string | null;
   room_id: string;
   room_name: string;
@@ -135,7 +139,11 @@ const BOOKING_QUERY = `
     p.country,
     p.check_in_time,
     p.check_out_time,
-    p.tax_rate,
+    exists (
+      select 1 from org_consent oc
+      where oc.organization_id = p.organization_id and oc.doc_id = $2
+    )                   as rates_confirmed,
+    p.commission_rate,
     p.stripe_account_id,
     r.id                as room_id,
     r.name              as room_name,
@@ -247,12 +255,33 @@ function trimSeconds(value: string | null): string | null {
   return value ? value.slice(0, 5) : null;
 }
 
-function toCents(majorUnits: number): number {
-  return Math.round(majorUnits * 100);
+/**
+ * The commission on these lines. A rate that cannot be a commission (someone
+ * typing `4.5` for 4.5%) must not take the checkout page down, and must not
+ * be charged either: NaN makes the booking fail `assertChargeable` in the
+ * route as a handled, non-retryable error.
+ */
+function commissionCents(lines: BookingLine[], rate: string): number {
+  try {
+    return applicationFeeCents(totalCents(lines), Number(rate));
+  } catch {
+    return Number.NaN;
+  }
+}
+
+/**
+ * Whether the commission is taken as an application fee yet. Off by default,
+ * so direct charges can be verified in test mode before any fee is live.
+ */
+function applicationFeeEnabled(): boolean {
+  return process.env.STRIPE_APPLICATION_FEE_ENABLED === 'true';
 }
 
 export async function getBookingSummary(): Promise<StaySummary> {
-  const row = await queryOne<BookingRow>(BOOKING_QUERY, [CHECKOUT_BOOKING_ID]);
+  const row = await queryOne<BookingRow>(BOOKING_QUERY, [
+    CHECKOUT_BOOKING_ID,
+    RATES_TAX_INCLUSIVE_DOC_ID,
+  ]);
   if (!row) throw new BookingNotFoundError(CHECKOUT_BOOKING_ID, await diagnose(CHECKOUT_BOOKING_ID));
 
   const checkIn = parseDate(row.check_in_date);
@@ -261,29 +290,12 @@ export async function getBookingSummary(): Promise<StaySummary> {
   // actually priced on, and a mismatch would mean charging for a different stay.
   const nights = row.total_nights;
 
-  const pricePerNight = Number(row.price_per_night);
-  const taxRate = Number(row.tax_rate);
-
-  // One line per thing the guest is paying for, in the order they'd expect to
-  // read them. The unit price stays visible, so "€185 × 3" reconciles by eye.
-  const lines: BookingLine[] = [
-    {
-      name: `${row.room_name}${row.room_type ? ` ${row.room_type}` : ''}`,
-      unitAmountCents: toCents(pricePerNight),
-      quantity: nights,
-    },
-  ];
-
-  // Only when the host actually charges one. A "€0.00 Tax" row is a question
-  // the guest then has to answer for themselves.
-  if (taxRate > 0) {
-    const taxable = pricePerNight * nights;
-    lines.push({
-      name: 'Tourist tax',
-      unitAmountCents: toCents(taxable * taxRate),
-      quantity: 1,
-    });
-  }
+  const lines = buildBookingLines({
+    roomName: row.room_name,
+    roomType: row.room_type,
+    pricePerNight: Number(row.price_per_night),
+    nights,
+  });
 
   const freeCancellationUntil = row.is_refundable
     ? new Date(checkIn.getTime() - FREE_CANCELLATION_DAYS * MS_PER_NIGHT)
@@ -316,8 +328,9 @@ export async function getBookingSummary(): Promise<StaySummary> {
     children: row.children,
 
     lines,
-    // The fee we would take on a Connect booking, in the units Stripe wants.
-    platformFeeCents: 0,
+    // OpenBookings' commission on the full guest price, in the units Stripe
+    // wants. Zero until the fee is switched on for this deployment.
+    platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, row.commission_rate) : 0,
     currency: row.currency.toLowerCase(),
 
     cancellationPolicy:
@@ -327,8 +340,14 @@ export async function getBookingSummary(): Promise<StaySummary> {
         : 'This reservation is non-refundable.'),
     freeCancellationUntil,
 
-    // Env still wins: the seeded property has no Connect account of its own.
-    stripeAccountId: row.stripe_account_id ?? process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '',
+    // The host's own connected account: the booking is charged on it. The env
+    // fallback exists for the seeded demo property in development only — in
+    // production a property without an account is not chargeable, and must
+    // never be charged on somebody else's.
+    stripeAccountId:
+      row.stripe_account_id ??
+      (process.env.NODE_ENV === 'production' ? '' : (process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '')),
+    ratesConfirmed: row.rates_confirmed === true,
     holdMinutes: HOLD_MINUTES,
   };
 }

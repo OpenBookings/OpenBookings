@@ -24,15 +24,26 @@ export type PaymentSummary = {
 
 /**
  * Read-only payment/refund summary for a payment intent, for support lookups.
+ *
+ * Bookings are direct charges, so the payment intent lives on the host's
+ * connected account, not on the platform: the account id is required to find
+ * it.
  * Amounts are in the smallest currency unit (cents), matching how bookings
  * store totals.
  */
-export async function getPaymentSummary(paymentIntentId: string): Promise<PaymentSummary | null> {
+export async function getPaymentSummary(
+  paymentIntentId: string,
+  stripeAccountId: string,
+): Promise<PaymentSummary | null> {
+  if (!stripeAccountId) return null;
+  const onAccount = { stripeAccount: stripeAccountId };
   let intent: Stripe.PaymentIntent;
   try {
-    intent = await stripe.paymentIntents.retrieve(paymentIntentId, {
-      expand: ['latest_charge'],
-    });
+    intent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      { expand: ['latest_charge'] },
+      onAccount,
+    );
   } catch (err) {
     if (err instanceof Stripe.errors.StripeError && err.code === 'resource_missing') {
       return null;
@@ -41,10 +52,10 @@ export async function getPaymentSummary(paymentIntentId: string): Promise<Paymen
   }
 
   const charge = intent.latest_charge as Stripe.Charge | null;
-  const { data: refunds } = await stripe.refunds.list({
-    payment_intent: paymentIntentId,
-    limit: 20,
-  });
+  const { data: refunds } = await stripe.refunds.list(
+    { payment_intent: paymentIntentId, limit: 20 },
+    onAccount,
+  );
 
   const amountRefunded = charge?.amount_refunded ?? 0;
   return {

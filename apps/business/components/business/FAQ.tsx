@@ -24,7 +24,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "Do payouts go through OpenBookings?",
     answer: [
-      "Partially. Between the guest payment and the payout sits a concept called ", { text: "Stripe Connect.", href: "https://stripe.com/en-nl/connect"}, " Payouts then follow the reconcilliation period for 7 calendar days (see 'platform agreement' for more info).",
+      "No. Guest payments go directly to your own Stripe account through ", { text: "Stripe Connect.", href: "https://stripe.com/en-nl/connect"}, " OpenBookings takes its commission at the moment of payment and never holds your money; Stripe pays you out on the schedule you set in your Stripe Dashboard.",
     ],
   },
   {

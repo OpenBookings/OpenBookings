@@ -38,7 +38,13 @@ export function VerifyStep({ initialStatus }: { initialStatus: OnboardingStatus 
     if (data.onboardingCompleted) { router.replace("/dashboard"); return; }
 
     // Clean — complete onboarding
-    if (data.stripe.currentlyDue.length === 0 && data.stripe.chargesEnabled && !completingRef.current) {
+    // Both: a host who can take payments but not be paid out is not ready.
+    if (
+      data.stripe.currentlyDue.length === 0 &&
+      data.stripe.chargesEnabled &&
+      data.stripe.payoutsEnabled &&
+      !completingRef.current
+    ) {
       completingRef.current = true;
       completeOnboarding().then(() => router.replace("/dashboard"));
     }
@@ -92,7 +98,7 @@ export function VerifyStep({ initialStatus }: { initialStatus: OnboardingStatus 
   }
 
   // No requirements left but charges not yet enabled — under review
-  if (stripe && !stripe.chargesEnabled) {
+  if (stripe && (!stripe.chargesEnabled || !stripe.payoutsEnabled)) {
     return (
       <div className="flex flex-col items-center gap-4 py-12 text-center">
         <div className="size-12 rounded-full bg-white/6 flex items-center justify-center">

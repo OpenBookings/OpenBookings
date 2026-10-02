@@ -48,6 +48,7 @@ const fixture: PropertyPagePayload = {
     company_registration: null,
     vat_number: null,
     highlights: [{ label: "Springs", icon: "droplet", distance: "50 m" }],
+    rates_confirmed: true,
   },
   amenities: [{ label: "Wi-Fi", icon: "wifi", category: "General", sort_order: 1 }],
   rooms: [
