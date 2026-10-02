@@ -8,8 +8,6 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
-const MAPTILER_STYLE_ID = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID ?? "";
-const MAP_STYLE = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID}/style.json?key=${MAPTILER_KEY}`;
 
 interface GeocodeSuggestion {
   id: string;
@@ -228,7 +226,6 @@ export function CoreInfoLocationStep({ values, onChange }: CoreInfoLocationStepP
       <div className="relative h-[380px] overflow-hidden rounded-xl border border-white/10">
         <Map
           ref={mapRef}
-          styles={{ light: MAP_STYLE, dark: MAP_STYLE }}
           center={values.coordinates ?? [8, 46]}
           zoom={values.coordinates ? 15 : 2}
         >

@@ -90,13 +90,6 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
     markDirty();
   }
 
-  const maptilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
-  const styleId = process.env.NEXT_PUBLIC_MAPTILER_STYLE_ID;
-  const mapStyle =
-    maptilerKey && styleId
-      ? `https://api.maptiler.com/maps/${styleId}/style.json?key=${maptilerKey}`
-      : undefined;
-
   async function persistHighlights() {
     setSavingHighlights(true);
     await saveHighlights(
@@ -236,7 +229,6 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
             <input type="hidden" name="lon" value={pinned ? String(lon) : ""} />
             <div className="relative h-80 overflow-hidden rounded-lg border">
               <Map
-                styles={mapStyle ? { dark: mapStyle, light: mapStyle } : undefined}
                 center={pinned ? [lon!, lat!] : UNPINNED_CENTER}
                 zoom={pinned ? PINNED_ZOOM : UNPINNED_ZOOM}
               >

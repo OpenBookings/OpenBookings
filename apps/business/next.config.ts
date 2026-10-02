@@ -20,7 +20,7 @@ const ContentSecurityPolicy = `
   img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
   font-src 'self' https://fonts.gstatic.com;
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
   worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';
