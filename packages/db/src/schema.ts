@@ -666,3 +666,37 @@ export const hostOnboarding = pgTable("host_onboarding", {
   /** NULL until the host clears the onboarding wall; the proxy gates on this. */
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
 });
+
+/**
+ * Server-side evidence of cookie-consent decisions: append-only, one row per
+ * event. The visitor's device decides whether analytics runs; this only
+ * proves what was chosen. No IP address or user agent is stored.
+ *
+ * `userId` has no foreign key on purpose: the row outlives account deletion
+ * as evidence, so erasure nulls the column and keeps the row.
+ *
+ * Mirrors packages/db/drizzle/0017_consent_log.sql; keep the two in sync.
+ */
+export const consentLog = pgTable(
+  "consent_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Random id minted on the device; identifies its consent record, not a person. */
+    consentId: uuid("consent_id").notNull(),
+    /** granted | denied | withdrawn | linked (CHECK constraint in the SQL). */
+    eventType: text("event_type").notNull(),
+    /** e.g. `{ "analytics": true }`. */
+    categories: jsonb("categories").notNull(),
+    /** `<CONSENT_VERSION>+<privacy document id>`, e.g. `1.1+privacy@2026-10-02/en`. */
+    bannerVersion: text("banner_version").notNull(),
+    /** web | business. */
+    app: text("app").notNull(),
+    userId: text("user_id"),
+    idempotencyKey: uuid("idempotency_key").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("consent_log_consent_id_idx").on(table.consentId, table.createdAt),
+  ],
+);
