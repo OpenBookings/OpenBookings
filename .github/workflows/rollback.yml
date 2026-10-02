@@ -5,6 +5,10 @@
 # and deploy" -- there is nothing to rebuild and no dependency on the state of
 # main.
 #
+# Only recent SHAs are there to return to: each release prunes the registry
+# down to the newest three SHA tags per app (plus whatever the container is
+# running) -- see .github/scripts/prune-registry.sh.
+#
 # This rolls back CODE ONLY. Migrations are never reversed: an older image runs
 # against today's schema, which is precisely why every migration in
 # packages/db/drizzle/ has to be backward-compatible (expand/contract). If the
@@ -93,14 +97,14 @@ jobs:
 
       # Fail here rather than leaving the container wedged pulling a tag that
       # was never pushed -- the usual cause being a SHA whose CI run did not
-      # rebuild this particular app.
+      # rebuild this particular app, or one old enough to have been pruned.
       - name: Check the image exists
         env:
           IMAGE: ${{ steps.target.outputs.image }}
         run: |
           set -euo pipefail
           if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-            echo "::error::${IMAGE} is not in the registry. That SHA may not have rebuilt ${{ inputs.app }} -- only apps whose paths changed are built."
+            echo "::error::${IMAGE} is not in the registry. That SHA may not have rebuilt ${{ inputs.app }} -- only apps whose paths changed are built -- or it has been pruned: only the three most recent images per app are kept."
             exit 1
           fi
           echo "found ${IMAGE}"
