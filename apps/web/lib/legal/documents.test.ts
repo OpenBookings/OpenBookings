@@ -9,6 +9,13 @@ const read = (version: string, locale: string) =>
 const sectionIds = (source: string) =>
   [...source.matchAll(/<Section id="([^"]+)"/g)].map((m) => m[1]);
 
+// Regions as confirmed for the 2026-10-02 version, per language.
+const REGIONS: Record<(typeof LEGAL_LOCALES)[number], Record<string, string>> = {
+  en: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", MapTiler: "EU (France and Ireland)", Sentry: "EU (Germany)" },
+  nl: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", MapTiler: "EU (Frankrijk en Ierland)", Sentry: "EU (Duitsland)" },
+  fr: { Neon: "UE (Francfort)", Scaleway: "UE (Amsterdam)", MapTiler: "UE (France et Irlande)", Sentry: "UE (Allemagne)" },
+};
+
 describe("privacy policy registry", () => {
   const doc = getDocument("privacy")!;
 
@@ -41,8 +48,17 @@ describe("privacy policy 2026-10-02 content", () => {
 
     test(`${locale}: does not name vendors that get no guest data`, () => {
       const source = read("2026-10-02", locale);
-      for (const absent of ["Google Cloud", "Tirreno", "Chatwoot", "Mistral", "Carto", "Dicebear", "Microsoft", "Upstash"]) {
-        expect(source).not.toContain(absent);
+      // Whole words, any case: "Cartographie" is not CartoDB, "CARTO" is.
+      for (const absent of ["Google Cloud", "Tirreno", "Chatwoot", "Mistral", "Carto", "CartoDB", "Dicebear", "Microsoft", "Upstash"]) {
+        expect(source).not.toMatch(new RegExp(`\\b${absent}\\b`, "i"));
+      }
+    });
+
+    test(`${locale}: states each vendor's confirmed region`, () => {
+      const source = read("2026-10-02", locale);
+      const row = (vendor: string) => source.split("\n").find((l) => l.startsWith(`| **${vendor}**`))!;
+      for (const [vendor, region] of Object.entries(REGIONS[locale])) {
+        expect(row(vendor)).toContain(`| ${region} |`);
       }
     });
 
