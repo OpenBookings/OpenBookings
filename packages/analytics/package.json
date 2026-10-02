@@ -4,14 +4,18 @@
   "private": true,
   "exports": {
     "./client": "./src/client.tsx",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./consent-route": "./src/consent-route.ts",
+    "./consent-events": "./src/consent-events.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "posthog-js": "^1.422.5",
-    "posthog-node": "^5.51.4"
+    "posthog-node": "^5.51.4",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "next": "*",
@@ -21,6 +25,7 @@
     "@openbookings/config": "workspace:*",
     "@types/node": "^22.20.1",
     "@types/react": "19.2.14",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@types/bun": "^1.3.14"
   }
 }
