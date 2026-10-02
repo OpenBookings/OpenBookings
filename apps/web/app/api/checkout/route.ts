@@ -72,6 +72,16 @@ class CheckoutError extends Error {
  * copy telling the guest not to keep retrying.
  */
 function assertChargeable(summary: BookingSummary): number {
+  // The total is shown as "incl. tax". That is only true once the property's
+  // organisation has confirmed its rates include tax; until then the price
+  // cannot honestly be sold. Not retryable by the guest, hence config_error.
+  if (!summary.ratesConfirmed) {
+    throw new CheckoutError(
+      'config_error',
+      'Property organisation has not confirmed tax-inclusive rates'
+    );
+  }
+
   if (summary.lines.length === 0) {
     throw new CheckoutError('booking_invalid', 'Booking has no priced lines');
   }

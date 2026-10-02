@@ -89,6 +89,11 @@ export const properties = pgTable(
     checkInUntil: time("check_in_until"),
     stripeAccountId: varchar("stripe_account_id", { length: 255 }).unique(),
     commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.035"),
+    /**
+     * Informational only. Rates are entered tax-inclusive (every organisation
+     * confirms it before it can set a price), so this must never be added to
+     * a guest price. Checkout deliberately does not read it.
+     */
     taxRate: numeric("tax_rate", { precision: 5, scale: 4 }).notNull().default("0.00"),
     isActive: boolean("is_active").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

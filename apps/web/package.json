@@ -17,6 +17,7 @@
     "@next/mdx": "^16.3.6",
     "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
+    "@openbookings/authz": "workspace:*",
     "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
