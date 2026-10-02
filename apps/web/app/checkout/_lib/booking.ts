@@ -256,6 +256,20 @@ function trimSeconds(value: string | null): string | null {
 }
 
 /**
+ * The commission on these lines. A rate that cannot be a commission (someone
+ * typing `4.5` for 4.5%) must not take the checkout page down, and must not
+ * be charged either: NaN makes the booking fail `assertChargeable` in the
+ * route as a handled, non-retryable error.
+ */
+function commissionCents(lines: BookingLine[], rate: string): number {
+  try {
+    return applicationFeeCents(totalCents(lines), Number(rate));
+  } catch {
+    return Number.NaN;
+  }
+}
+
+/**
  * Whether the commission is taken as an application fee yet. Off by default,
  * so direct charges can be verified in test mode before any fee is live.
  */
@@ -316,9 +330,7 @@ export async function getBookingSummary(): Promise<StaySummary> {
     lines,
     // OpenBookings' commission on the full guest price, in the units Stripe
     // wants. Zero until the fee is switched on for this deployment.
-    platformFeeCents: applicationFeeEnabled()
-      ? applicationFeeCents(totalCents(lines), Number(row.commission_rate))
-      : 0,
+    platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, row.commission_rate) : 0,
     currency: row.currency.toLowerCase(),
 
     cancellationPolicy:

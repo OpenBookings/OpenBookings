@@ -14,17 +14,19 @@ export const dynamic = "force-dynamic";
  * the `stripe:` prefix on the id.
  */
 const deps: StripeEventDeps = {
-  claim: async (eventId) => {
+  livemode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_live_"),
+  isProcessed: async (eventId) => {
     const rows = await query<{ event_id: string }>(
-      `INSERT INTO processed_events (event_id) VALUES ($1)
-       ON CONFLICT (event_id) DO NOTHING
-       RETURNING event_id`,
+      `SELECT event_id FROM processed_events WHERE event_id = $1`,
       [`stripe:${eventId}`],
     );
     return rows.length > 0;
   },
-  release: async (eventId) => {
-    await query(`DELETE FROM processed_events WHERE event_id = $1`, [`stripe:${eventId}`]);
+  markProcessed: async (eventId) => {
+    await query(
+      `INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`,
+      [`stripe:${eventId}`],
+    );
   },
   markOnboardingComplete: async (stripeAccountId) => {
     await query(
@@ -36,11 +38,15 @@ const deps: StripeEventDeps = {
     );
   },
   refundCommission: refundCommissionForCharge,
-  audit: async ({ action, stripeAccountId, detail }) => {
+  audit: async ({ action, stripeAccountId, detail, dedupeKey }) => {
+    // One row per fact: a retried event finds the row already there.
     await query(
       `INSERT INTO audit_log (action, organization_id, detail)
-       VALUES ($1, (SELECT organization_id FROM org_profile WHERE stripe_account_id = $2), $3)`,
-      [action, stripeAccountId, JSON.stringify({ ...detail, stripeAccountId })],
+       SELECT $1, (SELECT organization_id FROM org_profile WHERE stripe_account_id = $2), $3::jsonb
+       WHERE NOT EXISTS (
+         SELECT 1 FROM audit_log WHERE action = $1 AND detail->>'dedupeKey' = $4
+       )`,
+      [action, stripeAccountId, JSON.stringify({ ...detail, stripeAccountId, dedupeKey }), dedupeKey],
     );
   },
 };
@@ -62,7 +68,7 @@ export async function POST(req: Request) {
     const outcome = await handleStripeEvent(event, deps);
     return NextResponse.json({ received: true, outcome });
   } catch (error) {
-    // A 500 makes Stripe retry, and the claim was released so the retry runs.
+    // A 500 makes Stripe retry; the event was not marked done, so the retry runs.
     // The event type and id only: never the body.
     console.error(
       "[stripe-webhook]",

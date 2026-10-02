@@ -52,9 +52,25 @@ describe("commissionRefundDue", () => {
     expect(commissionRefundDue({ ...charge, chargeRefunded: 55_500, feeRefunded: 2498 })).toBe(0);
   });
 
-  test("a lost dispute returns everything that is left", () => {
-    expect(commissionRefundDue({ ...charge, chargeRefunded: 0, feeRefunded: 0, lostDispute: true })).toBe(2498);
-    expect(commissionRefundDue({ ...charge, chargeRefunded: 27_750, feeRefunded: 1249, lostDispute: true })).toBe(1249);
+  test("a dispute lost for the whole payment returns the whole commission", () => {
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 0, feeRefunded: 0, lostDisputeAmount: 55_500 })).toBe(2498);
+  });
+
+  test("a dispute lost for part of the payment returns that part's commission, not all of it", () => {
+    // Guest disputes EUR 100 of a EUR 555 stay and wins: the stay mostly happened.
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 0, feeRefunded: 0, lostDisputeAmount: 10_000 })).toBe(450);
+  });
+
+  test("half refunded, then the other half lost to a dispute, returns the fee exactly once", () => {
+    const first = commissionRefundDue({ ...charge, chargeRefunded: 27_750, feeRefunded: 0 });
+    const second = commissionRefundDue({ ...charge, chargeRefunded: 27_750, feeRefunded: first, lostDisputeAmount: 27_750 });
+    expect(first + second).toBe(2498);
+    // The dispute event redelivered.
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 27_750, feeRefunded: 2498, lostDisputeAmount: 27_750 })).toBe(0);
+  });
+
+  test("a refund arriving after a lost dispute never claws commission back", () => {
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 5_000, feeRefunded: 2498 })).toBe(0);
   });
 
   test("never returns more than was collected, whatever the inputs say", () => {

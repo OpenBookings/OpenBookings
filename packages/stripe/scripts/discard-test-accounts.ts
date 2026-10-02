@@ -9,7 +9,9 @@
  * does nothing without --confirm (it lists what it would delete).
  *
  * After running it, clear the stored ids so affected hosts are sent back to
- * the Stripe onboarding step (run by hand against the same environment):
+ * the Stripe onboarding step. Run by hand, against the database that belongs
+ * to the SAME environment as the test key — these statements have no WHERE
+ * clause and would unlink every host if pointed at production:
  *
  *   UPDATE host_onboarding SET step_data = step_data - 'stripe_account_id',
  *          onboarding_completed_at = NULL;
@@ -29,8 +31,13 @@ if (!key.startsWith("sk_test_") && !key.startsWith("rk_test_")) {
 const confirm = process.argv.includes("--confirm");
 const stripe = new Stripe(key);
 
+// Listed in full before anything is deleted: deleting while paging can leave
+// the next page's cursor pointing at an account that no longer exists.
+const accounts: Stripe.Account[] = [];
+for await (const account of stripe.accounts.list({ limit: 100 })) accounts.push(account);
+
 let count = 0;
-for await (const account of stripe.accounts.list({ limit: 100 })) {
+for (const account of accounts) {
   count++;
   const label = `${account.id}  ${account.email ?? "(no email)"}  dashboard=${account.controller?.stripe_dashboard?.type ?? "?"}`;
   if (!confirm) {

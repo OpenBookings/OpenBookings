@@ -38,16 +38,23 @@ export function commissionRefundDue(input: {
   chargeRefunded: number;
   feeAmount: number;
   feeRefunded: number;
-  /** A lost dispute takes the whole payment back; so does the commission. */
-  lostDispute?: boolean;
+  /**
+   * The amount of a dispute the host lost. It counts like a refund of that
+   * amount: a guest who wins back EUR 100 of a EUR 555 stay did not undo the
+   * whole booking, and the commission on the rest was earned.
+   */
+  lostDisputeAmount?: number;
 }): number {
   const { chargeAmount, feeAmount, feeRefunded } = input;
   if (chargeAmount <= 0 || feeAmount <= 0) return 0;
 
-  const refunded = Math.min(Math.max(input.chargeRefunded, 0), chargeAmount);
-  const target = input.lostDispute
-    ? feeAmount
-    : Math.floor((feeAmount * refunded) / chargeAmount);
+  // A lost dispute does not show up in the charge's refunded amount, so it is
+  // added here; together they can never exceed the charge.
+  const undone = Math.min(
+    Math.max(input.chargeRefunded, 0) + Math.max(input.lostDisputeAmount ?? 0, 0),
+    chargeAmount,
+  );
+  const target = Math.floor((feeAmount * undone) / chargeAmount);
 
   return Math.max(0, Math.min(target, feeAmount) - Math.max(feeRefunded, 0));
 }

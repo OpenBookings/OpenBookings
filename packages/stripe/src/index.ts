@@ -11,5 +11,5 @@ export {
   type BookingCheckoutLine,
 } from './payments/checkout';
 export { applicationFeeCents, commissionRefundDue } from './payments/fees';
-export { refundCommissionForCharge } from './payments/commission-refund';
+export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
 export { constructWebhookEvent, type StripeEvent } from './webhooks';

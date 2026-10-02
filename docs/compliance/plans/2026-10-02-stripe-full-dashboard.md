@@ -101,3 +101,14 @@ Handles: `account.updated`; `checkout.session.completed` (deduped, logged no-op 
 - Run `discard-test-accounts.ts` against test mode when ready (it deletes connected accounts).
 - Set `STRIPE_APPLICATION_FEE_ENABLED=true` once direct charges are verified in test mode.
 - Partner Agreement wording: commission on the full guest price, Stripe fees paid by the host, disputes handled by the host, commission returned on refund.
+- **Verify the webhook endpoint in Stripe is a Connect endpoint** ("Events on Connected accounts"), subscribed to `account.updated`, `account.external_account.*`, `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`. If it is scoped to your own account, none of these arrive and commission is never returned. The code cannot tell which it is.
+- Set `NEXT_PUBLIC_BUSINESS_URL` in development (`http://business.localhost:3001`); without it Stripe returns hosts to production after onboarding.
+- The host docs describe the commission as live. Turn `STRIPE_APPLICATION_FEE_ENABLED` on before any real host is onboarded, or the docs are wrong in the host's favour.
+
+## Known gaps after review
+
+- A commission refund is not reversed if the guest refund it followed later fails at the bank.
+- Refund and dispute events are written to `audit_log` only; they do not update the booking row or notify the host (the spec asked for both). Bookings are not real rows yet.
+- The return page finds the connected account through the one seeded booking. When checkout stops being pinned, the account has to be stored with the session.
+- Audit rows use `stripeAccountId` and `chargeId` rather than provider-neutral names.
+- Not checked in a browser: Stripe.js initialised with a connected account against this checkout form, and which error Stripe returns for an account that cannot take charges.

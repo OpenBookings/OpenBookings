@@ -13,6 +13,8 @@
 export type StripeEventLike = {
   id: string;
   type: string;
+  /** False for events from Stripe's test mode. */
+  livemode: boolean;
   /** The connected account the object belongs to, for Connect events. */
   account?: string;
   data: { object: unknown };
@@ -22,20 +24,27 @@ export type StripeAuditEntry = {
   action: string;
   stripeAccountId: string;
   detail: Record<string, unknown>;
+  /**
+   * Identifies the thing being recorded (a fee refund, a dispute). A second
+   * entry with the same action and key is not written, so a retried event
+   * cannot leave two records of one fact.
+   */
+  dedupeKey: string;
 };
 
 export type StripeEventDeps = {
-  /** Record that this event is being processed; false if it already was. */
-  claim: (eventId: string) => Promise<boolean>;
-  /** Undo a claim after a failure, so Stripe's retry is processed. */
-  release: (eventId: string) => Promise<void>;
+  /** Whether this deployment runs on Stripe's live keys. */
+  livemode: boolean;
+  isProcessed: (eventId: string) => Promise<boolean>;
+  /** Called only after the event's work has succeeded. */
+  markProcessed: (eventId: string) => Promise<void>;
   markOnboardingComplete: (stripeAccountId: string) => Promise<void>;
-  /** Returns the commission handed back, in minor units (0 if none was due). */
+  /** Returns every commission refund that now exists on the charge. */
   refundCommission: (
     chargeId: string,
     stripeAccountId: string,
-    options: { lostDispute?: boolean },
-  ) => Promise<number>;
+    options: { lostDisputeAmount?: number },
+  ) => Promise<Array<{ id: string; amount: number }>>;
   audit: (entry: StripeAuditEntry) => Promise<void>;
   /** A host's payout bank account was added, changed or removed. */
   onExternalAccountChanged?: (input: {
@@ -55,19 +64,22 @@ export async function handleStripeEvent(
   event: StripeEventLike,
   deps: StripeEventDeps,
 ): Promise<StripeEventOutcome> {
+  // A production Connect endpoint is also sent test-mode events. Their objects
+  // do not exist for live keys, so acting on one could only fail, and Stripe
+  // would keep retrying it for days.
+  if (event.livemode !== deps.livemode) return "ignored";
+
   const run = route(event, deps);
   if (!run) return "ignored";
 
-  // Stripe delivers at least once. Claiming first means a redelivery does
-  // nothing; releasing on failure means a genuine retry still gets processed.
-  if (!(await deps.claim(event.id))) return "duplicate";
-  try {
-    await run();
-    return "handled";
-  } catch (error) {
-    await deps.release(event.id).catch(() => {});
-    throw error;
-  }
+  // Stripe delivers at least once, so a redelivery is skipped. But the event
+  // is marked done only AFTER its work succeeded: every handler here is safe
+  // to repeat, whereas an event marked done before a crash would be lost for
+  // good — and with it, a host's commission refund.
+  if (await deps.isProcessed(event.id)) return "duplicate";
+  await run();
+  await deps.markProcessed(event.id);
+  return "handled";
 }
 
 /** The work for an event, or null when there is none to do. */
@@ -101,29 +113,31 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
         });
     }
 
-    case "checkout.session.completed":
-      // Deduped and acknowledged. Creating the booking from it comes with
-      // real booking intents; checkout is still pinned to a seeded booking.
-      return account ? async () => {} : null;
+    // checkout.session.completed is deliberately not handled yet: creating
+    // the booking from it comes with real booking intents. Leaving it
+    // unmarked means those events can still be replayed once it is.
 
     case "charge.refunded": {
       const chargeId = str(object.id);
       if (!account || !chargeId) return null;
-      return () => returnCommission(deps, chargeId, account, "refund", {});
+      return () => returnCommission(deps, chargeId, account, {});
     }
 
     case "charge.dispute.closed": {
       const chargeId = str(object.charge);
-      if (!account || !chargeId || object.status !== "lost") return null;
-      return () => returnCommission(deps, chargeId, account, "lost-dispute", { lostDispute: true });
+      const amount = typeof object.amount === "number" ? object.amount : 0;
+      if (!account || !chargeId || object.status !== "lost" || amount <= 0) return null;
+      return () => returnCommission(deps, chargeId, account, { lostDisputeAmount: amount });
     }
 
     case "charge.dispute.created": {
-      if (!account) return null;
+      const disputeId = str(object.id);
+      if (!account || !disputeId) return null;
       return () =>
         deps.audit({
           action: "payment.dispute-opened",
           stripeAccountId: account,
+          dedupeKey: disputeId,
           detail: {
             disputeId: str(object.id),
             chargeId: str(object.charge),
@@ -138,19 +152,26 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
   }
 }
 
-/** If the booking did not happen, OpenBookings does not earn. */
+/**
+ * If the booking did not happen, OpenBookings does not earn.
+ *
+ * Records every commission refund on the charge, each keyed by its Stripe id.
+ * Not just the one this event caused: if an earlier attempt moved the money
+ * and failed before writing its record, this is where that record gets made.
+ */
 async function returnCommission(
   deps: StripeEventDeps,
   chargeId: string,
   stripeAccountId: string,
-  reason: "refund" | "lost-dispute",
-  options: { lostDispute?: boolean },
+  options: { lostDisputeAmount?: number },
 ): Promise<void> {
-  const amount = await deps.refundCommission(chargeId, stripeAccountId, options);
-  if (amount <= 0) return;
-  await deps.audit({
-    action: "commission.refunded",
-    stripeAccountId,
-    detail: { chargeId, amount, reason },
-  });
+  const refunds = await deps.refundCommission(chargeId, stripeAccountId, options);
+  for (const refund of refunds) {
+    await deps.audit({
+      action: "commission.refunded",
+      stripeAccountId,
+      dedupeKey: refund.id,
+      detail: { chargeId, feeRefundId: refund.id, amount: refund.amount },
+    });
+  }
 }

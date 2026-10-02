@@ -215,7 +215,13 @@ function CheckoutSession({
   ...props
 }: CheckoutClientProps & { appearance: Omit<Appearance, 'rules'> }) {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<SessionState>({ status: 'loading' });
+  // A property with no connected Stripe account cannot be charged at all. Say
+  // so straight away, with copy that does not invite a retry, instead of
+  // loading nothing and blaming the guest's ad blocker.
+  const chargeable = props.stripeAccountId !== '';
+  const [state, setState] = useState<SessionState>(() =>
+    chargeable ? { status: 'loading' } : { status: 'error', copy: checkoutErrorCopy('config_error') }
+  );
   const [stripe, setStripe] = useState<Stripe | null>(null);
   const {
     token: turnstileToken,
@@ -243,7 +249,7 @@ function CheckoutSession({
     // No token yet — either the gate is still waiting on sign-in, or the
     // challenge is running. Neither is a failure; the effect re-runs as soon
     // as a token is issued.
-    if (!turnstileToken) return;
+    if (!turnstileToken || !chargeable) return;
 
     // Aborting on cleanup keeps React's development double-mount from leaving
     // a second, orphaned Session holding the same room.
@@ -275,7 +281,7 @@ function CheckoutSession({
       active = false;
       controller.abort();
     };
-  }, [attempt, turnstileToken, props.stripeAccountId]);
+  }, [attempt, turnstileToken, props.stripeAccountId, chargeable]);
 
   // A blocked script or a failed challenge is terminal for this attempt: there
   // is no token to send, so the Session is never requested. Derived rather than
