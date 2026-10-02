@@ -4,7 +4,8 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./permissions": "./src/permissions.ts"
+    "./permissions": "./src/permissions.ts",
+    "./rates-doc": "./src/rates-doc.ts"
   },
   "scripts": {
     "test": "bun test",

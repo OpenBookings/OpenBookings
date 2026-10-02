@@ -1,5 +1,6 @@
 import { queryOne as dbQueryOne } from "@openbookings/db";
 import type { AuthzDeps, SessionLike } from "./index";
+import { RATES_TAX_INCLUSIVE_DOC_ID } from "./rates-doc";
 
 /**
  * Inclusive-rates confirmation.
@@ -16,11 +17,7 @@ import type { AuthzDeps, SessionLike } from "./index";
  * All checks fail closed: an unknown id, or a property with no organisation,
  * is "not confirmed".
  */
-export const RATES_TAX_INCLUSIVE_DOC_ID = "rates-tax-inclusive@2026-10-02";
-
-/** The statement an organisation confirms. Shown verbatim wherever it is asked. */
-export const RATES_TAX_INCLUSIVE_STATEMENT =
-  "All rates I enter on OpenBookings include tourist tax, VAT and any mandatory fees. The price I enter is the full price the guest pays. Collecting and remitting those taxes is my responsibility.";
+export { RATES_TAX_INCLUSIVE_DOC_ID, RATES_TAX_INCLUSIVE_STATEMENT } from "./rates-doc";
 
 const CONFIRMED_SQL = `EXISTS (
   SELECT 1 FROM org_consent oc

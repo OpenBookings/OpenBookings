@@ -30,6 +30,7 @@ import {
   type ActionResult,
 } from "../_lib/actions";
 import type { AriGridData, EditPrefill, RoomTypeRow } from "../_lib/types";
+import { RateInclusiveNotice } from "./rate-inclusive-notice";
 
 /**
  * The three bulk-edit modals, plus the reopen path off the detail panel.
@@ -587,7 +588,11 @@ function AddRatePlanDialog({
             value={bar}
             onChange={(e) => setBar(e.target.value)}
             required
+            aria-describedby="ari-plan-bar-basis"
           />
+          <div id="ari-plan-bar-basis">
+            <RateInclusiveNotice />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

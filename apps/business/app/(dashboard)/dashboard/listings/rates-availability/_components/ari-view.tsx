@@ -12,6 +12,8 @@ import { RangeActionBar } from "./range-action-bar";
 import { roomHasIssues } from "../_lib/runs";
 import { useAriDraft } from "../_lib/use-ari-draft";
 import { publishAriChanges } from "../_lib/actions";
+import { RATES_CONFIRMATION_REQUIRED } from "../_lib/rates-confirmation";
+import { RatesConfirmationDialog } from "./rates-confirmation-dialog";
 import type {
   AriGridData,
   AriSelection,
@@ -40,9 +42,15 @@ interface AriViewProps {
   data: AriGridData;
   startDate: string;
   windowDays: number;
+  /**
+   * Whether this property's organisation has confirmed its rates include tax,
+   * and whether this user may confirm it. The server enforces the rule; this
+   * only decides what the host is shown.
+   */
+  rates: { confirmed: boolean; canConfirm: boolean };
 }
 
-export function AriView({ data, startDate, windowDays }: AriViewProps) {
+export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = React.useTransition();
@@ -58,6 +66,9 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
   const [issuesOnly, setIssuesOnly] = React.useState(false);
   const [selection, setSelection] = React.useState<AriSelection | null>(null);
   const [dialog, setDialog] = React.useState<DialogState | null>(null);
+  // Asked up front for an organisation that has not confirmed yet, rather
+  // than only after a publish has been refused.
+  const [confirmOpen, setConfirmOpen] = React.useState(!rates.confirmed);
   const draft = useAriDraft();
   const [publishing, setPublishing] = React.useState(false);
   const [range, setRange] = React.useState<RangeSelection | null>(null);
@@ -130,7 +141,9 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
       });
 
       if (!result.ok) {
-        toast.error(result.error);
+        // The draft is kept: once confirmed, the same publish goes through.
+        if (result.code === RATES_CONFIRMATION_REQUIRED) setConfirmOpen(true);
+        else toast.error(result.error);
         return;
       }
 
@@ -238,6 +251,23 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
           floor it is supposed to sit on.
         */}
         <div className="flex min-h-0 flex-1 flex-col px-4 pt-4 lg:px-6 lg:pt-6">
+          <p className="pb-2 text-muted-foreground text-xs">
+            {rates.confirmed ? (
+              "All rates include tax. Guests pay the price shown here."
+            ) : (
+              <>
+                Prices are locked until your organisation confirms that its
+                rates include tax.{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  Review
+                </button>
+              </>
+            )}
+          </p>
           <AriGrid
             data={filteredData}
             expandedRooms={expandedRooms}
@@ -271,6 +301,18 @@ export function AriView({ data, startDate, windowDays }: AriViewProps) {
         onEditRestrictions={(prefill) => openDialog("restrictions", prefill)}
         onReopen={(prefill) => openDialog("reopen", prefill)}
         onStage={draft.stage}
+      />
+
+      <RatesConfirmationDialog
+        open={confirmOpen}
+        propertyId={data.propertyId}
+        canConfirm={rates.canConfirm}
+        onClose={() => setConfirmOpen(false)}
+        onConfirmed={() => {
+          setConfirmOpen(false);
+          toast.success("Confirmed. You can set prices now.");
+          startTransition(() => router.refresh());
+        }}
       />
 
       <AriEditDialogs

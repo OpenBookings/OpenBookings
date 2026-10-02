@@ -1,3 +1,4 @@
+import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 import type { PoolClient } from "pg";
 import type { LegalNBoringData } from "@/app/(onboarding)/onboarding/actions";
 
@@ -128,6 +129,8 @@ export async function provisionOrganizationTx(
   for (const [docId, signature] of [
     ["partner-agreement", input.legal.partnerAgreement],
     ["dpa", input.legal.dpa],
+    // Confirmed in the same step; without it the organisation cannot set prices.
+    [RATES_TAX_INCLUSIVE_DOC_ID, input.legal.ratesInclusive],
   ] as const) {
     if (!signature) continue;
     await client.query(
