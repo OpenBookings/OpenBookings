@@ -24,40 +24,58 @@ export async function POST() {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const row = await queryOne<{
-    stripe_account_id: string | null;
-    onboarding_complete: boolean;
-    is_owner: boolean;
-  }>(
-    // The connected account is the organisation's money. Before the
-    // organisation exists (mid-onboarding) the person onboarding is its owner
-    // to be; afterwards, only a member with the owner role.
-    `SELECT ho.step_data->>'stripe_account_id' AS stripe_account_id,
-            (ho.onboarding_completed_at IS NOT NULL) AS onboarding_complete,
-            (NOT EXISTS (SELECT 1 FROM "member" m WHERE m."userId" = $1)
-              OR EXISTS (SELECT 1 FROM "member" m WHERE m."userId" = $1 AND m.role = 'owner')) AS is_owner
-     FROM host_onboarding ho
-     WHERE ho.user_id = $1`,
+  // Two ways to be entitled to this account's onboarding link:
+  //
+  // - Mid-onboarding there is no organisation yet. The person onboarding is
+  //   its owner-to-be, whatever their role in some other organisation.
+  // - Afterwards, only an owner of the organisation the account belongs to.
+  //   Not "whoever has an onboarding row": a removed or demoted ex-owner still
+  //   has one, and a second owner never did.
+  const onboarding = await queryOne<{ stripe_account_id: string | null; complete: boolean }>(
+    `SELECT step_data->>'stripe_account_id' AS stripe_account_id,
+            (onboarding_completed_at IS NOT NULL) AS complete
+     FROM host_onboarding WHERE user_id = $1`,
     [session.user.id]
   );
 
+  let stripeAccountId: string | null;
+  let isOwner: boolean;
+  let onboardingComplete: boolean;
+
+  if (onboarding && !onboarding.complete) {
+    stripeAccountId = onboarding.stripe_account_id;
+    isOwner = true;
+    onboardingComplete = false;
+  } else {
+    const owned = await queryOne<{ stripe_account_id: string }>(
+      `SELECT op.stripe_account_id
+       FROM "member" m
+       JOIN org_profile op ON op.organization_id = m."organizationId"
+       WHERE m."userId" = $1 AND m.role = 'owner' AND op.stripe_account_id IS NOT NULL
+       ORDER BY (op.stripe_account_id = $2) DESC, m."createdAt"
+       LIMIT 1`,
+      [session.user.id, onboarding?.stripe_account_id ?? null]
+    );
+    stripeAccountId = owned?.stripe_account_id ?? null;
+    // No owned organisation with an account. If the user has nothing at all
+    // there is simply no account; if they onboarded once but own nothing now,
+    // they are no longer entitled to it.
+    isOwner = owned !== null || !onboarding;
+    onboardingComplete = true;
+  }
+
   let requirementsDue = 0;
-  if (row?.stripe_account_id && row.onboarding_complete && row.is_owner) {
+  if (isOwner && stripeAccountId && onboardingComplete) {
     // Only asked when it decides the answer. Unreachable Stripe means no link.
     try {
-      const account = await retrieveConnectAccount(row.stripe_account_id);
+      const account = await retrieveConnectAccount(stripeAccountId);
       requirementsDue = account.requirements?.currently_due?.length ?? 0;
     } catch {
       return NextResponse.json({ error: 'Stripe is unavailable' }, { status: 503 });
     }
   }
 
-  const decision = accountLinkDecision({
-    isOwner: row?.is_owner === true,
-    stripeAccountId: row?.stripe_account_id ?? null,
-    onboardingComplete: row?.onboarding_complete === true,
-    requirementsDue,
-  });
+  const decision = accountLinkDecision({ isOwner, stripeAccountId, onboardingComplete, requirementsDue });
 
   if (decision === 'forbidden') {
     return NextResponse.json({ error: 'Only an owner can do this' }, { status: 403 });
@@ -72,10 +90,10 @@ export async function POST() {
     );
   }
 
-  const stage = row!.onboarding_complete ? 'stripe-requirements' : 'onboarding';
-  const url = await createAccountLink(row!.stripe_account_id!, {
-    refreshUrl: `${APP_URL}/onboarding/stripe`,
-    returnUrl: row!.onboarding_complete ? `${APP_URL}/dashboard/finance` : `${APP_URL}/onboarding/stripe`,
+  const stage = onboardingComplete ? 'stripe-requirements' : 'onboarding';
+  const url = await createAccountLink(stripeAccountId!, {
+    refreshUrl: onboardingComplete ? `${APP_URL}/dashboard/finance` : `${APP_URL}/onboarding/stripe`,
+    returnUrl: onboardingComplete ? `${APP_URL}/dashboard/finance` : `${APP_URL}/onboarding/stripe`,
   });
 
   await query(

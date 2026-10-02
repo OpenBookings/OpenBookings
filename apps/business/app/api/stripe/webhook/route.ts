@@ -58,30 +58,41 @@ const deps: StripeEventDeps = {
  * it can do is make sure every owner hears about a change, so one that nobody
  * made is noticed.
  */
-deps.onExternalAccountChanged = async ({ stripeAccountId, change, last4, country }) => {
+deps.onExternalAccountChanged = async ({ eventId, stripeAccountId, change, last4, country }) => {
+  // Tied to the organisation that owns this account, and to its owners only.
   const rows = await query<{ organization_id: string; name: string; email: string }>(
     `SELECT op.organization_id, o.name, u.email
      FROM org_profile op
      JOIN "organization" o ON o.id = op.organization_id
      JOIN "member" m ON m."organizationId" = op.organization_id AND m.role = 'owner'
      JOIN "user" u ON u.id = m."userId"
-     WHERE op.stripe_account_id = $1`,
+     WHERE op.stripe_account_id = $1
+     ORDER BY op.organization_id`,
     [stripeAccountId],
   );
+  const organizationId = rows[0]?.organization_id ?? null;
 
-  await query(
+  // One record per Stripe event. If Stripe retries (a slow mail provider, a
+  // failed write further on), the row is already there and no second email
+  // goes out. Last four digits and country only: never the account number.
+  const inserted = await query<{ id: string }>(
     `INSERT INTO audit_log (action, organization_id, detail)
-     VALUES ('payout.external-account-changed', $1, $2)`,
-    // Last four digits and country only. Never the account number.
-    [rows[0]?.organization_id ?? null, JSON.stringify({ stripeAccountId, change, last4, country })],
+     SELECT 'payout.external-account-changed', $1, $2::jsonb
+     WHERE NOT EXISTS (
+       SELECT 1 FROM audit_log
+       WHERE action = 'payout.external-account-changed' AND detail->>'dedupeKey' = $3
+     )
+     RETURNING id`,
+    [organizationId, JSON.stringify({ stripeAccountId, change, last4, country, dedupeKey: eventId }), eventId],
   );
+  if (inserted.length === 0) return;
 
-  if (rows.length === 0) return;
-  // Sent after the audit row, and never allowed to fail the webhook: a
-  // bounced email must not make Stripe retry and write the row twice.
+  const owners = rows.filter((row) => row.organization_id === organizationId);
+  if (owners.length === 0) return;
+  // Never allowed to fail the webhook: a bounced email is not Stripe's problem.
   await sendPayoutChangeAlert(
-    rows.map((row) => row.email),
-    { organisationName: rows[0]!.name, change, last4, country },
+    owners.map((row) => row.email),
+    { organisationName: owners[0]!.name, change, last4, country },
   ).catch((error) => {
     console.error("[stripe-webhook] payout alert failed:", error instanceof Error ? error.message : error);
   });

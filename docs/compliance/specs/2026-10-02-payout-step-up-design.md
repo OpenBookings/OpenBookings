@@ -57,7 +57,7 @@ clock:
   `/passkey/verify-authentication`, `/two-factor/verify-totp` or
   `/two-factor/verify-backup-code`. Never at sign-in.
 
-Migration `packages/db/drizzle/0017_factor_stepup.sql` (hand-applied,
+Migration `packages/db/drizzle/0019_factor_stepup.sql` (hand-applied,
 idempotent):
 
 ```sql
@@ -81,7 +81,7 @@ Paths gated:
 - existing: `/organization/delete`, `/organization/remove-member`,
   `/change-email`, `/delete-user`, promotion to owner/admin;
 - new: `/organization/invite-member` (closes F2c);
-- new: `/passkey/add-passkey`, `/passkey/delete-passkey`,
+- new: `/passkey/generate-register-options`, `/passkey/verify-registration`, `/passkey/delete-passkey`,
   `/two-factor/enable`, `/two-factor/disable`. Today a stolen session can
   enrol its own passkey and then satisfy the gate with it.
 

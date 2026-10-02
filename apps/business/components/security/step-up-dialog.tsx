@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { isStepUpRequired } from "@/lib/step-up";
 import {
@@ -26,7 +27,7 @@ type Action = () => Promise<Result>;
  * this only gives the host a way to satisfy it without losing what they were
  * doing.
  */
-export function useStepUp(hasFactor: boolean) {
+export function useStepUp(factors: { hasPasskey: boolean; hasAuthenticator: boolean }) {
   const [pending, setPending] = React.useState<{
     action: Action;
     resolve: (result: Result) => void;
@@ -35,23 +36,39 @@ export function useStepUp(hasFactor: boolean) {
   const guard = React.useCallback(async (action: Action): Promise<Result> => {
     const result = await action();
     if (!isStepUpRequired(result)) return result;
-    return new Promise<Result>((resolve) => setPending({ action, resolve }));
+    return new Promise<Result>((resolve) =>
+      setPending((current) => {
+        // One prompt at a time: a second gated action while the dialog is open
+        // is turned away rather than silently replacing the first.
+        if (current) {
+          resolve({ error: { code: "STEP_UP_BUSY", message: "Finish the verification that is already open." } });
+          return current;
+        }
+        return { action, resolve };
+      }),
+    );
   }, []);
 
   const dialog = (
     <StepUpDialog
       open={pending !== null}
-      hasFactor={hasFactor}
+      factors={factors}
       onCancel={() => {
-        pending?.resolve({ error: { code: "STEP_UP_CANCELLED", message: "Cancelled." } });
+        // Not an error to show: the host changed their mind.
+        pending?.resolve({ error: null });
         setPending(null);
       }}
       onVerified={async () => {
         if (!pending) return;
         const { action, resolve } = pending;
         setPending(null);
-        // Once. If it is refused again the caller shows the error.
-        resolve(await action());
+        // Once. If it is refused again the caller shows the error. The promise
+        // must settle whatever happens, or the caller's busy state sticks.
+        try {
+          resolve(await action());
+        } catch {
+          resolve({ error: { code: "STEP_UP_FAILED", message: "Something went wrong. Please try again." } });
+        }
       }}
     />
   );
@@ -61,12 +78,12 @@ export function useStepUp(hasFactor: boolean) {
 
 function StepUpDialog({
   open,
-  hasFactor,
+  factors,
   onCancel,
   onVerified,
 }: {
   open: boolean;
-  hasFactor: boolean;
+  factors: { hasPasskey: boolean; hasAuthenticator: boolean };
   onCancel: () => void;
   onVerified: () => void;
 }) {
@@ -76,7 +93,7 @@ function StepUpDialog({
         {/* Mounted only while open, so a half-typed code never survives into
             the next prompt. */}
         {open ? (
-          <StepUpBody hasFactor={hasFactor} onCancel={onCancel} onVerified={onVerified} />
+          <StepUpBody factors={factors} onCancel={onCancel} onVerified={onVerified} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -84,14 +101,16 @@ function StepUpDialog({
 }
 
 function StepUpBody({
-  hasFactor,
+  factors,
   onCancel,
   onVerified,
 }: {
-  hasFactor: boolean;
+  factors: { hasPasskey: boolean; hasAuthenticator: boolean };
   onCancel: () => void;
   onVerified: () => void;
 }) {
+  const router = useRouter();
+  const hasFactor = factors.hasPasskey || factors.hasAuthenticator;
   const [mode, setMode] = React.useState<"totp" | "backup">("totp");
   const [code, setCode] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -118,27 +137,32 @@ function StepUpBody({
           <DialogDescription>
             {hasFactor
               ? "This change needs a fresh check with your passkey or authenticator app."
-              : "This change needs a recent sign-in. Sign out and back in, then try again."}
+              : "This change needs a recent sign-in. Sign in again, then come back and try once more."}
           </DialogDescription>
         </DialogHeader>
 
         {hasFactor ? (
           <div className="flex flex-col gap-4">
-            <Button
-              disabled={busy}
-              onClick={() =>
-                attempt(
-                  () => authClient.signIn.passkey() as Promise<Result>,
-                  "The passkey check was cancelled or did not match.",
-                )
-              }
-            >
-              Use passkey
-            </Button>
+            {factors.hasPasskey ? (
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  attempt(
+                    () => authClient.signIn.passkey() as Promise<Result>,
+                    "The passkey check was cancelled or did not match.",
+                  )
+                }
+              >
+                Use passkey
+              </Button>
+            ) : null}
 
+            {factors.hasAuthenticator ? (
             <div className="flex flex-col gap-2">
               <label htmlFor="step-up-code" className="text-sm text-muted-foreground">
-                {mode === "totp" ? "Or enter the 6-digit code from your authenticator app" : "Enter a recovery code"}
+                {mode === "totp"
+                  ? "Enter the 6-digit code from your authenticator app"
+                  : "Enter a recovery code. Each one works once, so keep them for when you have nothing else."}
               </label>
               <div className="flex gap-2">
                 <Input
@@ -176,8 +200,18 @@ function StepUpBody({
                 {mode === "totp" ? "Use a recovery code instead" : "Use an authenticator code instead"}
               </button>
             </div>
+            ) : null}
           </div>
-        ) : null}
+        ) : (
+          <Button
+            onClick={async () => {
+              await authClient.signOut();
+              router.push("/login");
+            }}
+          >
+            Sign in again
+          </Button>
+        )}
 
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
 

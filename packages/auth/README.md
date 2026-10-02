@@ -121,7 +121,25 @@ a factor must have a fresh *factor* verification for gated actions; a host
 with none falls back to sign-in recency, which keeps them able to enrol their
 first one (`stepUpSatisfied` in `shared.ts`). Also gated now: inviting a
 member, storing or deleting a passkey, enabling or disabling two-factor, and
-regenerating backup codes. Payout bank details are not gated here: they are
+regenerating backup codes (and asking for passkey registration options, so
+the refusal comes before the device ceremony).
+
+The hooks live in `step-up-hooks.ts` and are tested against the real Better
+Auth dispatch (`step-up-hooks.test.ts`). Three things that are easy to get
+wrong and that those tests pin:
+
+- Better Auth runs after-hooks for **failed** requests too. The hook checks
+  the returned value and stamps nothing on failure; otherwise a wrong code
+  would unlock the gate.
+- `/passkey/verify-authentication` always creates a **new** session for the
+  passkey's owner. The hook stamps that new session, and retires the old one
+  when it belonged to the same user. It never stamps the session the request
+  arrived with, or anyone's passkey could vouch for a stolen cookie.
+- `/two-factor/get-totp-uri` is blocked: with passwordless hosts it returns
+  the authenticator secret to any session.
+
+Wrong codes from a signed-in session are counted in `audit_log`
+(`auth.factor-failed`); after five in 15 minutes further tries are refused. Payout bank details are not gated here: they are
 changed in the host's own Stripe Dashboard, behind Stripe's login, and owners
 are emailed when they change.
 

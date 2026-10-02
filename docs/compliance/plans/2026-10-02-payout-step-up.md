@@ -15,7 +15,7 @@
 - Step-up window stays 15 minutes (`STEP_UP_MAX_AGE_MS`).
 - `lastFactorVerifiedAt` is stamped only on success of `/passkey/verify-authentication`, `/two-factor/verify-totp`, `/two-factor/verify-backup-code`. Never at sign-in.
 - A user who has a factor (a passkey, or `twoFactorEnabled`) must have a fresh factor verification for gated actions. A user with none falls back to `lastVerifiedAt`, as today.
-- Gated paths, added: `/organization/invite-member`, `/passkey/add-passkey`, `/passkey/delete-passkey`, `/two-factor/enable`, `/two-factor/disable`. Existing gated paths unchanged.
+- Gated paths, added: `/organization/invite-member`, `/passkey/generate-register-options`, `/passkey/verify-registration` (Better Auth has no `/passkey/add-passkey`), `/passkey/delete-passkey`, `/two-factor/enable`, `/two-factor/disable`, `/two-factor/generate-backup-codes`. Existing gated paths unchanged.
 - Gates fail closed: an unreadable session row or a database error is a refusal.
 - Freshness is read from the database, never the cookie cache.
 - Account-link route: owner of the organisation only; refused with 409 once the Stripe account needs nothing; writes `audit_log` `payout.onboarding-link-created`. No step-up there (the link leads to a Stripe login).
@@ -67,3 +67,25 @@ export function stepUpSatisfied(input: { hasFactor: boolean; lastVerifiedAt: Dat
 - Apply `0019_factor_stepup.sql` before deploying.
 - Add `account.external_account.created|updated|deleted` to the Connect webhook endpoint in Stripe.
 - Recovery when a host has lost every factor is a manual identity check by you; there is no self-service reset beyond backup codes.
+
+## What review changed
+
+A reviewer ran the hooks against the real Better Auth dispatch and found the first version did not hold. Fixed, with an integration test for each (`packages/auth/src/step-up-hooks.test.ts`):
+
+- A failed verification still started the clock (Better Auth runs after-hooks on failure).
+- Passkey re-verification stamped the old session; the browser was moved to a new, unstamped one, so passkey hosts could never pass the gate.
+- Someone else's passkey, presented with a victim's cookie, stamped the victim's session.
+- `/two-factor/get-totp-uri` returned the authenticator secret to any session; it is now blocked.
+- No limit on wrong codes from a signed-in session; now five per 15 minutes.
+
+## Still open to a stolen session cookie
+
+- A host with no factor, within 15 minutes of signing in, can do everything, including enrolling the thief's own factor. This is the cost of keeping enrolment optional.
+- Not gated: demoting a member or promoting to `finance`/`manager`, `/organization/update`, `/organization/leave`, cancelling an invitation, revoking sessions (which can sign the real host out), unlinking a social account, renaming a passkey.
+- `/admin/*` for a stolen staff session, including impersonation.
+- No screen in the business app calls invite, remove or role change yet; whoever builds it must wrap those calls in `useStepUp`'s `guard`.
+
+## Not verified
+
+- The dialog in a real browser (WebAuthn prompt, focus). The server side is covered by the integration test with a software passkey.
+- Finance shows the payout status of the user's oldest organisation, not the active one; any member role can see it.

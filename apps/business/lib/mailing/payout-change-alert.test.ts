@@ -31,6 +31,9 @@ describe("renderPayoutChangeAlert", () => {
   test("tells the reader what to do if it was not them, and never links to a sign-in page", () => {
     const { text } = renderPayoutChangeAlert({ organisationName: "Acme", change: "updated", last4: "6789", country: "NL" }, at);
     expect(text).toContain("If this was not you");
+    // Sent from a no-reply address, so it must name one that is read.
+    expect(text).toContain("support@openbookings.co");
+    expect(text).not.toMatch(/reply to this email/i);
     expect(text).toContain("dashboard.stripe.com");
     expect(text).not.toMatch(/https?:\/\/[^\s]*login/);
   });

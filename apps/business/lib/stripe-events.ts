@@ -48,6 +48,8 @@ export type StripeEventDeps = {
   audit: (entry: StripeAuditEntry) => Promise<void>;
   /** A host's payout bank account was added, changed or removed. */
   onExternalAccountChanged?: (input: {
+    /** The Stripe event id, so the record and the email happen once per event. */
+    eventId: string;
     stripeAccountId: string;
     change: "created" | "updated" | "deleted";
     last4: string | null;
@@ -106,6 +108,7 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
       const change = event.type.split(".").pop() as "created" | "updated" | "deleted";
       return () =>
         notify({
+          eventId: event.id,
           stripeAccountId: account,
           change,
           last4: str(object.last4),

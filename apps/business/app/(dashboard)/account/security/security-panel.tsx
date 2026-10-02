@@ -55,7 +55,10 @@ export function SecurityPanel() {
 
   // Adding or removing a factor is gated: the server asks for a fresh check
   // first, and this turns that refusal into a prompt instead of an error.
-  const { guard, dialog: stepUpDialog } = useStepUp(passkeys.length > 0 || twoFactorEnabled);
+  const { guard, dialog: stepUpDialog } = useStepUp({
+    hasPasskey: passkeys.length > 0,
+    hasAuthenticator: twoFactorEnabled,
+  });
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -117,7 +120,9 @@ export function SecurityPanel() {
     const result = (await guard(() => authClient.twoFactor.enable({}))) as Awaited<
       ReturnType<typeof authClient.twoFactor.enable>
     >;
-    if (result.error || !result.data) {
+    if (!result?.error && !result?.data) {
+      // The verification prompt was dismissed: nothing happened, nothing to report.
+    } else if (result.error || !result.data) {
       setError(result.error?.message ?? "Could not start two-factor setup.");
     } else {
       setTotpUri(result.data.totpURI);

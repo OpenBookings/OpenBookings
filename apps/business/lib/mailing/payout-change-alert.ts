@@ -75,7 +75,7 @@ export function renderPayoutChangeAlert(
     "",
     "If you or a colleague did this, there is nothing to do.",
     "",
-    "If this was not you: go to dashboard.stripe.com directly (type the address, do not follow a link), check the bank account under Settings, change your Stripe password and turn on two-step authentication. Then reply to this email so we can help.",
+    "If this was not you: go to dashboard.stripe.com directly (type the address, do not follow a link), check the bank account under Settings, change your Stripe password and turn on two-step authentication. Then write to support@openbookings.co so we can help. This address does not receive replies.",
   ].filter((line): line is string => line !== null)
 
   const text = lines.join("\n")
