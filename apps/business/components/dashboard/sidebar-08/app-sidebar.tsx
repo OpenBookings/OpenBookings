@@ -27,6 +27,7 @@ import {
   useNavAttention,
 } from "@/components/dashboard/sidebar-08/use-nav-attention";
 import { WhatsNewDialog } from "@/components/dashboard/sidebar-08/whats-new-dialog";
+import { PAGE_IDS, PAGES } from "@/lib/analytics/pages";
 import type { PropertyBrand } from "@/lib/property-brand";
 import {
   Sidebar,
@@ -73,13 +74,7 @@ const navMain: NavItem[] = [
     title: "Analytics",
     url: "#",
     icon: TrendingUp,
-    items: [
-      { title: "Revenue", url: "/dashboard/analytics/revenue" },
-      { title: "Sell-through", url: "/dashboard/analytics/sell-through" },
-      { title: "Bookings", url: "/dashboard/analytics/bookings" },
-      { title: "Pricing", url: "/dashboard/analytics/pricing" },
-      { title: "Guests", url: "/dashboard/analytics/guests" },
-    ],
+    items: PAGE_IDS.map((id) => ({ title: PAGES[id].title, url: PAGES[id].path })),
   },
 ];
 

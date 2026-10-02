@@ -1,4 +1,5 @@
-import type { ModifierType } from "@openbookings/pricing";
+import type { PageId } from "./pages";
+import type { CompareMode, DateRange, Period } from "./period";
 
 /** Calendar date, `YYYY-MM-DD`. Every date in this module is one of these. */
 export type IsoDate = string;
@@ -7,191 +8,247 @@ export type IsoDate = string;
 export type IsoInstant = string;
 
 // ─────────────────────────────────────────────
-// Facts — the seam. See the spec's "The seam" table for the real source of
-// every field. Change these only alongside that table.
+// Facts — the seam. Real queries will return exactly these shapes.
 // ─────────────────────────────────────────────
-
-/** One room type's trading on one date. The grain everything derives from. */
-export interface NightFact {
-  date: IsoDate;
-  propertyId: string;
-  /** A `rooms` row IS the room type. */
-  roomId: string;
-  ratePlanId: string;
-  /** rooms.total_units, less blocked and closed units. */
-  unitsAvailable: number;
-  unitsSold: number;
-  /** Net room revenue: ex VAT, ex tourist tax, ex fees, after discounts. */
-  netRevenueCents: number;
-  /** Rate plan BAR before modifiers, multiplied by unitsSold. */
-  basePriceCents: number;
-  modifiers: { type: ModifierType; impactCents: number }[];
-}
 
 export type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
 
 export interface BookingFact {
   id: string;
-  propertyId: string;
-  /** Drives lead time and "bookings created in period". */
+  /** The booking date: drives every booking-date widget and lead time. */
   createdAt: IsoInstant;
   checkIn: IsoDate;
   checkOut: IsoDate;
   nights: number;
   status: BookingStatus;
+  /** Null until the booking is cancelled. */
   cancelledAt: IsoInstant | null;
   adults: number;
   children: number;
-  /** Stands in for bookings.user_id. */
   guestKey: string;
-  /** ISO-3166-1 alpha-2. No database source exists yet — see the spec. */
+  /** ISO-3166-1 alpha-2. */
   guestCountry: string;
-  netRevenueCents: number;
   roomId: string;
   ratePlanId: string;
+  /** Net room revenue per night, one entry per night. Sums to netRevenueCents. */
+  nightlyNetCents: number[];
+  /** Net room revenue: ex VAT, ex tourist tax, ex fees, after discounts. */
+  netRevenueCents: number;
+  /** The rate before discounts. basePriceCents − discountCents = netRevenueCents. */
+  basePriceCents: number;
+  discountCents: number;
+  /** What the host kept when a cancelled booking's tier charged a fee. */
+  cancellationFeeCents: number;
+}
+
+/** One room type's capacity on one date. */
+export interface InventoryFact {
+  date: IsoDate;
+  roomId: string;
+  unitsTotal: number;
+  unitsOutOfOrder: number;
+}
+
+/** One unit sold for one night. Always expanded from a booking, never invented. */
+export interface SoldNight {
+  date: IsoDate;
+  roomId: string;
+  ratePlanId: string;
+  bookingId: string;
+  revenueCents: number;
 }
 
 export interface Facts {
-  nights: NightFact[];
   bookings: BookingFact[];
+  inventory: InventoryFact[];
+  nights: SoldNight[];
   roomTypeNames: Record<string, string>;
   ratePlanNames: Record<string, string>;
 }
 
 // ─────────────────────────────────────────────
-// View model
+// View model primitives
 // ─────────────────────────────────────────────
 
-export interface PropertySummary {
-  id: string;
-  name: string;
-}
+export type Basis = "booking" | "stay";
 
 /**
- * One widget's outcome. A derivation that throws is contained here rather than
- * taking the page down with it; today that is defensive, and when one aggregate
- * query can fail while its neighbours succeed it becomes load-bearing.
+ * One widget's outcome. `sample` is counted on the widget's own basis: nights
+ * sold for stay-date widgets, bookings for booking-date widgets.
  */
-export type Widget<T> = { ok: true; value: T } | { ok: false; message: string };
+export type Widget<T> =
+  | { ok: true; value: T; basis: Basis; sample: number }
+  | { ok: false; reason: "below-minimum"; basis: Basis; needed: number; have: number }
+  | { ok: false; reason: "error"; message: string };
 
-/**
- * `pct` is null when there is nothing to compare against, which renders "—".
- * `label` is the text beside the arrow, because colour and glyph alone are not
- * enough. `goodDirection` inverts for Cancellations and Average discount.
- */
+/** Exists only when there is a comparison and the rounded change is non-zero. */
 export interface Delta {
-  pct: number | null;
-  direction: "up" | "down" | "flat";
+  pct: number;
+  direction: "up" | "down";
   label: string;
-  goodDirection: "up" | "down";
+  /** `neutral` for metrics where a rise is not good news. */
+  tone: "directional" | "neutral";
 }
 
-/** One point on a time series. `label` is pre-formatted for axis and tooltip. */
-export interface Point {
-  bucket: IsoDate;
-  label: string;
-  value: number;
-}
-
-/** One bar in a ranked chart or list. */
-export interface Category {
-  key: string;
-  label: string;
-  value: number;
-  /** Populated where a list shows a second figure, e.g. times a modifier fired. */
-  count?: number;
+export interface StatValue {
+  value: number | null;
+  delta: Delta | null;
 }
 
 export type Granularity = "day" | "week" | "month";
 
-export interface KpiWithDelta {
-  value: number | null;
-  delta: Delta;
-}
-
-export interface KpiWithSpark {
-  value: number | null;
-  spark: Point[];
-}
-
-export interface RevenueSection {
-  yearToDateCents: Widget<KpiWithDelta>;
-  periodCents: Widget<KpiWithDelta>;
-  adrCents: Widget<KpiWithSpark>;
-  revparCents: Widget<KpiWithSpark>;
-  overTime: Widget<Point[]>;
-  byRoomType: Widget<Category[]>;
-  byRatePlan: Widget<Category[]>;
-  commissionCents: Widget<number>;
-}
-
-/** One cell of the busiest-days table. `pct` is null where no inventory existed. */
-export interface HeatCell {
-  weekStart: IsoDate;
-  weekday: number; // 1 = Monday ... 7 = Sunday
-  pct: number | null;
-  nightsSold: number;
-  nightsAvailable: number;
-}
-
-export interface Heatmap {
-  weeks: { start: IsoDate; label: string }[];
-  cells: HeatCell[];
-}
-
-export interface SellThroughSection {
-  pct: Widget<KpiWithDelta>;
-  roomsSold: Widget<number>;
-  overTime: Widget<Point[]>;
-  byRoomType: Widget<Category[]>;
-  busiestDays: Widget<Heatmap>;
-}
-
-export interface UpcomingWindow {
-  window: 30 | 60 | 90;
+export interface Point {
+  bucket: IsoDate;
   label: string;
-  nightsSold: number;
-  nightsAvailable: number;
+  /** Null where the question had no answer, e.g. occupancy with nothing available. */
+  value: number | null;
+  /** The comparison period's value for the same position, or null. */
+  compare: number | null;
+  /** True when the bucket is still in progress or clipped by the range end. */
+  incomplete: boolean;
 }
 
-export interface BookingsSection {
-  count: Widget<KpiWithDelta>;
-  averageLengthOfStay: Widget<number | null>;
-  cancellations: Widget<KpiWithDelta & { count: number }>;
-  leadTime: Widget<Category[]>;
-  upcoming: Widget<UpcomingWindow[]>;
+export interface Share {
+  key: string;
+  label: string;
+  value: number;
+  sharePct: number;
 }
 
-export interface PricingSection {
-  averageDiscountPct: Widget<number | null>;
-  priceOverTime: Widget<{ base: Point[]; achieved: Point[] }>;
-  topModifiers: Widget<Category[]>;
+export interface Bar {
+  key: string;
+  label: string;
+  value: number;
 }
 
-export interface GuestsSection {
-  averagePartySize: Widget<number | null>;
-  repeatGuestPct: Widget<number | null>;
-  countries: Widget<Category[]>;
+export interface DayCell {
+  date: IsoDate;
+  sold: number;
+  available: number;
+  weekend: boolean;
 }
 
-export interface AnalyticsData {
-  property: PropertySummary;
-  properties: PropertySummary[];
-  range: { from: IsoDate; to: IsoDate };
+export interface CancellationRow {
+  key: string;
+  label: string;
+  bookings: number;
+  cancelled: number;
+  ratePct: number | null;
+  feesRetainedCents: number;
+}
+
+export interface RatePlanRow {
+  key: string;
+  label: string;
+  bookings: number;
+  nights: number;
+  adrCents: number | null;
+  revenueCents: number;
+}
+
+export interface WeekdayRow {
+  /** 1 = Monday … 7 = Sunday. */
+  weekday: number;
+  label: string;
+  occupancyPct: number | null;
+  adrCents: number | null;
+  /** True when the weekday sells out below the period's average rate. */
+  hint: boolean;
+}
+
+export type GroupType = "solo" | "couple" | "family" | "group";
+
+// ─────────────────────────────────────────────
+// Page view models
+// ─────────────────────────────────────────────
+
+export interface RevenueView {
+  revenue: Widget<StatValue>;
+  yearToDate: Widget<StatValue>;
+  adr: Widget<StatValue>;
+  revpar: Widget<StatValue>;
+  commission: Widget<StatValue>;
+  overTime: Widget<Point[]>;
+  byRoomType: Widget<Share[]>;
+  byRatePlan: Widget<Share[]>;
+}
+
+export interface OccupancyView {
+  occupancy: Widget<StatValue>;
+  nightsSold: Widget<StatValue>;
+  nightsAvailable: Widget<StatValue>;
+  unsoldNext30: Widget<StatValue>;
+  overTime: Widget<Point[]>;
+  overTimeGranularity: Granularity;
+  next90: Widget<DayCell[]>;
+  /** Null until twelve months of history exist. */
+  pace: Widget<Point[]> | null;
+  byWeekday: Widget<Bar[]>;
+}
+
+export interface BookingPatternsView {
+  bookings: Widget<StatValue>;
+  medianLeadDays: Widget<StatValue>;
+  medianStayNights: Widget<StatValue>;
+  cancellationRate: Widget<StatValue>;
+  leadTime: Widget<Bar[]>;
+  stayLength: Widget<Bar[]>;
+  cancellationsByDaysBefore: Widget<Bar[]>;
+  byRatePlan: Widget<CancellationRow[]>;
+}
+
+export interface PricingView {
+  adr: Widget<StatValue>;
+  discounts: Widget<StatValue & { shareOfBookingsPct: number | null }>;
+  discountDepth: Widget<StatValue>;
+  adrOverTime: Widget<Point[]>;
+  byRatePlan: Widget<RatePlanRow[]>;
+  byWeekday: Widget<WeekdayRow[]>;
+}
+
+export interface GuestsView {
+  returning: Widget<StatValue>;
+  medianPartySize: Widget<StatValue>;
+  countries: Widget<Share[]>;
+  groupTypes: Widget<Share[]>;
+}
+
+// ─────────────────────────────────────────────
+// Derivation context and page payload
+// ─────────────────────────────────────────────
+
+/** Everything a page derivation needs. Note what is absent: any property. */
+export interface DeriveContext {
+  facts: Facts;
+  period: Period;
+  /** Null when no comparison was asked for or none is possible. */
+  comparison: DateRange | null;
+  today: IsoDate;
   granularity: Granularity;
-  /** False only for a property that has never had a booking. Drives the Alert. */
-  hasAnyBookings: boolean;
-  /** Gates the widgets that need at least 5 bookings to be safe or meaningful. */
-  bookingsInPeriod: number;
-  /** True when this data was generated rather than queried. Drives the banner. */
-  isDemo: boolean;
-  revenue: RevenueSection;
-  sellThrough: SellThroughSection;
-  bookings: BookingsSection;
-  pricing: PricingSection;
-  guests: GuestsSection;
 }
 
-/** Widgets that refuse to render below five bookings, named so the UI and the
- * "not enough data" tests cannot disagree about which they are. */
-export const MIN_BOOKINGS_FOR_DETAIL = 5;
+export interface PageViews {
+  revenue: RevenueView;
+  occupancy: OccupancyView;
+  "booking-patterns": BookingPatternsView;
+  pricing: PricingView;
+  guests: GuestsView;
+}
+
+export interface PageData<P extends PageId = PageId> {
+  page: P;
+  /** True when the facts were generated. Drives the banner and the export button only. */
+  isDemo: boolean;
+  /** False only for a host who has never had a booking. */
+  hasAnyBookings: boolean;
+  range: DateRange;
+  comparison: DateRange | null;
+  /** The comparison actually applied, after any fallback. */
+  compare: CompareMode;
+  canCompareLastYear: boolean;
+  granularity: Granularity;
+  view: PageViews[P];
+}
+
+/** Discriminated on `page`, so a switch narrows `view`. */
+export type AnyPageData = { [P in PageId]: PageData<P> }[PageId];

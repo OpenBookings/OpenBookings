@@ -1,56 +1,40 @@
-"use client";
+import { formatPercent } from "@/lib/analytics/format";
+import type { Share } from "@/lib/analytics/types";
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
-import { formatCount } from "@/lib/analytics/format";
-import type { UpcomingWindow } from "@/lib/analytics/types";
+const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
-const config = {
-  nightsSold: { label: "Nights sold", color: "var(--chart-1)" },
-  nightsAvailable: { label: "Still available", color: "var(--chart-3)" },
-};
+interface StackedBarProps {
+  rows: Share[];
+  format: (value: number) => string;
+  summary: string;
+}
 
-/**
- * Sold against still-available, per window. Stacking these two is only honest
- * because they add up to the inventory in the window — which is why the
- * derivation subtracts sold from the total rather than reporting both.
- */
-export function UpcomingStackedBar({ windows }: { windows: UpcomingWindow[] }) {
-  if (windows.every((w) => w.nightsSold + w.nightsAvailable === 0)) {
-    return <p className="text-muted-foreground text-sm">No rooms open in the next 90 days.</p>;
-  }
-
-  const summary = windows
-    .map(
-      (w) =>
-        `${w.label}: ${formatCount(w.nightsSold)} of ${formatCount(
-          w.nightsSold + w.nightsAvailable,
-        )} nights sold`,
-    )
-    .join("; ");
-
+/** Parts of a whole as one horizontal bar. The legend carries the numbers. */
+export function StackedBar({ rows, format, summary }: StackedBarProps) {
   return (
-    <ChartContainer
-      config={config}
-      className="h-64 w-full"
-      role="img"
-      aria-label={`Upcoming sell-through. ${summary}.`}
-    >
-      <BarChart data={windows} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-        <CartesianGrid vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-        <YAxis tickLine={false} axisLine={false} width={56} tickMargin={8} />
-        <ChartTooltip content={<ChartTooltipContent labelKey="label" />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Bar dataKey="nightsSold" stackId="nights" fill="var(--color-nightsSold)" radius={[0, 0, 4, 4]} />
-        <Bar dataKey="nightsAvailable" stackId="nights" fill="var(--color-nightsAvailable)" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ChartContainer>
+    <div>
+      <div className="flex h-3 w-full overflow-hidden rounded-sm" role="img" aria-label={summary}>
+        {rows.map((row, index) => (
+          <div
+            key={row.key}
+            style={{ width: `${row.sharePct}%`, backgroundColor: COLORS[index % COLORS.length] }}
+          />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+        {rows.map((row, index) => (
+          <li key={row.key} className="flex items-center gap-2">
+            <span
+              className="size-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+              aria-hidden
+            />
+            {row.label}
+            <span className="tabular-nums">{format(row.value)}</span>
+            <span className="text-muted-foreground tabular-nums">{formatPercent(row.sharePct, 0)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -1,54 +1,47 @@
 "use client";
 
-import * as React from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { csvFilename, sectionCsv, type SectionId } from "@/lib/analytics/csv";
-import type { AnalyticsData } from "@/lib/analytics/types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { csvFilename, pageCsv } from "@/lib/analytics/csv";
+import type { AnyPageData } from "@/lib/analytics/types";
 
 /**
- * Client-side Blob rather than a route handler: the view model is already here,
- * so a round trip could only fetch data that might have moved on and produce a
- * file that disagrees with the screen.
+ * Built in the browser from the view model already on screen, so the file
+ * cannot disagree with the page and carries the same suppression. Disabled
+ * with a reason in demo mode: demo numbers must never reach a host's books.
  */
 export function ExportButton({
   data,
-  section,
-  label,
+  disabledReason,
 }: {
-  data: AnalyticsData;
-  section: SectionId;
-  label: string;
+  data: AnyPageData;
+  disabledReason: string | null;
 }) {
-  const [busy, setBusy] = React.useState(false);
-
   const download = () => {
-    setBusy(true);
-    try {
-      const blob = new Blob([sectionCsv(data, section)], {
-        type: "text/csv;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = csvFilename(data, section);
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setBusy(false);
-    }
+    const url = URL.createObjectURL(new Blob([pageCsv(data)], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = csvFilename(data);
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={download}
-      disabled={busy}
-      aria-label={`Export ${label} as CSV`}
-    >
+  const button = (
+    <Button variant="outline" size="sm" onClick={download} disabled={disabledReason !== null}>
       <Download aria-hidden />
       Export CSV
     </Button>
+  );
+
+  if (disabledReason === null) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0}>{button}</span>
+      </TooltipTrigger>
+      <TooltipContent>{disabledReason}</TooltipContent>
+    </Tooltip>
   );
 }

@@ -59,29 +59,52 @@ export function enumerateDates(from: IsoDate, to: IsoDate): IsoDate[] {
 }
 
 export type PeriodPreset =
-  | "this-month"
-  | "last-month"
+  | "last-7-days"
+  | "last-30-days"
   | "last-3-months"
-  | "ytd"
   | "last-12-months"
+  | "ytd"
   | "custom";
 
+export const DEFAULT_PRESET: PeriodPreset = "last-3-months";
+
 export const PERIOD_LABELS: Record<PeriodPreset, string> = {
-  "this-month": "This month",
-  "last-month": "Last month",
+  "last-7-days": "Last 7 days",
+  "last-30-days": "Last 30 days",
   "last-3-months": "Last 3 months",
-  ytd: "Year to date",
   "last-12-months": "Last 12 months",
-  custom: "Custom range",
+  ytd: "Year to date",
+  custom: "Custom",
 };
 
 export const PERIOD_PRESETS = Object.keys(PERIOD_LABELS) as PeriodPreset[];
 
-export interface Period {
-  preset: PeriodPreset;
+export interface DateRange {
   from: IsoDate;
   to: IsoDate;
 }
+
+export interface Period extends DateRange {
+  preset: PeriodPreset;
+}
+
+export type CompareMode = "none" | "previous" | "last-year";
+
+export const DEFAULT_COMPARE: CompareMode = "previous";
+
+export const COMPARE_LABELS: Record<CompareMode, string> = {
+  none: "No comparison",
+  previous: "Previous period",
+  "last-year": "Same period last year",
+};
+
+export const COMPARE_MODES = Object.keys(COMPARE_LABELS) as CompareMode[];
+
+/** Search params as Next hands them over: a repeated key arrives as an array. */
+export type RawParams = Record<string, string | string[] | undefined>;
+
+const first = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
 
 /** One URL must not be able to ask for the whole history at daily grain. */
 const MAX_CUSTOM_DAYS = 366 * 5;
@@ -92,26 +115,23 @@ export function resolvePeriod(
   custom?: { from?: string; to?: string },
 ): Period {
   switch (preset) {
-    case "this-month":
-      return { preset, from: startOfMonth(today), to: today };
-    case "last-month": {
-      const lastMonthDay = addDays(startOfMonth(today), -1);
-      return { preset, from: startOfMonth(lastMonthDay), to: endOfMonth(lastMonthDay) };
-    }
+    case "last-7-days":
+      return { preset, from: addDays(today, -6), to: today };
+    case "last-30-days":
+      return { preset, from: addDays(today, -29), to: today };
     case "last-3-months":
       // 3 months back, then forward one day, so the span is inclusive.
       return { preset, from: addDays(shiftMonths(today, -3), 1), to: today };
-    case "ytd":
-      return { preset, from: `${today.slice(0, 4)}-01-01`, to: today };
     case "last-12-months":
       return { preset, from: addDays(shiftMonths(today, -12), 1), to: today };
+    case "ytd":
+      return { preset, from: `${today.slice(0, 4)}-01-01`, to: today };
     case "custom": {
       if (!isIsoDate(custom?.from) || !isIsoDate(custom?.to)) {
-        return resolvePeriod("this-month", today);
+        return resolvePeriod(DEFAULT_PRESET, today);
       }
-      // Swapped rather than rejected: a host dragging backwards through the
-      // Calendar produces from > to for the length of the drag, and blanking
-      // the page mid-gesture is not a useful answer to a half-finished range.
+      // Swapped rather than rejected: dragging backwards through the calendar
+      // produces from > to for the length of the drag.
       const forwards = custom.from <= custom.to;
       const to = forwards ? custom.to : custom.from;
       let from = forwards ? custom.from : custom.to;
@@ -126,48 +146,61 @@ function shiftMonths(date: IsoDate, months: number): IsoDate {
   const [y, m, d] = date.split("-").map(Number);
   const target = new Date(Date.UTC(y, m - 1 + months, 1));
   const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  return fromUtc(
-    Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), Math.min(d, lastDay)),
-  );
+  return fromUtc(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), Math.min(d, lastDay)));
+}
+
+export function shiftYears(date: IsoDate, years: number): IsoDate {
+  const [y, m, d] = date.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y + years, m, 0)).getUTCDate();
+  return fromUtc(Date.UTC(y + years, m - 1, Math.min(d, lastDay)));
 }
 
 /** Query params are user input. Anything unrecognised falls back; nothing throws. */
-export function parsePeriodParams(
-  params: { period?: string; from?: string; to?: string },
-  today: IsoDate,
-): Period {
-  const preset = (PERIOD_PRESETS as string[]).includes(params.period ?? "")
-    ? (params.period as PeriodPreset)
-    : "this-month";
-  return resolvePeriod(preset, today, { from: params.from, to: params.to });
+export function parsePeriodParams(params: RawParams, today: IsoDate): Period {
+  const requested = first(params.period) ?? "";
+  const preset = (PERIOD_PRESETS as string[]).includes(requested)
+    ? (requested as PeriodPreset)
+    : DEFAULT_PRESET;
+  return resolvePeriod(preset, today, { from: first(params.from), to: first(params.to) });
+}
+
+export function parseCompareParam(value: string | string[] | undefined): CompareMode {
+  const requested = first(value) ?? "";
+  return (COMPARE_MODES as string[]).includes(requested) ? (requested as CompareMode) : DEFAULT_COMPARE;
 }
 
 /**
- * One decision, in one place. If the revenue chart and the sell-through chart
- * each chose their own granularity they would eventually disagree, and a host
- * comparing the two would be comparing different weeks.
+ * One decision, in one place: daily up to 31 days, weekly up to 26 whole weeks
+ * (182 days), monthly beyond.
  */
-export function granularityFor(period: Period): Granularity {
-  const days = daysBetween(period.from, period.to);
+export function granularityFor(range: DateRange): Granularity {
+  const days = daysBetween(range.from, range.to);
   if (days <= 31) return "day";
-  // 182 days is 26 whole weeks, so the weekly chart never draws more than 26
-  // bars. A day past it is monthly: "six months" from 1 January is 181 days,
-  // and the boundary is asserted in the tests rather than left to a constant.
   if (days <= 182) return "week";
   return "month";
 }
 
-/** Null when the comparison span would run before any data could exist. */
-export function comparisonRange(period: Period): { from: IsoDate; to: IsoDate } | null {
-  if (period.preset === "ytd") {
-    return { from: shiftYears(period.from, -1), to: shiftYears(period.to, -1) };
+export function comparisonRange(range: DateRange, mode: CompareMode): DateRange | null {
+  if (mode === "none") return null;
+  if (mode === "last-year") {
+    return { from: shiftYears(range.from, -1), to: shiftYears(range.to, -1) };
   }
-  const days = daysBetween(period.from, period.to);
-  return { from: addDays(period.from, -days), to: addDays(period.from, -1) };
+  const days = daysBetween(range.from, range.to);
+  return { from: addDays(range.from, -days), to: addDays(range.from, -1) };
 }
 
-function shiftYears(date: IsoDate, years: number): IsoDate {
-  const [y, m, d] = date.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(y + years, m, 0)).getUTCDate();
-  return fromUtc(Date.UTC(y + years, m - 1, Math.min(d, lastDay)));
+const AMSTERDAM_PARTS = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Amsterdam",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * The host's calendar day. A server in UTC would otherwise call it yesterday
+ * for the last hour or two of every Amsterdam evening.
+ */
+export function amsterdamToday(now: Date = new Date()): IsoDate {
+  const parts = Object.fromEntries(AMSTERDAM_PARTS.formatToParts(now).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }

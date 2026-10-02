@@ -1,121 +1,75 @@
 import { describe, expect, test } from "bun:test";
-import type { Category, Facts, NightFact, Point } from "../types";
+import { booking, ctx, facts, inventory, ok } from "../test-fixtures";
 import { derivePricing } from "./pricing";
 
-const night = (over: Partial<NightFact>): NightFact => ({
-  date: "2026-09-10", propertyId: "p1", roomId: "standard", ratePlanId: "flex",
-  unitsAvailable: 10, unitsSold: 1, netRevenueCents: 9_000,
-  basePriceCents: 10_000, modifiers: [], ...over,
-});
-
-const facts = (nights: NightFact[]): Facts => ({
-  nights, bookings: [], roomTypeNames: {}, ratePlanNames: {},
-});
-
-const SEPT = { preset: "custom", from: "2026-09-01", to: "2026-09-30" } as const;
-
-const value = <T,>(w: { ok: boolean } & Record<string, unknown>): T => {
-  expect(w.ok).toBe(true);
-  return (w as unknown as { value: T }).value;
-};
+const SEPT = { from: "2026-09-01", to: "2026-09-30" };
 
 describe("derivePricing", () => {
-  test("average discount is the gap between base and achieved", () => {
-    const section = derivePricing(
-      facts([night({ date: "2026-09-02", basePriceCents: 10_000, netRevenueCents: 9_000 })]),
-      SEPT,
-    );
-    expect(value<number>(section.averageDiscountPct)).toBe(10);
+  test("discounts: euros given, share of bookings, and depth among discounted bookings", () => {
+    const f = facts([
+      booking({ nights: 1, nightlyNetCents: [9_000], discountCents: 1_000 }),
+      booking({ nights: 1, nightlyNetCents: [10_000] }),
+      booking({ nights: 1, nightlyNetCents: [16_000], discountCents: 4_000 }),
+      booking({ nights: 1, nightlyNetCents: [10_000], discountCents: 9_999, status: "cancelled", cancelledAt: "2026-09-02T10:00:00.000Z" }),
+    ]);
+    const view = derivePricing(ctx(f, SEPT));
+    expect(ok(view.discounts).value).toBe(5_000);
+    expect(ok(view.discounts).shareOfBookingsPct).toBeCloseTo(66.67, 1);
+    // 5,000 given on 30,000 of rack rate.
+    expect(ok(view.discountDepth).value).toBeCloseTo(16.67, 1);
   });
 
-  /**
-   * Weighted by nights sold. Unweighted, one heavily discounted night in a
-   * quiet week outweighs a full week at rack rate, and the host reads a pricing
-   * problem that is not there.
-   */
-  test("average discount is weighted by nights sold, not a mean of nightly percentages", () => {
-    const section = derivePricing(
-      facts([
-        // One night at 50% off.
-        night({ date: "2026-09-02", unitsSold: 1, basePriceCents: 10_000, netRevenueCents: 5_000 }),
-        // Nine nights at full price.
-        night({ date: "2026-09-03", unitsSold: 9, basePriceCents: 90_000, netRevenueCents: 90_000 }),
-      ]),
-      SEPT,
-    );
-    // Weighted: 1 - 95000/100000 = 5%. Unweighted would be 25%.
-    expect(value<number>(section.averageDiscountPct)).toBe(5);
+  test("no discounted bookings: zero given and no depth to report", () => {
+    const view = derivePricing(ctx(facts([booking()]), SEPT));
+    expect(ok(view.discounts).value).toBe(0);
+    expect(ok(view.discounts).shareOfBookingsPct).toBe(0);
+    expect(ok(view.discountDepth).value).toBeNull();
   });
 
-  test("a night with no base price is excluded rather than counted as no discount", () => {
-    const section = derivePricing(
-      facts([
-        night({ date: "2026-09-02", unitsSold: 0, basePriceCents: 0, netRevenueCents: 0 }),
-        night({ date: "2026-09-03", unitsSold: 1, basePriceCents: 10_000, netRevenueCents: 8_000 }),
-      ]),
-      SEPT,
-    );
-    expect(value<number>(section.averageDiscountPct)).toBe(20);
+  test("ADR and its trend are by stay date, and an empty bucket is a gap", () => {
+    const f = facts([
+      booking({ createdAt: "2026-08-01T10:00:00.000Z", checkIn: "2026-09-02", nights: 2, nightlyNetCents: [10_000, 14_000] }),
+    ]);
+    const view = derivePricing(ctx(f, { from: "2026-09-01", to: "2026-09-04" }));
+    expect(ok(view.adr).value).toBe(12_000);
+    expect(view.adr).toMatchObject({ basis: "stay", sample: 2 });
+    expect(ok(view.adrOverTime).map((p) => p.value)).toEqual([null, 10_000, 14_000, null]);
   });
 
-  test("average discount is null when nothing was priced", () => {
-    const section = derivePricing(facts([night({ unitsSold: 0, basePriceCents: 0, netRevenueCents: 0 })]), SEPT);
-    expect(value<number | null>(section.averageDiscountPct)).toBeNull();
+  test("the rate plan table is by booking date and sums to the revenue", () => {
+    const f = facts([
+      booking({ ratePlanId: "flex", nights: 2 }),
+      booking({ ratePlanId: "flex", nights: 1, nightlyNetCents: [13_000] }),
+      booking({ ratePlanId: "saver", nights: 4, nightlyNetCents: [8_000, 8_000, 8_000, 8_000] }),
+      booking({ ratePlanId: "saver", status: "cancelled", cancelledAt: "2026-09-02T10:00:00.000Z" }),
+    ]);
+    expect(ok(derivePricing(ctx(f, SEPT)).byRatePlan)).toEqual([
+      { key: "flex", label: "Flexible", bookings: 2, nights: 3, adrCents: 11_000, revenueCents: 33_000 },
+      { key: "saver", label: "Saver", bookings: 1, nights: 4, adrCents: 8_000, revenueCents: 32_000 },
+    ]);
   });
 
-  test("a surcharge reads as a negative discount rather than being dropped", () => {
-    // A weekend uplift is a real thing a host does; hiding it would make the
-    // two lines cross with nothing to explain why.
-    const section = derivePricing(
-      facts([night({ date: "2026-09-05", basePriceCents: 10_000, netRevenueCents: 11_500 })]),
-      SEPT,
+  test("a weekday that sells out below the average rate gets the hint", () => {
+    const night = (checkIn: string, cents: number) => booking({ checkIn, nights: 1, nightlyNetCents: [cents] });
+    const f = facts(
+      [
+        // Every Friday in September 2026, cheaply.
+        night("2026-09-04", 8_000), night("2026-09-11", 8_000), night("2026-09-18", 8_000), night("2026-09-25", 8_000),
+        // Two of four Mondays, at a high rate.
+        night("2026-09-07", 15_000), night("2026-09-14", 15_000),
+      ],
+      inventory("2026-09-01", "2026-09-30", { standard: 1 }),
     );
-    expect(value<number>(section.averageDiscountPct)).toBe(-15);
+    const rows = ok(derivePricing(ctx(f, SEPT)).byWeekday);
+    expect(rows.find((r) => r.label === "Friday")).toEqual({
+      weekday: 5, label: "Friday", occupancyPct: 100, adrCents: 8_000, hint: true,
+    });
+    expect(rows.find((r) => r.label === "Monday")).toMatchObject({ occupancyPct: 50, adrCents: 15_000, hint: false });
+    expect(rows.find((r) => r.label === "Tuesday")).toMatchObject({ occupancyPct: 0, adrCents: null, hint: false });
   });
 
-  test("base and achieved come back as two aligned series", () => {
-    const section = derivePricing(
-      facts([night({ date: "2026-09-02", unitsSold: 2, basePriceCents: 20_000, netRevenueCents: 18_000 })]),
-      SEPT,
-    );
-    const { base, achieved } = value<{ base: Point[]; achieved: Point[] }>(section.priceOverTime);
-    expect(base).toHaveLength(30);
-    expect(achieved).toHaveLength(30);
-    expect(base.map((p) => p.bucket)).toEqual(achieved.map((p) => p.bucket));
-    // Per-night averages, so 20000c over 2 units is 10000c.
-    expect(base.find((p) => p.bucket === "2026-09-02")!.value).toBe(10_000);
-    expect(achieved.find((p) => p.bucket === "2026-09-02")!.value).toBe(9_000);
-  });
-
-  test("modifiers rank by absolute revenue impact and cap at ten", () => {
-    const section = derivePricing(
-      facts([
-        night({
-          date: "2026-09-02",
-          modifiers: [
-            { type: "day_of_week", impactCents: 5_000 },
-            { type: "early_bird", impactCents: -12_000 },
-          ],
-        }),
-        night({
-          date: "2026-09-03",
-          modifiers: [{ type: "day_of_week", impactCents: 3_000 }],
-        }),
-      ]),
-      SEPT,
-    );
-    const rows = value<Category[]>(section.topModifiers);
-    // Early bird moved more money even though it moved it downwards.
-    expect(rows[0]).toMatchObject({ key: "early_bird", value: -12_000, count: 1 });
-    expect(rows[1]).toMatchObject({ key: "day_of_week", value: 8_000, count: 2 });
-    expect(rows.length).toBeLessThanOrEqual(10);
-  });
-
-  test("modifier rows carry a readable label, not the enum value", () => {
-    const section = derivePricing(
-      facts([night({ date: "2026-09-02", modifiers: [{ type: "last_minute", impactCents: -900 }] })]),
-      SEPT,
-    );
-    expect(value<Category[]>(section.topModifiers)[0].label).toBe("Last-minute discount");
+  test("the weekday table needs five nights sold", () => {
+    const view = derivePricing(ctx(facts([booking({ nights: 2 })]), SEPT));
+    expect(view.byWeekday).toEqual({ ok: false, reason: "below-minimum", basis: "stay", needed: 5, have: 2 });
   });
 });

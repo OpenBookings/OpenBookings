@@ -1,118 +1,93 @@
 import { describe, expect, test } from "bun:test";
+import { getPageData, isDemoParam } from "./get-analytics";
+import { PAGE_IDS } from "./pages";
 import { resolvePeriod } from "./period";
-import { getAnalytics, listProperties } from "./get-analytics";
+import type { Widget } from "./types";
 
-const TODAY = "2026-09-25";
-const thisMonth = resolvePeriod("this-month", TODAY);
+const TODAY = "2026-10-01";
+const query = (over = {}) => ({
+  period: resolvePeriod("last-3-months", TODAY),
+  compare: "previous" as const,
+  today: TODAY,
+  demo: true,
+  ...over,
+});
+const custom = (from: string, to: string) => resolvePeriod("custom", TODAY, { from, to });
 
-describe("getAnalytics", () => {
-  test("returns the same data for the same query, every time", async () => {
-    const query = { propertyId: "demo-zeeburg", period: thisMonth, today: TODAY, demo: true };
-    expect(await getAnalytics(query)).toEqual(await getAnalytics(query));
-  });
+/** Every number anywhere in a payload. */
+function numbers(value: unknown, out: number[] = []): number[] {
+  if (typeof value === "number") out.push(value);
+  else if (Array.isArray(value)) value.forEach((v) => numbers(v, out));
+  else if (value && typeof value === "object") Object.values(value).forEach((v) => numbers(v, out));
+  return out;
+}
 
-  test("without demo it returns an empty dataset and says the property is new", async () => {
-    const data = await getAnalytics({ period: thisMonth, today: TODAY, demo: false });
-    expect(data.isDemo).toBe(false);
-    expect(data.hasAnyBookings).toBe(false);
-    expect(data.bookingsInPeriod).toBe(0);
-    // The sections are still well-formed, so a component cannot crash on them.
-    expect(data.revenue.periodCents.ok).toBe(true);
-    expect(data.guests.countries.ok).toBe(true);
-  });
+const value = <T,>(w: Widget<T>): T => {
+  if (!w.ok) throw new Error("widget did not render");
+  return w.value;
+};
 
-  test("a demo property with history says it has bookings", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-zeeburg", period: thisMonth, today: TODAY, demo: true,
-    });
-    expect(data.hasAnyBookings).toBe(true);
-    expect(data.bookingsInPeriod).toBeGreaterThan(0);
-  });
-
-  test("the brand new demo property has never had a booking", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-nieuwehaven", period: thisMonth, today: TODAY, demo: true,
-    });
-    expect(data.hasAnyBookings).toBe(false);
-  });
-
-  /**
-   * Review Focus 5. An empty period is not a new property. Keying the Alert off
-   * "no bookings here" would tell an established host with a quiet fortnight
-   * that they are waiting for their first ever booking.
-   */
-  test("a range before the property opened is empty but not new", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-zeeburg",
-      period: resolvePeriod("custom", TODAY, { from: "2024-01-01", to: "2024-01-31" }),
-      today: TODAY,
-      demo: true,
-    });
-    expect(data.bookingsInPeriod).toBe(0);
-    expect(data.hasAnyBookings).toBe(true);
-  });
-
-  test("an unknown property id falls back rather than throwing", async () => {
-    const data = await getAnalytics({
-      propertyId: "does-not-exist", period: thisMonth, today: TODAY, demo: true,
-    });
-    expect(data.property.id).toBe("demo-zeeburg");
-  });
-
-  test("the selected property and the full list both come back", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-vlierhof", period: thisMonth, today: TODAY, demo: true,
-    });
-    expect(data.property).toEqual({ id: "demo-vlierhof", name: "De Vlierhof" });
-    expect(data.properties).toHaveLength(3);
-  });
-
-  test("fail forces exactly one widget to fail and leaves the rest standing", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-zeeburg", period: thisMonth, today: TODAY, demo: true, fail: "revenue.overTime",
-    });
-    expect(data.revenue.overTime.ok).toBe(false);
-    expect(data.revenue.periodCents.ok).toBe(true);
-    expect(data.sellThrough.pct.ok).toBe(true);
-  });
-
-  test("fail is ignored outside demo mode", async () => {
-    const data = await getAnalytics({
-      period: thisMonth, today: TODAY, demo: false, fail: "revenue.overTime",
-    });
-    expect(data.revenue.overTime.ok).toBe(true);
-  });
-
-  test("the upcoming windows have facts to read beyond the period", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-zeeburg",
-      period: resolvePeriod("last-month", TODAY),
-      today: TODAY,
-      demo: true,
-    });
-    expect(data.bookings.upcoming.ok).toBe(true);
-    if (data.bookings.upcoming.ok) {
-      const ninety = data.bookings.upcoming.value.find((w) => w.window === 90)!;
-      expect(ninety.nightsSold + ninety.nightsAvailable).toBeGreaterThan(0);
-    }
-  });
-
-  test("granularity travels with the data so charts cannot disagree", async () => {
-    const data = await getAnalytics({
-      propertyId: "demo-zeeburg", period: resolvePeriod("last-12-months", TODAY), today: TODAY, demo: true,
-    });
-    expect(data.granularity).toBe("month");
+describe("isDemoParam", () => {
+  test("only the literal 1 is demo", () => {
+    expect(isDemoParam("1")).toBe(true);
+    expect(isDemoParam(["1", "0"])).toBe(true);
+    expect(isDemoParam("true")).toBe(false);
+    expect(isDemoParam(undefined)).toBe(false);
   });
 });
 
-describe("listProperties", () => {
-  test("demo mode offers all three, so every state is reachable from the selector", () => {
-    expect(listProperties(true).map((p) => p.id)).toEqual([
-      "demo-zeeburg", "demo-vlierhof", "demo-nieuwehaven",
-    ]);
+describe("getPageData", () => {
+  test("outside demo there are no facts and no bookings, on every page", async () => {
+    for (const page of PAGE_IDS) {
+      const data = await getPageData(page, query({ demo: false }));
+      expect(data).toMatchObject({ page, isDemo: false, hasAnyBookings: false, comparison: null });
+      expect(numbers(data).every(Number.isFinite)).toBe(true);
+    }
   });
 
-  test("outside demo mode there is nothing to list yet", () => {
-    expect(listProperties(false)).toEqual([]);
+  test("demo fills every page", async () => {
+    for (const page of PAGE_IDS) {
+      const data = await getPageData(page, query());
+      expect(data).toMatchObject({ page, isDemo: true, hasAnyBookings: true, compare: "previous" });
+      expect(data.comparison).not.toBeNull();
+    }
+  });
+
+  test("last-year is honoured with a year of history and falls back without", async () => {
+    const recent = await getPageData("revenue", query({ compare: "last-year" }));
+    expect(recent).toMatchObject({ compare: "last-year", canCompareLastYear: true });
+    expect(recent.comparison).toEqual({ from: "2025-07-02", to: "2025-10-01" });
+
+    const early = await getPageData("revenue", query({ compare: "last-year", period: custom("2024-07-01", "2024-07-31") }));
+    expect(early).toMatchObject({ compare: "previous", canCompareLastYear: false });
+  });
+
+  test("a range older than all history renders zeros with no comparison, not the never-booked state", async () => {
+    const data = await getPageData("revenue", query({ period: custom("2022-01-01", "2022-01-31") }));
+    expect(data.hasAnyBookings).toBe(true);
+    expect(data.comparison).toBeNull();
+    expect(value(data.view.revenue)).toEqual({ value: 0, delta: null });
+    expect(data.view.overTime).toMatchObject({ ok: true, sample: 0 });
+  });
+
+  test("a range entirely in the future: nothing booked in it yet, but nights already sold", async () => {
+    const future = custom("2026-11-01", "2026-11-30");
+    const revenue = await getPageData("revenue", query({ period: future }));
+    expect(value(revenue.view.revenue).value).toBe(0);
+    expect(revenue.view.revenue).toMatchObject({ sample: 0 });
+
+    const occupancy = await getPageData("occupancy", query({ period: future }));
+    expect(value(occupancy.view.nightsSold).value).toBeGreaterThan(0);
+
+    for (const page of PAGE_IDS) {
+      const data = await getPageData(page, query({ period: future }));
+      expect(numbers(data).every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  test("compare none removes the comparison everywhere", async () => {
+    const data = await getPageData("revenue", query({ compare: "none" }));
+    expect(data.comparison).toBeNull();
+    expect(value(data.view.revenue).delta).toBeNull();
   });
 });

@@ -71,13 +71,14 @@ export function formatMonthYear(date: IsoDate): string {
  */
 export function trendSentence(
   label: string,
-  points: Point[],
+  points: Pick<Point, "label" | "value">[],
   format: (value: number) => string,
 ): string {
-  if (points.length === 0) return `${label} has no data in this period.`;
-  const first = points[0];
-  const last = points[points.length - 1];
-  if (points.length === 1) {
+  const known = points.filter((p): p is { label: string; value: number } => p.value !== null);
+  if (known.length === 0) return `${label} has no data in this period.`;
+  const first = known[0];
+  const last = known[known.length - 1];
+  if (known.length === 1) {
     return `${label} was ${format(first.value)} on ${first.label}, the only point in this period.`;
   }
   const verb =
@@ -87,3 +88,35 @@ export function trendSentence(
   }
   return `${label} ${verb} from ${format(first.value)} on ${first.label} to ${format(last.value)} on ${last.label}.`;
 }
+
+const wholeEuros = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** Stats and chart axes. Cents belong in tables and the CSV: use formatCents there. */
+export function formatEuros(cents: number | null): string {
+  return cents === null ? EM_DASH : wholeEuros.format(Math.round(cents / 100));
+}
+
+/** "2026-10-01" -> "1 Oct 2026". */
+export function formatDate(date: IsoDate): string {
+  return `${formatDayMonth(date)} ${date.slice(0, 4)}`;
+}
+
+export function formatRange(range: { from: IsoDate; to: IsoDate }): string {
+  return `${formatDate(range.from)} – ${formatDate(range.to)}`;
+}
+
+export function formatDays(value: number | null): string {
+  if (value === null) return EM_DASH;
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded} ${rounded === 1 ? "day" : "days"}`;
+}
+
+/** Index 0 is Monday, matching `weekdayOf(date) - 1`. */
+export const WEEKDAY_NAMES = [
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+] as const;

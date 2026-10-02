@@ -1,95 +1,71 @@
-import { comparisonRange, granularityFor, type Period } from "../period";
-import type { Facts, IsoDate, RevenueSection } from "../types";
-import { toSeries } from "./buckets";
-import { makeDelta } from "./delta";
 import {
-  COMMISSION_RATE,
-  groupSum,
-  inRange,
-  rank,
-  ratio,
-  sumNightsAvailable,
-  sumNightsSold,
-  sumRevenueCents,
-} from "./totals";
+  adrCents, bookingDate, bookingsCreatedIn, commissionCents, earliestFactDate, groupSum,
+  inventoryIn, keptBookings, nightsIn, revenueCents, revparCents, shares,
+} from "../metrics";
+import { shiftYears, type DateRange } from "../period";
+import type { BookingFact, DeriveContext, RevenueView } from "../types";
+import { overlay, toSeries } from "./buckets";
+import { makeDelta } from "./delta";
 import { widget } from "./widget";
 
-export function deriveRevenue(
-  facts: Facts,
-  period: Period,
-  today: IsoDate,
-): RevenueSection {
-  const granularity = granularityFor(period);
-  const current = inRange(facts.nights, period.from, period.to);
-  const comparison = comparisonRange(period);
-  const previous = comparison ? inRange(facts.nights, comparison.from, comparison.to) : [];
+export function deriveRevenue(ctx: DeriveContext): RevenueView {
+  const { facts, period, comparison, today, granularity } = ctx;
 
-  const revenueCents = sumRevenueCents(current);
-  const sold = sumNightsSold(current);
-  const available = sumNightsAvailable(current);
+  // Booking-date basis: what was booked in the period.
+  const keptIn = (range: DateRange): BookingFact[] =>
+    keptBookings(bookingsCreatedIn(facts.bookings, range));
+  const kept = keptIn(period);
+  const prevKept = comparison ? keptIn(comparison) : null;
+  const revenue = revenueCents(kept);
 
-  // Year to date ignores the selector by design: it is the one figure a host
+  // Stay-date basis: ADR and RevPAR need nights as their denominator.
+  const nights = nightsIn(facts.nights, period);
+  const inv = inventoryIn(facts.inventory, period);
+  const prevNights = comparison ? nightsIn(facts.nights, comparison) : null;
+  const prevInv = comparison ? inventoryIn(facts.inventory, comparison) : null;
+
+  // Year to date ignores the period by design: it is the one figure a host
   // reads without first checking which period is on screen.
   const yearStart = `${today.slice(0, 4)}-01-01`;
-  const ytdCents = sumRevenueCents(inRange(facts.nights, yearStart, today));
-  const lastYearCents = sumRevenueCents(
-    inRange(
-      facts.nights,
-      `${Number(today.slice(0, 4)) - 1}-01-01`,
-      `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`,
-    ),
-  );
+  const ytdKept = keptIn({ from: yearStart, to: today });
+  const lastYtd = { from: shiftYears(yearStart, -1), to: shiftYears(today, -1) };
+  const earliest = earliestFactDate(facts);
+  const ytdComparable = comparison !== null && earliest !== null && earliest <= lastYtd.from;
 
   return {
-    yearToDateCents: widget(() => ({
-      value: ytdCents,
-      delta: makeDelta(ytdCents, lastYearCents === 0 ? null : lastYearCents),
+    revenue: widget("booking", kept.length, () => ({
+      value: revenue,
+      delta: makeDelta(revenue, prevKept ? revenueCents(prevKept) : null),
     })),
-    periodCents: widget(() => ({
-      value: revenueCents,
-      delta: makeDelta(revenueCents, comparison ? sumRevenueCents(previous) : null),
+    yearToDate: widget("booking", ytdKept.length, () => {
+      const value = revenueCents(ytdKept);
+      return { value, delta: makeDelta(value, ytdComparable ? revenueCents(keptIn(lastYtd)) : null) };
+    }),
+    adr: widget("stay", nights.length, () => ({
+      value: adrCents(nights),
+      delta: makeDelta(adrCents(nights), prevNights ? adrCents(prevNights) : null),
     })),
-    // ADR over nights SOLD; RevPAR over nights AVAILABLE. When nothing sold,
-    // ADR has no answer — reporting €0 would say rooms went for nothing —
-    // while RevPAR legitimately is €0, because the rooms were there and earned.
-    adrCents: widget(() => ({
-      value: ratio(revenueCents, sold),
-      spark: toSeries(current, {
-        date: (n) => n.date,
-        value: (n) => n.netRevenueCents,
-        from: period.from,
-        to: period.to,
-        granularity,
-      }),
+    revpar: widget("stay", nights.length, () => ({
+      value: revparCents(nights, inv),
+      delta: makeDelta(
+        revparCents(nights, inv),
+        prevNights && prevInv ? revparCents(prevNights, prevInv) : null,
+      ),
     })),
-    revparCents: widget(() => ({
-      value: ratio(revenueCents, available),
-      spark: toSeries(current, {
-        date: (n) => n.date,
-        value: (n) => n.netRevenueCents,
-        from: period.from,
-        to: period.to,
-        granularity,
-      }),
-    })),
-    overTime: widget(() =>
-      toSeries(current, {
-        date: (n) => n.date,
-        value: (n) => n.netRevenueCents,
-        from: period.from,
-        to: period.to,
-        granularity,
-      }),
+    commission: widget("booking", kept.length, () => ({ value: commissionCents(revenue), delta: null })),
+    overTime: widget("booking", kept.length, () =>
+      overlay(
+        toSeries(kept, bookingDate, period, granularity, today, revenueCents),
+        prevKept && comparison
+          ? toSeries(prevKept, bookingDate, comparison, granularity, today, revenueCents)
+          : null,
+      ),
     ),
-    byRoomType: widget(() =>
-      rank(groupSum(current, (n) => n.roomId, (n) => n.netRevenueCents), facts.roomTypeNames),
+    byRoomType: widget("booking", kept.length, () =>
+      shares(groupSum(kept, (b) => b.roomId, (b) => b.netRevenueCents), facts.roomTypeNames),
     ),
-    byRatePlan: widget(() =>
-      rank(groupSum(current, (n) => n.ratePlanId, (n) => n.netRevenueCents), facts.ratePlanNames),
+    byRatePlan: widget("booking", kept.length, () =>
+      shares(groupSum(kept, (b) => b.ratePlanId, (b) => b.netRevenueCents), facts.ratePlanNames),
     ),
-    // Rounded once, over the total. Rounding per night drifts by up to a cent a
-    // night, which on four thousand room-nights visibly disagrees with 4.5% of
-    // the revenue figure printed directly above it.
-    commissionCents: widget(() => Math.round(revenueCents * COMMISSION_RATE)),
   };
 }

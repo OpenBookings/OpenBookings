@@ -443,3 +443,35 @@ jobs:
         env:
           OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
         run: .github/scripts/check-release.sh openbookings.co "$GITHUB_SHA"
+
+      # ---- Registry ----------------------------------------------------------
+      #
+      # Last, and only after the release held: pruning before the roll could
+      # delete the image a failed release needs to fall back to. Every app is
+      # pruned every time, not just the rebuilt ones -- it is idempotent, and
+      # it is the only thing that ever cleans up support, which is pushed but
+      # never rolled.
+      #
+      # This bounds rollback.yml to the SHAs kept here. See prune-registry.sh
+      # for what is exempt.
+      #
+      # continue-on-error because production is already on the new commit by
+      # now: a failed delete should show up as an annotation, not turn a good
+      # release red and invite a rollback nobody needs.
+      - name: Prune old images from the registry
+        continue-on-error: true
+        env:
+          KEEP: 3
+          PROTECT_TAGS: ${{ github.sha }}
+          WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
+          BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
+          DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
+        run: |
+          set -uo pipefail
+
+          failed=0
+          .github/scripts/prune-registry.sh openbookings-web      "$WEB_CONTAINER_ID"      || failed=1
+          .github/scripts/prune-registry.sh openbookings-business "$BUSINESS_CONTAINER_ID" || failed=1
+          .github/scripts/prune-registry.sh openbookings-docs     "$DOCS_CONTAINER_ID"     || failed=1
+          .github/scripts/prune-registry.sh openbookings-support                           || failed=1
+          exit "$failed"

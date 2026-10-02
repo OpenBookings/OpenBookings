@@ -1,180 +1,100 @@
 import { describe, expect, test } from "bun:test";
-import type { Category, Facts, NightFact } from "../types";
-import { COMMISSION_RATE, ratio } from "./totals";
+import { booking, ctx, facts, inventory, ok } from "../test-fixtures";
 import { deriveRevenue } from "./revenue";
 
-const night = (over: Partial<NightFact>): NightFact => ({
-  date: "2026-09-10",
-  propertyId: "p1",
-  roomId: "standard",
-  ratePlanId: "flex",
-  unitsAvailable: 10,
-  unitsSold: 5,
-  netRevenueCents: 50_000,
-  basePriceCents: 55_000,
-  modifiers: [],
-  ...over,
-});
-
-const facts = (nights: NightFact[]): Facts => ({
-  nights,
-  bookings: [],
-  roomTypeNames: { standard: "Standard Double", suite: "Junior Suite" },
-  ratePlanNames: { flex: "Flexible", saver: "Saver" },
-});
-
-const SEPT = { preset: "custom", from: "2026-09-01", to: "2026-09-30" } as const;
-const TODAY = "2026-09-30";
-
-const value = <T,>(w: { ok: boolean } & Record<string, unknown>): T => {
-  expect(w.ok).toBe(true);
-  return (w as unknown as { value: T }).value;
-};
-
-describe("ratio", () => {
-  test("a zero denominator yields null, never Infinity or NaN", () => {
-    expect(ratio(100, 0)).toBeNull();
-    expect(ratio(0, 0)).toBeNull();
-    expect(ratio(100, 4)).toBe(25);
-  });
-});
+const SEPT = { from: "2026-09-01", to: "2026-09-30" };
 
 describe("deriveRevenue", () => {
-  test("period revenue sums only nights inside the range", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2026-08-31", netRevenueCents: 99_999 }),
-        night({ date: "2026-09-01", netRevenueCents: 10_000 }),
-        night({ date: "2026-09-30", netRevenueCents: 20_000 }),
-        night({ date: "2026-10-01", netRevenueCents: 99_999 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<{ value: number }>(section.periodCents).value).toBe(30_000);
-  });
-
-  test("ADR is revenue over nights sold, and reconciles back", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2026-09-02", unitsSold: 4, netRevenueCents: 40_000 }),
-        night({ date: "2026-09-03", unitsSold: 6, netRevenueCents: 80_000 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    const adr = value<{ value: number }>(section.adrCents).value;
-    expect(adr).toBe(12_000);
-    expect(adr * 10).toBe(value<{ value: number }>(section.periodCents).value);
-  });
-
-  test("RevPAR is revenue over nights available", () => {
-    const section = deriveRevenue(
-      facts([night({ date: "2026-09-02", unitsAvailable: 10, netRevenueCents: 50_000 })]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<{ value: number }>(section.revparCents).value).toBe(5_000);
-  });
-
-  /**
-   * Review Focus 4. A host looking at next month sees positive inventory and no
-   * sales. Three divisions that look alike must give three different answers:
-   * sell-through 0, RevPAR €0, and ADR nothing at all — there were no nights
-   * sold to average over, and reporting €0 would claim they sold rooms for free.
-   */
-  test("a period entirely in the future gives RevPAR zero and ADR null", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2026-09-10", unitsSold: 0, unitsAvailable: 10, netRevenueCents: 0, basePriceCents: 0 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<{ value: number | null }>(section.revparCents).value).toBe(0);
-    expect(value<{ value: number | null }>(section.adrCents).value).toBeNull();
-  });
-
-  test("commission rounds once over the period total, not per night", () => {
-    // 3 x 33333c at 4.5% is 1499.985c per night. Rounding per night gives 4500;
-    // rounding the total gives 4500 too — so use a total where they part:
-    // 7 x 14_285c = 100_000c -> 4500 exactly, per-night 642.825 -> 643 x 7 = 4501.
-    const nights = Array.from({ length: 7 }, (_, i) =>
-      night({ date: `2026-09-0${i + 1}`, netRevenueCents: 14_285, unitsSold: 1, unitsAvailable: 1 }),
-    );
-    const section = deriveRevenue(facts(nights), SEPT, TODAY);
-    const revenue = value<{ value: number }>(section.periodCents).value;
-    expect(value<number>(section.commissionCents)).toBe(Math.round(revenue * COMMISSION_RATE));
-    expect(value<number>(section.commissionCents)).not.toBe(7 * Math.round(14_285 * COMMISSION_RATE));
-  });
-
-  test("year to date ignores the period selector and starts 1 January", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2025-12-31", netRevenueCents: 90_000 }),
-        night({ date: "2026-01-02", netRevenueCents: 10_000 }),
-        night({ date: "2026-09-10", netRevenueCents: 20_000 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<{ value: number }>(section.yearToDateCents).value).toBe(30_000);
-  });
-
-  test("year to date compares against the same span last year", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2025-03-01", netRevenueCents: 50_000 }),
-        night({ date: "2026-03-01", netRevenueCents: 100_000 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<{ delta: { label: string } }>(section.yearToDateCents).delta.label).toBe("up 100%");
-  });
-
-  test("revenue by room type is grouped, named and sorted descending", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2026-09-02", roomId: "standard", netRevenueCents: 10_000 }),
-        night({ date: "2026-09-03", roomId: "suite", netRevenueCents: 70_000 }),
-        night({ date: "2026-09-04", roomId: "standard", netRevenueCents: 15_000 }),
-      ]),
-      SEPT,
-      TODAY,
-    );
-    expect(value<Category[]>(section.byRoomType)).toEqual([
-      { key: "suite", label: "Junior Suite", value: 70_000 },
-      { key: "standard", label: "Standard Double", value: 25_000 },
+  test("revenue is the net of kept bookings made in the period", () => {
+    const f = facts([
+      booking(),
+      booking({ status: "cancelled", cancelledAt: "2026-09-03T10:00:00.000Z" }),
+      booking({ createdAt: "2026-08-15T10:00:00.000Z", nights: 1 }),
     ]);
+    const view = deriveRevenue(ctx(f, SEPT));
+    expect(ok(view.revenue).value).toBe(20_000);
+    expect(ok(view.revenue).delta).toMatchObject({ direction: "up", pct: 100 });
+    expect(ok(view.commission).value).toBe(900);
+    expect(ok(view.commission).delta).toBeNull();
   });
 
-  test("revenue by rate plan is grouped, named and sorted descending", () => {
-    const section = deriveRevenue(
-      facts([
-        night({ date: "2026-09-02", ratePlanId: "flex", netRevenueCents: 10_000 }),
-        night({ date: "2026-09-03", ratePlanId: "saver", netRevenueCents: 40_000 }),
-      ]),
-      SEPT,
-      TODAY,
+  test("no comparison means no delta anywhere", () => {
+    const f = facts([booking(), booking({ createdAt: "2026-08-15T10:00:00.000Z" })]);
+    const view = deriveRevenue(ctx(f, { ...SEPT, compare: "none" }));
+    expect(ok(view.revenue).delta).toBeNull();
+    expect(ok(view.adr).delta).toBeNull();
+    expect(ok(view.yearToDate).delta).toBeNull();
+    expect(ok(view.overTime).every((p) => p.compare === null)).toBe(true);
+  });
+
+  test("ADR and RevPAR are by stay date", () => {
+    // Booked in August, stayed in September: no September revenue, but September nights.
+    const f = facts(
+      [booking({ createdAt: "2026-08-20T10:00:00.000Z", checkIn: "2026-09-10", nights: 3 })],
+      inventory("2026-09-01", "2026-09-30", { standard: 1 }),
     );
-    expect(value<{ label: string }[]>(section.byRatePlan)[0].label).toBe("Saver");
+    const view = deriveRevenue(ctx(f, SEPT));
+    expect(ok(view.revenue).value).toBe(0);
+    expect(ok(view.adr).value).toBe(10_000);
+    expect(ok(view.revpar).value).toBe(1_000);
+    expect(view.adr).toMatchObject({ basis: "stay", sample: 3 });
   });
 
-  test("revenue over time buckets by the period's own granularity", () => {
-    const section = deriveRevenue(
-      facts([night({ date: "2026-09-02", netRevenueCents: 10_000 })]),
-      SEPT,
-      TODAY,
-    );
-    // 30 days is daily grain, so there is one point per day in September.
-    expect(value<unknown[]>(section.overTime)).toHaveLength(30);
+  test("year to date does not move with the period", () => {
+    const f = facts([
+      booking({ createdAt: "2026-02-01T10:00:00.000Z" }),
+      booking({ createdAt: "2026-09-05T10:00:00.000Z" }),
+    ]);
+    const a = deriveRevenue(ctx(f, { ...SEPT, today: "2026-09-30" }));
+    const b = deriveRevenue(ctx(f, { from: "2026-09-24", to: "2026-09-30", today: "2026-09-30" }));
+    expect(ok(a.yearToDate).value).toBe(40_000);
+    expect(ok(b.yearToDate).value).toBe(40_000);
   });
 
-  test("an empty period gives zeroes and nulls, not a failed widget", () => {
-    const section = deriveRevenue(facts([]), SEPT, TODAY);
-    expect(value<{ value: number }>(section.periodCents).value).toBe(0);
-    expect(value<{ value: number | null }>(section.adrCents).value).toBeNull();
-    expect(value<number>(section.commissionCents)).toBe(0);
+  test("year to date only compares when last year is fully in the history", () => {
+    const recent = facts([booking({ createdAt: "2026-02-01T10:00:00.000Z" })]);
+    expect(ok(deriveRevenue(ctx(recent, SEPT)).yearToDate).delta).toBeNull();
+
+    const established = facts([
+      booking({ createdAt: "2024-12-01T10:00:00.000Z" }),
+      booking({ createdAt: "2025-03-01T10:00:00.000Z", nights: 1 }),
+      booking({ createdAt: "2026-02-01T10:00:00.000Z" }),
+    ]);
+    expect(ok(deriveRevenue(ctx(established, SEPT)).yearToDate).delta).toMatchObject({ direction: "up", pct: 100 });
+  });
+
+  test("the series sums to the revenue and flags the bucket still in progress", () => {
+    const f = facts([
+      booking({ createdAt: "2026-07-10T10:00:00.000Z" }),
+      booking({ createdAt: "2026-09-29T10:00:00.000Z", nights: 1 }),
+    ]);
+    const view = deriveRevenue(ctx(f, { from: "2026-07-01", to: "2026-09-30", today: "2026-09-30" }));
+    const points = ok(view.overTime);
+    expect(points.reduce((t, p) => t + (p.value ?? 0), 0)).toBe(ok(view.revenue).value!);
+    expect(points.at(-1)!.incomplete).toBe(true);
+    // 1 July 2026 is a Wednesday: the first week is partial too.
+    expect(points[0].incomplete).toBe(true);
+    expect(points[1].incomplete).toBe(false);
+  });
+
+  test("both breakdowns sum to the revenue and carry shares", () => {
+    const f = facts([
+      booking({ roomId: "standard", ratePlanId: "flex" }),
+      booking({ roomId: "suite", ratePlanId: "saver", nights: 1, nightlyNetCents: [60_000] }),
+    ]);
+    const view = deriveRevenue(ctx(f, SEPT));
+    expect(ok(view.byRoomType)).toEqual([
+      { key: "suite", label: "Junior Suite", value: 60_000, sharePct: 75 },
+      { key: "standard", label: "Standard Double", value: 20_000, sharePct: 25 },
+    ]);
+    expect(ok(view.byRatePlan).reduce((t, r) => t + r.value, 0)).toBe(80_000);
+  });
+
+  test("an empty period is zero revenue with a zero sample, not an error", () => {
+    const view = deriveRevenue(ctx(facts([booking()]), { from: "2026-03-01", to: "2026-03-31" }));
+    expect(view.revenue).toMatchObject({ ok: true, sample: 0 });
+    expect(ok(view.revenue).value).toBe(0);
+    expect(ok(view.adr).value).toBeNull();
+    expect(view.overTime).toMatchObject({ ok: true, sample: 0 });
   });
 });

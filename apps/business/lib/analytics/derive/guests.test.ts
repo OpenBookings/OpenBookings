@@ -1,134 +1,88 @@
 import { describe, expect, test } from "bun:test";
-import type { BookingFact, Category, Facts } from "../types";
-import { deriveGuests, OTHER_COUNTRY_KEY } from "./guests";
+import { booking, ctx, facts, ok } from "../test-fixtures";
+import { deriveGuests } from "./guests";
 
-const booking = (over: Partial<BookingFact>): BookingFact => ({
-  id: "b1", propertyId: "p1", createdAt: "2026-09-10T12:00:00.000Z",
-  checkIn: "2026-09-20", checkOut: "2026-09-22", nights: 2,
-  status: "confirmed", cancelledAt: null, adults: 2, children: 0,
-  guestKey: "g1", guestCountry: "NL", netRevenueCents: 30_000,
-  roomId: "standard", ratePlanId: "flex", ...over,
-});
-
-const facts = (bookings: BookingFact[]): Facts => ({
-  nights: [], bookings, roomTypeNames: {}, ratePlanNames: {},
-});
-
-const SEPT = { preset: "custom", from: "2026-09-01", to: "2026-09-30" } as const;
-
-const value = <T,>(w: { ok: boolean } & Record<string, unknown>): T => {
-  expect(w.ok).toBe(true);
-  return (w as unknown as { value: T }).value;
-};
-
-const many = (country: string, count: number, from = 0) =>
-  Array.from({ length: count }, (_, i) =>
-    booking({ id: `${country}-${i + from}`, guestKey: `${country}-g${i + from}`, guestCountry: country }),
-  );
+const SEPT = { from: "2026-09-01", to: "2026-09-30" };
+const from = (country: string, count: number, over = {}) =>
+  Array.from({ length: count }, () => booking({ guestCountry: country, ...over }));
 
 describe("deriveGuests", () => {
-  test("average party size counts adults and children", () => {
-    const section = deriveGuests(
-      facts([booking({ adults: 2, children: 2 }), booking({ id: "b2", adults: 1, children: 0 })]),
-      SEPT,
-    );
-    expect(value<number>(section.averagePartySize)).toBe(2.5);
-  });
-
-  test("a cancelled booking never stayed, so it has no party size", () => {
-    const section = deriveGuests(
-      facts([
-        booking({ adults: 2, children: 0 }),
-        booking({ id: "b2", adults: 8, children: 0, status: "cancelled", cancelledAt: "2026-09-11T00:00:00.000Z" }),
-      ]),
-      SEPT,
-    );
-    expect(value<number>(section.averagePartySize)).toBe(2);
-  });
-
-  test("party size is null with nothing to average", () => {
-    expect(value<number | null>(deriveGuests(facts([]), SEPT).averagePartySize)).toBeNull();
-  });
-
-  /**
-   * All history, not just the selected period. A guest's second stay is their
-   * second stay whichever window the host happens to be looking at.
-   */
-  test("a guest whose first stay predates the period still counts as repeat", () => {
-    const section = deriveGuests(
-      facts([
-        booking({ id: "old", guestKey: "gerda", checkIn: "2025-05-01", createdAt: "2025-04-01T12:00:00.000Z" }),
-        booking({ id: "new", guestKey: "gerda", checkIn: "2026-09-20" }),
-      ]),
-      SEPT,
-    );
-    expect(value<number>(section.repeatGuestPct)).toBe(100);
-  });
-
-  test("a first-time guest is not a repeat guest", () => {
-    const section = deriveGuests(facts([booking({ guestKey: "new-face" })]), SEPT);
-    expect(value<number>(section.repeatGuestPct)).toBe(0);
-  });
-
-  /**
-   * The privacy rule. A four-room B&B with one Japanese guest would otherwise
-   * publish that guest's presence to anyone who can see the screen.
-   */
-  /**
-   * The country list counts bookings, not stays, so a cancelled booking still
-   * counts toward its country. That is deliberate, and it cuts against the
-   * privacy fold at the margin: four stays plus one cancellation is five
-   * bookings, and the country is named rather than folded. The spec's
-   * cancelled-earns-nothing list names revenue, nights sold, length of stay and
-   * party size — never country — and this widget's own definition is "bookings
-   * per country", the same population section 3 counts. Pinned here so that
-   * reading "bookings" as "stays" later has to argue with a test.
-   */
-  test("a cancelled booking still counts toward its country", () => {
-    const section = deriveGuests(
-      facts([
-        ...many("JP", 4),
-        booking({
-          id: "jp-cancelled",
-          guestKey: "jp-g9",
-          guestCountry: "JP",
-          status: "cancelled",
-          cancelledAt: "2026-09-12T12:00:00.000Z",
-        }),
-      ]),
-      SEPT,
-    );
-    expect(value<Category[]>(section.countries)).toEqual([
-      { key: "JP", label: "Japan", value: 5 },
+  test("a country is named only with five distinct guests behind it", () => {
+    const f = facts([
+      ...from("NL", 6),
+      // Five bookings, one guest: naming Japan would name the guest.
+      ...from("JP", 5, { guestKey: "one-regular" }),
+      ...from("DE", 4),
+    ]);
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries)).toEqual([
+      { key: "NL", label: "Netherlands", value: 6, sharePct: 40 },
+      { key: "OTHER", label: "Other", value: 9, sharePct: 60 },
     ]);
   });
 
-  test("a country with four bookings folds into Other; five stands on its own", () => {
-    const section = deriveGuests(
-      facts([...many("NL", 10), ...many("DE", 5), ...many("JP", 4), ...many("CA", 1)]),
-      SEPT,
-    );
-    const rows = value<Category[]>(section.countries);
-    expect(rows.map((r) => r.key)).toEqual(["NL", "DE", OTHER_COUNTRY_KEY]);
-    expect(rows.find((r) => r.key === OTHER_COUNTRY_KEY)).toMatchObject({ label: "Other", value: 5 });
+  test("at most five countries are named; the rest join Other", () => {
+    const f = facts(["NL", "BE", "DE", "GB", "FR", "US", "IT"].flatMap((c, i) => from(c, 12 - i)));
+    const rows = ok(deriveGuests(ctx(f, SEPT)).countries);
+    expect(rows.map((r) => r.key)).toEqual(["NL", "BE", "DE", "GB", "FR", "OTHER"]);
+    expect(rows.at(-1)!.value).toBe(7 + 6);
+    expect(rows.reduce((t, r) => t + r.value, 0)).toBe(63);
   });
 
-  test("Other sorts last even when it outweighs a named country", () => {
-    const section = deriveGuests(
-      facts([...many("NL", 6), ...many("JP", 4), ...many("CA", 4), ...many("IE", 4)]),
-      SEPT,
-    );
-    const rows = value<Category[]>(section.countries);
-    expect(rows[rows.length - 1]).toMatchObject({ key: OTHER_COUNTRY_KEY, value: 12 });
+  test("the page declines entirely below five distinct guests", () => {
+    const f = facts(from("NL", 8, { guestKey: "one-regular" }));
+    const view = deriveGuests(ctx(f, SEPT));
+    expect(view.countries).toEqual({ ok: false, reason: "below-minimum", basis: "booking", needed: 5, have: 1 });
+    expect(view.groupTypes).toMatchObject({ ok: false, reason: "below-minimum" });
   });
 
-  test("no Other row appears when nothing needs folding", () => {
-    const section = deriveGuests(facts([...many("NL", 6), ...many("DE", 5)]), SEPT);
-    expect(value<Category[]>(section.countries).some((r) => r.key === OTHER_COUNTRY_KEY)).toBe(false);
+  test("in a closed set, one folded group would be named by elimination, so a second joins it", () => {
+    const f = facts([
+      ...from("NL", 6, { adults: 2 }),
+      ...from("NL", 5, { adults: 1 }),
+      ...from("NL", 2, { adults: 2, children: 1 }),
+    ]);
+    // Family alone as Other would be readable as "2 family bookings". Solo, the next smallest, joins it.
+    expect(ok(deriveGuests(ctx(f, SEPT)).groupTypes).map((r) => [r.key, r.value])).toEqual([
+      ["couple", 6], ["OTHER", 7],
+    ]);
   });
 
-  test("countries carry a readable name", () => {
-    const section = deriveGuests(facts(many("NL", 5)), SEPT);
-    expect(value<Category[]>(section.countries)[0].label).toBe("Netherlands");
+  test("Other itself is never backed by fewer than five guests", () => {
+    const f = facts([...from("NL", 7), ...from("BE", 6), ...from("DE", 2)]);
+    // DE alone would leave Other at 2 guests. BE joins it.
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries).map((r) => [r.key, r.value])).toEqual([
+      ["NL", 7], ["OTHER", 8],
+    ]);
+  });
+
+  test("when everything must fold, the whole population is Other", () => {
+    const f = facts([...from("NL", 4), ...from("BE", 3)]);
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries).map((r) => [r.key, r.value])).toEqual([["OTHER", 7]]);
+  });
+
+  test("cancelled bookings brought nobody and are counted nowhere", () => {
+    const f = facts([
+      ...from("NL", 6, { adults: 2 }),
+      ...from("NL", 6, { adults: 4, status: "cancelled", cancelledAt: "2026-09-02T10:00:00.000Z" }),
+    ]);
+    const view = deriveGuests(ctx(f, SEPT));
+    expect(ok(view.countries)[0].value).toBe(6);
+    expect(ok(view.medianPartySize).value).toBe(2);
+    expect(view.medianPartySize).toMatchObject({ sample: 6 });
+  });
+
+  test("returning is judged against all history, not the period", () => {
+    const f = facts([
+      booking({ guestKey: "regular", createdAt: "2025-05-01T10:00:00.000Z", checkIn: "2025-06-01" }),
+      booking({ guestKey: "regular" }),
+      booking(), booking(), booking(),
+    ]);
+    expect(ok(deriveGuests(ctx(f, SEPT)).returning).value).toBe(25);
+  });
+
+  test("an empty period has no answer, not zero guests of size NaN", () => {
+    const view = deriveGuests(ctx(facts([]), SEPT));
+    expect(ok(view.returning).value).toBeNull();
+    expect(ok(view.medianPartySize).value).toBeNull();
   });
 });

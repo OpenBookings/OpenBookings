@@ -1,17 +1,15 @@
-import {
-  resolveNightlyRates,
-  type Night,
-} from "@openbookings/pricing";
+import { expandNights } from "../metrics";
 import { addDays, enumerateDates, weekdayOf } from "../period";
-import type { BookingFact, Facts, IsoDate, NightFact } from "../types";
+import type { BookingFact, Facts, InventoryFact, IsoDate } from "../types";
 import { makeRng, type Rng } from "./rng";
-import type { DemoProperty, DemoRatePlan } from "./properties";
+import { ZEEBURG, type DemoHotel, type DemoRatePlan, type DemoRoomType } from "./zeeburg";
 
-/**
- * Demand shape. Two effects a host would recognise on their own numbers: the
- * weekend peak, and a summer high season that in the Netherlands runs June to
- * August with a shoulder either side.
- */
+/** Arrivals are generated this far past today, so the next 90 days have bookings. */
+const HORIZON_DAYS = 180;
+/** Mean of STAY_WEIGHTS. Turns nightly demand into arrivals per day. */
+const AVERAGE_STAY = 2.77;
+const GUEST_POOL = 6000;
+
 const WEEKEND_FACTOR: Record<number, number> = {
   1: 0.82, 2: 0.84, 3: 0.9, 4: 1.0, 5: 1.28, 6: 1.34, 7: 0.92,
 };
@@ -21,178 +19,189 @@ const SEASON_FACTOR: Record<string, number> = {
   "07": 1.38, "08": 1.36, "09": 1.1, "10": 0.9, "11": 0.66, "12": 0.74,
 };
 
-/** Countries in the order they are drawn. The tail exists so the <5 fold fires. */
+const STAY_WEIGHTS: [number, number][] = [
+  [1, 22], [2, 34], [3, 20], [4, 10], [5, 6], [6, 3], [7, 3], [9, 2],
+];
+
+/** [min days, max days, weight]. */
+const LEAD_RANGES: [[number, number], number][] = [
+  [[0, 0], 6], [[1, 3], 14], [[4, 7], 16], [[8, 14], 18],
+  [[15, 30], 20], [[31, 60], 16], [[61, 150], 10],
+];
+
+const ADULT_WEIGHTS: [number, number][] = [[1, 18], [2, 62], [3, 8], [4, 12]];
+
+/** The tail exists so the small-segment fold has something to fold. */
 const COUNTRY_WEIGHTS: [string, number][] = [
   ["NL", 38], ["BE", 16], ["DE", 14], ["GB", 8], ["FR", 6], ["US", 4],
   ["IT", 3], ["ES", 3], ["DK", 2], ["SE", 2], ["PL", 1], ["IE", 1],
   ["JP", 1], ["CA", 1], ["AT", 1], ["PT", 1], ["NO", 1], ["CH", 1],
 ];
 
-const CANCELLATION_RATE = 0.09;
-/** Cents, from whole euros. The one place this conversion happens. */
-const toCents = (euros: number): number => Math.round(euros * 100);
+const WEEKEND_UPLIFT = 1.15;
+const EARLY_BIRD = { minLeadDays: 60, rate: 0.08 };
+const LAST_MINUTE = { maxLeadDays: 3, rate: 0.12 };
+const WEEKLY = { minNights: 7, rate: 0.1 };
 
-function pickCountry(rng: Rng): string {
-  const total = COUNTRY_WEIGHTS.reduce((sum, [, w]) => sum + w, 0);
+function weighted<T>(rng: Rng, options: [T, number][]): T {
+  const total = options.reduce((sum, [, weight]) => sum + weight, 0);
   let roll = rng.next() * total;
-  for (const [code, weight] of COUNTRY_WEIGHTS) {
+  for (const [value, weight] of options) {
     roll -= weight;
-    if (roll <= 0) return code;
+    if (roll < 0) return value;
   }
-  return COUNTRY_WEIGHTS[0][0];
+  return options[options.length - 1][0];
 }
 
-/** Share of inventory that sells on this date, before rounding to whole units. */
-function demandFor(property: DemoProperty, date: IsoDate, rng: Rng): number {
-  const weekend = WEEKEND_FACTOR[weekdayOf(date)] ?? 1;
-  const season = SEASON_FACTOR[date.slice(5, 7)] ?? 1;
-  const jitter = 0.82 + rng.next() * 0.36;
-  return property.demand * weekend * season * jitter;
+const pad = (value: number): string => String(value).padStart(2, "0");
+
+/** Friday and Saturday nights carry the weekend rate. */
+const isWeekendNight = (date: IsoDate): boolean => weekdayOf(date) === 5 || weekdayOf(date) === 6;
+
+function outOfOrder(hotel: DemoHotel, room: DemoRoomType, date: IsoDate): number {
+  if (room.units <= 2) return 0;
+  return makeRng(`${hotel.seed}:ooo:${room.id}:${date}`).bool(0.03) ? 1 : 0;
+}
+
+function countryOf(hotel: DemoHotel, guestIndex: number): string {
+  return weighted(makeRng(`${hotel.seed}:guest:${guestIndex}`), COUNTRY_WEIGHTS);
 }
 
 /**
- * Prices come out of the real calculator, not out of this file. A demo revenue
- * figure that did not pass through the modifier pipeline would agree with
- * nothing — not the ARI grid, not a guest quote — and section 4 would be
- * comparing a base price against a number nobody computed.
+ * Bookings first. Each arrival date and rate plan has its own seed, and rooms
+ * are allocated in arrival order from the opening day, so the bookings for a
+ * given date are the same whatever `today` is: a later today only reveals
+ * bookings that had not been made yet.
  */
-function priceNights(plan: DemoRatePlan, dates: IsoDate[], today: IsoDate) {
-  const nights: Night[] = dates.map((date) => ({
-    date,
-    base_price: plan.barEuros,
-    has_override: false,
-  }));
-  return resolveNightlyRates(nights, plan.modifiers, { baseOccupancy: 2, today });
-}
+export function buildDemoFacts(today: IsoDate, hotel: DemoHotel = ZEEBURG): Facts {
+  const lastDate = addDays(today, HORIZON_DAYS);
+  const dates = enumerateDates(hotel.openedOn, lastDate);
+  const rooms = new Map(hotel.roomTypes.map((room) => [room.id, room]));
 
-export function generateFacts(
-  property: DemoProperty,
-  from: IsoDate,
-  to: IsoDate,
-  today: IsoDate,
-): Facts {
-  const dates = enumerateDates(from, to);
-  const nights: NightFact[] = [];
-
-  for (const plan of property.ratePlans) {
-    const roomType = property.roomTypes.find((r) => r.id === plan.roomId);
-    if (!roomType) continue;
-
-    // Seeded per plan, so adding a plan cannot shift another plan's history.
-    const rng = makeRng(`${property.seed}:${plan.id}`);
-    const rates = priceNights(plan, dates, today);
-
-    dates.forEach((date, i) => {
-      const rate = rates[i];
-      // A few units are held back now and then: maintenance, owner use.
-      const blocked = rng.bool(0.04) ? rng.int(1, Math.max(1, Math.floor(roomType.units / 3))) : 0;
-      const unitsAvailable = Math.max(0, roomType.units - blocked);
-
-      const open = property.openedOn !== null && date >= property.openedOn;
-      const unitsSold = open
-        ? Math.min(unitsAvailable, Math.max(0, Math.round(unitsAvailable * demandFor(property, date, rng))))
-        : 0;
-
-      // The trace carries one step per modifier that actually fired, with a
-      // signed euro delta. Multiplying by unitsSold gives the revenue impact
-      // for the night; a modifier that did not fire leaves no step and so
-      // contributes nothing, which is the behaviour section 4 reports.
-      const modifiers = rate.trace
-        .filter((step) => step.modifier_type !== undefined)
-        .map((step) => ({
-          type: step.modifier_type!,
-          impactCents: toCents(step.delta * unitsSold),
-        }));
-
-      nights.push({
-        date,
-        propertyId: property.id,
-        roomId: roomType.id,
-        ratePlanId: plan.id,
-        unitsAvailable,
-        unitsSold,
-        netRevenueCents: toCents(rate.price * unitsSold),
-        basePriceCents: toCents(plan.barEuros * unitsSold),
-        modifiers,
-      });
-    });
-  }
-
-  nights.sort((a, b) => a.date.localeCompare(b.date) || a.ratePlanId.localeCompare(b.ratePlanId));
-
-  return {
-    nights,
-    bookings: generateBookings(property, nights, today),
-    roomTypeNames: Object.fromEntries(property.roomTypes.map((r) => [r.id, r.name])),
-    ratePlanNames: Object.fromEntries(property.ratePlans.map((p) => [p.id, p.name])),
-  };
-}
-
-/**
- * Bookings are assembled from the nights that sold rather than invented beside
- * them, so the two arrays describe the same trading. A booking is a run of
- * consecutive sold nights on one plan; its revenue is the sum of those nights'
- * per-unit revenue.
- */
-function generateBookings(
-  property: DemoProperty,
-  nights: NightFact[],
-  today: IsoDate,
-): BookingFact[] {
-  if (property.openedOn === null) return [];
-
-  const rng = makeRng(`${property.seed}:bookings`);
-  const bookings: BookingFact[] = [];
-  // A small pool, so some guests recur and "repeat guests" is not always zero.
-  const guestPool = Array.from({ length: 140 }, (_, i) => `guest-${property.id}-${i}`);
-
-  const byPlan = new Map<string, NightFact[]>();
-  for (const night of nights) {
-    if (night.unitsSold === 0) continue;
-    const list = byPlan.get(night.ratePlanId) ?? [];
-    list.push(night);
-    byPlan.set(night.ratePlanId, list);
-  }
-
-  for (const [planId, planNights] of byPlan) {
-    let cursor = 0;
-    while (cursor < planNights.length) {
-      const stay = rng.int(1, 5);
-      const window = planNights.slice(cursor, cursor + stay);
-      cursor += window.length;
-      if (window.length === 0) break;
-
-      const checkIn = window[0].date;
-      const checkOut = addDays(window[window.length - 1].date, 1);
-      const leadDays = rng.int(0, 120);
-      const createdAt = `${addDays(checkIn, -leadDays)}T${String(rng.int(8, 21)).padStart(2, "0")}:00:00.000Z`;
-      const cancelled = rng.bool(CANCELLATION_RATE);
-
-      // Per-unit revenue: the night's revenue divided by the units that sold.
-      const netRevenueCents = window.reduce(
-        (sum, n) => sum + Math.round(n.netRevenueCents / Math.max(1, n.unitsSold)),
-        0,
-      );
-
-      bookings.push({
-        id: `bk-${property.id}-${planId}-${checkIn}`,
-        propertyId: property.id,
-        createdAt,
-        checkIn,
-        checkOut,
-        nights: window.length,
-        status: cancelled ? "cancelled" : checkOut <= today ? "completed" : "confirmed",
-        cancelledAt: cancelled ? `${addDays(checkIn, -rng.int(1, Math.max(1, leadDays)))}T12:00:00.000Z` : null,
-        adults: rng.int(1, 2),
-        children: rng.bool(0.22) ? rng.int(1, 2) : 0,
-        guestKey: rng.pick(guestPool),
-        guestCountry: pickCountry(rng),
-        netRevenueCents,
-        roomId: window[0].roomId,
-        ratePlanId: planId,
-      });
+  const inventory: InventoryFact[] = [];
+  const capacity = new Map<string, number>();
+  for (const date of dates) {
+    for (const room of hotel.roomTypes) {
+      const unitsOutOfOrder = outOfOrder(hotel, room, date);
+      inventory.push({ date, roomId: room.id, unitsTotal: room.units, unitsOutOfOrder });
+      capacity.set(`${room.id}:${date}`, room.units - unitsOutOfOrder);
     }
   }
 
-  return bookings.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const taken = new Map<string, number>();
+  const bookings: BookingFact[] = [];
+
+  for (const date of dates) {
+    for (const plan of hotel.ratePlans) {
+      const room = rooms.get(plan.roomId)!;
+      const rng = makeRng(`${hotel.seed}:${plan.id}:${date}`);
+      const nightlyDemand =
+        room.units * plan.share * hotel.demand *
+        (WEEKEND_FACTOR[weekdayOf(date)] ?? 1) * (SEASON_FACTOR[date.slice(5, 7)] ?? 1);
+      const expected = nightlyDemand / AVERAGE_STAY;
+      const arrivals = Math.floor(expected) + (rng.bool(expected % 1) ? 1 : 0);
+
+      for (let index = 0; index < arrivals; index++) {
+        const booking = drawBooking(hotel, plan, date, index, rng, today);
+        const stayDates = enumerateDates(date, addDays(date, booking.nights - 1));
+        // A stay that runs past the generated window has no capacity row.
+        const fits = stayDates.every((d) => (taken.get(`${room.id}:${d}`) ?? 0) < (capacity.get(`${room.id}:${d}`) ?? 0));
+        if (!fits) continue;
+        for (const d of stayDates) taken.set(`${room.id}:${d}`, (taken.get(`${room.id}:${d}`) ?? 0) + 1);
+        // Not made yet, as far as today is concerned. It still holds its room,
+        // which is what keeps history identical when today moves.
+        if (booking.createdAt.slice(0, 10) > today) continue;
+        bookings.push(booking);
+      }
+    }
+  }
+
+  bookings.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+
+  return {
+    bookings,
+    inventory,
+    nights: expandNights(bookings),
+    roomTypeNames: Object.fromEntries(hotel.roomTypes.map((room) => [room.id, room.name])),
+    ratePlanNames: Object.fromEntries(hotel.ratePlans.map((plan) => [plan.id, plan.name])),
+  };
+}
+
+/** Every random draw happens here, in a fixed order, whether or not the booking fits. */
+function drawBooking(
+  hotel: DemoHotel,
+  plan: DemoRatePlan,
+  checkIn: IsoDate,
+  index: number,
+  rng: Rng,
+  today: IsoDate,
+): BookingFact {
+  const nights = weighted(rng, STAY_WEIGHTS);
+  const [minLead, maxLead] = weighted(rng, LEAD_RANGES);
+  const lead = rng.int(minLead, maxLead);
+  const createdDate = addDays(checkIn, -lead);
+  const createdAt = `${createdDate}T${pad(rng.int(8, 21))}:${pad(rng.int(0, 59))}:00.000Z`;
+
+  const adults = weighted(rng, ADULT_WEIGHTS);
+  const children = adults >= 2 && rng.bool(0.2) ? rng.int(1, 2) : 0;
+  const guestIndex = rng.int(0, GUEST_POOL - 1);
+
+  const willCancel = rng.bool(plan.refundable ? 0.12 : 0.04);
+  const cancelOffset = rng.int(0, lead);
+  const cancelDate = addDays(createdDate, cancelOffset);
+  const cancelled = willCancel && cancelDate <= today;
+
+  const nightlyBase = Array.from({ length: nights }, (_, i) =>
+    isWeekendNight(addDays(checkIn, i)) ? Math.round(plan.barCents * WEEKEND_UPLIFT) : plan.barCents,
+  );
+  // A discount is earned by the booking itself: how early, how late, how long.
+  const discountRate =
+    (lead >= EARLY_BIRD.minLeadDays ? EARLY_BIRD.rate : 0) +
+    (lead <= LAST_MINUTE.maxLeadDays && plan.refundable ? LAST_MINUTE.rate : 0) +
+    (nights >= WEEKLY.minNights ? WEEKLY.rate : 0);
+  const nightlyNetCents = nightlyBase.map((cents) => Math.round(cents * (1 - discountRate)));
+  const basePriceCents = nightlyBase.reduce((total, cents) => total + cents, 0);
+  const netRevenueCents = nightlyNetCents.reduce((total, cents) => total + cents, 0);
+
+  // Non-refundable keeps everything; refundable keeps the first night inside
+  // two days of arrival and nothing before that.
+  const daysBeforeArrival = lead - cancelOffset;
+  const cancellationFeeCents = !cancelled
+    ? 0
+    : !plan.refundable
+      ? netRevenueCents
+      : daysBeforeArrival <= 2
+        ? nightlyNetCents[0]
+        : 0;
+
+  const checkOut = addDays(checkIn, nights);
+
+  return {
+    id: `demo-${plan.id}-${checkIn}-${index}`,
+    createdAt,
+    checkIn,
+    checkOut,
+    nights,
+    status: cancelled ? "cancelled" : checkOut <= today ? "completed" : "confirmed",
+    cancelledAt: cancelled ? `${cancelDate}T12:00:00.000Z` : null,
+    adults,
+    children,
+    guestKey: `demo-guest-${guestIndex}`,
+    guestCountry: countryOf(hotel, guestIndex),
+    roomId: plan.roomId,
+    ratePlanId: plan.id,
+    nightlyNetCents,
+    netRevenueCents,
+    basePriceCents,
+    discountCents: basePriceCents - netRevenueCents,
+    cancellationFeeCents,
+  };
+}
+
+let cache: { today: IsoDate; facts: Facts } | null = null;
+
+/** One generation per day per server process. */
+export function generateDemoFacts(today: IsoDate): Facts {
+  if (cache?.today !== today) cache = { today, facts: buildDemoFacts(today) };
+  return cache.facts;
 }

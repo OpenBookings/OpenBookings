@@ -1,6 +1,12 @@
 import { formatDayMonth, formatMonthYear } from "../format";
-import { addDays, startOfMonth, startOfWeek } from "../period";
+import { addDays, endOfMonth, startOfMonth, startOfWeek, type DateRange } from "../period";
 import type { Granularity, IsoDate, Point } from "../types";
+
+export interface Bucket {
+  key: IsoDate;
+  label: string;
+  incomplete: boolean;
+}
 
 export function bucketKey(date: IsoDate, granularity: Granularity): IsoDate {
   if (granularity === "day") return date;
@@ -8,63 +14,72 @@ export function bucketKey(date: IsoDate, granularity: Granularity): IsoDate {
   return startOfMonth(date);
 }
 
-export function bucketLabel(bucket: IsoDate, granularity: Granularity): string {
-  return granularity === "month" ? formatMonthYear(bucket) : formatDayMonth(bucket);
+function bucketEnd(key: IsoDate, granularity: Granularity): IsoDate {
+  if (granularity === "day") return key;
+  if (granularity === "week") return addDays(key, 6);
+  return endOfMonth(key);
+}
+
+function nextKey(key: IsoDate, granularity: Granularity): IsoDate {
+  if (granularity === "day") return addDays(key, 1);
+  if (granularity === "week") return addDays(key, 7);
+  return addDays(endOfMonth(key), 1);
 }
 
 /**
- * Every bucket in the range, including the ones nothing happened in. A quiet
- * fortnight that closes up makes the line either side of it look steeper than
- * it was, which is the kind of wrong a host would act on.
+ * Every bucket the range touches, including the ones nothing happened in. A
+ * bucket is incomplete when it is still in progress (it ends today or later),
+ * when the range stops before it does, or when the range starts after it
+ * does: each way its total is partial, and drawn as a solid line it reads as a
+ * collapse at one end or a ramp at the other.
  */
-export function emptyBuckets(
-  from: IsoDate,
-  to: IsoDate,
-  granularity: Granularity,
-): IsoDate[] {
-  const buckets: IsoDate[] = [];
-  let cursor = bucketKey(from, granularity);
-  const last = bucketKey(to, granularity);
-  while (cursor <= last) {
-    buckets.push(cursor);
-    cursor =
-      granularity === "day"
-        ? addDays(cursor, 1)
-        : granularity === "week"
-          ? addDays(cursor, 7)
-          : startOfMonth(addDays(`${cursor.slice(0, 7)}-28`, 7));
+export function buckets(range: DateRange, granularity: Granularity, today: IsoDate): Bucket[] {
+  const out: Bucket[] = [];
+  const last = bucketKey(range.to, granularity);
+  for (let key = bucketKey(range.from, granularity); key <= last; key = nextKey(key, granularity)) {
+    const end = bucketEnd(key, granularity);
+    out.push({
+      key,
+      label: granularity === "month" ? formatMonthYear(key) : formatDayMonth(key),
+      incomplete: end >= today || end > range.to || key < range.from,
+    });
   }
-  return buckets;
+  return out;
 }
 
+/** Rows grouped into the range's buckets and reduced to one value each. */
 export function toSeries<T>(
   rows: T[],
-  opts: {
-    date: (row: T) => IsoDate;
-    value: (row: T) => number;
-    from: IsoDate;
-    to: IsoDate;
-    granularity: Granularity;
-    reduce?: "sum" | "mean";
-  },
+  date: (row: T) => IsoDate,
+  range: DateRange,
+  granularity: Granularity,
+  today: IsoDate,
+  reduce: (rows: T[], bucket: Bucket) => number | null,
 ): Point[] {
-  const totals = new Map<IsoDate, { sum: number; count: number }>();
+  const groups = new Map<IsoDate, T[]>();
   for (const row of rows) {
-    const key = bucketKey(opts.date(row), opts.granularity);
-    const entry = totals.get(key) ?? { sum: 0, count: 0 };
-    entry.sum += opts.value(row);
-    entry.count += 1;
-    totals.set(key, entry);
+    const d = date(row);
+    if (d < range.from || d > range.to) continue;
+    const key = bucketKey(d, granularity);
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
   }
+  return buckets(range, granularity, today).map((bucket) => ({
+    bucket: bucket.key,
+    label: bucket.label,
+    value: reduce(groups.get(bucket.key) ?? [], bucket),
+    compare: null,
+    incomplete: bucket.incomplete,
+  }));
+}
 
-  return emptyBuckets(opts.from, opts.to, opts.granularity).map((bucket) => {
-    const entry = totals.get(bucket);
-    const value =
-      opts.reduce === "mean"
-        ? entry && entry.count > 0
-          ? entry.sum / entry.count
-          : 0
-        : (entry?.sum ?? 0);
-    return { bucket, label: bucketLabel(bucket, opts.granularity), value };
-  });
+/**
+ * Lays the comparison period under the current one, position by position. The
+ * two can differ in bucket count by one; a position with no counterpart stays
+ * null and no value is invented for it.
+ */
+export function overlay(current: Point[], previous: Point[] | null): Point[] {
+  if (!previous) return current;
+  return current.map((point, index) => ({ ...point, compare: previous[index]?.value ?? null }));
 }

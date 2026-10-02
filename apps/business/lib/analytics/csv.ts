@@ -1,18 +1,10 @@
-import type { AnalyticsData, Category, Point, Widget } from "./types";
+import { PAGES } from "./pages";
+import type { AnyPageData, Bar, Point, Share, StatValue, Widget } from "./types";
 
-export type SectionId = "revenue" | "sell-through" | "bookings" | "pricing" | "guests";
+type Cell = string | number | null;
+type Row = Cell[];
 
-export const SECTION_TITLES: Record<SectionId, string> = {
-  revenue: "Revenue",
-  "sell-through": "Sell-through",
-  bookings: "Bookings",
-  pricing: "Pricing",
-  guests: "Guests",
-};
-
-type Row = (string | number | null)[];
-
-function escape(field: string | number | null): string {
+function escape(field: Cell): string {
   if (field === null) return "";
   const text = String(field);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -21,102 +13,128 @@ function escape(field: string | number | null): string {
 const toCsv = (rows: Row[]): string => rows.map((row) => row.map(escape).join(",")).join("\n");
 
 /** Cents are an internal unit. A host opening this in a spreadsheet wants euros. */
-const euros = (cents: number | null): string | null =>
-  cents === null ? null : (cents / 100).toFixed(2);
-
-const pct = (value: number | null): string | null =>
-  value === null ? null : value.toFixed(1);
+const euros = (cents: number | null): string | null => (cents === null ? null : (cents / 100).toFixed(2));
+const decimal = (value: number | null): string | null => (value === null ? null : value.toFixed(1));
+const whole = (value: number | null): string | null => (value === null ? null : String(value));
 
 /**
- * A failed widget leaves a visible note. A blank block would read as "nothing
- * happened here", which is a different and wrong claim.
+ * A widget that declined leaves a visible note. A blank block would read as
+ * "nothing happened", which is a different and wrong claim. This is also what
+ * keeps the file under the same suppression as the screen: it can only print
+ * what the view model holds.
  */
-function rowsFor<T>(w: Widget<T>, build: (value: T) => Row[]): Row[] {
-  return w.ok ? build(w.value) : [["This widget was unavailable when the file was exported."]];
+function rowsFor<T>(label: string, w: Widget<T>, build: (value: T) => Row[]): Row[] {
+  if (w.ok) return build(w.value);
+  return [[label, "", w.reason === "below-minimum" ? "not enough data" : "unavailable", ""]];
 }
 
-const categories = (label: string, rows: Category[], format: (v: number) => string | null): Row[] =>
-  rows.map((row) => [label, row.label, format(row.value), row.count ?? null]);
+const stat = (label: string, w: Widget<StatValue>, format: (v: number | null) => string | null): Row[] =>
+  rowsFor(label, w, (v) => [[label, "", format(v.value), v.delta?.label ?? ""]]);
 
-const series = (label: string, points: Point[], format: (v: number) => string | null): Row[] =>
-  points.map((point) => [label, point.bucket, point.label, format(point.value)]);
+const points = (label: string, w: Widget<Point[]>, format: (v: number | null) => string | null): Row[] =>
+  rowsFor(label, w, (rows) => rows.map((p) => [label, p.bucket, format(p.value), p.incomplete ? "incomplete" : ""]));
 
-export function sectionCsv(data: AnalyticsData, section: SectionId): string {
-  const header: Row = [
-    ["Property", data.property.name],
-    ["Section", SECTION_TITLES[section]],
-    ["From", data.range.from],
-    ["To", data.range.to],
-  ].flat() as Row;
+const shares = (label: string, w: Widget<Share[]>, format: (v: number | null) => string | null): Row[] =>
+  rowsFor(label, w, (rows) => rows.map((r) => [label, r.label, format(r.value), `${r.sharePct.toFixed(1)}%`]));
 
-  const rows: Row[] = [
-    ["Metric", "Key", "Value", "Count"],
-    ...bodyFor(data, section),
-  ];
+const bars = (label: string, w: Widget<Bar[]>, format: (v: number | null) => string | null): Row[] =>
+  rowsFor(label, w, (rows) => rows.map((r) => [label, r.label, format(r.value), ""]));
 
-  return `${toCsv([header])}\n\n${toCsv(rows)}\n`;
-}
-
-function bodyFor(data: AnalyticsData, section: SectionId): Row[] {
-  switch (section) {
-    case "revenue":
+function body(data: AnyPageData): Row[] {
+  switch (data.page) {
+    case "revenue": {
+      const v = data.view;
       return [
-        ...rowsFor(data.revenue.yearToDateCents, (v) => [["Year to date (EUR)", "", euros(v.value), v.delta.label]]),
-        ...rowsFor(data.revenue.periodCents, (v) => [["Revenue in period (EUR)", "", euros(v.value), v.delta.label]]),
-        ...rowsFor(data.revenue.adrCents, (v) => [["Average room price (EUR)", "", euros(v.value), null]]),
-        ...rowsFor(data.revenue.revparCents, (v) => [["RevPAR (EUR)", "", euros(v.value), null]]),
-        ...rowsFor(data.revenue.commissionCents, (v) => [["Commission paid (EUR)", "", euros(v), null]]),
-        ...rowsFor(data.revenue.overTime, (v) => series("Revenue over time (EUR)", v, euros)),
-        ...rowsFor(data.revenue.byRoomType, (v) => categories("Revenue by room type (EUR)", v, euros)),
-        ...rowsFor(data.revenue.byRatePlan, (v) => categories("Revenue by rate plan (EUR)", v, euros)),
+        ...stat("Revenue (EUR)", v.revenue, euros),
+        ...stat("Year to date (EUR)", v.yearToDate, euros),
+        ...stat("ADR (EUR)", v.adr, euros),
+        ...stat("RevPAR (EUR)", v.revpar, euros),
+        ...stat("Commission 4.5% (EUR)", v.commission, euros),
+        ...points("Revenue over time (EUR)", v.overTime, euros),
+        ...shares("Revenue by room type (EUR)", v.byRoomType, euros),
+        ...shares("Revenue by rate plan (EUR)", v.byRatePlan, euros),
       ];
-    case "sell-through":
+    }
+    case "occupancy": {
+      const v = data.view;
       return [
-        ...rowsFor(data.sellThrough.pct, (v) => [["Sell-through (%)", "", pct(v.value), v.delta.label]]),
-        ...rowsFor(data.sellThrough.roomsSold, (v) => [["Rooms sold", "", v, null]]),
-        ...rowsFor(data.sellThrough.overTime, (v) => series("Sell-through over time (%)", v, pct)),
-        ...rowsFor(data.sellThrough.byRoomType, (v) => categories("Sell-through by room type (%)", v, pct)),
-        ...rowsFor(data.sellThrough.busiestDays, (v) =>
-          v.cells.map((cell) => [
-            "Busiest days (%)",
-            `${cell.weekStart} weekday ${cell.weekday}`,
-            pct(cell.pct),
-            cell.nightsSold,
+        ...stat("Occupancy (%)", v.occupancy, decimal),
+        ...stat("Nights sold", v.nightsSold, whole),
+        ...stat("Nights available", v.nightsAvailable, whole),
+        ...stat("Unsold nights, next 30 days", v.unsoldNext30, whole),
+        ...points("Occupancy over time (%)", v.overTime, decimal),
+        ...rowsFor("Next 90 days", v.next90, (cells) =>
+          cells.map((c) => ["Next 90 days", c.date, c.sold, `of ${c.available} available`]),
+        ),
+        ...(v.pace ? points("Pace, nights on the books", v.pace, whole) : []),
+        ...bars("Occupancy by weekday (%)", v.byWeekday, decimal),
+      ];
+    }
+    case "booking-patterns": {
+      const v = data.view;
+      return [
+        ...stat("Bookings", v.bookings, whole),
+        ...stat("Median lead time (days)", v.medianLeadDays, decimal),
+        ...stat("Median stay length (nights)", v.medianStayNights, decimal),
+        ...stat("Cancellation rate (%)", v.cancellationRate, decimal),
+        ...bars("Lead time (bookings)", v.leadTime, whole),
+        ...bars("Stay length (bookings)", v.stayLength, whole),
+        ...bars("Cancellations by days before check-in", v.cancellationsByDaysBefore, whole),
+        ...rowsFor("Cancellations by rate plan", v.byRatePlan, (rows) =>
+          rows.flatMap((r): Row[] => [
+            ["Cancellation rate by rate plan (%)", r.label, decimal(r.ratePct), `${r.cancelled} of ${r.bookings}`],
+            ["Cancellation fees retained (EUR)", r.label, euros(r.feesRetainedCents), ""],
           ]),
         ),
       ];
-    case "bookings":
+    }
+    case "pricing": {
+      const v = data.view;
       return [
-        ...rowsFor(data.bookings.count, (v) => [["Number of bookings", "", v.value, v.delta.label]]),
-        ...rowsFor(data.bookings.averageLengthOfStay, (v) => [["Average length of stay (nights)", "", v === null ? null : v.toFixed(2), null]]),
-        ...rowsFor(data.bookings.cancellations, (v) => [["Cancellations", "", v.count, v.delta.label]]),
-        ...rowsFor(data.bookings.leadTime, (v) => categories("Lead time (bookings)", v, (n) => String(n))),
-        ...rowsFor(data.bookings.upcoming, (v) =>
-          v.flatMap((w) => [
-            ["Upcoming nights sold", w.label, w.nightsSold, null],
-            ["Upcoming nights available", w.label, w.nightsAvailable, null],
-          ]),
-        ),
-      ];
-    case "pricing":
-      return [
-        ...rowsFor(data.pricing.averageDiscountPct, (v) => [["Average discount (%)", "", pct(v), null]]),
-        ...rowsFor(data.pricing.priceOverTime, (v) => [
-          ...series("Base price (EUR)", v.base, euros),
-          ...series("Achieved price (EUR)", v.achieved, euros),
+        ...stat("ADR (EUR)", v.adr, euros),
+        ...rowsFor("Discounts given (EUR)", v.discounts, (d) => [
+          ["Discounts given (EUR)", "", euros(d.value), d.delta?.label ?? ""],
+          ["Bookings with a discount (%)", "", decimal(d.shareOfBookingsPct), ""],
         ]),
-        ...rowsFor(data.pricing.topModifiers, (v) => categories("Modifier impact (EUR)", v, euros)),
+        ...stat("Average discount depth (%)", v.discountDepth, decimal),
+        ...points("ADR over time (EUR)", v.adrOverTime, euros),
+        ...rowsFor("By rate plan", v.byRatePlan, (rows) =>
+          rows.flatMap((r): Row[] => [
+            ["Bookings by rate plan", r.label, r.bookings, ""],
+            ["Nights by rate plan", r.label, r.nights, ""],
+            ["ADR by rate plan (EUR)", r.label, euros(r.adrCents), ""],
+            ["Revenue by rate plan (EUR)", r.label, euros(r.revenueCents), ""],
+          ]),
+        ),
+        ...rowsFor("By weekday", v.byWeekday, (rows) =>
+          rows.flatMap((r): Row[] => [
+            ["Occupancy by weekday (%)", r.label, decimal(r.occupancyPct), ""],
+            ["ADR by weekday (EUR)", r.label, euros(r.adrCents), r.hint ? "sells out below average rate" : ""],
+          ]),
+        ),
       ];
-    case "guests":
+    }
+    case "guests": {
+      const v = data.view;
       return [
-        ...rowsFor(data.guests.averagePartySize, (v) => [["Average party size", "", v === null ? null : v.toFixed(2), null]]),
-        ...rowsFor(data.guests.repeatGuestPct, (v) => [["Repeat guests (%)", "", pct(v), null]]),
-        ...rowsFor(data.guests.countries, (v) => categories("Country", v, (n) => String(n))),
+        ...stat("Returning guests (%)", v.returning, decimal),
+        ...stat("Median party size", v.medianPartySize, decimal),
+        ...shares("Booker country", v.countries, whole),
+        ...shares("Group type", v.groupTypes, whole),
       ];
+    }
   }
 }
 
-export function csvFilename(data: AnalyticsData, section: SectionId): string {
-  const slug = data.property.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  return `${slug}-${section}-${data.range.from}-to-${data.range.to}.csv`;
+export function pageCsv(data: AnyPageData): string {
+  const header: Row[] = [
+    ["Page", PAGES[data.page].title],
+    ["From", data.range.from],
+    ["To", data.range.to],
+  ];
+  return `${toCsv(header)}\n\n${toCsv([["Metric", "Key", "Value", "Note"], ...body(data)])}\n`;
+}
+
+export function csvFilename(data: AnyPageData): string {
+  return `analytics-${data.page}-${data.range.from}-to-${data.range.to}.csv`;
 }
