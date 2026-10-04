@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { completeOnboarding } from "../actions";
 import type { OnboardingStatus } from "../_lib/status";
+import { isStripeAccountReady } from "@/lib/stripe-readiness";
 
 // Fixed, same-origin endpoint — never built from user input, so there is no
 // request target an attacker could influence.
@@ -37,10 +38,22 @@ export function VerifyStep({ initialStatus }: { initialStatus: OnboardingStatus 
     if (!data.stripe) { router.replace("/onboarding/legal"); return; }
     if (data.onboardingCompleted) { router.replace("/dashboard"); return; }
 
+<<<<<<< Updated upstream
     // Clean — complete onboarding
     if (data.stripe.currentlyDue.length === 0 && data.stripe.chargesEnabled && !completingRef.current) {
+=======
+    // Clean — complete onboarding. The server checks readiness again and may
+    // still refuse: then say so instead of spinning forever, and let the next
+    // change in status (or a reload) try again.
+    if (isStripeAccountReady(data.stripe) && !completingRef.current) {
+>>>>>>> Stashed changes
       completingRef.current = true;
-      completeOnboarding().then(() => router.replace("/dashboard"));
+      completeOnboarding()
+        .then(() => router.replace("/dashboard"))
+        .catch(() => {
+          completingRef.current = false;
+          setError("We couldn't finish setting up your account. Please try again in a moment.");
+        });
     }
   }, [data, router]);
 
@@ -110,10 +123,14 @@ export function VerifyStep({ initialStatus }: { initialStatus: OnboardingStatus 
     );
   }
 
-  // Completing — show spinner
+  // Completing — show spinner, or why it stopped
   return (
-    <div className="flex items-center justify-center py-16">
-      <div className="size-5 rounded-full border-2 border-ob-brand border-t-transparent animate-spin" />
+    <div className="flex flex-col items-center justify-center gap-4 py-16">
+      {error ? (
+        <p className="text-sm text-red-400">{error}</p>
+      ) : (
+        <div className="size-5 rounded-full border-2 border-ob-brand border-t-transparent animate-spin" />
+      )}
     </div>
   );
 }
