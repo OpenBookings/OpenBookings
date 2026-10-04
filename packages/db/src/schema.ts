@@ -663,10 +663,6 @@ export const hostOnboarding = pgTable("host_onboarding", {
   completedSteps: text("completed_steps").array().notNull().default([]),
   /** Accumulated per-step payloads, merged key-by-key. */
   stepData: jsonb("step_data").notNull().default({}),
-  /**
-   * Set when the wizard completes. Nothing gates on it any more: completion
-   * lives on org_profile.onboarding_completed_at (0020). Kept only as a
-   * dual-write so a rollback works; dropped in 0021.
-   */
+  /** NULL until the host clears the onboarding wall; the proxy gates on this. */
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
 });

@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sessionForApp, sessionCookieNames } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
 import { auth } from "@/lib/auth"; // from packages/auth
-import { getOnboardingFacts, wizardInProgress } from "@/lib/onboarding-facts";
-import { onboardingWallDecision } from "@/lib/onboarding-wall";
+import { queryOne } from "@openbookings/db";
 import { headers } from "next/headers";
 
 const env = readAuthEnv();
@@ -57,14 +56,17 @@ export async function proxy(request: NextRequest) {
   // React bug during chained navigations (vercel/next.js#63121).
   const path = request.nextUrl.pathname;
   if (path.startsWith("/dashboard") || path.startsWith("/onboarding")) {
-    const facts = await getOnboardingFacts(session.user.id);
-    const decision = onboardingWallDecision({
-      path,
-      hasCompletedOrg: facts.hasCompletedOrg,
-      wizardInProgress: wizardInProgress(facts),
-    });
-    if (decision !== "allow") {
-      return NextResponse.redirect(new URL(decision, request.url));
+    const row = await queryOne<{ onboarding_completed_at: string | null }>(
+      `SELECT onboarding_completed_at FROM host_onboarding WHERE user_id = $1`,
+      [session.user.id]
+    );
+    const completed = !!row?.onboarding_completed_at;
+
+    if (path.startsWith("/dashboard") && !completed) {
+      return NextResponse.redirect(new URL("/onboarding", request.url));
+    }
+    if (path.startsWith("/onboarding") && completed) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
