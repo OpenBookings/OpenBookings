@@ -3,9 +3,12 @@
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne, withTransaction } from "@openbookings/db";
 import { headers } from "next/headers";
-import { createConnectAccount } from "@openbookings/stripe";
+import { createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
 import { provisionOrganizationTx } from "@/lib/provision-organization";
+import { completionPrecheck } from "@/lib/onboarding-completion";
+import { isStripeAccountReady } from "@/lib/stripe-readiness";
 import { promoteOnboardingToProperty } from "./promotion";
+import { summariseStripeAccount } from "./_lib/status";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -33,6 +36,12 @@ export interface LegalNBoringData {
   cocNumber?: string;
   partnerAgreement?: LegalSignatureRecord;
   dpa?: LegalSignatureRecord;
+  /**
+   * Confirmation that the host's rates include tax (see
+   * RATES_TAX_INCLUSIVE_STATEMENT). Becomes an org_consent row when the
+   * organisation is provisioned.
+   */
+  ratesInclusive?: LegalSignatureRecord;
   previousAttempts?: LegalAttemptRecord[];
 }
 
@@ -127,6 +136,29 @@ export async function signLegalDocument(
   await saveStepData("legal-n-boring", updated);
 }
 
+/**
+ * Record (or withdraw) the host's confirmation that their rates include tax.
+ * Captured like a signature, with time and IP, because guests are told the
+ * price includes tax on the strength of it.
+ */
+export async function setInclusiveRatesConfirmation(confirmed: boolean): Promise<void> {
+  await getSession();
+  const hdrs = await headers();
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    hdrs.get("x-real-ip") ??
+    "unknown";
+
+  const existing = await loadStepData();
+  const legal = { ...(existing["legal-n-boring"] ?? ({} as LegalNBoringData)) };
+  delete legal.ratesInclusive;
+
+  await saveStepData("legal-n-boring", {
+    ...legal,
+    ...(confirmed && { ratesInclusive: { signedAt: new Date().toISOString(), signerIp: ip } }),
+  });
+}
+
 /** Archive current legal data as a previous attempt and clear the active fields. */
 export async function resetLegalData(): Promise<void> {
   await getSession();
@@ -174,17 +206,14 @@ export async function provisionStripeAccount(): Promise<string> {
   if (!legal) throw new Error("Legal step data is missing");
   if (!location) throw new Error("Location step data is missing");
 
+  // The country decides which regulator the account sits under and cannot be
+  // changed afterwards, so it is never defaulted.
+  if (!location.country) throw new Error("Property country is missing");
+
   const accountId = await createConnectAccount({
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
-    fullName: legal.fullName,
-    roleTitle: legal.roleTitle,
-    vatNumber: legal.vatNumber,
-    cocNumber: legal.cocNumber ?? "",
-    city: location.city,
-    country: location.country || "NL",
-    postalCode: location.postalCode,
-    streetAddress: location.streetAddress,
+    country: location.country,
   });
 
   await query(
@@ -210,6 +239,10 @@ export async function provisionStripeAccount(): Promise<string> {
  * transaction-bound deps so its INSERTs roll back with the org if anything
  * below fails — its ON CONFLICT DO NOTHING is deliberately written to be safe
  * inside a surrounding transaction.
+ *
+ * This is the only place onboarding is marked complete
+ * (`org_profile.onboarding_completed_at`), so it checks for itself what the
+ * verify step checks in the browser: the Stripe account must be ready.
  */
 export async function completeOnboarding(): Promise<void> {
   const session = await getSession();
@@ -217,6 +250,35 @@ export async function completeOnboarding(): Promise<void> {
   const stepData = await loadStepData();
   const legal = stepData["legal-n-boring"];
   if (!legal) throw new Error("Legal step data is missing");
+
+  const stripeAccountId =
+    (stepData as { stripe_account_id?: string }).stripe_account_id ?? null;
+  const completedOrg = stripeAccountId
+    ? await queryOne<{ caller_is_member: boolean }>(
+        `SELECT EXISTS (
+                  SELECT 1 FROM "member" m
+                  WHERE m."organizationId" = op.organization_id AND m."userId" = $2
+                ) AS caller_is_member
+         FROM org_profile op
+         WHERE op.stripe_account_id = $1 AND op.onboarding_completed_at IS NOT NULL
+         ORDER BY caller_is_member DESC
+         LIMIT 1`,
+        [stripeAccountId, userId],
+      )
+    : null;
+
+  const precheck = completionPrecheck({
+    stripeAccountId,
+    completedOrg: completedOrg && { callerIsMember: completedOrg.caller_is_member },
+  });
+  if (precheck === "already-complete") return;
+  if (precheck === "no-account") throw new Error("Stripe account is missing");
+  if (precheck === "account-taken") {
+    throw new Error("This Stripe account belongs to an organisation you are no longer part of");
+  }
+
+  const account = summariseStripeAccount(await retrieveConnectAccount(stripeAccountId!));
+  if (!isStripeAccountReady(account)) throw new Error("Stripe account is not ready yet");
 
   await withTransaction(async (client) => {
     const txDeps = {
@@ -229,8 +291,7 @@ export async function completeOnboarding(): Promise<void> {
     const { organizationId } = await provisionOrganizationTx(client, {
       userId,
       legal,
-      stripeAccountId:
-        (stepData as { stripe_account_id?: string }).stripe_account_id ?? null,
+      stripeAccountId,
     });
 
     const result = await promoteOnboardingToProperty(
@@ -256,6 +317,16 @@ export async function completeOnboarding(): Promise<void> {
       [organizationId, userId],
     );
 
+    // The completion flag the wall reads. Set on the organisation returned
+    // above, whether it was just created or already existed.
+    await client.query(
+      `UPDATE org_profile SET onboarding_completed_at = NOW()
+        WHERE organization_id = $1 AND onboarding_completed_at IS NULL`,
+      [organizationId],
+    );
+
+    // Transition dual-write: keeps a rollback to the previous code (which
+    // gates on this column) working. Removed with migration 0021.
     await client.query(
       `UPDATE host_onboarding SET onboarding_completed_at = NOW() WHERE user_id = $1`,
       [userId],

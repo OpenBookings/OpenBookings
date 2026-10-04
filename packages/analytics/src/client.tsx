@@ -13,96 +13,246 @@ export type {
   SendMessageResponse,
 } from 'posthog-js'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useRef, useContext, createContext, createElement, Suspense } from 'react'
+import { useState, useEffect, useRef, useContext, useCallback, createContext, createElement, Suspense } from 'react'
+import { CONSENT_TTL_MS, adoptExpiry, loadConsent, newConsentUuid, saveConsent, type ConsentState } from './consent-device'
+import { CONSENT_VERSION, consentEventType, type ConsentEvent } from './consent-events'
+import { enqueueConsentEvent, flushConsentOutbox, type FlushResult, type OutboxDeps } from './consent-outbox'
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const RELEASE_SHA = process.env.NEXT_PUBLIC_RELEASE_SHA
 
 // ─── Cookie Consent ───────────────────────────────────────────────────────────
 
-type ConsentState = 'accepted' | 'declined' | null
-
-interface ConsentRecord {
-  v: ConsentState
-  exp: number
-  h: string
-  ver: string
-}
-
 interface CookieConsentContextValue {
   consent: ConsentState
   loaded: boolean
+  /** True while a visitor who already chose has reopened the banner. */
+  reviewing: boolean
   accept: () => void
   decline: () => void
+  /** Show the banner again so an earlier choice can be changed. */
+  reopen: () => void
+  /** Record, once per device and account, whose decision this is. */
+  link: (userId: string) => void
 }
 
-const STORAGE_KEY = 'ob_cookie_consent'
-const CONSENT_TTL_MS = 90 * 24 * 60 * 60 * 1000
-// Client-side salt — deters naive localStorage edits, not a secret
-const SALT = 'ob-consent-v1'
-// Bump this when cookie policy changes to force re-consent.
-// In client components, only NEXT_PUBLIC_ env vars are available.
-export const CONSENT_VERSION = process.env.NEXT_PUBLIC_COOKIE_VERSION ?? '1'
+export { CONSENT_VERSION }
 
-async function hashRecord(v: ConsentState, exp: number): Promise<string> {
-  const data = new TextEncoder().encode(`${v}:${exp}:${SALT}`)
-  const buf = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-async function writeConsent(v: ConsentState): Promise<void> {
-  const exp = Date.now() + CONSENT_TTL_MS
-  const h = await hashRecord(v, exp)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ v, exp, h, ver: CONSENT_VERSION } satisfies ConsentRecord))
-}
-
-async function readConsent(): Promise<ConsentState> {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return null
-  try {
-    const record: ConsentRecord = JSON.parse(raw)
-    if (record.ver !== CONSENT_VERSION) return null
-    if (record.v !== 'accepted' && record.v !== 'declined') return null
-    if (typeof record.exp !== 'number' || Date.now() > record.exp) return null
-    const expected = await hashRecord(record.v, record.exp)
-    if (expected !== record.h) return null
-    return record.v
-  } catch {
-    return null
-  }
-}
+const CONSENT_ENDPOINT = '/api/consent'
+const LINKED_KEY = 'ob_consent_linked'
 
 export const CookieConsentContext = createContext<CookieConsentContextValue>({
   consent: null,
   loaded: false,
+  reviewing: false,
   accept: () => {},
   decline: () => {},
+  reopen: () => {},
+  link: () => {},
 })
 
-export function CookieConsentProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Stop PostHog and remove what it stored. Used when consent is withdrawn:
+ * "declined" has to mean nothing analytics-related is left on the device,
+ * including PostHog's own opt-out marker, so a later Accept starts clean.
+ */
+function stopAnalytics() {
+  try {
+    if (posthog.__loaded) posthog.opt_out_capturing()
+  } catch {
+    // Not initialised or already torn down.
+  }
+  try {
+    const mine = (name: string) => name.startsWith('ph_') || name.startsWith('__ph_opt_in_out_')
+    for (const key of Object.keys(localStorage)) if (mine(key)) localStorage.removeItem(key)
+    const host = window.location.hostname
+    const parent = host.split('.').slice(-2).join('.')
+    for (const part of document.cookie.split(';')) {
+      const name = part.split('=')[0]!.trim()
+      if (!mine(name)) continue
+      for (const domain of ['', `; domain=${host}`, `; domain=.${parent}`]) {
+        document.cookie = `${name}=; Max-Age=0; path=/${domain}`
+      }
+    }
+  } catch {
+    // Storage unavailable: nothing was stored to remove.
+  }
+}
+
+function outboxDeps(): OutboxDeps {
+  return {
+    storage: localStorage,
+    fetch: (input, init) => fetch(input, init),
+    endpoint: CONSENT_ENDPOINT,
+    // A rejected event can never succeed; say so where error tracking sees it.
+    onDrop: (event, status) =>
+      console.error(`[consent] ${event.eventType} event rejected with ${status}; dropped`),
+  }
+}
+
+/**
+ * Owns the visitor's cookie decision.
+ *
+ * The device record decides whether analytics runs. Every decision is also
+ * sent to the server as evidence, through an outbox: the choice takes effect
+ * immediately and the network catches up when it can.
+ *
+ * `bannerVersion` names the wording the visitor was shown, e.g.
+ * `1.1+privacy@2026-10-03/en`; it is stored with each event.
+ */
+export function CookieConsentProvider({
+  children,
+  bannerVersion = CONSENT_VERSION,
+}: {
+  children: React.ReactNode
+  bannerVersion?: string
+}) {
   const [consent, setConsent] = useState<ConsentState>(null)
   const [loaded, setLoaded] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const cidRef = useRef<string | null>(null)
+  const consentRef = useRef<ConsentState>(null)
 
-  useEffect(() => {
-    readConsent().then(v => {
-      if (v) setConsent(v)
-      setLoaded(true)
-    })
+  /** Deliver what is queued. Never throws: evidence can be lost, the page cannot. */
+  const flush = useCallback(async (): Promise<FlushResult> => {
+    try {
+      return await flushConsentOutbox(outboxDeps())
+    } catch {
+      // localStorage itself can be unreachable.
+      return { expiries: {}, remaining: 0 }
+    }
   }, [])
 
-  function accept() {
-    setConsent('accepted')
-    writeConsent('accepted')
-  }
+  /** Queue one event; returns its idempotency key, or null if it could not be queued. */
+  const send = useCallback(
+    (eventType: ConsentEvent['eventType'], analytics: boolean): string | null => {
+      const cid = cidRef.current
+      if (!cid) return null
+      try {
+        const idempotencyKey = newConsentUuid()
+        enqueueConsentEvent(outboxDeps(), {
+          consentId: cid,
+          eventType,
+          categories: { analytics },
+          bannerVersion,
+          idempotencyKey,
+        })
+        return idempotencyKey
+      } catch {
+        return null
+      }
+    },
+    [bannerVersion],
+  )
 
-  function decline() {
-    setConsent('declined')
-    writeConsent('declined')
-  }
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      let result: Awaited<ReturnType<typeof loadConsent>> = { consent: null, cid: null, backfill: false }
+      try {
+        result = await loadConsent(localStorage, CONSENT_VERSION)
+      } catch {
+        // No storage: treated as no decision yet.
+      }
+      if (cancelled) return
+      cidRef.current = result.cid
+      consentRef.current = result.consent
+      if (result.consent) setConsent(result.consent)
+      setLoaded(true)
+      // A choice made before the consent log existed: record it once, as it stands.
+      if (result.backfill && result.consent) {
+        send(result.consent === 'accepted' ? 'granted' : 'denied', result.consent === 'accepted')
+      }
+      void flush()
+    })()
 
-  return createElement(CookieConsentContext.Provider, { value: { consent, loaded, accept, decline } }, children)
+    const onOnline = () => void flush()
+    window.addEventListener('online', onOnline)
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', onOnline)
+    }
+  }, [flush, send])
+
+  const decide = useCallback(
+    (next: Exclude<ConsentState, null>) => {
+      const previous = consentRef.current
+      const eventType = consentEventType(next, previous)
+      consentRef.current = next
+
+      // Device first: the choice must hold even if nothing below succeeds.
+      setConsent(next)
+      setReviewing(false)
+      // A withdrawal stops analytics now, not after the network has answered.
+      if (eventType === 'withdrawn') stopAnalytics()
+
+      void (async () => {
+        try {
+          cidRef.current ??= newConsentUuid()
+          await saveConsent(localStorage, {
+            consent: next,
+            version: CONSENT_VERSION,
+            cid: cidRef.current,
+            expiresAt: Date.now() + CONSENT_TTL_MS,
+          })
+        } catch {
+          // See flush.
+        }
+        const key = send(eventType, next === 'accepted')
+
+        if (eventType === 'withdrawn') {
+          // Give delivery a moment (the request is keepalive, so it survives
+          // the reload anyway), then reload so nothing initialised under the
+          // old consent is still running.
+          await Promise.race([flush(), new Promise((resolve) => setTimeout(resolve, 1500))])
+          window.location.reload()
+          return
+        }
+
+        // Take the server's expiry for this decision only, so device and log
+        // agree. Events from other tabs or sign-in links never extend it.
+        const { expiries } = await flush()
+        const expiresAt = key ? expiries[key] : undefined
+        const cid = cidRef.current
+        if (expiresAt && cid) {
+          try {
+            await adoptExpiry(localStorage, { consent: next, cid, expiresAt: Date.parse(expiresAt) })
+          } catch {
+            // See flush.
+          }
+        }
+      })()
+    },
+    [flush, send],
+  )
+
+  const accept = useCallback(() => decide('accepted'), [decide])
+  const decline = useCallback(() => decide('declined'), [decide])
+  const reopen = useCallback(() => setReviewing(true), [])
+
+  const link = useCallback(
+    (userId: string) => {
+      const cid = cidRef.current
+      const current = consentRef.current
+      if (!cid || !current) return
+      const pair = `${cid}:${userId}`
+      try {
+        if (localStorage.getItem(LINKED_KEY) === pair) return
+        localStorage.setItem(LINKED_KEY, pair)
+      } catch {
+        return
+      }
+      send('linked', current === 'accepted')
+      void flush()
+    },
+    [flush, send],
+  )
+
+  return createElement(
+    CookieConsentContext.Provider,
+    { value: { consent, loaded, reviewing, accept, decline, reopen, link } },
+    children,
+  )
 }
 
 export function useCookieConsent() {
@@ -159,6 +309,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     // property, so it rides along on $pageview and everything downstream too.
     // Only apps whose Dockerfile passes the build arg have it -- the rest would
     // otherwise register `undefined` and put a useless key on every event.
+    // Belt for stopAnalytics(): if an opt-out marker survived a withdrawal,
+    // an explicit Accept must still turn capturing back on.
+    if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing()
     if (RELEASE_SHA) {
       posthog.register({ release: RELEASE_SHA })
     }
@@ -202,6 +355,15 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
 export function useAnalyticsIdentity(userId: string | null | undefined) {
   const ready = useContext(PostHogReadyContext)
   const identifiedRef = useRef<string | null>(null)
+  const { loaded, consent, link } = useCookieConsent()
+
+  // Consent evidence is linked to the account whether analytics was accepted
+  // or declined: a refusal is as much the account holder's decision as an
+  // acceptance. This is separate from PostHog identity below, which only
+  // exists when analytics is on.
+  useEffect(() => {
+    if (loaded && consent && userId) link(userId)
+  }, [loaded, consent, userId, link])
 
   useEffect(() => {
     if (!ready) return

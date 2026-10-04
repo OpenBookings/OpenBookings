@@ -17,6 +17,15 @@
 > `privacy@2026-09-21/nl`, which is the identifier §D3's `consent_log` fix should
 > record.
 
+> **Update (2 Oct 2026):** two findings below are resolved on branch
+> `compliance/maptiler-privacy-policy`. **CartoDB is no longer used**: both apps
+> default to MapTiler via `@openbookings/maps`, and Carto is gone from the
+> business CSP, so its row in §4 is historical. **The guest privacy policy has a
+> new version, `privacy@2026-10-02`**, which names Scaleway as host, lists
+> MapTiler, and lists only vendors that receive guest personal data from
+> `apps/web` (issue #5 in §1, D7 and drift #2, guest side). The host-side
+> policy is still outstanding. Specs and plans for this and the other fixes are
+> in `docs/compliance/specs/` and `docs/compliance/plans/`.
 
 ## 1. Summary
 

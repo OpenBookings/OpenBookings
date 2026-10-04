@@ -35,8 +35,10 @@ const NIGHTS = 3;
 const ADULTS = 2;
 const CHILDREN = 0;
 
+/** Tax-inclusive, like every rate: this is what the guest pays per night. */
 const PRICE_PER_NIGHT = 185;
-const BOOKING_FEE_RATE = 0.035;
+const RATES_TAX_INCLUSIVE_DOC_ID = "rates-tax-inclusive@2026-10-02";
+const BOOKING_FEE_RATE = 0.045;
 
 /**
  * The sentence the checkout page quotes verbatim. The 7 days here is the same
@@ -129,6 +131,41 @@ async function main() {
         ROOM_SUBTOTAL,
       ],
     );
+
+    // Checkout refuses a property whose organisation has not confirmed that
+    // its rates include tax. Give the demo property's organisation that
+    // confirmation, signed by its first owner, so the seeded booking is
+    // payable. Keep the id in step with RATES_TAX_INCLUSIVE_DOC_ID in
+    // packages/authz/src/rates-doc.ts.
+    const { rowCount: confirmed } = await pool.query(
+      `insert into org_consent
+         (organization_id, doc_id, signed_by_user_id, signer_full_name, signed_at)
+       select p.organization_id, $2, m."userId", coalesce(u.name, 'Demo owner'), now()
+       from properties p
+       join "member" m on m."organizationId" = p.organization_id and m.role = 'owner'
+       join "user" u on u.id = m."userId"
+       where p.id = $1
+         and not exists (
+           select 1 from org_consent oc
+           where oc.organization_id = p.organization_id and oc.doc_id = $2
+         )
+       order by m."createdAt"
+       limit 1`,
+      [PROPERTY_ID, RATES_TAX_INCLUSIVE_DOC_ID],
+    );
+    if (confirmed) console.log("Recorded the inclusive-rates confirmation for the demo organisation.");
+    const { rows: [state] } = await pool.query<{ ok: boolean }>(
+      `select exists (
+         select 1 from org_consent oc join properties p on p.organization_id = oc.organization_id
+         where p.id = $1 and oc.doc_id = $2) as ok`,
+      [PROPERTY_ID, RATES_TAX_INCLUSIVE_DOC_ID],
+    );
+    if (!state?.ok) {
+      console.warn(
+        "WARNING: the demo property's organisation has NOT confirmed inclusive rates " +
+          "(no organisation, or no owner member). Checkout will refuse this booking.",
+      );
+    }
 
     console.log(
       `Seeded booking ${DEMO_BOOKING_ID}: ${NIGHTS} nights, ${ADULTS} adults, €${TOTAL} total (€${BOOKING_FEE} fee).`,

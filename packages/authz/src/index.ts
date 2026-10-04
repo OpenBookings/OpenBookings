@@ -5,6 +5,8 @@ import {
   type HostRole,
 } from "./permissions";
 
+export * from "./rates-confirmation";
+
 export {
   ac,
   roles,

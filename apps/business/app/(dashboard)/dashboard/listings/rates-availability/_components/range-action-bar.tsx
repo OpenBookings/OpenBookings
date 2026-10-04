@@ -5,6 +5,7 @@ import { Ban, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { RangeSelection } from "../_lib/types";
+import { RATE_INCLUSIVE_NOTICE } from "../_lib/rates-confirmation";
 import type { DraftEdit } from "../_lib/use-ari-draft";
 import { formatDateRange } from "../_lib/format";
 
@@ -88,9 +89,10 @@ export function RangeActionBar({
       <div className="flex items-center gap-1">
         <Input
           inputMode="decimal"
-          placeholder="Price"
-          aria-label={`Set price for ${dates.length} selected nights`}
-          className="h-8 w-24"
+          placeholder="Price incl. tax"
+          title={RATE_INCLUSIVE_NOTICE}
+          aria-label={`Set price for ${dates.length} selected nights, including tax`}
+          className="h-8 w-32"
           value={price}
           onChange={(event) => setPrice(event.target.value)}
           onKeyDown={(event) => {

@@ -16,11 +16,11 @@ const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval' http://localhost:3000" : "";
 const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com${DEV_SCRIPT_SRC};
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://eu-assets.i.posthog.com;
+  style-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com;
   img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
-  font-src 'self' https://fonts.gstatic.com;
+  font-src 'self';
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://basemaps.cartocdn.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
   worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';
@@ -31,7 +31,7 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@openbookings/analytics", "@openbookings/messaging"],
+  transpilePackages: ["@openbookings/analytics", "@openbookings/maps", "@openbookings/messaging"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
 

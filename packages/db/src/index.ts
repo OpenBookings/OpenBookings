@@ -5,6 +5,7 @@ import * as schema from "./schema";
 export { schema };
 export * from "./schema";
 export * from "./support";
+export * from "./consent";
 export { sql } from "drizzle-orm";
 
 const connectionType = process.env.ENV_TYPE;

@@ -8,7 +8,7 @@ export default async function StripePage() {
 
   const row = await getOnboardingRow(session!.user.id);
   const target = resolveOnboardingRedirect(row);
-  if (target) redirect(target);
+  if (target) redirect(target === "no-access" ? "/onboarding" : target);
 
   const initialStatus = await getOnboardingStatus(row);
   return <VerifyStep initialStatus={initialStatus} />;

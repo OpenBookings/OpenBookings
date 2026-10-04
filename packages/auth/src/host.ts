@@ -9,17 +9,15 @@ import {
   accountTypeHooksForPool,
   advancedConfig,
   createAuthPool,
-  isStepUpFresh,
   magicLinkOptions,
   microsoftEmailFromProfile,
   sharedSessionOptions,
   stampMicrosoftTenantId,
-  stepUpRequiredForRequest,
-  STEP_UP_REFRESH_PATHS,
   userAdditionalFields,
   type BaseAuthConfig,
 } from "./shared";
 import { locationFromHeaders, type SignInLocation } from "./location";
+import { createStepUpHooks } from "./step-up-hooks";
 
 export type { SignInLocation } from "./location";
 
@@ -62,8 +60,6 @@ export type HostAuthConfig = BaseAuthConfig & {
   }) => Promise<void>;
 };
 
-const STEP_UP_MESSAGE =
-  "This action requires recent verification. Confirm with your passkey or authenticator code and try again.";
 
 /**
  * Auth instance for apps/business (host portal). Mounts the organization
@@ -107,14 +103,59 @@ export function createHostAuth(config: HostAuthConfig) {
     }
   };
 
-  /** Authoritative step-up freshness: DB read, never the cookie cache. */
-  const sessionHasFreshStepUp = async (sessionId: string) => {
-    const result = await pool.query<{ lastVerifiedAt: Date | null }>(
-      `SELECT "lastVerifiedAt" FROM "session" WHERE id = $1`,
-      [sessionId],
-    );
-    return isStepUpFresh(result.rows[0]?.lastVerifiedAt);
-  };
+  /**
+   * The step-up gate's view of the database. Everything it decides on is read
+   * here, never from the cookie cache.
+   */
+  const stepUp = createStepUpHooks({
+    // Both clocks and whether the user has a factor, in one query, so the
+    // answer is about one consistent moment.
+    getState: async (sessionId) => {
+      const result = await pool.query<{
+        lastVerifiedAt: Date | null;
+        lastFactorVerifiedAt: Date | null;
+        hasFactor: boolean;
+      }>(
+        `SELECT s."lastVerifiedAt",
+                s."lastFactorVerifiedAt",
+                (COALESCE(u."twoFactorEnabled", FALSE)
+                  OR EXISTS (SELECT 1 FROM "passkey" p WHERE p."userId" = s."userId")) AS "hasFactor"
+         FROM "session" s
+         JOIN "user" u ON u.id = s."userId"
+         WHERE s.id = $1`,
+        [sessionId],
+      );
+      return result.rows[0] ?? null;
+    },
+    stampFactor: async (sessionId) => {
+      await pool.query(
+        `UPDATE "session"
+           SET "lastVerifiedAt" = NOW(), "lastFactorVerifiedAt" = NOW()
+         WHERE id = $1`,
+        [sessionId],
+      );
+    },
+    retireSession: async (sessionId) => {
+      await pool.query(`DELETE FROM "session" WHERE id = $1`, [sessionId]);
+    },
+    // Wrong codes from a signed-in session, counted in audit_log so the limit
+    // holds across instances and leaves a trace of the attempt.
+    recentFactorFailures: async (userId) => {
+      const result = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM audit_log
+         WHERE action = 'auth.factor-failed' AND actor_user_id = $1
+           AND created_at > NOW() - INTERVAL '15 minutes'`,
+        [userId],
+      );
+      return Number(result.rows[0]?.n ?? 0);
+    },
+    recordFactorFailure: async (userId) => {
+      await pool.query(
+        `INSERT INTO audit_log (action, actor_user_id) VALUES ('auth.factor-failed', $1)`,
+        [userId],
+      );
+    },
+  });
 
   /**
    * New-device detection (task 17): every sign-in is recorded in audit_log;
@@ -209,6 +250,12 @@ export function createHostAuth(config: HostAuthConfig) {
           required: false,
           input: false,
         },
+        // Stamped only by a passkey / authenticator / backup-code check.
+        lastFactorVerifiedAt: {
+          type: "date",
+          required: false,
+          input: false,
+        },
       },
     },
     account: {
@@ -255,19 +302,8 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // Step-up gate (task 14). Recency, not passkey presence: a stale
-        // session gets 403 STEP_UP_REQUIRED and must re-verify (passkey,
-        // TOTP, backup code — or a fresh sign-in for hosts with no second
-        // factor enrolled yet).
-        if (stepUpRequiredForRequest(ctx.path, ctx.body)) {
-          const session = await getSessionFromCtx(ctx);
-          if (session && !(await sessionHasFreshStepUp(session.session.id))) {
-            throw new APIError("FORBIDDEN", {
-              message: STEP_UP_MESSAGE,
-              code: "STEP_UP_REQUIRED",
-            });
-          }
-        }
+        // Step-up gate: see step-up-hooks.ts.
+        await stepUp.before(ctx);
         // Org policy can require every member to keep at least one passkey
         // (org_profile.auth_policy, task 14).
         if (ctx.path === "/passkey/delete-passkey") {
@@ -297,17 +333,9 @@ export function createHostAuth(config: HostAuthConfig) {
         }
       }),
       after: createAuthMiddleware(async (ctx) => {
-        // A successful re-verification restarts the step-up clock. After
-        // hooks only run on success — a failed verify throws before this.
-        if ((STEP_UP_REFRESH_PATHS as readonly string[]).includes(ctx.path)) {
-          const session = await getSessionFromCtx(ctx);
-          if (session) {
-            await pool.query(
-              `UPDATE "session" SET "lastVerifiedAt" = NOW() WHERE id = $1`,
-              [session.session.id],
-            );
-          }
-        }
+        // A successful re-verification restarts the step-up clocks. After
+        // hooks run for failed requests too; step-up-hooks.ts checks.
+        await stepUp.after(ctx);
       }),
     },
     plugins: [

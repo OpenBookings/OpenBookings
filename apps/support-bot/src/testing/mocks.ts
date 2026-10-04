@@ -52,6 +52,7 @@ function reservationRow(fake: FakeReservation): SupportReservation {
     total_amount: 32500,
     currency: "eur",
     stripe_payment_intent_id: "pi_test",
+    stripe_account_id: "acct_test",
     cancellation_reason: null,
     cancelled_at: null,
     created_at: "2026-08-01T00:00:00.000Z",

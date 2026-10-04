@@ -453,6 +453,10 @@ export interface ResolvedRoom extends Omit<RoomRow, 'nights' | 'modifiers'> {
   nights: Night[]
   modifiers: Modifier[]
   subtotal: number
+  /**
+   * What the guest pays. Tax-inclusive by contract with the host: rates are
+   * entered including tourist tax and VAT, so nothing is added after this.
+   */
   total_price: number
   applied_modifiers: ModifierType[]
   /** Ordered build-up of `total_price`. See PriceStep. */

@@ -51,7 +51,7 @@ export default async function HotelPage({
       )}
 
       <OverviewSection hotel={hotel} amenityCategories={amenityCategories} />
-      <RoomsSection rooms={rooms} />
+      <RoomsSection rooms={rooms} ratesConfirmed={hotel.rates_confirmed === true} />
       <PoliciesSection hotel={hotel} />
       <LocationSection hotel={hotel} />
       <FootnoteSection hotel={hotel} />

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Clock, HelpCircle, XCircle } from 'lucide-react';
 import * as Sentry from '@sentry/nextjs';
-import { stripe } from '@openbookings/stripe';
+import { retrieveBookingCheckout } from '@openbookings/stripe';
+import { getBookingSummary } from '../_lib/booking';
 import { Button } from '@/components/ui/button';
 import { describeDeclineCode } from '../_lib/errors';
 
@@ -115,9 +116,13 @@ async function resolveOutcome(sessionId: string | undefined): Promise<Outcome> {
   try {
     // The PaymentIntent carries `last_payment_error`, which is the only place
     // the reason for a decline survives once the guest is back on our page.
-    session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['payment_intent'],
-    });
+    //
+    // The Session was created on the host's connected account, so that is
+    // where it has to be looked up. A failure to find the booking lands in the
+    // catch below as "unverified": we cannot say what happened to the money.
+    const { stripeAccountId } = await getBookingSummary();
+    if (!stripeAccountId) throw new Error('Booking has no connected Stripe account');
+    session = await retrieveBookingCheckout(sessionId, stripeAccountId);
   } catch (err) {
     // Stripe positively confirming there is no such Session is different from
     // Stripe being unreachable: the id is wrong, and there is no payment of

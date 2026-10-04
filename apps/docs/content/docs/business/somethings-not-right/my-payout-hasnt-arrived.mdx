@@ -3,17 +3,20 @@ title: My payout hasn't arrived
 description: Why an expected bank transfer might be delayed.
 ---
 
-*Last updated: 10 September 2026*
+*Last updated: 2 October 2026*
 
 ## Overview
 
-If a payout has not reached your bank account, check the timeline to ensure the reconciliation period has passed.
+Payouts are sent by Stripe from your own Stripe account to your bank. OpenBookings does not hold or release your money, so the place to check is your Stripe Dashboard.
 
-## How to verify the timeline
+## How to check
 
-Payouts are only released after a strict 7-day calendar reconciliation period counting from the guest's **checkout** date, not the booking date. If 7 days have not yet passed since checkout, the funds are still being held by the platform.
+1. Sign in at [dashboard.stripe.com](https://dashboard.stripe.com) and open **Payouts**. Each payout shows its status and expected arrival date.
+2. Check your payout schedule there. A payment only becomes part of a payout once Stripe has made it available, which can take a few days, and longer for a new account.
+3. Check whether Stripe is asking for anything. If Stripe needs more information about you or your business, it pauses payouts until you provide it, and says so at the top of the dashboard.
+4. Check the bank account on file. A payout sent to a closed or mistyped account fails and is returned to your Stripe balance.
 
-If 7 days have passed, verify that your payment account remains in good standing and is not requesting further KYC documentation. 
+If the payout shows as paid in Stripe but has not reached your bank after the expected date, contact Stripe support or your bank with the payout's reference.
 
 ---
 

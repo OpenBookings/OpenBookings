@@ -446,6 +446,40 @@ export function isStepUpFresh(
   return now.getTime() - at < STEP_UP_MAX_AGE_MS;
 }
 
+/**
+ * The second clock. `lastVerifiedAt` is stamped at every sign-in, and hosts
+ * sign in by magic link or OAuth — so on its own "recently verified" can mean
+ * "clicked an email link". `lastFactorVerifiedAt` is stamped only when a
+ * passkey, authenticator code or backup code is actually verified.
+ */
+export function isFactorStepUpFresh(
+  lastFactorVerifiedAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  return isStepUpFresh(lastFactorVerifiedAt, now);
+}
+
+/**
+ * Whether a gated action may go ahead.
+ *
+ * A host who has a factor must have used it in the last 15 minutes: a fresh
+ * sign-in does not count, so control of their mailbox alone is not enough.
+ * A host with no factor has nothing to verify against, so a recent sign-in is
+ * the bar — which keeps them able to enrol their first one.
+ */
+export function stepUpSatisfied(
+  input: {
+    hasFactor: boolean;
+    lastVerifiedAt: Date | string | null | undefined;
+    lastFactorVerifiedAt: Date | string | null | undefined;
+  },
+  now: Date = new Date(),
+): boolean {
+  return input.hasFactor
+    ? isFactorStepUpFresh(input.lastFactorVerifiedAt, now)
+    : isStepUpFresh(input.lastVerifiedAt, now);
+}
+
 /** Better Auth endpoints whose success re-verifies the current session. */
 export const STEP_UP_REFRESH_PATHS = [
   "/passkey/verify-authentication",
@@ -471,6 +505,15 @@ export function stepUpRequiredForRequest(
     case "/organization/remove-member":
     case "/change-email":
     case "/delete-user":
+    // A stolen session must not be able to add itself a way back in: invite
+    // an accomplice, enrol its own passkey or authenticator, or strip the
+    // real owner's factors.
+    case "/organization/invite-member":
+    case "/passkey/verify-registration":
+    case "/passkey/delete-passkey":
+    case "/two-factor/enable":
+    case "/two-factor/disable":
+    case "/two-factor/generate-backup-codes":
       return true;
     case "/organization/update-member-role": {
       const role = (body as { role?: unknown } | null | undefined)?.role;
