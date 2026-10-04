@@ -38,7 +38,6 @@ export type StripeEventDeps = {
   isProcessed: (eventId: string) => Promise<boolean>;
   /** Called only after the event's work has succeeded. */
   markProcessed: (eventId: string) => Promise<void>;
-  markOnboardingComplete: (stripeAccountId: string) => Promise<void>;
   /** Returns every commission refund that now exists on the charge. */
   refundCommission: (
     chargeId: string,
@@ -90,15 +89,12 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
   const account = str(event.account);
 
   switch (event.type) {
-    case "account.updated": {
-      const requirements = (object.requirements ?? {}) as Obj;
-      const due = Array.isArray(requirements.currently_due) ? requirements.currently_due : [];
-      const id = str(object.id);
-      // Both: a host who can take payments but cannot be paid out is not ready.
-      const ready = due.length === 0 && object.charges_enabled === true && object.payouts_enabled === true;
-      if (!id || !ready) return null;
-      return () => deps.markOnboardingComplete(id);
-    }
+    // Acknowledged, and nothing more. Onboarding is completed only by
+    // completeOnboarding(), which provisions the organisation first; marking
+    // it here could let a host past the wall with no organisation. A host
+    // approved while away completes on return, through the verify step.
+    case "account.updated":
+      return async () => {};
 
     case "account.external_account.created":
     case "account.external_account.updated":

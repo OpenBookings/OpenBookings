@@ -16,7 +16,7 @@
  *   UPDATE host_onboarding SET step_data = step_data - 'stripe_account_id',
  *          onboarding_completed_at = NULL;
  *   UPDATE properties  SET stripe_account_id = NULL;
- *   UPDATE org_profile SET stripe_account_id = NULL;
+ *   UPDATE org_profile SET stripe_account_id = NULL, onboarding_completed_at = NULL;
  *
  * Run: bun --env-file=../../.env.local packages/stripe/scripts/discard-test-accounts.ts [--confirm]
  */

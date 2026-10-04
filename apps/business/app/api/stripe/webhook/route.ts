@@ -29,15 +29,6 @@ const deps: StripeEventDeps = {
       [`stripe:${eventId}`],
     );
   },
-  markOnboardingComplete: async (stripeAccountId) => {
-    await query(
-      `UPDATE host_onboarding
-       SET onboarding_completed_at = NOW()
-       WHERE step_data->>'stripe_account_id' = $1
-         AND onboarding_completed_at IS NULL`,
-      [stripeAccountId],
-    );
-  },
   refundCommission: refundCommissionForCharge,
   audit: async ({ action, stripeAccountId, detail, dedupeKey }) => {
     // One row per fact: a retried event finds the row already there.

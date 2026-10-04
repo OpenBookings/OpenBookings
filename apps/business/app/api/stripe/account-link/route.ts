@@ -2,7 +2,8 @@ import { createAccountLink, retrieveConnectAccount } from '@openbookings/stripe'
 import { getServerSession } from '@/lib/auth';
 import { query, queryOne } from '@openbookings/db';
 import { NextResponse } from 'next/server';
-import { accountLinkDecision } from '@/lib/account-link-policy';
+import { accountLinkDecision, accountLinkSubject } from '@/lib/account-link-policy';
+import { getOnboardingFacts, wizardInProgress } from '@/lib/onboarding-facts';
 
 // The public address of this app. Not `new URL(req.url).origin`: behind the
 // production proxy that is the address the container is bound to, and Stripe
@@ -24,45 +25,28 @@ export async function POST() {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Two ways to be entitled to this account's onboarding link:
-  //
-  // - Mid-onboarding there is no organisation yet. The person onboarding is
-  //   its owner-to-be, whatever their role in some other organisation.
-  // - Afterwards, only an owner of the organisation the account belongs to.
-  //   Not "whoever has an onboarding row": a removed or demoted ex-owner still
-  //   has one, and a second owner never did.
-  const onboarding = await queryOne<{ stripe_account_id: string | null; complete: boolean }>(
-    `SELECT step_data->>'stripe_account_id' AS stripe_account_id,
-            (onboarding_completed_at IS NOT NULL) AS complete
-     FROM host_onboarding WHERE user_id = $1`,
-    [session.user.id]
-  );
+  // Mid-wizard, the person onboarding is the owner-to-be of the wizard's
+  // account; afterwards, only an owner of an organisation that holds one. A
+  // removed ex-owner still has a wizard row, but it is no longer in progress,
+  // so they fall through to the ownership check. See accountLinkSubject.
+  const facts = await getOnboardingFacts(session.user.id);
+  const inProgress = wizardInProgress(facts);
+  const owned = inProgress
+    ? null
+    : await queryOne<{ stripe_account_id: string }>(
+        `SELECT op.stripe_account_id
+         FROM "member" m
+         JOIN org_profile op ON op.organization_id = m."organizationId"
+         WHERE m."userId" = $1 AND m.role = 'owner' AND op.stripe_account_id IS NOT NULL
+         ORDER BY (op.stripe_account_id = $2) DESC, m."createdAt"
+         LIMIT 1`,
+        [session.user.id, facts.wizard?.stripeAccountId ?? null]
+      );
 
-  let stripeAccountId: string | null;
-  let isOwner: boolean;
-  let onboardingComplete: boolean;
-
-  if (onboarding && !onboarding.complete) {
-    stripeAccountId = onboarding.stripe_account_id;
-    isOwner = true;
-    onboardingComplete = false;
-  } else {
-    const owned = await queryOne<{ stripe_account_id: string }>(
-      `SELECT op.stripe_account_id
-       FROM "member" m
-       JOIN org_profile op ON op.organization_id = m."organizationId"
-       WHERE m."userId" = $1 AND m.role = 'owner' AND op.stripe_account_id IS NOT NULL
-       ORDER BY (op.stripe_account_id = $2) DESC, m."createdAt"
-       LIMIT 1`,
-      [session.user.id, onboarding?.stripe_account_id ?? null]
-    );
-    stripeAccountId = owned?.stripe_account_id ?? null;
-    // No owned organisation with an account. If the user has nothing at all
-    // there is simply no account; if they onboarded once but own nothing now,
-    // they are no longer entitled to it.
-    isOwner = owned !== null || !onboarding;
-    onboardingComplete = true;
-  }
+  const { stripeAccountId, isOwner, onboardingComplete } = accountLinkSubject({
+    wizard: facts.wizard && { stripeAccountId: facts.wizard.stripeAccountId, inProgress },
+    ownedStripeAccountId: owned?.stripe_account_id ?? null,
+  });
 
   let requirementsDue = 0;
   if (isOwner && stripeAccountId && onboardingComplete) {

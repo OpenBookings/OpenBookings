@@ -8,7 +8,6 @@ function setup(over: Partial<StripeEventDeps> = {}) {
     livemode: false,
     isProcessed: async (id) => processed.has(id),
     markProcessed: async (id) => void processed.add(id),
-    markOnboardingComplete: async (account) => void calls.push(["complete", account]),
     refundCommission: async (charge, account, options) => {
       calls.push(["refund", charge, account, options]);
       return [{ id: "fr_1", amount: 100 }];
@@ -30,22 +29,12 @@ const event = (type: string, object: Record<string, unknown>, account: string | 
 const readyAccount = { id: "acct_1", charges_enabled: true, payouts_enabled: true, requirements: { currently_due: [] } };
 
 describe("handleStripeEvent", () => {
-  test("an account that can take payments and be paid out completes onboarding", async () => {
+  test("an account becoming ready completes nothing: only completeOnboarding() does, after provisioning", async () => {
+    // Completing here could mark a host done before their organisation exists.
     const t = setup();
     expect(await handleStripeEvent(event("account.updated", readyAccount), t.deps)).toBe("handled");
-    expect(t.calls).toEqual([["complete", "acct_1"]]);
-  });
-
-  test("an account still missing something does not", async () => {
-    for (const account of [
-      { ...readyAccount, payouts_enabled: false },
-      { ...readyAccount, charges_enabled: false },
-      { ...readyAccount, requirements: { currently_due: ["external_account"] } },
-    ]) {
-      const t = setup();
-      await handleStripeEvent(event("account.updated", account), t.deps);
-      expect(t.calls).toEqual([]);
-    }
+    expect(t.calls).toEqual([]);
+    expect(t.processed.has("evt_1")).toBe(true);
   });
 
   test("a refund returns the commission for that charge on that host's account", async () => {
