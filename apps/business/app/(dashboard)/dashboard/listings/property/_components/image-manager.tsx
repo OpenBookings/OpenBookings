@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeftIcon, ChevronRightIcon, ImageIcon, StarIcon, Trash2Icon, UploadCloudIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ImageIcon,
+  RefreshCwIcon,
+  StarIcon,
+  Trash2Icon,
+  UploadCloudIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import posthog from "posthog-js";
 import {
@@ -16,6 +24,8 @@ import {
 } from "@/components/ui/attachment";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import type { ImageGroup, PropertyImageRecord } from "../_lib/types";
 
 type UploadState = "idle" | "uploading" | "processing" | "error" | "done";
@@ -35,6 +45,12 @@ interface ImageManagerProps {
   showAltText?: boolean;
   showReorder?: boolean;
   showSetHero?: boolean;
+  /**
+   * Hero and logo hold exactly one image: the confirm route deletes the old
+   * row on upload. The slot shows that image with a "Replace" affordance on it
+   * instead of an "Add" card, which read as "you can have several".
+   */
+  single?: { aspect: "wide" | "square" };
   label: string;
   description: string;
 }
@@ -51,6 +67,7 @@ export function ImageManager({
   showAltText = false,
   showReorder = false,
   showSetHero = false,
+  single,
   label,
   description,
 }: ImageManagerProps) {
@@ -146,12 +163,120 @@ export function ImageManager({
     router.refresh();
   }
 
+  const fileInput = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      multiple={group === "gallery"}
+      hidden
+      onChange={(e) => {
+        Array.from(e.target.files ?? []).forEach(upload);
+        e.target.value = "";
+      }}
+    />
+  );
+
+  const header = (
+    <div className="space-y-1">
+      <p className="font-medium text-base">{label}</p>
+      <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  );
+
+  if (single) {
+    // An upload in flight wins over the stored image: it is what the slot is
+    // about to hold, and showing both would bring back the "two images" read.
+    const inFlight = pending.at(-1);
+    const current = images[0];
+    const busy = !!inFlight && inFlight.state !== "error";
+    const src = (busy ? inFlight.previewUrl : undefined) ?? current?.url;
+
+    return (
+      <div className="flex flex-col gap-5">
+        {header}
+
+        <div
+          className={cn(
+            "group/slot relative overflow-hidden rounded-xl border bg-muted",
+            single.aspect === "wide" ? "aspect-video w-full max-w-md" : "aspect-square w-40",
+            !src && "border-dashed",
+            inFlight?.state === "error" && "border-destructive/40",
+          )}
+        >
+          {src && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={src}
+              alt=""
+              className={cn(
+                "size-full",
+                single.aspect === "wide" ? "object-cover" : "object-contain p-3",
+                busy && "opacity-60",
+              )}
+            />
+          )}
+
+          {/* The whole slot is the button; the label sits on the image itself. */}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+            aria-label={src ? `Replace ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}
+            className={cn(
+              "absolute inset-0 flex items-center justify-center text-sm outline-none transition-colors",
+              "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+              src
+                ? "items-end justify-end p-3 hover:bg-black/30"
+                : "flex-col gap-1.5 text-muted-foreground hover:bg-muted-foreground/5 hover:text-foreground",
+              busy && "cursor-wait items-center justify-center bg-black/30 p-0",
+            )}
+          >
+            {busy ? (
+              <span className="flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 font-medium text-foreground text-xs shadow-sm">
+                <Spinner className="size-3.5" />
+                {inFlight.state === "processing" ? "Saving…" : "Uploading…"}
+              </span>
+            ) : src ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1.5 font-medium text-foreground text-xs shadow-sm">
+                <RefreshCwIcon className="size-3.5" />
+                Replace image
+              </span>
+            ) : (
+              <>
+                <UploadCloudIcon className="size-5" />
+                Upload image
+              </>
+            )}
+          </button>
+        </div>
+
+        {current && !busy && (
+          <div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => remove(current.id)}
+            >
+              <Trash2Icon />
+              Remove {label.toLowerCase()}
+            </Button>
+          </div>
+        )}
+        {inFlight?.state === "error" && (
+          <p className="text-destructive text-sm">That upload failed. Choose the image again to retry.</p>
+        )}
+
+        {fileInput}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="space-y-1">
-        <p className="font-medium text-base">{label}</p>
-        <p className="text-muted-foreground text-sm">{description}</p>
-      </div>
+      {header}
 
       <AttachmentGroup className="flex-wrap">
         {images.map((image, index) => (
@@ -245,17 +370,7 @@ export function ImageManager({
         </Attachment>
       </AttachmentGroup>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        multiple={group === "gallery"}
-        hidden
-        onChange={(e) => {
-          Array.from(e.target.files ?? []).forEach(upload);
-          e.target.value = "";
-        }}
-      />
+      {fileInput}
     </div>
   );
 }

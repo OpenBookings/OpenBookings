@@ -10,6 +10,8 @@ const TIME_MESSAGE = "Use a 24-hour time like 15:00.";
  * Codes a host may select. The display name, logo and tooltip for each live in
  * the `payment_methods` table — this list is only the accept-set for the form,
  * so a new code needs a catalogue row *and* an entry here.
+ *
+ * No cash: every payment goes through the platform (0021_platform_payments_only).
  */
 export const PAYMENT_METHODS = [
   "visa",
@@ -17,7 +19,6 @@ export const PAYMENT_METHODS = [
   "amex",
   "wero",
   "applepay",
-  "cash",
 ] as const;
 
 const requiredText = (label: string) =>
@@ -43,9 +44,13 @@ const optionalMoney = z
   ])
   .transform((v) => (v === "" ? null : v));
 
-/** An HTML checkbox posts "on" when ticked and nothing at all when not. */
+/**
+ * An HTML checkbox posts "on" when ticked and nothing at all when not — so a
+ * missing key is a real answer (unticked), not a malformed submission.
+ */
 const checkbox = z
   .unknown()
+  .optional()
   .transform((v) => v === "on" || v === "true" || v === true);
 
 /** Repeatable text rows: blank rows are the host's scratch space, not content. */
@@ -77,12 +82,19 @@ export const policiesSchema = z
     checkInUntil: optionalTime,
     checkOutTime: z.string().regex(TIME, TIME_MESSAGE),
     reception24h: checkbox,
-    freeCancellationDays: z.coerce
-      .number({ error: "Enter a number of days." })
-      .int("Enter a whole number of days.")
-      .min(0, "A cancellation window cannot be negative.")
-      .max(365, "Enter a window of a year or less."),
-    prepaymentRequired: checkbox,
+    // No longer asked in the editor: cancellation is moving to a full policy.
+    // The editor posts the stored value back unchanged, and blank stays NULL
+    // rather than coercing to 0, which would claim "no free cancellation".
+    freeCancellationDays: z
+      .union([
+        z.literal(""),
+        z.coerce
+          .number({ error: "Enter a number of days." })
+          .int("Enter a whole number of days.")
+          .min(0, "A cancellation window cannot be negative.")
+          .max(365, "Enter a window of a year or less."),
+      ])
+      .transform((v) => (v === "" ? null : v)),
     childrenWelcome: checkbox,
     minCheckInAge: z.coerce
       .number({ error: "Enter a minimum age." })
@@ -129,6 +141,7 @@ export const locationSchema = z.object({
     .refine((v) => v.trim() !== "", "Drop a pin on the map.")
     .transform((v) => Number(v))
     .refine((v) => v >= -180 && v <= 180, "That longitude is off the map."),
+  pinSetManually: checkbox,
 })
 // Shares hasPin with the checklist and the editor's map, so "the origin means
 // no pin" is stated once. The editor now renders its empty state from the same

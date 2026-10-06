@@ -52,8 +52,9 @@ export function PhotosSection({ data }: SectionProps) {
               propertyId={property.id}
               group="hero-image"
               images={hero}
+              single={{ aspect: "wide" }}
               label="Hero image"
-              description="The full-screen photo behind your property name. A new upload replaces the current one."
+              description="The full-screen photo behind your property name. Your listing has one; uploading another replaces it."
             />
           </div>
 
@@ -75,6 +76,7 @@ export function PhotosSection({ data }: SectionProps) {
               propertyId={property.id}
               group="logo"
               images={logo}
+              single={{ aspect: "square" }}
               label="Logo"
               description="Optional. Shown in the page footer; without one your property name is used instead."
             />

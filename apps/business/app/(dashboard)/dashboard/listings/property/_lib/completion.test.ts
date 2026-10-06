@@ -20,6 +20,7 @@ function complete(): PropertyEditorData {
       timezone: "Europe/Rome",
       lat: 42.8134,
       lon: 10.3235,
+      pinSetManually: false,
       checkInTime: "15:00",
       checkInUntil: "23:00",
       checkOutTime: "11:00",
@@ -153,16 +154,10 @@ describe("sectionStatus — policies", () => {
     expect(sectionStatus("policies", complete()).complete).toBe(true);
   });
 
-  test("treats a zero cancellation window as set, not missing", () => {
-    const d = complete();
-    d.content.freeCancellationDays = 0;
-    expect(sectionStatus("policies", d).complete).toBe(true);
-  });
-
-  test("reports a null cancellation window", () => {
+  test("does not require a cancellation window while it awaits a full policy", () => {
     const d = complete();
     d.content.freeCancellationDays = null;
-    expect(sectionStatus("policies", d).missing).toContain("Free cancellation window");
+    expect(sectionStatus("policies", d).complete).toBe(true);
   });
 
   test("requires at least one payment method", () => {

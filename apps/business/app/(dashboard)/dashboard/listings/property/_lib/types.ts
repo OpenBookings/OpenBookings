@@ -37,6 +37,8 @@ export interface PropertyRecord {
   timezone: string;
   lat: number | null;
   lon: number | null;
+  /** The host placed the pin by hand, so address edits leave it alone. */
+  pinSetManually: boolean;
   checkInTime: string;
   checkInUntil: string | null;
   checkOutTime: string;

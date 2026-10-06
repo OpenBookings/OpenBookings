@@ -26,10 +26,9 @@ import { PoliciesSection } from "./sections/policies";
 interface PropertyEditorProps {
   data: PropertyEditorData;
   amenities: AmenityCatalogEntry[];
-  publicBaseUrl: string;
 }
 
-export function PropertyEditor({ data, amenities, publicBaseUrl }: PropertyEditorProps) {
+export function PropertyEditor({ data, amenities }: PropertyEditorProps) {
   const [active, setActive] = React.useState<SectionId>("identity");
   const [dirty, setDirty] = React.useState(false);
   const [pendingSection, setPendingSection] = React.useState<SectionId | null>(null);
@@ -66,7 +65,6 @@ export function PropertyEditor({ data, amenities, publicBaseUrl }: PropertyEdito
         active={active}
         completed={completed}
         onSelect={requestSection}
-        publicUrl={`${publicBaseUrl}/p/${data.property.slug}`}
         publishSlot={<PublishToggle data={data} statuses={statuses} />}
       />
 

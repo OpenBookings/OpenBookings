@@ -35,13 +35,7 @@ async function EditorContent({ searchParams }: PageProps) {
 
   if (!data) return <NoProperty />;
 
-  return (
-    <PropertyEditor
-      data={data}
-      amenities={amenities}
-      publicBaseUrl={process.env.NEXT_PUBLIC_WEB_URL || "https://openbookings.co"}
-    />
-  );
+  return <PropertyEditor data={data} amenities={amenities} />;
 }
 
 /**

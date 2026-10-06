@@ -22,6 +22,9 @@ export function OverviewSection({
   const [descriptionLength, setDescriptionLength] = React.useState(
     content.overviewDescription?.length ?? 0,
   );
+  // The picker holds its selection in state, which a form reset cannot reach;
+  // remounting it is what makes Discard put the amenities back.
+  const [pickerKey, setPickerKey] = React.useState(0);
 
   return (
     <SectionForm
@@ -38,8 +41,9 @@ export function OverviewSection({
       }}
       action={saveOverview}
       onDirtyChange={onDirtyChange}
+      onReset={() => setPickerKey((k) => k + 1)}
     >
-      {(state, pending) => (
+      {(state, pending, markDirty) => (
         <FieldGroup className="max-w-3xl">
           <Field data-invalid={!!state.errors?.overviewHeadline}>
             <FieldLabel htmlFor="overviewHeadline">Headline</FieldLabel>
@@ -90,9 +94,11 @@ export function OverviewSection({
               Shown as pills under your description, and in the full amenities dialog.
             </FieldDescription>
             <AmenityPicker
+              key={pickerKey}
               amenities={amenities}
               selectedIds={state.values.amenityIds}
               disabled={pending}
+              onChange={markDirty}
             />
             {state.errors?.amenityIds && <FieldError>{state.errors.amenityIds[0]}</FieldError>}
           </Field>

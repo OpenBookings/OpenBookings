@@ -83,6 +83,11 @@ export const properties = pgTable(
     country: char("country", { length: 2 }).notNull(),
     timezone: varchar("timezone", { length: 50 }).notNull(),
     location: geographyPoint("location").notNull(),
+    /**
+     * The host placed the pin by hand (0022). While true, editing the address
+     * no longer moves the pin; the editor offers to make it follow again.
+     */
+    pinSetManually: boolean("pin_set_manually").notNull().default(false),
     checkInTime: time("check_in_time").notNull(),
     checkOutTime: time("check_out_time").notNull(),
     /** End of the arrival window. NULL = no stated cut-off. */
@@ -250,7 +255,8 @@ export const propertyContent = pgTable("property_content", {
   // Policy facts. The arrival window itself lives on `properties`.
   reception24h: boolean("reception_24h").notNull().default(false),
   freeCancellationDays: integer("free_cancellation_days"),
-  prepaymentRequired: boolean("prepayment_required").notNull().default(false),
+  /** Always true: every payment goes through the platform (0021). Kept for the listing page. */
+  prepaymentRequired: boolean("prepayment_required").notNull().default(true),
   childrenWelcome: boolean("children_welcome").notNull().default(true),
   minCheckInAge: integer("min_check_in_age"),
   cotPolicy: cotPolicyEnum("cot_policy"),
@@ -277,9 +283,10 @@ export const propertyContent = pgTable("property_content", {
  * method, swapping a logo, or fixing a name is a row edit, not a deploy. The
  * `code` is what the host's selection stores, so it is the primary key.
  *
- * `artworkUrl` is nullable because not every method has a logo — cash renders
- * as its label. `note` is the tooltip shown beside the label; it is the reason
- * cash needs one ("only available at the hotel") and cards do not.
+ * `artworkUrl` is nullable because not every method has a logo — such a method
+ * renders as its label. `note` is the tooltip shown beside the label. Cash was
+ * the original case for both; it is retired (is_active = false, 0021) because
+ * every payment now goes through the platform.
  */
 export const paymentMethods = pgTable("payment_methods", {
   code: varchar("code", { length: 32 }).primaryKey(),

@@ -3,6 +3,7 @@
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { saveLegal } from "../../_lib/actions";
+import { InfoTip } from "../info-tip";
 import { SectionForm } from "../section-form";
 import type { SectionProps } from "./props";
 
@@ -72,7 +73,21 @@ export function LegalSection({ data, onDirtyChange }: SectionProps) {
             </Field>
 
             <Field data-invalid={!!state.errors?.companyRegistration}>
-              <FieldLabel htmlFor="companyRegistration">Company registration</FieldLabel>
+              <div className="flex items-center gap-1.5">
+                <FieldLabel htmlFor="companyRegistration">Company registration</FieldLabel>
+                <InfoTip label="Company registration">
+                  <p className="font-medium text-foreground!">Your trade register number</p>
+                  <p>
+                    The number your business is registered under at the national company
+                    register — for example a KvK number (Netherlands), HRB number (Germany),
+                    SIREN (France), KBO number (Belgium) or CIF (Spain).
+                  </p>
+                  <p>
+                    EU law requires businesses selling online to show it, so guests can see who
+                    they are contracting with. You will find it on your registration extract.
+                  </p>
+                </InfoTip>
+              </div>
               <Input
                 id="companyRegistration"
                 name="companyRegistration"
@@ -86,7 +101,20 @@ export function LegalSection({ data, onDirtyChange }: SectionProps) {
             </Field>
 
             <Field data-invalid={!!state.errors?.vatNumber}>
-              <FieldLabel htmlFor="vatNumber">VAT number</FieldLabel>
+              <div className="flex items-center gap-1.5">
+                <FieldLabel htmlFor="vatNumber">VAT number</FieldLabel>
+                <InfoTip label="VAT number">
+                  <p className="font-medium text-foreground!">Your VAT identification number</p>
+                  <p>
+                    The number your tax authority issued for VAT, starting with your country
+                    code — for example NL123456789B01 or DE123456789.
+                  </p>
+                  <p>
+                    Guests see it in your business details. You can check it is valid on the
+                    European Commission&apos;s VIES service.
+                  </p>
+                </InfoTip>
+              </div>
               <Input
                 id="vatNumber"
                 name="vatNumber"

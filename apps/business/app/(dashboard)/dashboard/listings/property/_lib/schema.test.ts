@@ -72,7 +72,6 @@ describe("policiesSchema", () => {
     checkOutTime: "11:00",
     reception24h: "on",
     freeCancellationDays: "7",
-    prepaymentRequired: "on",
     childrenWelcome: "on",
     minCheckInAge: "18",
     cotPolicy: "free",
@@ -104,6 +103,22 @@ describe("policiesSchema", () => {
     const r = policiesSchema.safeParse(valid);
     expect(r.data!.cotFee).toBeNull();
     expect(r.data!.extraBedFee).toBe(60);
+  });
+
+  test("rejects cash: every payment goes through the platform", () => {
+    const r = policiesSchema.safeParse({ ...valid, paymentMethods: ["visa", "cash"] });
+    expect(r.success).toBe(false);
+  });
+
+  test("keeps a blank cancellation window as null, not zero", () => {
+    const r = policiesSchema.safeParse({ ...valid, freeCancellationDays: "" });
+    expect(r.success).toBe(true);
+    expect(r.data!.freeCancellationDays).toBeNull();
+  });
+
+  test("keeps a zero cancellation window as zero", () => {
+    const r = policiesSchema.safeParse({ ...valid, freeCancellationDays: "0" });
+    expect(r.data!.freeCancellationDays).toBe(0);
   });
 
   test("rejects a 12-hour time", () => {
@@ -170,6 +185,11 @@ describe("locationSchema", () => {
     lat: "42.8134",
     lon: "10.3235",
   };
+
+  test("reads the hand-placed pin flag, and its absence as false", () => {
+    expect(locationSchema.safeParse({ ...valid, pinSetManually: "on" }).data!.pinSetManually).toBe(true);
+    expect(locationSchema.safeParse(valid).data!.pinSetManually).toBe(false);
+  });
 
   test("accepts a full address", () => {
     expect(locationSchema.safeParse(valid).success).toBe(true);

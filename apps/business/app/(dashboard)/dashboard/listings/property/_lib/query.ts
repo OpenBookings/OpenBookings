@@ -41,6 +41,7 @@ interface PropertyRow {
   timezone: string;
   lat: number | null;
   lon: number | null;
+  pin_set_manually: boolean;
   check_in_time: string;
   check_in_until: string | null;
   check_out_time: string;
@@ -90,6 +91,7 @@ export async function loadEditorData(
        p.address_line_1, p.address_line_2, p.postal_code, p.city, p.country, p.timezone,
        ST_Y(p.location::geometry) AS lat,
        ST_X(p.location::geometry) AS lon,
+       p.pin_set_manually,
        to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
        to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
        to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
@@ -144,6 +146,7 @@ export async function loadEditorData(
     timezone: property.timezone,
     lat: property.lat,
     lon: property.lon,
+    pinSetManually: property.pin_set_manually,
     checkInTime: property.check_in_time,
     checkInUntil: property.check_in_until,
     checkOutTime: property.check_out_time,
@@ -162,7 +165,7 @@ export async function loadEditorData(
     finePrint: property.fine_print ?? [],
     reception24h: property.reception_24h ?? false,
     freeCancellationDays: property.free_cancellation_days,
-    prepaymentRequired: property.prepayment_required ?? false,
+    prepaymentRequired: property.prepayment_required ?? true,
     childrenWelcome: property.children_welcome ?? true,
     minCheckInAge: property.min_check_in_age,
     cotPolicy: property.cot_policy,

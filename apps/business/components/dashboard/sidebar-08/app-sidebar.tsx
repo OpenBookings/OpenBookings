@@ -56,14 +56,10 @@ const navMain: NavItem[] = [
     ],
   },
   {
-    title: "Property",
+    title: "Analytics",
     url: "#",
-    icon: PencilSparkles,
-    items: [
-      { title: "R&A", url: "/dashboard/listings/rates-availability" },
-      { title: "Property", url: "/dashboard/listings/property" },
-      { title: "Rooms", url: "/dashboard/listings/rooms" },
-    ],
+    icon: TrendingUp,
+    items: PAGE_IDS.map((id) => ({ title: PAGES[id].title, url: PAGES[id].path })),
   },
   {
     title: "Finance",
@@ -71,10 +67,14 @@ const navMain: NavItem[] = [
     icon: HandCoins,
   },
   {
-    title: "Analytics",
+    title: "About",
     url: "#",
-    icon: TrendingUp,
-    items: PAGE_IDS.map((id) => ({ title: PAGES[id].title, url: PAGES[id].path })),
+    icon: PencilSparkles,
+    items: [
+      { title: "R&A", url: "/dashboard/listings/rates-availability" },
+      { title: "Property", url: "/dashboard/listings/property" },
+      { title: "Rooms", url: "/dashboard/listings/rooms" },
+    ],
   },
 ];
 

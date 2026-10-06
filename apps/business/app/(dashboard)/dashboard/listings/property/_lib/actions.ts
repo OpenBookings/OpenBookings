@@ -154,7 +154,6 @@ export async function savePolicies(
     checkOutTime: String(formData.get("checkOutTime") ?? ""),
     reception24h: formData.get("reception24h"),
     freeCancellationDays: String(formData.get("freeCancellationDays") ?? ""),
-    prepaymentRequired: formData.get("prepaymentRequired"),
     childrenWelcome: formData.get("childrenWelcome"),
     minCheckInAge: String(formData.get("minCheckInAge") ?? ""),
     cotPolicy: formData.get("cotPolicy") ? String(formData.get("cotPolicy")) : null,
@@ -182,15 +181,18 @@ export async function savePolicies(
   await ensureContentRow(propertyId);
   await query(
     `UPDATE property_content
-     SET reception_24h = $1, free_cancellation_days = $2, prepayment_required = $3,
-         children_welcome = $4, min_check_in_age = $5, cot_policy = $6::cot_policy,
-         cot_fee = $7, extra_bed_fee = $8, pets_allowed = $9,
-         payment_methods = $10::text[], fine_print = $11::text[], updated_at = NOW()
-     WHERE property_id = $12`,
+     SET reception_24h = $1, free_cancellation_days = $2,
+         -- Not a host choice: every payment goes through the platform, so a
+         -- booking is always paid up front. Written on every save so a row
+         -- predating 0021 cannot keep saying otherwise.
+         prepayment_required = true,
+         children_welcome = $3, min_check_in_age = $4, cot_policy = $5::cot_policy,
+         cot_fee = $6, extra_bed_fee = $7, pets_allowed = $8,
+         payment_methods = $9::text[], fine_print = $10::text[], updated_at = NOW()
+     WHERE property_id = $11`,
     [
       d.reception24h,
       d.freeCancellationDays,
-      d.prepaymentRequired,
       d.childrenWelcome,
       d.minCheckInAge,
       d.cotPolicy,
@@ -222,6 +224,7 @@ export async function saveLocation(
     timezone: String(formData.get("timezone") ?? ""),
     lat: String(formData.get("lat") ?? ""),
     lon: String(formData.get("lon") ?? ""),
+    pinSetManually: formData.get("pinSetManually"),
   };
 
   await authorize(propertyId);
@@ -235,9 +238,12 @@ export async function saveLocation(
      SET address_line_1 = $1, address_line_2 = $2, postal_code = $3,
          city = $4, country = $5, timezone = $6,
          location = ST_SetSRID(ST_MakePoint($7::float8, $8::float8), 4326)::geography,
-         updated_at = NOW()
-     WHERE id = $9`,
-    [d.addressLine1, d.addressLine2, d.postalCode, d.city, d.country, d.timezone, d.lon, d.lat, propertyId],
+         pin_set_manually = $9, updated_at = NOW()
+     WHERE id = $10`,
+    [
+      d.addressLine1, d.addressLine2, d.postalCode, d.city, d.country, d.timezone,
+      d.lon, d.lat, d.pinSetManually, propertyId,
+    ],
   );
 
   await ensureContentRow(propertyId);

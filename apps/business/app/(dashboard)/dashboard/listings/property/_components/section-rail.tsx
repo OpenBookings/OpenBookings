@@ -11,7 +11,6 @@ interface SectionRailProps {
   active: SectionId;
   completed: number;
   onSelect: (section: SectionId) => void;
-  publicUrl: string;
   publishSlot: React.ReactNode;
 }
 
@@ -25,7 +24,6 @@ export function SectionRail({
   active,
   completed,
   onSelect,
-  publicUrl,
   publishSlot,
 }: SectionRailProps) {
   return (
@@ -76,14 +74,6 @@ export function SectionRail({
         <p className="px-3 text-muted-foreground text-xs tabular-nums">
           {completed} of {SECTION_IDS.length} sections done
         </p>
-        <a
-          href={publicUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-3 text-sm underline underline-offset-2 hover:no-underline"
-        >
-          Preview listing ↗
-        </a>
         <div className="px-3">{publishSlot}</div>
       </div>
     </nav>

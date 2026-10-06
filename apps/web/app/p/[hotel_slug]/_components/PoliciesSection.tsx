@@ -44,7 +44,16 @@ export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
         ? [{ Icon: BedDouble, text: `Cots available on request — ${money(hotel.cot_fee)} per night` }]
         : []),
     ...(hotel.extra_bed_fee !== null
-      ? [{ Icon: BedDouble, text: `Extra beds available — ${money(hotel.extra_bed_fee)} per night` }]
+      ? [
+          {
+            Icon: BedDouble,
+            // The host editor offers "Free of charge", stored as 0.
+            text:
+              Number(hotel.extra_bed_fee) === 0
+                ? "Extra beds available — free of charge"
+                : `Extra beds available — ${money(hotel.extra_bed_fee)} per night`,
+          },
+        ]
       : []),
   ];
 
