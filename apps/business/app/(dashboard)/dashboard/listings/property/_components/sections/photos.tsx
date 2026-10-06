@@ -3,7 +3,7 @@
 import { CircleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { sectionStatus } from "../../_lib/completion";
-import { ImageManager } from "../image-manager";
+import { ImageManager } from "../../../_components/image-manager";
 import type { SectionProps } from "./props";
 
 /**
@@ -49,8 +49,7 @@ export function PhotosSection({ data }: SectionProps) {
         <div className="flex flex-col divide-y divide-border pb-12">
           <div className="pb-12">
             <ImageManager
-              propertyId={property.id}
-              group="hero-image"
+              target={{ kind: "property", propertyId: property.id, group: "hero-image" }}
               images={hero}
               single={{ aspect: "wide" }}
               label="Hero image"
@@ -60,8 +59,7 @@ export function PhotosSection({ data }: SectionProps) {
 
           <div className="py-12">
             <ImageManager
-              propertyId={property.id}
-              group="gallery"
+              target={{ kind: "property", propertyId: property.id, group: "gallery" }}
               images={gallery}
               showAltText
               showReorder
@@ -73,8 +71,7 @@ export function PhotosSection({ data }: SectionProps) {
 
           <div className="pt-12">
             <ImageManager
-              propertyId={property.id}
-              group="logo"
+              target={{ kind: "property", propertyId: property.id, group: "logo" }}
               images={logo}
               single={{ aspect: "square" }}
               label="Logo"

@@ -25,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   clearRestrictions,
   createRatePlan,
+  setBaseRate,
   setAvailability,
   setRestriction,
   type ActionResult,
@@ -46,7 +47,8 @@ export type DialogKind =
   | "availability"
   | "restrictions"
   | "rate-plan"
-  | "reopen";
+  | "reopen"
+  | "base-rate";
 
 interface DialogState {
   kind: DialogKind;
@@ -649,6 +651,67 @@ function AddRatePlanDialog({
 }
 
 // ─────────────────────────────────────────────
+// Base rate (from the detail panel)
+// ─────────────────────────────────────────────
+
+function BaseRateDialog({
+  rooms,
+  currency,
+  prefill,
+  onDone,
+}: {
+  rooms: RoomTypeRow[];
+  currency: string;
+  prefill: EditPrefill;
+  onDone: () => void;
+}) {
+  const plan = rooms.flatMap((r) => r.ratePlans).find((p) => p.id === prefill.ratePlanId);
+  const [bar, setBar] = React.useState(plan && plan.bar > 0 ? String(plan.bar) : "");
+  const { pending, error, run } = useAction(onDone);
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void run(() => setBaseRate({ ratePlanId: plan?.id ?? "", bar: Number(bar) || 0 }));
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>Base rate · {plan?.name ?? "rate plan"}</DialogTitle>
+        <DialogDescription>
+          The nightly price on every date without its own price. Dates you have
+          priced individually keep their price.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4 py-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="ari-base-rate">Base rate ({currency})</Label>
+          <Input
+            id="ari-base-rate"
+            type="number"
+            min={1}
+            step={1}
+            value={bar}
+            onChange={(e) => setBar(e.target.value)}
+            required
+            aria-describedby="ari-base-rate-basis"
+          />
+          <div id="ari-base-rate-basis">
+            <RateInclusiveNotice />
+          </div>
+        </div>
+        <FormError message={error} />
+      </div>
+
+      <DialogFooter>
+        <SubmitButton pending={pending}>Save base rate</SubmitButton>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Host
 // ─────────────────────────────────────────────
 
@@ -681,6 +744,14 @@ export function AriEditDialogs({
         {state?.kind === "reopen" && (
           <ReopenDialog
             rooms={data.rooms}
+            prefill={state.prefill}
+            onDone={onClose}
+          />
+        )}
+        {state?.kind === "base-rate" && (
+          <BaseRateDialog
+            rooms={data.rooms}
+            currency={data.currency}
             prefill={state.prefill}
             onDone={onClose}
           />

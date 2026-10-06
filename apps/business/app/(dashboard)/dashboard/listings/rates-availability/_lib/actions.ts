@@ -342,6 +342,56 @@ export async function createRatePlan(
 }
 
 // ─────────────────────────────────────────────
+// Base rate
+// ─────────────────────────────────────────────
+
+const baseRateSchema = z.object({
+  ratePlanId: z.string().uuid(),
+  // At least 1: a zero base rate is how a rate created in the Rooms editor
+  // says "not priced yet", and the editor refuses to put one on sale.
+  bar: z.number().int().min(1, "Enter a base rate of at least 1"),
+});
+
+export type BaseRateInput = z.infer<typeof baseRateSchema>;
+
+/**
+ * Set a rate plan's standing nightly price — the figure every date falls back
+ * to when no override covers it. Until this existed a plan's base rate could
+ * only be set once, when R&A created it; a rate added in the Rooms editor
+ * starts at zero and is priced here before it can be switched on.
+ */
+export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
+  const parsed = baseRateSchema.safeParse(input);
+  if (!parsed.success) return failed(parsed.error.issues[0].message);
+  const data = parsed.data;
+
+  const session = await requireSession();
+  if (!(await userOwnsRatePlan(session, data.ratePlanId))) {
+    return failed("Rate plan not found");
+  }
+  // Same gate as createRatePlan: no price is stored until the organisation
+  // has confirmed, on record, that its rates include tax.
+  if (!(await ratePlanRatesConfirmed(data.ratePlanId))) {
+    return { ok: false, error: RATES_CONFIRMATION_MESSAGE, code: RATES_CONFIRMATION_REQUIRED };
+  }
+
+  const rows = await query<{ room_id: string }>(
+    `UPDATE rate_plans SET bar = $1, updated_at = NOW()
+     WHERE id = $2 AND archived_at IS NULL
+     RETURNING room_id`,
+    [data.bar, data.ratePlanId],
+  );
+
+  revalidatePath(ROUTE);
+  // The Rooms editor reads "is this priced" to decide whether a rate can be
+  // switched on.
+  revalidatePath("/dashboard/listings/rooms", "layout");
+  // rate_plans.bar is on the public listing page, as for createRatePlan.
+  if (rows[0]) await purgePropertyPage({ roomId: rows[0].room_id });
+  return { ok: true, affected: rows.length };
+}
+
+// ─────────────────────────────────────────────
 // Inclusive-rates confirmation
 // ─────────────────────────────────────────────
 

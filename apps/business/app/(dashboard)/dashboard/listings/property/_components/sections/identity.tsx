@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import { saveIdentity } from "../../_lib/actions";
-import { SectionForm } from "../section-form";
+import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
 
 export function IdentitySection({ data, onDirtyChange }: SectionProps) {
@@ -16,7 +16,7 @@ export function IdentitySection({ data, onDirtyChange }: SectionProps) {
       sectionId="identity"
       title="Identity"
       description="How your property is named on OpenBookings."
-      propertyId={property.id}
+      entityId={property.id}
       initialValues={{ name: property.name, subtitle: property.subtitle ?? "" }}
       action={saveIdentity}
       onDirtyChange={onDirtyChange}

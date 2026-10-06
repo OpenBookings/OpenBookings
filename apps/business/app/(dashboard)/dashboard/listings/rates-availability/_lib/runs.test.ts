@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { buildRuns, groupConsecutiveDates } from "./runs";
-import type { CellState, RateCell, ReasonCode, RestrictionRule } from "./types";
+import { buildRuns, groupConsecutiveDates, openPlanSummary } from "./runs";
+import type {
+  CellState,
+  RateCell,
+  RatePlanRow,
+  RatePlanStatus,
+  ReasonCode,
+  RestrictionRule,
+  RoomTypeRow,
+} from "./types";
 
 const rule = (id: string, overrides: Partial<RestrictionRule> = {}): RestrictionRule => ({
   id,
@@ -201,5 +209,50 @@ describe("groupConsecutiveDates", () => {
 
   test("nothing in, nothing out", () => {
     expect(groupConsecutiveDates([])).toEqual([]);
+  });
+});
+
+describe("openPlanSummary", () => {
+  const plan = (id: string, status: RatePlanStatus, onSale = true): RatePlanRow => ({
+    id,
+    name: id,
+    currency: "EUR",
+    bar: 100,
+    onSale,
+    isRefundable: true,
+    cancellationPolicy: null,
+    minStay: 1,
+    maxStay: null,
+    modifiers: [],
+    hasStayDiscount: false,
+    cells: [],
+    status,
+  });
+  const room = (ratePlans: RatePlanRow[]): RoomTypeRow => ({
+    id: "room",
+    name: "Room",
+    roomType: null,
+    baseOccupancy: 2,
+    totalUnits: 2,
+    onSale: true,
+    availability: [],
+    ratePlans,
+    lowestRates: [],
+  });
+
+  test("counts plans with bookable dates", () => {
+    expect(openPlanSummary(room([plan("a", "healthy"), plan("b", "inactive")]))).toBe(
+      "1/2 plans open",
+    );
+  });
+
+  test("a plan that is not on sale is never open, whatever its dates say", () => {
+    expect(openPlanSummary(room([plan("a", "healthy"), plan("b", "healthy", false)]))).toBe(
+      "1/2 plans open",
+    );
+  });
+
+  test("a room with no plans says so", () => {
+    expect(openPlanSummary(room([]))).toBe("No rate plans");
   });
 });

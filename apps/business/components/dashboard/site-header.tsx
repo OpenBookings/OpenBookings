@@ -5,6 +5,7 @@ import * as React from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBreadcrumbLabels } from "@/components/dashboard/breadcrumb-labels";
 import { CommandMenu02 } from "@/components/dashboard/command-menu-02";
 import {
   Breadcrumb,
@@ -26,13 +27,14 @@ function formatSegment(segment: string): string {
 export function SiteHeader({ title }: { title: string }) {
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
+  const labels = useBreadcrumbLabels();
 
   // The section root is the first two segments (e.g. /dashboard/bookings);
   // `title` labels it and deeper segments become the rest of the trail.
   const segments = pathname.split("/").filter(Boolean);
   const sectionHref = `/${segments.slice(0, 2).join("/")}`;
   const trail = segments.slice(2).map((segment, index) => ({
-    label: formatSegment(segment),
+    label: labels[segment] ?? formatSegment(segment),
     href: `${sectionHref}/${segments.slice(2, index + 3).join("/")}`,
   }));
 

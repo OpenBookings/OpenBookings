@@ -4,7 +4,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { saveLegal } from "../../_lib/actions";
 import { InfoTip } from "../info-tip";
-import { SectionForm } from "../section-form";
+import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
 
 export function LegalSection({ data, onDirtyChange }: SectionProps) {
@@ -15,7 +15,7 @@ export function LegalSection({ data, onDirtyChange }: SectionProps) {
       sectionId="legal"
       title="Legal & business details"
       description="Shown to guests under 'View business details'. Your booking is a direct contract with this entity, so it has to be right."
-      propertyId={property.id}
+      entityId={property.id}
       initialValues={{
         legalCompanyName: content.legalCompanyName ?? "",
         contactEmail: content.contactEmail ?? "",

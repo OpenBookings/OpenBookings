@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Ban, CalendarCog, Lock, PencilLine, Undo2 } from "lucide-react";
+import { Ban, CalendarCog, Lock, PencilLine, Tag, Undo2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -65,6 +65,7 @@ interface DetailPanelProps {
   onEditAvailability: (prefill: EditPrefill) => void;
   onEditRestrictions: (prefill: EditPrefill) => void;
   onReopen: (prefill: EditPrefill) => void;
+  onEditBaseRate: (prefill: EditPrefill) => void;
   onStage: (edits: DraftEdit[]) => void;
 }
 
@@ -76,6 +77,7 @@ export function AriDetailPanel({
   onEditAvailability,
   onEditRestrictions,
   onReopen,
+  onEditBaseRate,
   onStage,
 }: DetailPanelProps) {
   return (
@@ -110,6 +112,7 @@ export function AriDetailPanel({
             onEditAvailability={onEditAvailability}
             onEditRestrictions={onEditRestrictions}
             onReopen={onReopen}
+            onEditBaseRate={onEditBaseRate}
             onStage={onStage}
           />
         )}
@@ -304,6 +307,7 @@ function RateDetail({
   onEditAvailability,
   onEditRestrictions,
   onReopen,
+  onEditBaseRate,
   onStage,
 }: {
   room: RoomTypeRow;
@@ -314,6 +318,7 @@ function RateDetail({
   onEditAvailability: (prefill: EditPrefill) => void;
   onEditRestrictions: (prefill: EditPrefill) => void;
   onReopen: (prefill: EditPrefill) => void;
+  onEditBaseRate: (prefill: EditPrefill) => void;
   onStage: (edits: DraftEdit[]) => void;
 }) {
   const first = run.cells[0];
@@ -336,6 +341,17 @@ function RateDetail({
         <p className="text-muted-foreground text-sm">
           {plan.name} · {plan.isRefundable ? "Refundable" : "Non-refundable"}
         </p>
+        {/* Said once, up top: everything below reads as live otherwise. */}
+        {!plan.onSale && (
+          <p className="text-(--amber-11) text-sm">
+            {room.onSale
+              ? "Not on sale — this rate is switched off in Rooms."
+              : "Not on sale — this room type is a draft in Rooms."}
+          </p>
+        )}
+        {plan.bar === 0 && (
+          <p className="text-(--amber-11) text-sm">No base rate yet. Set one before it goes on sale.</p>
+        )}
         <StatusPill run={run} cell={first} />
       </SheetHeader>
 
@@ -484,6 +500,15 @@ function RateDetail({
             This rule runs past these dates — reopen a longer range
           </Button>
         )}
+
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
+        >
+          <Tag className="size-4" />
+          {plan.bar === 0 ? "Set base rate" : "Edit base rate"}
+        </Button>
 
         <Button
           variant="outline"

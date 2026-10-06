@@ -246,6 +246,9 @@ export function applyLowestRates(
 ): void {
   for (const room of rooms) {
     for (const plan of room.ratePlans) {
+      // The summary is "what a guest could book from", so a plan that is not
+      // on sale — a draft room, a switched-off rate — has no say in it.
+      if (!plan.onSale) continue;
       for (const cell of plan.cells) {
         if (cell.price === null) continue;
         const index = dateIndex.get(cell.date);

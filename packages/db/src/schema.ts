@@ -142,8 +142,29 @@ export const rooms = pgTable(
      * per date; this is the standing default.
      */
     totalUnits: integer("total_units").notNull().default(1),
+    /** Display order on the guest carousel and the Rooms index (0023). */
+    sortOrder: smallint("sort_order").notNull().default(0),
+    /** Soft delete (0023). Archived rooms are never active; their rows stay for past reservations. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * Bed counts per bed type, e.g. `{ king: 1, sofa_bed: 1 }` (0023). `bedType`
+     * keeps the label derived from it, because that is what the guest app reads.
+     */
+    bedConfig: jsonb("bed_config").$type<Record<string, number>>(),
+    /**
+     * Room-level amenity keys from the editor's fixed list (0023). NULL = never
+     * saved from the editor; it then derives a selection from `room_amenities`.
+     */
+    amenityKeys: text("amenity_keys").array(),
+    /** Up to six of `amenityKeys`, featured on the guest room card (0023). */
+    featuredAmenityKeys: text("featured_amenity_keys").array().notNull().default(sql`'{}'::text[]`),
   },
-  (table) => [index("idx_rooms_hotel_id").on(table.propertyId)],
+  (table) => [
+    index("idx_rooms_hotel_id").on(table.propertyId),
+    index("idx_rooms_property_order").on(table.propertyId, table.sortOrder),
+    check("rooms_featured_amenities_max", sql`cardinality(${table.featuredAmenityKeys}) <= 6`),
+    check("rooms_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
+  ],
 );
 
 export const ratePlans = pgTable(
@@ -161,12 +182,31 @@ export const ratePlans = pgTable(
     bookingFeeRate: numeric("booking_fee_rate", { precision: 5, scale: 4 }).notNull().default("0.00"),
     minStay: integer("min_stay").notNull().default(1),
     maxStay: integer("max_stay"),
+    /** "Book at least N days before arrival". NULL or 0 = same day. */
     minAdvanceBooking: integer("min_advance_booking"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Shown to guests under the rate name (0023). */
+    description: varchar("description", { length: 200 }),
+    /** Meals are independent facts, not one meal-plan enum (0023). */
+    includesBreakfast: boolean("includes_breakfast").notNull().default(false),
+    includesLunch: boolean("includes_lunch").notNull().default(false),
+    includesDinner: boolean("includes_dinner").notNull().default(false),
+    /** Extra inclusions from the editor's fixed list, stored as keys (0023). */
+    extras: text("extras").array().notNull().default(sql`'{}'::text[]`),
+    otherInclusion: varchar("other_inclusion", { length: 120 }),
+    /** "Book at most N days ahead". NULL = no limit (0023). */
+    maxAdvanceBooking: integer("max_advance_booking"),
+    /** Display order within the room (0023). */
+    sortOrder: smallint("sort_order").notNull().default(0),
+    /** Soft delete (0023). reservations reference rate plans, so a booked one is never removed. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
-  (table) => [index("idx_rate_plans_room_id").on(table.roomId, table.isActive)],
+  (table) => [
+    index("idx_rate_plans_room_id").on(table.roomId, table.isActive),
+    check("rate_plans_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
+  ],
 );
 
 export const rateOverrides = pgTable(

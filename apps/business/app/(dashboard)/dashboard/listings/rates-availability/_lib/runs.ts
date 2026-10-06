@@ -106,7 +106,9 @@ function nextDay(isoDate: string): string {
 export function openPlanSummary(room: RoomTypeRow): string {
   const total = room.ratePlans.length;
   if (total === 0) return "No rate plans";
-  const open = room.ratePlans.filter((p) => p.status !== "inactive").length;
+  // A plan that is not on sale (switched off, or on a draft room) is not
+  // open whatever its dates say: guests cannot book it.
+  const open = room.ratePlans.filter((p) => p.onSale && p.status !== "inactive").length;
   return `${open}/${total} plans open`;
 }
 

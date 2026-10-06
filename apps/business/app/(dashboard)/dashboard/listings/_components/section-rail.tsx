@@ -3,14 +3,15 @@
 import { CheckIcon, CircleAlertIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { SectionStatus } from "../_lib/completion";
-import { SECTION_IDS, SECTION_LABELS, type SectionId } from "../_lib/types";
+import type { SectionStatus } from "../_lib/editor";
 
-interface SectionRailProps {
-  statuses: Record<SectionId, SectionStatus>;
-  active: SectionId;
+interface SectionRailProps<S extends string> {
+  /** The sections in rail order, with their labels. */
+  sections: readonly { id: S; label: string }[];
+  statuses: Record<S, SectionStatus>;
+  active: S;
   completed: number;
-  onSelect: (section: SectionId) => void;
+  onSelect: (section: S) => void;
   publishSlot: React.ReactNode;
 }
 
@@ -19,19 +20,20 @@ interface SectionRailProps {
  * this screen — what on my page is still missing — and the same statuses gate
  * the publish switch below it.
  */
-export function SectionRail({
+export function SectionRail<S extends string>({
+  sections,
   statuses,
   active,
   completed,
   onSelect,
   publishSlot,
-}: SectionRailProps) {
+}: SectionRailProps<S>) {
   return (
     <nav
       aria-label="Listing sections"
       className="flex shrink-0 gap-1 overflow-x-auto border-b p-3 md:w-56 md:flex-col md:overflow-visible md:border-r md:border-b-0"
     >
-      {SECTION_IDS.map((id) => {
+      {sections.map(({ id, label }) => {
         const status = statuses[id];
         const isActive = id === active;
         return (
@@ -48,7 +50,7 @@ export function SectionRail({
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
-                <span className="truncate">{SECTION_LABELS[id]}</span>
+                <span className="truncate">{label}</span>
                 {status.complete ? (
                   <CheckIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Complete" />
                 ) : (
@@ -72,7 +74,7 @@ export function SectionRail({
 
       <div className="hidden md:mt-4 md:flex md:flex-col md:gap-3 md:border-t md:pt-4">
         <p className="px-3 text-muted-foreground text-xs tabular-nums">
-          {completed} of {SECTION_IDS.length} sections done
+          {completed} of {sections.length} sections done
         </p>
         <div className="px-3">{publishSlot}</div>
       </div>

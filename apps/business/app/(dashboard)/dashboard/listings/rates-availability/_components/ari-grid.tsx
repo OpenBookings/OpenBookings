@@ -35,6 +35,7 @@ import {
   Chip,
   GridLegend,
   HATCH_STYLE,
+  NotOnSaleTag,
   PolicyTag,
   StatusDot,
 } from "./cell-states";
@@ -459,8 +460,11 @@ function RoomTypeRowView({
             aria-hidden
           />
           <span className="min-w-0">
-            <span className="block truncate font-semibold text-sm leading-tight">
-              {room.name}
+            <span className="flex items-center gap-1.5">
+              <span className="truncate font-semibold text-sm leading-tight">
+                {room.name}
+              </span>
+              {!room.onSale && <NotOnSaleTag label="Draft" />}
             </span>
             <span className="block truncate text-[11px] text-muted-foreground leading-tight">
               {room.totalUnits} room{room.totalUnits === 1 ? "" : "s"} ·{" "}
@@ -748,7 +752,11 @@ function RatePlanRowView({
             <span className="truncate font-medium text-sm leading-tight">
               {plan.name}
             </span>
-            <PolicyTag refundable={plan.isRefundable} />
+            {room.onSale && !plan.onSale ? (
+              <NotOnSaleTag />
+            ) : (
+              <PolicyTag refundable={plan.isRefundable} />
+            )}
           </span>
           {caption && (
             <span className="block truncate text-[11px] text-muted-foreground leading-tight">

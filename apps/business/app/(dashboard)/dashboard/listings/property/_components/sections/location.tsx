@@ -45,7 +45,7 @@ import type { FormState, PropertyEditorData } from "../../_lib/types";
 import { locateTypedAddress, type AddressCandidate } from "../../_lib/address-lookup";
 import { AddressFinder, type AddressValue, type FinderMode } from "../address-finder";
 import { InfoTip } from "../info-tip";
-import { SectionForm } from "../section-form";
+import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
 
 /** The lucide names offered for a nearby highlight, matching the listing page's vocabulary. */
@@ -141,7 +141,7 @@ export function LocationSection({ data, onDirtyChange }: SectionProps) {
       sectionId="location"
       title="Location"
       description="Where you are, and what is worth walking to."
-      propertyId={data.property.id}
+      entityId={data.property.id}
       initialValues={{} as Record<string, unknown>}
       action={saveLocation}
       onDirtyChange={onDirtyChange}

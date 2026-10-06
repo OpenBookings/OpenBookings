@@ -189,6 +189,11 @@ export interface RatePlanRow {
   name: string;
   currency: string;
   bar: number;
+  /**
+   * Room published and plan active. Draft rooms and switched-off plans are
+   * listed so they can be priced before they sell, but guests cannot book them.
+   */
+  onSale: boolean;
   isRefundable: boolean;
   cancellationPolicy: string | null;
   minStay: number;
@@ -207,6 +212,8 @@ export interface RoomTypeRow {
   roomType: string | null;
   baseOccupancy: number;
   totalUnits: number;
+  /** rooms.is_active: published. A draft room is listed for pricing, not sold. */
+  onSale: boolean;
   availability: AvailabilityCell[];
   ratePlans: RatePlanRow[];
   /** Lowest open price per date across the plans — the collapsed-row summary. */
