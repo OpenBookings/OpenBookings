@@ -19,6 +19,14 @@ and exhausting it fails requests rather than queueing them. If instance count
 has to grow past what the ceiling allows, the answer is a pooler (Neon's
 `-pooler` host) rather than a smaller `max`.
 
+The application pool keeps idle connections for 4 minutes (`PGPOOL_IDLE_TIMEOUT_MS`),
+not pg's default 10s: a fresh connection to Neon costs 100–900ms, and a 10s
+reap meant a quiet site paid that on almost every request. Four minutes is
+below Neon's 5-minute scale-to-zero, so idle connections are closed before the
+compute suspends. On the `-pooler` endpoint idle clients are cheap; against a
+direct (non-pooled) URL each one holds a real Postgres backend for that long,
+so lower it there if connection count is tight.
+
 Both pools set `statement_timeout` and `idle_in_transaction_session_timeout`
 (`PG_STATEMENT_TIMEOUT_MS` / `PG_IDLE_TX_TIMEOUT_MS`, 15s each), so one slow or
 stuck query cannot hold a connection indefinitely, and both attach an `error`
