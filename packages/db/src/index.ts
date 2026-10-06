@@ -42,6 +42,29 @@ const POOL_MAX = Number(process.env.PGPOOL_MAX) || 10;
 const STATEMENT_TIMEOUT_MS = Number(process.env.PG_STATEMENT_TIMEOUT_MS) || 15_000;
 const IDLE_TX_TIMEOUT_MS = Number(process.env.PG_IDLE_TX_TIMEOUT_MS) || 15_000;
 
+/**
+ * How long an unused connection stays in the pool before it is closed.
+ *
+ * A fresh connection to Neon is not cheap from here: TLS and SCRAM through
+ * Neon's proxy, often a new server backend behind the pooler, and PostGIS
+ * loading into that backend on first use (~80ms on its own). Production traces put it at 100–900ms when
+ * the compute is already awake. At pg's default of 10s, a low-traffic site
+ * reaps every connection between page views, so nearly every request pays that
+ * again — Sentry flagged it as an N+1 on `pg-pool.connect`
+ * (OPENBOOKINGS-GUESTS-A).
+ *
+ * Four minutes keeps a browsing session on warm connections while still
+ * closing them before Neon's 5-minute scale-to-zero, so an idle pool never
+ * outlives the compute it points at. Holding idle clients is cheap on the
+ * `-pooler` endpoint, which accepts thousands of client connections and does
+ * not tie a Postgres backend to an idle one.
+ *
+ * Deliberately no `min`: a pool that never drains would hold connections
+ * forever, which on the Free plan risks keeping the compute from ever scaling
+ * to zero.
+ */
+const IDLE_TIMEOUT_MS = Number(process.env.PGPOOL_IDLE_TIMEOUT_MS) || 240_000;
+
 function createPool(): Pool | null {
   if (!connectionString) return null;
 
@@ -61,7 +84,7 @@ function createPool(): Pool | null {
   const pool = new Pool({
     connectionString,
     max: POOL_MAX,
-    idleTimeoutMillis: 10000,
+    idleTimeoutMillis: IDLE_TIMEOUT_MS,
     connectionTimeoutMillis: 10000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
