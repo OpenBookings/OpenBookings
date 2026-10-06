@@ -13,6 +13,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
+import { applyPendingMigrations } from "../../_lib/pending-migrations";
 import { VERSION_SQL } from "./ari-query";
 
 const connectionString = process.env.DATABASE_URL;
@@ -46,6 +47,7 @@ describeWithDb("VERSION_SQL", () => {
 
   beforeEach(async () => {
     await db.query("BEGIN");
+    await applyPendingMigrations(db);
 
     ownerUserId = `test-business-${crypto.randomUUID()}`;
     await db.query(

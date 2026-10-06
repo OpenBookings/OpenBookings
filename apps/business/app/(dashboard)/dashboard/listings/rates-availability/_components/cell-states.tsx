@@ -120,6 +120,20 @@ export function PolicyTag({ refundable }: { refundable: boolean }) {
   );
 }
 
+/**
+ * Marks a room type or rate plan guests cannot book: a draft room, or a plan
+ * that is switched off in the Rooms editor. They are listed here so they can
+ * be priced before they go on sale, and the tag is what stops a host reading
+ * their prices as live.
+ */
+export function NotOnSaleTag({ label = "Not on sale" }: { label?: string }) {
+  return (
+    <span className="shrink-0 rounded-full bg-(--amber-3) px-1.5 py-px text-(--amber-11) text-[10px] leading-[1.4]">
+      {label}
+    </span>
+  );
+}
+
 const STATUS_STYLE: Record<
   RatePlanStatus,
   { className: string; label: string }

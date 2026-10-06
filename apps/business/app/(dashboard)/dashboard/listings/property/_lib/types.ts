@@ -95,13 +95,4 @@ export interface PropertyEditorData {
   amenityIds: string[];
 }
 
-/**
- * The shape every section's server action returns, consumed by useActionState.
- * `values` is echoed back so a rejected save re-renders what the host typed
- * rather than throwing it away.
- */
-export interface FormState<T> {
-  values: T;
-  errors: Record<string, string[]> | null;
-  success: boolean;
-}
+export type { FormState } from "../../_lib/editor";

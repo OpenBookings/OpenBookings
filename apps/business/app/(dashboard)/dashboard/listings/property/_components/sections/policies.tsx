@@ -20,7 +20,7 @@ import { PAYMENT_METHODS } from "../../_lib/schema";
 import type { FormState, PropertyEditorData } from "../../_lib/types";
 import { InfoTip } from "../info-tip";
 import { RepeatableRows } from "../repeatable-rows";
-import { SectionForm } from "../section-form";
+import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
 
 const METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
@@ -67,7 +67,7 @@ export function PoliciesSection({ data, onDirtyChange }: SectionProps) {
       sectionId="policies"
       title="Policies"
       description="What guests need to know before they book."
-      propertyId={data.property.id}
+      entityId={data.property.id}
       initialValues={{} as Record<string, unknown>}
       action={savePolicies}
       onDirtyChange={onDirtyChange}

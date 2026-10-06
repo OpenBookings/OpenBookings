@@ -57,6 +57,8 @@ interface AvailabilityQueryRow {
   room_type: string | null;
   base_occupancy: number;
   total_units: number;
+  /** rooms.is_active: published. Drafts are listed so they can be priced, but are not on sale. */
+  on_sale: boolean;
   date: string;
   effective_total: number;
   booked: number;
@@ -87,6 +89,8 @@ interface RateQueryRow {
   plan_min_stay: number;
   plan_max_stay: number | null;
   base_occupancy: number;
+  /** Room published and plan active: what guests can actually book. */
+  on_sale: boolean;
   date: string;
   /** bigint column — see `toNumber`. */
   base_price: string;
@@ -138,13 +142,16 @@ export const AVAILABILITY_SQL = `
 WITH dates AS (
   SELECT generate_series($3::date, $4::date, INTERVAL '1 day')::date AS d
 ),
+-- Draft (unpublished) rooms are included: R&A is where a new room type gets
+-- its prices, and it has to be priced before it can go on sale. Archived rooms
+-- are gone for good. on_sale tells the grid which is which.
 scope_rooms AS (
-  SELECT r.id, r.name, r.room_type, r.base_occupancy, r.total_units
+  SELECT r.id, r.name, r.room_type, r.base_occupancy, r.total_units, r.is_active AS on_sale
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
   WHERE p.owner_user_id = $1
     AND p.id = $2
-    AND r.is_active
+    AND r.archived_at IS NULL
 ),
 booked AS (
   SELECT res.room_id, d.d AS date, COUNT(*)::int AS units
@@ -161,6 +168,7 @@ SELECT
   sr.room_type,
   sr.base_occupancy,
   sr.total_units,
+  sr.on_sale,
   d.d::text                                    AS date,
   COALESCE(inv.total_rooms, sr.total_units)    AS effective_total,
   COALESCE(bk.units, 0)                        AS booked,
@@ -218,18 +226,22 @@ const RATES_SQL = `
 WITH dates AS (
   SELECT generate_series($3::date, $4::date, INTERVAL '1 day')::date AS d
 ),
+-- Inactive plans and draft rooms are included for the same reason as in
+-- AVAILABILITY_SQL: a rate is priced here before it is switched on. Archived
+-- ones are not.
 scope_plans AS (
   SELECT
     rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable, rp.cancellation_policy,
     rp.min_stay, rp.max_stay,
+    (r.is_active AND rp.is_active) AS on_sale,
     r.id AS room_id, r.name AS room_name, r.base_occupancy
   FROM rate_plans rp
   JOIN rooms r      ON r.id = rp.room_id
   JOIN properties p ON p.id = r.property_id
   WHERE p.owner_user_id = $1
     AND p.id = $2
-    AND r.is_active
-    AND rp.is_active
+    AND r.archived_at IS NULL
+    AND rp.archived_at IS NULL
 )
 SELECT
   sp.room_id,
@@ -242,6 +254,7 @@ SELECT
   sp.min_stay                      AS plan_min_stay,
   sp.max_stay                      AS plan_max_stay,
   sp.base_occupancy,
+  sp.on_sale,
   d.d::text                        AS date,
   COALESCE(o.price_per_night, sp.bar) AS base_price,
   (o.price_per_night IS NOT NULL)     AS has_override,
@@ -349,7 +362,7 @@ WITH scope_rooms AS (
   SELECT r.id
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE p.owner_user_id = $1 AND p.id = $2 AND r.is_active
+  WHERE p.owner_user_id = $1 AND p.id = $2 AND r.archived_at IS NULL
 ),
 signatures AS (
   SELECT 'o' || ro.id::text || ro.price_per_night::text || ro.is_active::text
@@ -525,6 +538,7 @@ export async function loadAriGrid(
         roomType: row.room_type,
         baseOccupancy: row.base_occupancy,
         totalUnits: row.total_units,
+        onSale: row.on_sale,
         availability: [],
         ratePlans: [],
         lowestRates: dates.map(() => null),
@@ -689,6 +703,7 @@ export async function loadAriGrid(
         name: head.rate_plan_name,
         currency: head.currency,
         bar: toNumber(head.bar),
+        onSale: head.on_sale,
         isRefundable: head.is_refundable,
         cancellationPolicy: head.cancellation_policy,
         minStay: head.plan_min_stay,

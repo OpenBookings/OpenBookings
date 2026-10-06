@@ -8,14 +8,19 @@ import posthog from "posthog-js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import type { FormState } from "../_lib/types";
+import type { FormState } from "../_lib/editor";
 
 interface SectionFormProps<T> {
   /** Used for the heading, the toast, and the posthog event's `section` property. */
   sectionId: string;
   title: string;
   description: string;
-  propertyId: string;
+  /** The record being edited. Posted as a hidden field; the action re-authorizes it. */
+  entityId: string;
+  /** The hidden field's name. Each editor's actions read their own id. */
+  entityField?: "propertyId" | "roomId";
+  /** The posthog event fired on a successful save. */
+  analyticsEvent?: string;
   initialValues: T;
   action: (prev: FormState<T>, formData: FormData) => Promise<FormState<T>>;
   onDirtyChange?: (dirty: boolean) => void;
@@ -46,7 +51,9 @@ export function SectionForm<T>({
   sectionId,
   title,
   description,
-  propertyId,
+  entityId,
+  entityField = "propertyId",
+  analyticsEvent = "property_section_saved",
   initialValues,
   action,
   onDirtyChange,
@@ -74,8 +81,8 @@ export function SectionForm<T>({
     setDirty(false);
     onDirtyChange?.(false);
     toast.success("Saved", { description: `${title} is up to date.` });
-    posthog.capture("property_section_saved", { section: sectionId });
-  }, [state.success, sectionId, title, onDirtyChange]);
+    posthog.capture(analyticsEvent, { section: sectionId });
+  }, [state.success, sectionId, title, onDirtyChange, analyticsEvent]);
 
   // Guide the host to the first problem rather than making them hunt for the
   // red outline. Focus, not just scroll: it also announces to a screen reader.
@@ -113,7 +120,7 @@ export function SectionForm<T>({
         onChange={markDirty}
         className="flex-1 overflow-y-auto px-6 py-6"
       >
-        <input type="hidden" name="propertyId" value={propertyId} />
+        <input type="hidden" name={entityField} value={entityId} />
 
         {errorEntries.length > 0 && (
           <Alert variant="destructive" role="alert" className="mb-6">

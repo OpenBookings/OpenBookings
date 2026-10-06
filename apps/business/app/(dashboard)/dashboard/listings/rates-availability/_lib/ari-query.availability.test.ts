@@ -23,6 +23,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
+import { applyPendingMigrations } from "../../_lib/pending-migrations";
 import { AVAILABILITY_SQL } from "./ari-query";
 
 const connectionString = process.env.DATABASE_URL;
@@ -51,6 +52,7 @@ interface AvailabilityRow {
   room_id: string;
   room_name: string;
   total_units: number;
+  on_sale: boolean;
   date: string;
   effective_total: number;
   booked: number;
@@ -90,6 +92,7 @@ describeWithDb("AVAILABILITY_SQL", () => {
 
   beforeEach(async () => {
     await db.query("BEGIN");
+    await applyPendingMigrations(db);
 
     // Both properties.owner_user_id and bookings.user_id are foreign keys to
     // `"user"`. src/schema.ts declares neither as a reference -- it cannot,
@@ -293,8 +296,26 @@ describeWithDb("AVAILABILITY_SQL", () => {
     expect(result.rows).toHaveLength(0);
   });
 
-  test("excludes inactive rooms", async () => {
+  // A draft (unpublished) room is listed so it can be priced before it goes on
+  // sale; on_sale is what tells the grid not to treat it as live. Archiving is
+  // what removes a room from R&A.
+  test("lists a draft room, flagged as not on sale", async () => {
     await db.query(`UPDATE rooms SET is_active = false WHERE id = $1`, [roomId]);
+
+    const all = await rows();
+    expect(all).toHaveLength(5);
+    expect(all.every((r) => r.on_sale === false)).toBe(true);
+  });
+
+  test("a published room is on sale", async () => {
+    expect((await rows()).every((r) => r.on_sale === true)).toBe(true);
+  });
+
+  test("excludes archived rooms", async () => {
+    await db.query(
+      `UPDATE rooms SET is_active = false, archived_at = NOW() WHERE id = $1`,
+      [roomId],
+    );
 
     expect(await rows()).toHaveLength(0);
   });

@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { ImageGroup, PropertyImageRecord } from "../_lib/types";
+import type { ImageGroup } from "../property/_lib/types";
 
 type UploadState = "idle" | "uploading" | "processing" | "error" | "done";
 
@@ -37,14 +37,31 @@ interface PendingUpload {
   state: UploadState;
 }
 
+/** One stored photo, as either editor loads it. */
+export interface ManagedImage {
+  id: string;
+  url: string;
+  sortOrder: number;
+  altText: string | null;
+}
+
+/**
+ * Where uploads land and which routes edit them. A property photo belongs to a
+ * group (hero, logo, gallery); a room photo is always part of one gallery.
+ */
+export type ImageTarget =
+  | { kind: "property"; propertyId: string; group: ImageGroup }
+  | { kind: "room"; roomId: string };
+
 interface ImageManagerProps {
-  propertyId: string;
-  group: ImageGroup;
-  images: PropertyImageRecord[];
+  target: ImageTarget;
+  images: ManagedImage[];
   /** Gallery images carry alt text and reordering; hero and logo do not. */
   showAltText?: boolean;
   showReorder?: boolean;
   showSetHero?: boolean;
+  /** Label the first photo as the cover. A room's cover is simply its first photo. */
+  markFirstAsCover?: boolean;
   /**
    * Hero and logo hold exactly one image: the confirm route deletes the old
    * row on upload. The slot shows that image with a "Replace" affordance on it
@@ -61,12 +78,12 @@ interface ImageManagerProps {
  * row keeps a retry instead of disappearing.
  */
 export function ImageManager({
-  propertyId,
-  group,
+  target,
   images,
   showAltText = false,
   showReorder = false,
   showSetHero = false,
+  markFirstAsCover = false,
   single,
   label,
   description,
@@ -74,6 +91,14 @@ export function ImageManager({
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [pending, setPending] = React.useState<PendingUpload[]>([]);
+
+  const group = target.kind === "property" ? target.group : "gallery";
+  const imagesRoute = target.kind === "property" ? "/api/property-images" : "/api/room-images";
+  const confirmBody =
+    target.kind === "property"
+      ? { propertyId: target.propertyId, group: target.group }
+      : { roomId: target.roomId };
+  const uploadedEvent = target.kind === "property" ? "property_image_uploaded" : "room_image_uploaded";
 
   async function upload(file: File) {
     const key = `${file.name}-${Date.now()}-${Math.random()}`;
@@ -104,12 +129,12 @@ export function ImageManager({
       const confirm = await fetch("/api/upload/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: storageKey, propertyId, group }),
+        body: JSON.stringify({ key: storageKey, ...confirmBody }),
       });
       if (!confirm.ok) throw new Error("confirm failed");
 
       setState("done");
-      posthog.capture("property_image_uploaded", { group });
+      posthog.capture(uploadedEvent, { group });
       setPending((p) => p.filter((u) => u.key !== key));
       URL.revokeObjectURL(previewUrl);
       router.refresh();
@@ -122,7 +147,7 @@ export function ImageManager({
   }
 
   async function patch(id: string, body: Record<string, unknown>) {
-    const res = await fetch(`/api/property-images/${id}`, {
+    const res = await fetch(`${imagesRoute}/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -135,7 +160,7 @@ export function ImageManager({
   }
 
   async function remove(id: string) {
-    const res = await fetch(`/api/property-images/${id}`, { method: "DELETE" });
+    const res = await fetch(`${imagesRoute}/${id}`, { method: "DELETE" });
     if (!res.ok) {
       toast.error("Could not remove that photo.");
       return;
@@ -149,12 +174,12 @@ export function ImageManager({
     const b = images[index + direction];
     if (!a || !b) return;
     await Promise.all([
-      fetch(`/api/property-images/${a.id}`, {
+      fetch(`${imagesRoute}/${a.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sortOrder: b.sortOrder }),
       }),
-      fetch(`/api/property-images/${b.id}`, {
+      fetch(`${imagesRoute}/${b.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sortOrder: a.sortOrder }),
@@ -300,6 +325,9 @@ export function ImageManager({
                 />
               )}
               {!showAltText && <AttachmentDescription>{group}</AttachmentDescription>}
+              {markFirstAsCover && index === 0 && (
+                <AttachmentDescription>Cover photo</AttachmentDescription>
+              )}
             </AttachmentContent>
             <AttachmentActions>
               {showReorder && (

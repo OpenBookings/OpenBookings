@@ -304,6 +304,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         onEditAvailability={(prefill) => openDialog("availability", prefill)}
         onEditRestrictions={(prefill) => openDialog("restrictions", prefill)}
         onReopen={(prefill) => openDialog("reopen", prefill)}
+        onEditBaseRate={(prefill) => openDialog("base-rate", prefill)}
         onStage={draft.stage}
       />
 

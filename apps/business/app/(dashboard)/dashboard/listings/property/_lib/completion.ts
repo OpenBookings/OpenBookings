@@ -1,11 +1,8 @@
+import type { SectionStatus } from "../../_lib/editor";
 import { hasPin } from "./geo";
 import { SECTION_IDS, type PropertyEditorData, type SectionId } from "./types";
 
-export interface SectionStatus {
-  complete: boolean;
-  /** Human-readable labels, printed directly in rail and publish tooltips. */
-  missing: string[];
-}
+export type { SectionStatus };
 
 /** Minimum gallery photos before a listing looks like a listing. */
 const MIN_GALLERY = 3;

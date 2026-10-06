@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { saveOverview } from "../../_lib/actions";
 import type { AmenityCatalogEntry } from "../../_lib/query";
 import { AmenityPicker } from "../amenity-picker";
-import { SectionForm } from "../section-form";
+import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
 
 const MIN_DESCRIPTION = 120;
@@ -31,7 +31,7 @@ export function OverviewSection({
       sectionId="overview"
       title="Overview"
       description="The pitch guests read after your photos, and the note that closes the page."
-      propertyId={property.id}
+      entityId={property.id}
       initialValues={{
         overviewHeadline: content.overviewHeadline ?? "",
         overviewDescription: content.overviewDescription ?? "",
