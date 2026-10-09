@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { BedDouble, Check, LoaderCircle, ShieldCheck, UserRound } from 'lucide-react';
 import { AuthFormFields, AuthFormPhaseProvider } from '@/components/auth/AuthFormFields';
@@ -203,9 +204,10 @@ export function CheckoutGate({
           card is hand-rolled glass, so it has to supply the same thing.
         */}
         <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-black/40 p-8 text-white shadow-2xl backdrop-blur-2xl">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
+            width={43}
+            height={32}
             alt="OpenBookings"
             className="pointer-events-none mx-auto h-8 w-auto select-none"
             draggable="false"

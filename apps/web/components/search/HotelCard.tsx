@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import {
   ArrowRight,
   ChevronLeft,
@@ -56,9 +57,11 @@ function buildHotelImageUrl(hotelId: string, image: string): string {
 function HotelCardHeroImage({
   gallery,
   hotelName,
+  eager,
 }: {
   gallery: string[];
   hotelName: string;
+  eager: boolean;
 }) {
   const [imageIndex, setImageIndex] = useState(0);
   const hasGallery = gallery.length > 1;
@@ -75,13 +78,17 @@ function HotelCardHeroImage({
       }
     >
       <div className="absolute inset-0 overflow-hidden">
-        <img
-          src={currentSrc}
-          alt={hotelName}
-          loading="lazy"
-          draggable="false"
-          className="block size-full object-cover object-[center_15%] transition-transform duration-600 ease-out group-hover:scale-105"
-        />
+        {currentSrc ? (
+          <Image
+            src={currentSrc}
+            alt={hotelName}
+            fill
+            sizes="(min-width: 1024px) 320px, (min-width: 768px) 50vw, 100vw"
+            loading={eager ? "eager" : "lazy"}
+            draggable={false}
+            className="object-cover object-[center_15%] transition-transform duration-600 ease-out group-hover:scale-105"
+          />
+        ) : null}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[60px] bg-linear-to-b from-black/25 to-transparent" />
       </div>
 
@@ -171,7 +178,7 @@ function TruncatedName({ name }: { name: string }) {
   );
 }
 
-export function HotelCard({ hotel }: { hotel: HotelCardData }) {
+export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eager?: boolean }) {
   const gallery =
     hotel.images?.filter(Boolean).map((image) => buildHotelImageUrl(hotel.id, image)) ?? [];
   const displayRating = Math.round(
@@ -189,6 +196,7 @@ export function HotelCard({ hotel }: { hotel: HotelCardData }) {
       }
     >
       <HotelCardHeroImage
+        eager={eager}
         key={hotel.id}
         gallery={gallery}
         hotelName={hotel.name}
