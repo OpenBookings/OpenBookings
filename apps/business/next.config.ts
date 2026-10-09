@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
+import { DEVICE_SIZES, IMAGE_QUALITIES, IMAGE_SIZES } from "@openbookings/images";
 
 // `eval` is only needed by the dev-time React Refresh runtime, and the
 // localhost origin only by the local guest app, so neither ships to
@@ -31,9 +32,20 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@openbookings/analytics", "@openbookings/maps", "@openbookings/messaging"],
+  transpilePackages: ["@openbookings/analytics", "@openbookings/images", "@openbookings/maps", "@openbookings/messaging"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
+
+  // Resizing is done by Cloudflare on cdn.openbookings.co, not by this
+  // server. The size lists are deliberately short: each width is a separately
+  // billed transformation per image.
+  images: {
+    loader: "custom",
+    loaderFile: "./lib/image-loader.ts",
+    imageSizes: [...IMAGE_SIZES],
+    deviceSizes: [...DEVICE_SIZES],
+    qualities: [...IMAGE_QUALITIES],
+  },
 
   allowedDevOrigins: ["127.0.0.1"],
 

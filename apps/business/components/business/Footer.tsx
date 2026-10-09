@@ -17,7 +17,7 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
         <div className="mb-12 flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-[340px]">
             <div className="mb-4 flex items-center gap-[11px]">
-              <Image src="/OB-LOGO-LIGHT.png" alt="OpenBookings Business" width={100} height={100} />
+              <Image src="/OB-LOGO-LIGHT.png" alt="OpenBookings Business" width={100} height={75} unoptimized />
               <span className="text-[15px] font-medium tracking-[-0.02em] text-white">OpenBookings Business</span>
             </div>
             <p className="text-[13px] leading-[1.7] text-white/28">

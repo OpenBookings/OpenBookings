@@ -49,6 +49,7 @@ export function FoundersNote() {
                   alt="Wouter van der Wal, founder of OpenBookings"
                   width={176}
                   height={176}
+                  unoptimized
                   className="shrink-0"
                 />
                 <div>
