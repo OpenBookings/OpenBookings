@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
+import { cdnImageSrcSet, cdnImageUrl } from "@openbookings/images";
 import { motion, AnimatePresence } from "framer-motion";
 import { Images, X, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -70,7 +72,10 @@ function GalleryDialog({
           <AnimatePresence mode="wait">
             <motion.img
               key={current}
-              src={url}
+              src={cdnImageUrl(url, { width: 1920 })}
+              srcSet={cdnImageSrcSet(url, [960, 1440, 1920, 2560])}
+              sizes="100vw"
+              decoding="async"
               alt={alt_text ?? `Gallery image ${current + 1}`}
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -167,10 +172,12 @@ export function GalleryBar({ images }: { images: GalleryImage[] }) {
               style={{ width: 195 }}
               onClick={() => openDialog(i)}
             >
-              <img
+              <Image
                 src={img.url}
                 alt={img.alt_text ?? `Property image ${(i % images.length) + 1}`}
-                className="w-full h-full object-cover"
+                fill
+                sizes="195px"
+                className="object-cover"
                 draggable={false}
               />
             </div>

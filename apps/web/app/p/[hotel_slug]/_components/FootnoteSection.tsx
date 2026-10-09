@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 
 export function FootnoteSection({ hotel }: { hotel: HotelPageData }) {
@@ -7,9 +8,11 @@ export function FootnoteSection({ hotel }: { hotel: HotelPageData }) {
         {/* Logos */}
         <div className="flex items-center justify-center gap-8 mb-8">
           {hotel.logo_image_url ? (
-            <img
+            <Image
               src={hotel.logo_image_url}
               alt={`${hotel.name} logo`}
+              width={112}
+              height={112}
               className="h-auto w-28 object-contain"
             />
           ) : (
@@ -18,9 +21,11 @@ export function FootnoteSection({ hotel }: { hotel: HotelPageData }) {
           <span className="flex items-center justify-center h-14 text-white/20 text-3xl font-thin select-none leading-none">
             ×
           </span>
-          <img
+          <Image
             src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
             alt="OpenBookings"
+            width={112}
+            height={84}
             className="h-auto w-28 object-contain"
           />
         </div>

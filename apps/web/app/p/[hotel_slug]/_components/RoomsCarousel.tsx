@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, Calendar, Users, Minus, Plus, Heart,
@@ -299,11 +300,19 @@ function RoomsCarousel({ rooms, activeIndex, onNavigate, liked, onToggleLike, on
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.55 }}
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{
-                    backgroundImage: room.images[imageIndex] ? `url('${room.images[imageIndex]}')` : undefined,
-                  }}
-                />
+                  className="absolute inset-0"
+                >
+                  {room.images[imageIndex] && (
+                    <Image
+                      src={room.images[imageIndex]}
+                      alt=""
+                      fill
+                      sizes="(min-width: 1152px) 1056px, 100vw"
+                      className="object-cover object-center"
+                      draggable={false}
+                    />
+                  )}
+                </motion.div>
               </AnimatePresence>
 
               <div className="absolute inset-0 bg-linear-to-r from-black/45 via-transparent to-transparent" />
