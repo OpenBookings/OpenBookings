@@ -1,3 +1,4 @@
+import { cdnImageUrl } from "@openbookings/images";
 import {
   LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog,
 } from "lucide-react";
@@ -139,7 +140,7 @@ export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
                   style={note ? { cursor: "help" } : undefined}
                 >
                   {artwork_url ? (
-                    <img src={artwork_url} alt={label} className="h-5 w-10 object-contain" draggable={false} loading="lazy" decoding="async" />
+                    <img src={cdnImageUrl(artwork_url, { width: 96 })} alt={label} className="h-5 w-10 object-contain" draggable={false} loading="lazy" decoding="async" />
                   ) : (
                     // No logo in the catalogue — the name is the tile.
                     <span className={`text-xs font-medium text-white/55 tracking-wide${note ? " border-b border-dashed border-white/30" : ""}`}>
