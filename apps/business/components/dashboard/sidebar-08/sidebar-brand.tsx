@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 import type { PropertyBrand } from "@/lib/property-brand";
@@ -39,8 +40,10 @@ export function SidebarBrand({ brand }: { brand?: PropertyBrand | null }) {
       className="group-data-[collapsible=icon]:hidden"
     >
       <a href="/dashboard">
-        <img
+        <Image
           src={OPENBOOKINGS_MARK}
+          width={96}
+          height={72}
           // Decorative in the co-branded state, where it is one half of a
           // lockup the property logo's alt already names; decorative in the
           // default state too, where the adjacent text reads "OpenBookings".
@@ -63,8 +66,10 @@ export function SidebarBrand({ brand }: { brand?: PropertyBrand | null }) {
         {coBranded ? (
           <>
             <span aria-hidden className="h-6 w-px shrink-0 bg-sidebar-border" />
-            <img
+            <Image
               src={logoUrl as string}
+              width={128}
+              height={32}
               alt={brand?.name ?? ""}
               onError={() => setLogoFailed(true)}
               // The other equal share of the row, sized and centred exactly

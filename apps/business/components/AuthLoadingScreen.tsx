@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 interface Props {
   /** Defaults to true so the component can be used directly as a Suspense/loading.tsx fallback. */
   visible?: boolean;
@@ -17,8 +19,11 @@ export function AuthLoadingScreen({ visible = true }: Props) {
         pointerEvents: visible ? "auto" : "none",
       }}
     >
-      <img
+      <Image
         src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
+        width={128}
+        height={96}
+        preload
         alt="OpenBookings"
         draggable="false"
         className="h-16 sm:h-20 w-auto select-none pointer-events-none animate-pulse"

@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs";
 import createMDX from "@next/mdx";
+import { DEVICE_SIZES, IMAGE_QUALITIES, IMAGE_SIZES } from "@openbookings/images";
 
 // Stripe.js and the Payment Element load scripts, open iframes and call the
 // API from Stripe-owned origins, so each needs allowing explicitly.
@@ -44,9 +45,20 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@openbookings/analytics", "@openbookings/maps"],
+  transpilePackages: ["@openbookings/analytics", "@openbookings/images", "@openbookings/maps"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
+
+  // Resizing is done by Cloudflare on cdn.openbookings.co, not by this
+  // server. The size lists are deliberately short: each width is a separately
+  // billed transformation per image.
+  images: {
+    loader: "custom",
+    loaderFile: "./lib/image-loader.ts",
+    imageSizes: [...IMAGE_SIZES],
+    deviceSizes: [...DEVICE_SIZES],
+    qualities: [...IMAGE_QUALITIES],
+  },
 
   allowedDevOrigins: ["127.0.0.1"],
 

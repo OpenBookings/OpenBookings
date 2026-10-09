@@ -3,7 +3,8 @@
 import { useState, useEffect, startTransition, use } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { getRandomBackgroundImage } from "@/lib/background";
+import Image from "next/image";
+import { useBackdrop } from "@/lib/use-backdrop";
 
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Nav } from "@/components/nav";
@@ -31,11 +32,7 @@ export default function Home() {
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
   const [openGuestSelector, setOpenGuestSelector] = useState(false);
-  const [backgroundImage, setBackgroundImage] = useState<{
-    url: string;
-    name: string;
-  } | null>(null);
-  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
+  const backdrop = useBackdrop();
 
   function performSearch() {
     const params = new URLSearchParams();
@@ -64,64 +61,23 @@ export default function Home() {
   }, []);
 
 
-  // Set random background only on client side to avoid hydration mismatch
-  // Persist selection in localStorage; cache image bytes in Cache API
-  useEffect(() => {
-    const CACHE_NAME = "ob_backgrounds";
-
-    async function loadBackground() {
-      let bg: { url: string; name: string };
-
-      const stored = localStorage.getItem(CACHE_NAME);
-      if (stored) {
-        try {
-          bg = JSON.parse(stored);
-        } catch {
-          bg = getRandomBackgroundImage();
-          localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-        }
-      } else {
-        bg = getRandomBackgroundImage();
-        localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-      }
-
-      setBackgroundImage(bg);
-
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        let response = await cache.match(bg.url);
-        if (!response) {
-          await cache.add(bg.url);
-          response = await cache.match(bg.url);
-        }
-        if (response) {
-          const blob = await response.blob();
-          setBackgroundSrc(URL.createObjectURL(blob));
-          return;
-        }
-      } catch {
-        // Cache API unavailable (e.g. private browsing on some browsers)
-      }
-
-      // Fallback to direct URL
-      setBackgroundSrc(bg.url);
-    }
-
-    loadBackground();
-  }, []);
 
   return (
     <>
       <main className="min-h-screen text-white relative">
         {/* Background Image */}
-        <div
-          className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: backgroundSrc
-              ? `url('${backgroundSrc}')`
-              : undefined,
-          }}
-        >
+        <div className="fixed inset-0 bg-black">
+          {backdrop && (
+            <Image
+              src={backdrop.url}
+              alt=""
+              fill
+              sizes="100vw"
+              loading="eager"
+              fetchPriority="high"
+              className="object-cover object-center"
+            />
+          )}
           <div
             className="absolute inset-0"
             style={{
@@ -137,7 +93,7 @@ export default function Home() {
         <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="text-center translate-y-[12vh]" style={{ textShadow: "0 2px 24px rgba(0,0,0,0.85), 0 1px 6px rgba(0,0,0,0.6)" }}>
             <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-3 select-none">
-              Discover {backgroundImage?.name || ""}
+              Discover {backdrop?.name || ""}
             </h1>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight ml-0.5 text-gray-300 select-none">
               Quick, Easy & Open-Source

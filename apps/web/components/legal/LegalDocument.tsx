@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { LanguageSwitcher } from "@/components/legal/LanguageSwitcher";
 import { LegalTOC } from "@/components/legal/LegalTOC";
@@ -70,8 +71,10 @@ export function LegalDocument({
             being squeezed between two fixed-width neighbours. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-y-3 px-6 py-4 sm:grid sm:grid-cols-[1fr_auto_1fr]">
           <Link href="/" className="flex items-center gap-2 sm:justify-self-start">
-            <img
+            <Image
               src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
+              width={96}
+              height={72}
               alt="OpenBookings"
               className="h-8 w-auto"
               draggable="false"

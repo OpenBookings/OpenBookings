@@ -1,12 +1,20 @@
+import Image from "next/image";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 
 export function HeroSection({ hotel }: { hotel: HotelPageData }) {
   return (
     <section id="hero" className="relative h-screen overflow-hidden bg-[#0a0a0a]">
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url('${hotel.hero_image_url}')` }}
-      >
+      <div className="absolute inset-0">
+        {hotel.hero_image_url && (
+          <Image
+            src={hotel.hero_image_url}
+            alt=""
+            fill
+            preload
+            sizes="100vw"
+            className="object-cover object-center"
+          />
+        )}
         <div
           className="absolute inset-0"
           style={{

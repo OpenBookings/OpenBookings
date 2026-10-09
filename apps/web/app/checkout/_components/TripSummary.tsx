@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { ShieldCheck } from 'lucide-react';
 import { useCheckoutForm } from '@stripe/react-stripe-js/checkout';
 
@@ -83,24 +84,26 @@ function RoomIdentity({
     <div className="space-y-7 sm:space-y-9">
       <div className="flex items-center justify-center gap-4">
         {logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={propertyName} className="h-10 w-auto sm:h-12 object-contain" />
+          <Image src={logoUrl} alt={propertyName} width={128} height={48} className="h-10 w-auto sm:h-12 object-contain" />
         )}
         <span className="text-white/40 text-sm font-medium" aria-hidden="true">✕</span>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src="/OB-LOGO-LIGHT.png"
           alt="OpenBookings"
+          width={64}
+          height={48}
+          unoptimized
           className="h-10 w-auto sm:h-12 object-contain"
         />
       </div>
 
       <div className="flex items-center gap-5 sm:gap-7">
         {roomImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={roomImageUrl}
             alt=""
+            width={224}
+            height={126}
             className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
           />
         )}

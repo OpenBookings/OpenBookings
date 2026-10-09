@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -186,10 +187,9 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                     href={roomHref(room.id)}
                     className="flex items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
-                    <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                    <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
                       {room.coverUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={room.coverUrl} alt="" className="size-full object-cover" />
+                        <Image src={room.coverUrl} alt="" fill sizes="48px" className="object-cover" />
                       ) : (
                         <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
                       )}

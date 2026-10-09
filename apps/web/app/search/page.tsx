@@ -4,7 +4,8 @@ import { HotelCard, type HotelCardData } from "@/components/search/HotelCard";
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
-import { getRandomBackgroundImage } from "@/lib/background";
+import Image from "next/image";
+import { useBackdrop } from "@/lib/use-backdrop";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
@@ -74,7 +75,7 @@ function SearchPageInner() {
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
   const [openGuestSelector, setOpenGuestSelector] = useState(false);
-  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
+  const backdrop = useBackdrop();
 
   const [authError, setAuthError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("top");
@@ -145,46 +146,6 @@ function SearchPageInner() {
     childCount !== committed.children ||
     rooms !== committed.rooms;
 
-  useEffect(() => {
-    const CACHE_NAME = "openbookings-backgrounds";
-
-    async function loadBackground() {
-      let bg: { url: string; name: string };
-
-      const stored = localStorage.getItem("ob_backgrounds");
-      if (stored) {
-        try {
-          bg = JSON.parse(stored);
-        } catch {
-          bg = getRandomBackgroundImage();
-          localStorage.setItem("ob_backgrounds", JSON.stringify(bg));
-        }
-      } else {
-        bg = getRandomBackgroundImage();
-        localStorage.setItem("ob_backgrounds", JSON.stringify(bg));
-      }
-
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        let response = await cache.match(bg.url);
-        if (!response) {
-          await cache.add(bg.url);
-          response = await cache.match(bg.url);
-        }
-        if (response) {
-          const blob = await response.blob();
-          setBackgroundSrc(URL.createObjectURL(blob));
-          return;
-        }
-      } catch {
-        // Cache API unavailable (e.g. private browsing on some browsers)
-      }
-
-      setBackgroundSrc(bg.url);
-    }
-
-    loadBackground();
-  }, []);
 
   function performSearch() {
     const params = new URLSearchParams();
@@ -208,12 +169,19 @@ function SearchPageInner() {
   return (
     <div className="min-h-screen px-10 py-20 pb-[100px] font-sans">
       {/* Background layer */}
-      <div
-        className="fixed inset-0 bg-black bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: backgroundSrc ? `url('${backgroundSrc}')` : undefined,
-        }}
-      >
+      <div className="fixed inset-0 bg-black">
+        {backdrop && (
+          // Deliberately low resolution: it sits under a blur and a 70% black
+          // layer, so a quarter-width, low-quality image is indistinguishable.
+          <Image
+            src={backdrop.url}
+            alt=""
+            fill
+            sizes="25vw"
+            quality={40}
+            className="object-cover object-center"
+          />
+        )}
         <div
           className="absolute inset-0 backdrop-blur-md"
           style={{ background: "rgba(0,0,0,0.7)" }}
@@ -292,8 +260,9 @@ function SearchPageInner() {
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-8 items-start md:grid-cols-2 lg:grid-cols-3">
-              {sortedHotels.map((hotel) => (
-                <HotelCard key={hotel.id} hotel={hotel} />
+              {sortedHotels.map((hotel, index) => (
+                // The first row is above the fold at every breakpoint.
+                <HotelCard key={hotel.id} hotel={hotel} eager={index < 3} />
               ))}
             </div>
           )}

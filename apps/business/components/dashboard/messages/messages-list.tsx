@@ -40,7 +40,7 @@ function ThreadRow({
       <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-medium text-muted-foreground">
         {thread.guest_image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={thread.guest_image} alt="" className="size-full object-cover" />
+          <img src={thread.guest_image} alt="" className="size-full object-cover" loading="lazy" decoding="async" />
         ) : (
           initials(thread.guest_name)
         )}

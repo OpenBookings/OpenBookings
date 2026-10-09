@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { SessionEntryOverlay } from "@/components/SessionEntryOverlay";
 import { ONBOARDING_STEPS, STEP_TITLES, STEP_SUBTITLES, type OnboardingStep } from "./onboarding/steps";
@@ -17,8 +18,10 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       <SessionEntryOverlay />
       {/* Logo — top left */}
       <header className="px-8 pt-7 shrink-0">
-        <img
+        <Image
           src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
+          width={96}
+          height={72}
           alt="OpenBookings"
           className="h-8 w-auto select-none pointer-events-none"
           draggable="false"

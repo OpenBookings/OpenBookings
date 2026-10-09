@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -73,8 +74,11 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
           msUserSelect: "none",
         }}
       >
-        <img
+        <Image
           src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
+          width={96}
+          height={72}
+          preload
           alt="OpenBookings Logo"
           className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none"
           draggable="false"

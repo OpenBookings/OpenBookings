@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getRandomBackgroundImage } from "@/lib/background";
+import { useEffect } from "react";
+import Image from "next/image";
+import { useBackdrop } from "@/lib/use-backdrop";
 import { authClient } from "@/lib/auth-client";
 
 import { SS_AuthForm } from "@/components/auth/SS-AuthForm";
@@ -14,7 +15,7 @@ export function LoginClient({
   initialError?: string | null;
   signOutOnMount?: boolean;
 }) {
-  const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null);
+  const backdrop = useBackdrop();
 
   // The server page renders us with an error for non-business sessions;
   // clear that session so the user can retry with a business account.
@@ -30,55 +31,21 @@ export function LoginClient({
     }
   }, []);
 
-  useEffect(() => {
-    const CACHE_NAME = "ob_backgrounds";
-
-    async function loadBackground() {
-      let bg: { url: string; name: string };
-
-      const stored = localStorage.getItem(CACHE_NAME);
-      if (stored) {
-        try {
-          bg = JSON.parse(stored);
-        } catch {
-          bg = getRandomBackgroundImage();
-          localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-        }
-      } else {
-        bg = getRandomBackgroundImage();
-        localStorage.setItem(CACHE_NAME, JSON.stringify(bg));
-      }
-
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        let response = await cache.match(bg.url);
-        if (!response) {
-          await cache.add(bg.url);
-          response = await cache.match(bg.url);
-        }
-        if (response) {
-          const blob = await response.blob();
-          setBackgroundSrc(URL.createObjectURL(blob));
-          return;
-        }
-      } catch {
-        // Cache API unavailable (e.g. private browsing on some browsers)
-      }
-
-      setBackgroundSrc(bg.url);
-    }
-
-    loadBackground();
-  }, []);
 
   return (
     <main className="fixed inset-0 min-h-screen bg-background">
-      <div
-        className="absolute inset-0 bg-black bg-cover bg-center bg-no-repeat z-0"
-        style={{
-          backgroundImage: backgroundSrc ? `url('${backgroundSrc}')` : undefined,
-        }}
-      >
+      <div className="absolute inset-0 bg-black z-0">
+        {backdrop && (
+          <Image
+            src={backdrop.url}
+            alt=""
+            fill
+            sizes="100vw"
+            loading="eager"
+            fetchPriority="high"
+            className="object-cover object-center"
+          />
+        )}
         <div
           className="absolute inset-0"
           style={{

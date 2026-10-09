@@ -20,6 +20,7 @@
     "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
+    "@openbookings/images": "workspace:*",
     "@openbookings/maps": "workspace:*",
     "@openbookings/messaging": "workspace:*",
     "@openbookings/pricing": "workspace:*",
