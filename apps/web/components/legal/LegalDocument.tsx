@@ -73,8 +73,8 @@ export function LegalDocument({
           <Link href="/" className="flex items-center gap-2 sm:justify-self-start">
             <Image
               src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
-              width={43}
-              height={32}
+              width={96}
+              height={72}
               alt="OpenBookings"
               className="h-8 w-auto"
               draggable="false"

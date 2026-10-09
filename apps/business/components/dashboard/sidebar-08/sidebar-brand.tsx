@@ -42,8 +42,8 @@ export function SidebarBrand({ brand }: { brand?: PropertyBrand | null }) {
       <a href="/dashboard">
         <Image
           src={OPENBOOKINGS_MARK}
-          width={43}
-          height={32}
+          width={96}
+          height={72}
           // Decorative in the co-branded state, where it is one half of a
           // lockup the property logo's alt already names; decorative in the
           // default state too, where the adjacent text reads "OpenBookings".

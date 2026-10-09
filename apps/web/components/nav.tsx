@@ -76,8 +76,8 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
       >
         <Image
           src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
-          width={86}
-          height={64}
+          width={96}
+          height={72}
           preload
           alt="OpenBookings Logo"
           className="h-8 sm:h-10 md:h-16 w-auto select-none pointer-events-none"

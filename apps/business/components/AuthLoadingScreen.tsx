@@ -21,8 +21,8 @@ export function AuthLoadingScreen({ visible = true }: Props) {
     >
       <Image
         src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
-        width={107}
-        height={80}
+        width={128}
+        height={96}
         preload
         alt="OpenBookings"
         draggable="false"

@@ -20,8 +20,8 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       <header className="px-8 pt-7 shrink-0">
         <Image
           src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
-          width={43}
-          height={32}
+          width={96}
+          height={72}
           alt="OpenBookings"
           className="h-8 w-auto select-none pointer-events-none"
           draggable="false"

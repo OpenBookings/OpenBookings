@@ -206,8 +206,8 @@ export function CheckoutGate({
         <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-black/40 p-8 text-white shadow-2xl backdrop-blur-2xl">
           <Image
             src="https://cdn.openbookings.co/Public/Openbookings-logo-v2.png"
-            width={43}
-            height={32}
+            width={96}
+            height={72}
             alt="OpenBookings"
             className="pointer-events-none mx-auto h-8 w-auto select-none"
             draggable="false"
