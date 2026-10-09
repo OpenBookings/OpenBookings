@@ -2,9 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CoreInfoLocationStep, type CoreInfoLocationValues } from "../_steps/core-info-location";
+import dynamic from "next/dynamic";
+import type { CoreInfoLocationValues } from "../_steps/core-info-location";
 import { StepNav } from "../_components/step-nav";
 import { saveStepData, type CoreInfoLocationData } from "../actions";
+
+const CoreInfoLocationStep = dynamic(
+  () => import("../_steps/core-info-location").then((m) => m.CoreInfoLocationStep),
+  { ssr: false, loading: () => <div className="h-96 animate-pulse rounded-xl bg-white/5" aria-hidden /> },
+);
 
 const EMPTY_LOCATION: CoreInfoLocationValues = {
   streetAddress: "",

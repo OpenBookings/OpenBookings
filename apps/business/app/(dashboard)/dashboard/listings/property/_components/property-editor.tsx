@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,10 +20,16 @@ import type { AmenityCatalogEntry } from "../_lib/query";
 import { SECTION_IDS, SECTION_LABELS, type PropertyEditorData, type SectionId } from "../_lib/types";
 import { IdentitySection } from "./sections/identity";
 import { LegalSection } from "./sections/legal";
-import { LocationSection } from "./sections/location";
 import { OverviewSection } from "./sections/overview";
 import { PhotosSection } from "./sections/photos";
 import { PoliciesSection } from "./sections/policies";
+
+// The location section pulls in maplibre-gl, which no other section needs, so
+// it is fetched when the tab is first opened.
+const LocationSection = dynamic(() => import("./sections/location").then((m) => m.LocationSection), {
+  ssr: false,
+  loading: () => <div className="h-96 animate-pulse rounded-xl bg-muted" aria-hidden />,
+});
 
 interface PropertyEditorProps {
   data: PropertyEditorData;
