@@ -56,7 +56,7 @@ export function Nav() {
         <div className="absolute inset-0 bg-white/3 mask-[linear-gradient(to_bottom,black_0%,transparent_100%)]" />
       </div>
       <div className="flex items-center gap-[11px]">
-        <img src="/OB-LIGHT-WORDMARK.png" alt="OpenBookings Business" className="h-10 w-auto" />
+        <Image src="/OB-LIGHT-WORDMARK.png" alt="OpenBookings Business" width={200} height={40} unoptimized className="h-10 w-auto" />
       </div>
       <div className="flex items-center gap-2.5">
         <Link

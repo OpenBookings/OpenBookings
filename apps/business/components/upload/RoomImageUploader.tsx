@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import Uppy, {
   type Body,
@@ -114,13 +115,9 @@ export function RoomImageUploader({ roomId, existingImages = [] }: Props) {
       {confirmedImages.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {confirmedImages.map((img) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={img.id}
-              src={img.url}
-              alt=""
-              className="aspect-square w-full rounded-md object-cover"
-            />
+            <div key={img.id} className="relative aspect-square w-full overflow-hidden rounded-md">
+              <Image src={img.url} alt="" fill sizes="(min-width: 768px) 200px, 33vw" className="object-cover" />
+            </div>
           ))}
         </div>
       )}

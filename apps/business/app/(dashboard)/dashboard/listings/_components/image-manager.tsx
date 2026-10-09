@@ -1,5 +1,7 @@
 "use client";
 
+import { cdnImageSrcSet, cdnImageUrl } from "@openbookings/images";
+import Image from "next/image";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -230,12 +232,15 @@ export function ImageManager({
           )}
         >
           {src && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={src}
               alt=""
+              fill
+              sizes="(min-width: 768px) 448px, 100vw"
+              // An in-flight upload previews from a blob: URL, which has no
+              // resized variants to build a srcset from.
+              unoptimized={src.startsWith("blob:")}
               className={cn(
-                "size-full",
                 single.aspect === "wide" ? "object-cover" : "object-contain p-3",
                 busy && "opacity-60",
               )}
@@ -308,7 +313,14 @@ export function ImageManager({
           <Attachment key={image.id} state="done" size="default" orientation="vertical">
             <AttachmentMedia variant="image">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image.url} alt={image.altText ?? ""} />
+              <img
+                src={cdnImageUrl(image.url, { width: 256 })}
+                srcSet={cdnImageSrcSet(image.url, [256, 480])}
+                sizes="160px"
+                alt={image.altText ?? ""}
+                loading="lazy"
+                decoding="async"
+              />
             </AttachmentMedia>
             <AttachmentContent>
               {showAltText && (
