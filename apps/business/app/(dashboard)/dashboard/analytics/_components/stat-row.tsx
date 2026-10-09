@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EM_DASH } from "@/lib/analytics/format";
 import type { Delta, StatValue, Widget } from "@/lib/analytics/types";
 import { cn } from "@/lib/utils";
+import { useEmpty } from "./empty-context";
 
 /**
  * Colour says which way the figure moved, not whether that is good. Metrics
@@ -42,8 +43,13 @@ interface StatProps {
   hrefLabel?: string;
 }
 
-/** One number: a large figure, a small label, a delta when there is one. No box. */
+/**
+ * One number: a large figure, a small label, a delta when there is one. No box.
+ * Before the first booking it reads zero, with nothing beside it.
+ */
 export function Stat({ label, widget, format, info, note, href, hrefLabel }: StatProps) {
+  const empty = useEmpty();
+  const zeroed = empty !== null && empty.variant !== "filtered";
   const stat = widget.ok ? widget.value : null;
   return (
     <div className="min-w-0">
@@ -63,12 +69,12 @@ export function Stat({ label, widget, format, info, note, href, hrefLabel }: Sta
       </dt>
       <dd className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-semibold text-2xl tabular-nums tracking-tight">
-          {stat ? format(stat.value) : EM_DASH}
+          {zeroed ? format(0) : stat ? format(stat.value) : EM_DASH}
         </span>
-        {stat?.delta ? <DeltaChip delta={stat.delta} /> : null}
+        {stat?.delta && !zeroed ? <DeltaChip delta={stat.delta} /> : null}
       </dd>
-      {note ? <p className="mt-0.5 text-muted-foreground text-xs">{note}</p> : null}
-      {href && hrefLabel ? (
+      {note && !zeroed ? <p className="mt-0.5 text-muted-foreground text-xs">{note}</p> : null}
+      {href && hrefLabel && !zeroed ? (
         <Link href={href} className="mt-0.5 inline-block text-xs underline underline-offset-4">
           {hrefLabel}
         </Link>

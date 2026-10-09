@@ -9,11 +9,14 @@ interface StackedBarProps {
   summary: string;
 }
 
-/** Parts of a whole as one horizontal bar. The legend carries the numbers. */
+/**
+ * Parts of a whole as one horizontal bar. The legend carries the names and the
+ * numbers in the same order, and a gap marks each boundary, so hue is not the only cue.
+ */
 export function StackedBar({ rows, format, summary }: StackedBarProps) {
   return (
     <div>
-      <div className="flex h-3 w-full overflow-hidden rounded-sm" role="img" aria-label={summary}>
+      <div className="flex h-3 w-full gap-px overflow-hidden rounded-sm" role="img" aria-label={summary}>
         {rows.map((row, index) => (
           <div
             key={row.key}

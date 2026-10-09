@@ -241,6 +241,8 @@ export interface PageData<P extends PageId = PageId> {
   isDemo: boolean;
   /** False only for a host who has never had a booking. */
   hasAnyBookings: boolean;
+  /** False when no booking was made in the period and none stays in it. */
+  periodHasBookings: boolean;
   range: DateRange;
   comparison: DateRange | null;
   /** The comparison actually applied, after any fallback. */
