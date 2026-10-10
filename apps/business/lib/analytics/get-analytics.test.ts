@@ -40,7 +40,7 @@ describe("getPageData", () => {
   test("outside demo there are no facts and no bookings, on every page", async () => {
     for (const page of PAGE_IDS) {
       const data = await getPageData(page, query({ demo: false }));
-      expect(data).toMatchObject({ page, isDemo: false, hasAnyBookings: false, comparison: null });
+      expect(data).toMatchObject({ page, isDemo: false, hasAnyBookings: false, periodHasBookings: false, comparison: null });
       expect(numbers(data).every(Number.isFinite)).toBe(true);
     }
   });
@@ -48,7 +48,7 @@ describe("getPageData", () => {
   test("demo fills every page", async () => {
     for (const page of PAGE_IDS) {
       const data = await getPageData(page, query());
-      expect(data).toMatchObject({ page, isDemo: true, hasAnyBookings: true, compare: "previous" });
+      expect(data).toMatchObject({ page, isDemo: true, hasAnyBookings: true, periodHasBookings: true, compare: "previous" });
       expect(data.comparison).not.toBeNull();
     }
   });
@@ -65,6 +65,7 @@ describe("getPageData", () => {
   test("a range older than all history renders zeros with no comparison, not the never-booked state", async () => {
     const data = await getPageData("revenue", query({ period: custom("2022-01-01", "2022-01-31") }));
     expect(data.hasAnyBookings).toBe(true);
+    expect(data.periodHasBookings).toBe(false);
     expect(data.comparison).toBeNull();
     expect(value(data.view.revenue)).toEqual({ value: 0, delta: null });
     expect(data.view.overTime).toMatchObject({ ok: true, sample: 0 });
@@ -75,6 +76,8 @@ describe("getPageData", () => {
     const revenue = await getPageData("revenue", query({ period: future }));
     expect(value(revenue.view.revenue).value).toBe(0);
     expect(revenue.view.revenue).toMatchObject({ sample: 0 });
+    // Stays in the period count, so the page is not treated as filtered to nothing.
+    expect(revenue.periodHasBookings).toBe(true);
 
     const occupancy = await getPageData("occupancy", query({ period: future }));
     expect(value(occupancy.view.nightsSold).value).toBeGreaterThan(0);

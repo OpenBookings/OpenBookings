@@ -4,7 +4,7 @@ import { deriveGuests } from "./derive/guests";
 import { deriveOccupancy } from "./derive/occupancy";
 import { derivePricing } from "./derive/pricing";
 import { deriveRevenue } from "./derive/revenue";
-import { earliestFactDate } from "./metrics";
+import { bookingDate, earliestFactDate, inRange } from "./metrics";
 import type { PageId } from "./pages";
 import { comparisonRange, granularityFor, shiftYears, type CompareMode, type Period } from "./period";
 import type { DeriveContext, Facts, IsoDate, PageData, PageViews } from "./types";
@@ -58,6 +58,10 @@ export async function getPageData<P extends PageId>(page: P, query: PageQuery): 
     page,
     isDemo: demo,
     hasAnyBookings: facts.bookings.length > 0,
+    // Either basis counts: a stay in the period still fills the stay-date widgets.
+    periodHasBookings: facts.bookings.some(
+      (b) => inRange(bookingDate(b), period) || (b.checkIn <= period.to && b.checkOut > period.from),
+    ),
     range: { from: period.from, to: period.to },
     comparison,
     compare,

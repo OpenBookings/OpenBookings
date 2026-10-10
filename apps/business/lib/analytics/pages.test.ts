@@ -9,13 +9,6 @@ describe("pages", () => {
   test("each path is the id under the analytics root", () => {
     for (const id of PAGE_IDS) expect(PAGES[id].path).toBe(`/dashboard/analytics/${id}`);
   });
-
-  test("every page has a ghost with stats and at least one frame", () => {
-    for (const id of PAGE_IDS) {
-      expect(PAGES[id].ghost.stats.length).toBeGreaterThan(0);
-      expect(PAGES[id].ghost.frames.length).toBeGreaterThan(0);
-    }
-  });
 });
 
 describe("carryQuery", () => {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ComponentType } from "react";
+import { filteredAction, neverBookedVariant } from "@/lib/analytics/empty-state";
 import { getPageData, isDemoParam } from "@/lib/analytics/get-analytics";
 import { carryQuery, PAGES, type PageId } from "@/lib/analytics/pages";
 import {
@@ -13,7 +14,8 @@ import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "@/lib/analyt
 import type { AnyPageData, PageData } from "@/lib/analytics/types";
 import { getServerSession } from "@/lib/auth";
 import { DemoBanner } from "./demo-banner";
-import { GhostPage } from "./ghost-page";
+import { EmptyProvider } from "./empty-context";
+import { FilteredPanel, NeverBookedCover } from "./empty-state";
 import { PageHeader } from "./page-header";
 
 export interface AnalyticsRouteProps {
@@ -32,8 +34,10 @@ async function loadReadiness(userId: string, today: string): Promise<ReadinessIt
 /**
  * Everything the five pages share: the session check, the period, comparison
  * and demo flag from the URL, one getPageData() call, and the header, banner
- * and empty state around whichever view is being read. The request never
- * says which property: there is nothing here to tamper with.
+ * and empty state around whichever view is being read. A host with no bookings
+ * gets the real view at zero under a blurred cover with one message on it.
+ * Demo data is internal: the `demo` flag works, and nothing on the page offers
+ * it. The request never says which property: there is nothing here to tamper with.
  */
 export async function AnalyticsPage<P extends PageId>({
   page,
@@ -74,30 +78,44 @@ export async function AnalyticsPage<P extends PageId>({
     />
   );
 
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (first !== undefined) search.set(key, first);
+  }
+
   if (neverBooked) {
-    const search = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      const first = Array.isArray(value) ? value[0] : value;
-      if (first !== undefined) search.set(key, first);
-    }
-    search.set("demo", "1");
+    const readiness = await loadReadiness(session.user.id, today);
+    const variant = neverBookedVariant(readiness);
     return (
       <>
         {header}
-        <GhostPage
-          meta={meta}
-          readiness={await loadReadiness(session.user.id, today)}
-          demoHref={`${meta.path}${carryQuery(search)}`}
-        />
+        <NeverBookedCover variant={variant} readiness={readiness}>
+          <EmptyProvider variant={variant}>
+            <View data={data} />
+          </EmptyProvider>
+        </NeverBookedCover>
       </>
     );
   }
 
+  const filtered = !data.periodHasBookings;
   return (
     <>
       {demo ? <DemoBanner /> : null}
       {header}
-      <View data={data} />
+      <EmptyProvider
+        variant={filtered ? "filtered" : undefined}
+        panel={
+          filtered ? (
+            <FilteredPanel
+              action={filteredAction(meta.path, new URLSearchParams(carryQuery(search)), period, today)}
+            />
+          ) : undefined
+        }
+      >
+        <View data={data} />
+      </EmptyProvider>
     </>
   );
 }
