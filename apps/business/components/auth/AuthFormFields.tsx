@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
+import { usePasskeySignIn } from "./use-passkey-sign-in";
 
 export type AuthFormCardPhase = "idle" | "sending" | "email_sent" | "social";
 
@@ -55,9 +56,12 @@ export function AuthFormWelcomeTitle() {
 export function AuthFormFields({
     onSignInSuccess,
     initialError,
+    offerPasskey = true,
 }: {
     onSignInSuccess?: () => void;
     initialError?: string | null;
+    /** Off while the page is clearing a session, so the two don't race. */
+    offerPasskey?: boolean;
 }) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
@@ -73,6 +77,8 @@ export function AuthFormFields({
     } | null>(null);
 
     const setCardPhase = useContext(AuthFormPhaseContext)?.setPhase;
+
+    usePasskeySignIn(offerPasskey);
 
     useEffect(() => {
         if (!setCardPhase) return;
@@ -248,6 +254,8 @@ export function AuthFormFields({
                             type="email"
                             placeholder="you@domain.com"
                             required
+                            // "webauthn" lets the browser suggest a passkey here.
+                            autoComplete="username webauthn"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="flex-1 h-10"

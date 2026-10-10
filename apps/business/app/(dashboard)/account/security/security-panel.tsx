@@ -1,57 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bell } from "lucide-react";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { describeDevice } from "@/lib/device";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useStepUp } from "@/components/security/step-up-dialog";
+import { rememberPasskey } from "@/lib/passkey-hint";
+import { isPasskeyPromptCancelled, passkeyErrorMessage } from "@/lib/passkey-errors";
+import { deriveProtection, type ProtectionTaskId } from "@/lib/security-tasks";
+import {
+  LastPasskeyDialog,
+  PasskeyNameDialog,
+  RemovePasskeyDialog,
+  type ActionResult,
+} from "./_components/passkey-dialogs";
+import { ProtectionCard } from "./_components/protection-card";
+import {
+  PasskeysSection,
+  SessionsSection,
+  passkeyLabel,
+  type Passkey,
+  type Session,
+} from "./_components/security-sections";
 
-type PasskeyRow = {
-  id: string;
-  name?: string | null;
-  createdAt?: string | Date | null;
-  backedUp?: boolean;
-};
+/** Which dialog is open, and for which passkey. One at a time. */
+type OpenDialog =
+  | { kind: "add" }
+  | { kind: "rename"; passkey: Passkey }
+  | { kind: "remove"; passkey: Passkey }
+  | { kind: "last"; passkey: Passkey }
+  | null;
 
-type SessionRow = {
-  token: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-  createdAt?: string | Date | null;
-};
-
-function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
+function activity(session: Session): number {
+  return new Date(session.updatedAt ?? session.createdAt ?? 0).getTime();
 }
 
 export function SecurityPanel() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [passkeysFailed, setPasskeysFailed] = useState(false);
+  const [sessionsFailed, setSessionsFailed] = useState(false);
 
-  const [passkeys, setPasskeys] = useState<PasskeyRow[]>([]);
-  const [addingPasskey, setAddingPasskey] = useState(false);
-  const [passkeyName, setPasskeyName] = useState("");
-
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [totpUri, setTotpUri] = useState<string | null>(null);
-  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
-  const [totpCode, setTotpCode] = useState("");
-  const [totpPending, setTotpPending] = useState(false);
-
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [passkeys, setPasskeys] = useState<Passkey[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [currentToken, setCurrentToken] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  // Setup for the authenticator app is no longer offered here; a host who
+  // enabled one earlier can still use it to pass the step-up check.
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+
+  const [dialog, setDialog] = useState<OpenDialog>(null);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
+  const sessionsHeading = useRef<HTMLHeadingElement>(null);
 
   // Adding or removing a factor is gated: the server asks for a fresh check
   // first, and this turns that refusal into a prompt instead of an error.
@@ -60,20 +63,25 @@ export function SecurityPanel() {
     hasAuthenticator: twoFactorEnabled,
   });
 
+  // Reloads the lists. A list that fails to load keeps what it last showed
+  // out of sight behind its own retry card; the other one is unaffected.
   const refresh = useCallback(async () => {
-    setError(null);
     const [passkeyResult, sessionsResult, current] = await Promise.all([
       authClient.passkey.listUserPasskeys(),
       authClient.listSessions(),
       authClient.getSession(),
     ]);
-    if (passkeyResult.data) setPasskeys(passkeyResult.data as PasskeyRow[]);
-    if (sessionsResult.data) setSessions(sessionsResult.data as SessionRow[]);
+    if (passkeyResult.data) setPasskeys(passkeyResult.data as Passkey[]);
+    if (sessionsResult.data) setSessions(sessionsResult.data as Session[]);
     if (current.data) {
       setCurrentToken(current.data.session.token);
+      setEmail(current.data.user.email);
       const user = current.data.user as { twoFactorEnabled?: boolean | null };
       setTwoFactorEnabled(!!user.twoFactorEnabled);
     }
+    setPasskeysFailed(!passkeyResult.data);
+    // Without the current session there is no telling which row is this device.
+    setSessionsFailed(!sessionsResult.data || !current.data);
     setLoading(false);
   }, []);
 
@@ -85,272 +93,204 @@ export function SecurityPanel() {
     void refresh();
   }, [refresh]);
 
-  const addPasskey = async () => {
-    setAddingPasskey(true);
-    setError(null);
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await refresh();
+    } catch {
+      // Still failing; the retry card stays.
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const orderedSessions = useMemo(
+    () =>
+      [...sessions].sort((a, b) => {
+        if (a.token === currentToken) return -1;
+        if (b.token === currentToken) return 1;
+        return activity(b) - activity(a);
+      }),
+    [sessions, currentToken],
+  );
+  const otherSessions = orderedSessions.filter((session) => session.token !== currentToken);
+  const protection = deriveProtection({ passkeys, otherSessionCount: otherSessions.length });
+
+  const addPasskey = async (name: string): Promise<ActionResult> => {
     try {
       const result = await guard(() =>
-        authClient.passkey.addPasskey({ name: passkeyName.trim() || undefined }),
+        authClient.passkey.addPasskey({ name: name || describeDevice(navigator.userAgent) }),
       );
       if (result?.error) {
-        setError(result.error.message ?? "Could not add the passkey.");
-      } else {
-        setPasskeyName("");
-        await refresh();
+        // Dismissing the browser's prompt leaves the dialog as it was.
+        if (isPasskeyPromptCancelled(result.error)) return { ok: false };
+        return {
+          ok: false,
+          error: passkeyErrorMessage(result.error, "Could not add the passkey. Try again."),
+        };
       }
-    } catch {
-      setError("Passkey setup was cancelled or is not supported on this device.");
-    } finally {
-      setAddingPasskey(false);
-    }
-  };
-
-  const deletePasskey = async (id: string) => {
-    setError(null);
-    const result = await guard(() => authClient.passkey.deletePasskey({ id }));
-    if (result?.error) {
-      setError(result.error.message ?? "Could not delete the passkey.");
-    }
-    await refresh();
-  };
-
-  const enableTwoFactor = async () => {
-    setTotpPending(true);
-    setError(null);
-    const result = (await guard(() => authClient.twoFactor.enable({}))) as Awaited<
-      ReturnType<typeof authClient.twoFactor.enable>
-    >;
-    if (!result?.error && !result?.data) {
-      // The verification prompt was dismissed: nothing happened, nothing to report.
-    } else if (result.error || !result.data) {
-      setError(result.error?.message ?? "Could not start two-factor setup.");
-    } else {
-      setTotpUri(result.data.totpURI);
-      setBackupCodes(result.data.backupCodes);
-    }
-    setTotpPending(false);
-  };
-
-  const confirmTotp = async () => {
-    setTotpPending(true);
-    setError(null);
-    const result = await authClient.twoFactor.verifyTotp({ code: totpCode.trim() });
-    if (result.error) {
-      setError("That code didn't match. Check your authenticator app and try again.");
-    } else {
-      setTotpUri(null);
-      setTotpCode("");
-      setTwoFactorEnabled(true);
+      // No error and no data: the verification prompt was dismissed.
+      if (!(result && "data" in result && result.data)) return { ok: false };
+      // The login page may now open the passkey prompt on this browser.
+      rememberPasskey();
+      toast.success("Passkey added");
       await refresh();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Passkeys are not supported on this device or browser." };
     }
-    setTotpPending(false);
   };
 
-  const disableTwoFactor = async () => {
-    setTotpPending(true);
-    setError(null);
-    const result = await guard(() => authClient.twoFactor.disable({}));
-    if (result?.error) {
-      setError(result.error.message ?? "Could not disable two-factor.");
-    } else {
-      setTwoFactorEnabled(false);
-      setBackupCodes(null);
+  const renamePasskey = async (passkey: Passkey, name: string): Promise<ActionResult> => {
+    try {
+      const result = await authClient.passkey.updatePasskey({ id: passkey.id, name });
+      if (result.error) {
+        return { ok: false, error: passkeyErrorMessage(result.error, "Could not rename the passkey. Try again.") };
+      }
+      toast.success("Passkey renamed");
+      await refresh();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not rename the passkey. Check your connection and try again." };
     }
-    setTotpPending(false);
-    await refresh();
   };
 
-  const revokeSession = async (token: string) => {
-    setError(null);
-    await authClient.revokeSession({ token });
-    await refresh();
+  const removePasskey = async (passkey: Passkey): Promise<ActionResult> => {
+    try {
+      const result = await guard(() => authClient.passkey.deletePasskey({ id: passkey.id }));
+      if (result?.error) {
+        // The server may know better than this page did (LAST_PASSKEY).
+        await refresh();
+        return { ok: false, error: passkeyErrorMessage(result.error, "Could not remove the passkey. Try again.") };
+      }
+      if (!(result && "data" in result && result.data)) return { ok: false };
+      toast.success("Passkey removed");
+      await refresh();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Could not remove the passkey. Check your connection and try again." };
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-4 px-4 lg:px-6">
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
+  const signOutSession = async (session: Session) => {
+    // Gone at once; put back if the server did not agree.
+    setSessions((list) => list.filter((s) => s.token !== session.token));
+    const restore = () => {
+      setSessions((list) => (list.some((s) => s.token === session.token) ? list : [...list, session]));
+      toast.error("Could not sign that session out. Try again.");
+    };
+    try {
+      const result = await authClient.revokeSession({ token: session.token });
+      if (result.error) restore();
+      else toast.success("Session signed out");
+    } catch {
+      restore();
+    }
+  };
+
+  const signOutOthers = async () => {
+    const count = otherSessions.length;
+    setSigningOutOthers(true);
+    try {
+      const result = await authClient.revokeOtherSessions();
+      if (result.error) toast.error("Could not sign the other sessions out. Try again.");
+      else toast.success(`Signed out of ${count} other ${count === 1 ? "session" : "sessions"}`);
+    } catch {
+      toast.error("Could not sign the other sessions out. Check your connection and try again.");
+    } finally {
+      await refresh().catch(() => {});
+      setSigningOutOthers(false);
+    }
+  };
+
+  const onTask = (task: ProtectionTaskId) => {
+    if (task !== "sessions") return setDialog({ kind: "add" });
+    const heading = sessionsHeading.current;
+    if (!heading) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    heading.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    heading.focus({ preventScroll: true });
+  };
+
+  const close = () => setDialog(null);
+  const load = { loading, retrying, onRetry: () => void retry() };
 
   return (
-    <div className="flex flex-col gap-6 px-4 lg:px-6">
+    <>
       {stepUpDialog}
-      {error ? (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
+
+      <header>
+        <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] sm:text-[28px]">Security</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your passkeys, and the devices signed in to your account.
         </p>
-      ) : null}
+      </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Passkeys</CardTitle>
-          <CardDescription>
-            Sign in and confirm sensitive changes without codes. Passkeys sync
-            through iCloud Keychain or Google Password Manager, so they follow
-            you to your other devices — we still recommend adding a second
-            passkey on a different device or a hardware key.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {passkeys.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No passkeys yet. Add one to protect your team and account changes.
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {passkeys.map((pk) => (
-                <li key={pk.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">
-                      {pk.name || "Unnamed passkey"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Added {formatDate(pk.createdAt)}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {pk.backedUp ? <Badge variant="secondary">Synced</Badge> : null}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deletePasskey(pk.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              placeholder='Name this passkey (e.g. "Front desk MacBook")'
-              value={passkeyName}
-              onChange={(e) => setPasskeyName(e.target.value)}
-              className="sm:max-w-xs"
-            />
-            <Button onClick={addPasskey} disabled={addingPasskey}>
-              {addingPasskey ? "Waiting for device…" : "Add passkey"}
-            </Button>
+      {loading ? (
+        <Card className="gap-4 p-6">
+          <div className="flex items-center gap-5">
+            <Skeleton className="size-14 rounded-full" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-5 w-64 max-w-full" />
+              <Skeleton className="h-4 w-80 max-w-full" />
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <Skeleton className="h-[78px] w-full rounded-xl" />
+        </Card>
+      ) : passkeysFailed || sessionsFailed ? null : (
+        <ProtectionCard protection={protection} onAction={onTask} />
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Authenticator app</CardTitle>
-          <CardDescription>
-            Fallback for when a passkey isn&apos;t available. Enabling this also
-            issues one-time recovery codes — store them somewhere safe.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {twoFactorEnabled && !totpUri ? (
-            <div className="flex items-center justify-between gap-3">
-              <Badge>Enabled</Badge>
-              <Button variant="outline" size="sm" onClick={disableTwoFactor} disabled={totpPending}>
-                Disable
-              </Button>
-            </div>
-          ) : null}
+      <PasskeysSection
+        passkeys={passkeys}
+        load={{ ...load, failed: passkeysFailed }}
+        onAdd={() => setDialog({ kind: "add" })}
+        onRename={(passkey) => setDialog({ kind: "rename", passkey })}
+        onRemove={(passkey) =>
+          // Nothing is sent for the last one; the server would refuse it anyway.
+          setDialog({ kind: passkeys.length === 1 ? "last" : "remove", passkey })
+        }
+      />
 
-          {!twoFactorEnabled && !totpUri ? (
-            <Button onClick={enableTwoFactor} disabled={totpPending} className="self-start">
-              {totpPending ? "Setting up…" : "Set up authenticator app"}
-            </Button>
-          ) : null}
+      <SessionsSection
+        sessions={orderedSessions}
+        currentToken={currentToken}
+        load={{ ...load, failed: sessionsFailed }}
+        headingRef={sessionsHeading}
+        signingOutOthers={signingOutOthers}
+        onSignOut={(session) => void signOutSession(session)}
+        onSignOutOthers={() => void signOutOthers()}
+      />
 
-          {totpUri ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm">
-                Add this account to your authenticator app (1Password, Google
-                Authenticator, …) using the setup key below, then enter the
-                6-digit code it shows to finish.
-              </p>
-              <code className="break-all rounded-md bg-muted px-3 py-2 text-xs">
-                {totpUri}
-              </code>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  placeholder="123456"
-                  inputMode="numeric"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
-                  className="sm:max-w-32"
-                />
-                <Button onClick={confirmTotp} disabled={totpPending || totpCode.trim().length < 6}>
-                  Confirm
-                </Button>
-              </div>
-            </div>
-          ) : null}
+      <p className="flex items-start gap-2 border-t pt-5 text-[13px] text-muted-foreground">
+        <Bell aria-hidden className="mt-0.5 size-4 shrink-0" />
+        Every owner is emailed whenever a new device signs in.
+      </p>
 
-          {backupCodes ? (
-            <div className="flex flex-col gap-2">
-              <Separator />
-              <p className="text-sm font-medium">
-                Recovery codes — shown once, save them now
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Each code works one time if you lose access to your passkeys and
-                authenticator app.
-              </p>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                {backupCodes.map((code) => (
-                  <code key={code} className="rounded bg-muted px-2 py-1 text-xs">
-                    {code}
-                  </code>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Active sessions</CardTitle>
-          <CardDescription>
-            Everywhere this account is signed in. Revoke anything you don&apos;t
-            recognise — the owners are also emailed whenever a new device signs
-            in.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="flex flex-col divide-y">
-            {sessions.map((s) => (
-              <li key={s.token} className="flex items-center justify-between gap-3 py-2">
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-medium">
-                    {describeDevice(s.userAgent)}
-                    {s.token === currentToken ? (
-                      <Badge variant="secondary" className="ml-2">
-                        This device
-                      </Badge>
-                    ) : null}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {s.ipAddress || "unknown IP"} · signed in {formatDate(s.createdAt)}
-                  </span>
-                </div>
-                {s.token !== currentToken ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => revokeSession(s.token)}
-                  >
-                    Revoke
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-    </div>
+      <PasskeyNameDialog
+        open={dialog?.kind === "add" || dialog?.kind === "rename"}
+        mode={dialog?.kind === "rename" ? "rename" : "add"}
+        initialName={dialog?.kind === "rename" ? (dialog.passkey.name ?? "") : ""}
+        email={email}
+        onSubmit={(name) =>
+          dialog?.kind === "rename" ? renamePasskey(dialog.passkey, name) : addPasskey(name)
+        }
+        onClose={close}
+      />
+      <RemovePasskeyDialog
+        open={dialog?.kind === "remove"}
+        name={dialog?.kind === "remove" ? passkeyLabel(dialog.passkey) : ""}
+        onConfirm={() =>
+          dialog?.kind === "remove" ? removePasskey(dialog.passkey) : Promise.resolve({ ok: false })
+        }
+        onClose={close}
+      />
+      <LastPasskeyDialog
+        open={dialog?.kind === "last"}
+        name={dialog?.kind === "last" ? passkeyLabel(dialog.passkey) : ""}
+        onAddAnother={() => setDialog({ kind: "add" })}
+        onClose={close}
+      />
+    </>
   );
 }

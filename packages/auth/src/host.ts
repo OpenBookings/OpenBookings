@@ -18,6 +18,8 @@ import {
 } from "./shared";
 import { locationFromHeaders, type SignInLocation } from "./location";
 import { createStepUpHooks } from "./step-up-hooks";
+import { passkeyAccountName } from "./passkey-account-name";
+import { refuseLastPasskeyRemoval } from "./last-passkey";
 
 export type { SignInLocation } from "./location";
 
@@ -302,35 +304,19 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // Before the step-up gate, so a refusal that is certain does not cost
+        // the host a passkey prompt first.
+        await refuseLastPasskeyRemoval(ctx, async (userId) => {
+          const count = await pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM "passkey" WHERE "userId" = $1`,
+            [userId],
+          );
+          return Number(count.rows[0]?.n ?? 0);
+        });
         // Step-up gate: see step-up-hooks.ts.
         await stepUp.before(ctx);
-        // Org policy can require every member to keep at least one passkey
-        // (org_profile.auth_policy, task 14).
-        if (ctx.path === "/passkey/delete-passkey") {
-          const session = await getSessionFromCtx(ctx);
-          if (session) {
-            const policy = await pool.query(
-              `SELECT 1
-               FROM org_profile op
-               JOIN "member" m ON m."organizationId" = op.organization_id
-               WHERE m."userId" = $1 AND (op.auth_policy->>'requirePasskey') = 'true'
-               LIMIT 1`,
-              [session.user.id],
-            );
-            if (policy.rowCount && policy.rowCount > 0) {
-              const count = await pool.query<{ n: string }>(
-                `SELECT count(*)::text AS n FROM "passkey" WHERE "userId" = $1`,
-                [session.user.id],
-              );
-              if (Number(count.rows[0]?.n ?? 0) <= 1) {
-                throw new APIError("BAD_REQUEST", {
-                  message:
-                    "Your organization requires a passkey on every account. Add another passkey before deleting this one.",
-                });
-              }
-            }
-          }
-        }
+        // Last: everything above only refuses, this rewrites the request.
+        return passkeyAccountName(ctx);
       }),
       after: createAuthMiddleware(async (ctx) => {
         // A successful re-verification restarts the step-up clocks. After
