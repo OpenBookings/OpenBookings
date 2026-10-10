@@ -58,7 +58,7 @@ export function LoginClient({
       <div className="relative z-10 flex items-center justify-center min-h-screen w-full backdrop-blur-xl">
         <AuthFormPhaseProvider>
           <SS_AuthForm>
-            <AuthFormFields initialError={initialError} />
+            <AuthFormFields initialError={initialError} offerPasskey={!signOutOnMount} />
           </SS_AuthForm>
         </AuthFormPhaseProvider>
       </div>
