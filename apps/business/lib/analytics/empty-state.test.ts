@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { blockers, filteredAction, neverBookedVariant, nextStep } from "./empty-state";
+import { parsePeriodParams } from "./period";
 import { evaluateReadiness, NOT_STARTED } from "./readiness";
 
 const READY = { listingLive: true, availabilityOpen: true, hasActiveRatePlan: true, paymentsConnected: true };
@@ -53,21 +54,46 @@ describe("nextStep", () => {
 });
 
 describe("filteredAction", () => {
+  const WIDEN = { label: "Show last 12 months", href: `${PATH}?period=last-12-months` };
+
+  function action(query: string, today = "2026-10-10") {
+    const search = new URLSearchParams(query);
+    const period = parsePeriodParams(Object.fromEntries(search), today);
+    return filteredAction(PATH, search, period, today);
+  }
+
   test("a narrowed period resets to the default and keeps everything else", () => {
-    const search = new URLSearchParams("period=custom&from=2026-01-01&to=2026-01-07&compare=none&demo=1");
-    expect(filteredAction(PATH, search)).toEqual({
+    expect(action("period=custom&from=2026-01-01&to=2026-01-07&compare=none&demo=1")).toEqual({
       label: "Reset filters",
       href: `${PATH}?compare=none&demo=1`,
     });
   });
 
   test("the default period has nothing to reset, so it widens", () => {
-    const widen = { label: "Show last 12 months", href: `${PATH}?period=last-12-months` };
-    expect(filteredAction(PATH, new URLSearchParams())).toEqual(widen);
-    expect(filteredAction(PATH, new URLSearchParams("period=last-3-months"))).toEqual(widen);
+    expect(action("")).toEqual(WIDEN);
+    expect(action("period=last-3-months")).toEqual(WIDEN);
+  });
+
+  test("a period that falls back to the default widens too", () => {
+    expect(action("period=nonsense")).toEqual(WIDEN);
+    expect(action("period=custom&from=nope")).toEqual(WIDEN);
   });
 
   test("resetting to no params at all is the bare path", () => {
-    expect(filteredAction(PATH, new URLSearchParams("period=last-7-days")).href).toBe(PATH);
+    expect(action("period=last-7-days")?.href).toBe(PATH);
+  });
+
+  test("year to date widens once it holds the default, and resets while it is shorter", () => {
+    expect(action("period=ytd", "2026-10-10")).toEqual(WIDEN);
+    expect(action("period=ytd", "2026-02-10")).toEqual({ label: "Reset filters", href: PATH });
+  });
+
+  test("a custom range that holds the default widens instead of resetting into it", () => {
+    expect(action("period=custom&from=2026-05-01&to=2026-10-10")).toEqual(WIDEN);
+  });
+
+  test("the widest period has nowhere wider to go, so it offers nothing", () => {
+    expect(action("period=last-12-months")).toBeNull();
+    expect(action("period=custom&from=2024-01-01&to=2026-10-10")).toBeNull();
   });
 });

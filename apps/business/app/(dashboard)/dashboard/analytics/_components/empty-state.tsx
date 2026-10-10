@@ -108,13 +108,13 @@ export function NeverBookedCover({
 }
 
 /** For a host with bookings, none of them in the period on screen. */
-export function FilteredPanel({ action }: { action: EmptyAction }) {
+export function FilteredPanel({ action }: { action: EmptyAction | null }) {
   return (
     <section className="rounded-xl border bg-card">
       <EmptyState
         variant="filtered"
         headline="No bookings in this period"
-        body="Try a wider date range."
+        body={action ? "Try a wider date range." : "Try a different date range."}
         action={action}
       />
     </section>

@@ -108,7 +108,9 @@ export async function AnalyticsPage<P extends PageId>({
         variant={filtered ? "filtered" : undefined}
         panel={
           filtered ? (
-            <FilteredPanel action={filteredAction(meta.path, new URLSearchParams(carryQuery(search)))} />
+            <FilteredPanel
+              action={filteredAction(meta.path, new URLSearchParams(carryQuery(search)), period, today)}
+            />
           ) : undefined
         }
       >
