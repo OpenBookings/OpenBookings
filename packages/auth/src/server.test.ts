@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getIp } from "better-auth/api";
+import { getIP } from "better-auth/api";
 import {
   accountTypeMismatchMessage,
   advancedConfig,
@@ -420,7 +420,7 @@ const ipOptions = {
 } as never;
 
 const resolveIp = (headers: Record<string, string>) =>
-  getIp(new Headers(headers), ipOptions);
+  getIP(new Headers(headers), ipOptions);
 
 describe("IP_ADDRESS_HEADERS", () => {
   test("cf-connecting-ip resolves behind a multi-hop forwarded chain", () => {
