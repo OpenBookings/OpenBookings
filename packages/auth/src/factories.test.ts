@@ -51,11 +51,15 @@ describe("factory plugin surface", () => {
     expect("verifyTOTP" in guest.api).toBe(false);
   });
 
-  test("an organization route on the guest handler returns 404", async () => {
-    const guest = createGuestAuth(base);
-    const response = await guest.handler(
-      new Request("http://app.localhost:3002/api/auth/organization/list"),
-    );
-    expect(response.status).toBe(404);
+  // Asserted on the route table rather than through `guest.handler`: since
+  // Better Auth 1.7 the handler validates the database schema before it
+  // routes, so it cannot answer at all against a dead connection string.
+  test("the guest instance routes no organization or admin paths", () => {
+    const paths = (auth: { api: object }) =>
+      Object.values(auth.api).map((endpoint) => (endpoint as { path?: string }).path ?? "");
+    const guest = paths(createGuestAuth(base));
+    const host = paths(createHostAuth({ ...base, cookiePrefix: "ob-host" }));
+    expect(host).toContain("/organization/list");
+    expect(guest.filter((path) => /^\/(organization|admin)\//.test(path))).toEqual([]);
   });
 });

@@ -84,7 +84,7 @@ export function NeverBookedCover({
   const next = variant === "not-live" ? nextStep(readiness) : null;
   return (
     // Both children share one grid cell, so the cover is exactly as large as the page under it.
-    <div className="grid min-w-0 flex-1 [&>*]:col-start-1 [&>*]:row-start-1">
+    <div className="grid min-w-0 flex-1 *:col-start-1 *:row-start-1">
       <div aria-hidden inert className="flex min-w-0 select-none flex-col gap-4 md:gap-6">
         {children}
       </div>
