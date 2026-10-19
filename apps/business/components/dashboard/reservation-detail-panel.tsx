@@ -1,5 +1,7 @@
 "use client";
 
+import { GetHelpButton } from "@/components/support/get-help-button";
+import { isUuid, shortBookingRef } from "@/lib/support/references";
 import { Ban, MessageSquare, Pencil, CalendarX2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -167,10 +169,23 @@ function QuickAction({
   );
 }
 
-export function ReservationQuickActions() {
+export function ReservationQuickActions({ reservationId }: { reservationId?: string }) {
   return (
     <TooltipProvider>
       <div className="flex items-center gap-2">
+        {/* Links the booking once reservations are real bookings (UUIDs); the
+            mock RES-… ids only preset the category. Hidden while support is off. */}
+        <GetHelpButton
+          category="bookings"
+          iconOnly
+          size="icon"
+          label="Get help with this booking"
+          linked={
+            isUuid(reservationId)
+              ? { type: "booking", id: reservationId, label: `Booking ${shortBookingRef(reservationId)}`, detail: "" }
+              : null
+          }
+        />
         <QuickAction label="Edit details">
           <Pencil />
         </QuickAction>

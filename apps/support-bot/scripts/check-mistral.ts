@@ -12,9 +12,12 @@
  *
  * Nothing here touches the database, Stripe, or Chatwoot.
  */
-import { MISTRAL_MODEL, mistralChat } from "../src/agent/loop";
+import { mistralChat } from "../src/agent/loop";
 import { SYSTEM_PROMPT } from "../src/agent/prompt";
 import { mistralToolSchemas } from "../src/agent/tools";
+import { env } from "../src/env";
+
+const MISTRAL_MODEL = env.mistralModel;
 
 function ok(label: string, detail = "") {
   console.log(`  \x1b[32mPASS\x1b[0m  ${label}${detail ? ` — ${detail}` : ""}`);

@@ -16,7 +16,7 @@ export const auth = createGuestAuth({
   trustedOrigins: [
     "https://appleid.apple.com",
     "https://openbookings.co",
-    "http://app.localhost:3002",
+    "http://web.localhost:3002",
   ],
   dashApiKey: process.env.BETTER_AUTH_DASH_API_KEY,
   googleClientId: process.env.GOOGLE_CLIENT_ID,

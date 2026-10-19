@@ -132,9 +132,6 @@ export function useNavAttention() {
     counts: {
       notifications: countUnread(NOTIFICATIONS, seen.notifications),
       whatsNew: countUnread(CHANGELOG, seen.whatsNew),
-      // No support signal yet — the slot exists so a real one (an open ticket,
-      // say) can light up the dot without touching the sidebar.
-      support: 0,
     },
     markSeen,
   };

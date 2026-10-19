@@ -1,5 +1,5 @@
 import { APIError, type User, type Session } from "better-auth";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 /**
  * Shared building blocks for the two Better Auth instances. This module is
@@ -178,7 +178,50 @@ export function createAuthPool(connectionString: string): Pool {
     console.error("[auth] idle client error (connection discarded):", err);
   });
 
+  retryTerminatedConnect(pool);
   return pool;
+}
+
+/**
+ * Give a connection that the server drops mid-handshake one more attempt.
+ *
+ * The first request after both the container and Neon have scaled to zero
+ * opens a fresh connection through the pooler while the compute is still
+ * waking, and that socket is sometimes closed before the handshake finishes
+ * (OPENBOOKINGS-BUSINESS-1Q, OPENBOOKINGS-GUESTS-16 — failed /login and
+ * /api/auth hits seconds after a cold start). The second attempt finds the
+ * compute up.
+ *
+ * Only `connect` is retried: no SQL has been sent at that point, so it is safe
+ * for every caller. A query cut off mid-flight is not retried, because it may
+ * already have committed. `pool.query` acquires its client through
+ * `this.connect`, so patching the instance covers Better Auth's own queries
+ * (Kysely calls `connect()`) and the raw `pool.query` calls in host.ts alike.
+ */
+function retryTerminatedConnect(pool: Pool): void {
+  const connect = pool.connect.bind(pool) as () => Promise<PoolClient>;
+
+  const connectWithRetry = async (): Promise<PoolClient> => {
+    try {
+      return await connect();
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== "Connection terminated unexpectedly") {
+        throw err;
+      }
+      console.warn("[auth] connection terminated during connect; retrying once");
+      return connect();
+    }
+  };
+
+  pool.connect = ((
+    callback?: (err: Error | undefined, client?: PoolClient, done?: (release?: Error | boolean) => void) => void,
+  ) => {
+    if (!callback) return connectWithRetry();
+    connectWithRetry().then(
+      (client) => callback(undefined, client, client.release),
+      (err: Error) => callback(err),
+    );
+  }) as Pool["connect"];
 }
 
 /**

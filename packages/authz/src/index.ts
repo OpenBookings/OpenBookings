@@ -70,6 +70,39 @@ export const PROPERTY_EDIT_ACCESS_SQL = `(
   )
 )`;
 
+/**
+ * Read access to a property `p` for the user bound at `userParam` (e.g.
+ * `"$1"`). Wider than PROPERTY_EDIT_ACCESS_SQL: every org role can read, and
+ * the property-scoped roles (manager, frontdesk) still need a
+ * property_access row. Legacy direct ownership counts too. Used where a
+ * member only looks things up — the support panel's booking picker and the
+ * support bot's host tools — never to authorize a write.
+ */
+export function propertyReadAccessSql(userParam: string): string {
+  if (!/^\$\d+$/.test(userParam)) throw new Error(`Not a bind parameter: ${userParam}`);
+  const list = (names: readonly string[]) => names.map((role) => `'${role}'`).join(", ");
+  // Positive lists on both sides, so an unknown role reads nothing (fails
+  // closed, like memberHasPropertyAccess).
+  const orgWide = (Object.keys(roles) as HostRole[]).filter(
+    (role) => !PROPERTY_SCOPED_ROLES.includes(role),
+  );
+  return `(
+  p.owner_user_id = ${userParam}
+  OR EXISTS (
+    SELECT 1 FROM "member" m
+    WHERE m."organizationId" = p.organization_id
+      AND m."userId" = ${userParam}
+      AND (
+        m.role IN (${list(orgWide)})
+        OR m.role IN (${list(PROPERTY_SCOPED_ROLES)}) AND EXISTS (
+          SELECT 1 FROM property_access pa
+          WHERE pa.member_id = m.id AND pa.property_id = p.id
+        )
+      )
+  )
+)`;
+}
+
 export async function userOwnsProperty(
   session: SessionLike | null | undefined,
   propertyId: string,

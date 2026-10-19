@@ -31,12 +31,42 @@ export const contextCache = new Map<number, CachedTurn[]>();
 export const reservations = new Map<string, FakeReservation>();
 /** Every write the pipeline made to Chatwoot, in order. */
 export const chatwootCalls: ChatwootCall[] = [];
+/** Typing indicator toggles, kept apart so call-order assertions above stay readable. */
+export const typingCalls: Array<{ conversationId: number; on: boolean }> = [];
+
+/** Raw SQL the code under test ran through `query`, with a scripted result per call. */
+export const sqlCalls: Array<{ text: string; values: unknown[] }> = [];
+export const sqlResults: unknown[][] = [];
+
+/** In-memory support_tickets keyed by conversation id (the webhook's view). */
+export type FakeTicket = {
+  id: string;
+  organization_id: string;
+  opened_by_user_id: string | null;
+  status: string;
+  last_message_at?: Date | null;
+  last_message_sender?: string | null;
+  last_message_preview?: string | null;
+  handed_off_at?: Date | null;
+  resolved_at?: Date | null;
+};
+export const supportTickets = new Map<number, FakeTicket>();
+/** Rows the backfill was asked to insert. */
+export const backfills: unknown[] = [];
+/** What claimSupportReplyNotification returns next (null = nothing to send). */
+export const replyClaims: Array<{ ticket_id: string; conversation_id: number; email: string; name: string | null } | null> = [];
 
 export function resetMocks(): void {
   processedEvents.clear();
   contextCache.clear();
   reservations.clear();
   chatwootCalls.length = 0;
+  typingCalls.length = 0;
+  sqlCalls.length = 0;
+  sqlResults.length = 0;
+  supportTickets.clear();
+  backfills.length = 0;
+  replyClaims.length = 0;
   nextIncomingId = 9000;
 }
 
@@ -77,6 +107,52 @@ function reservationRow(fake: FakeReservation): SupportReservation {
 }
 
 mock.module("@openbookings/db", () => ({
+  // Host lookups (src/host/queries.ts) go through raw SQL; tests script the
+  // rows and assert the scoping in the statement text.
+  query: async (text: string, values: unknown[] = []) => {
+    sqlCalls.push({ text, values });
+    return sqlResults.shift() ?? [];
+  },
+  // Imported by @openbookings/authz at load; the bot only uses its SQL helpers.
+  queryOne: async (text: string, values: unknown[] = []) => {
+    sqlCalls.push({ text, values });
+    return (sqlResults.shift() ?? [])[0] ?? null;
+  },
+
+  // support_tickets surface used by the support webhook.
+  supportPreview: (content: string | null | undefined) => {
+    const line = (content ?? "").replace(/\s+/g, " ").trim();
+    return line || null;
+  },
+  isSupportTicketStatus: (v: unknown) =>
+    typeof v === "string" && ["pending", "open", "snoozed", "resolved"].includes(v),
+  findSupportTicketByConversation: async (conversationId: number) => supportTickets.get(conversationId) ?? null,
+  backfillSupportTicket: async (row: unknown) => {
+    backfills.push(row);
+    return true;
+  },
+  applySupportTicketStatus: async (conversationId: number, status: string, at: Date) => {
+    const t = supportTickets.get(conversationId);
+    if (!t) return false;
+    if ((status === "open" || status === "snoozed") && t.status === "pending" && !t.handed_off_at) t.handed_off_at = at;
+    if (status === "resolved") t.resolved_at = at;
+    t.status = status;
+    return true;
+  },
+  recordSupportTicketMessage: async (
+    conversationId: number,
+    m: { at: Date; content: string | null; sender: string },
+  ) => {
+    const t = supportTickets.get(conversationId);
+    if (!t) return null;
+    if (t.last_message_at && t.last_message_at > m.at) return null;
+    t.last_message_at = m.at;
+    t.last_message_sender = m.sender;
+    t.last_message_preview = m.content;
+    return { id: t.id, opened_by_user_id: t.opened_by_user_id };
+  },
+  claimSupportReplyNotification: async () => replyClaims.shift() ?? null,
+
   // Mirrors INSERT ... ON CONFLICT DO NOTHING RETURNING: true only for the
   // insert that actually won the race.
   recordProcessedEvent: async (eventId: string) => {
@@ -128,5 +204,13 @@ mock.module("../chatwoot/client", () => ({
   },
   setConversationStatus: async (conversationId: number, status: string) => {
     chatwootCalls.push({ kind: "status", conversationId, status });
+  },
+  // Same two writes as the real @openbookings/support implementation.
+  handOffToHuman: async (conversationId: number, note: string) => {
+    chatwootCalls.push({ kind: "note", conversationId, content: note });
+    chatwootCalls.push({ kind: "status", conversationId, status: "open" });
+  },
+  setTypingStatus: async (conversationId: number, on: boolean) => {
+    typingCalls.push({ conversationId, on });
   },
 }));

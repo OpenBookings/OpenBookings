@@ -14,38 +14,96 @@ function required(name: string): string {
 }
 
 /**
- * Every variable the service needs to serve a request, including the two read
- * inside the workspace packages. Lazy getters alone would let a Cloud Run
- * revision start healthy and then 500 on every webhook — Chatwoot would retry
- * a request that can never succeed — so the entrypoint asserts the whole set
- * up front and the revision fails to go live instead.
+ * Every variable the service needs to serve a request, including the ones read
+ * inside the workspace packages. Lazy getters alone would let a revision start
+ * healthy and then 500 on every webhook — Chatwoot would retry a request that
+ * can never succeed — so the entrypoint asserts the whole set up front and the
+ * revision fails to go live instead.
+ *
+ * The set depends on the configuration: the task queue backend decides which
+ * queue credentials are needed, and host support adds its own.
  */
-const REQUIRED_AT_STARTUP = [
+const ALWAYS_REQUIRED = [
   "MISTRAL_API_KEY",
+  "MISTRAL_MODEL",
   "CHATWOOT_BASE_URL",
-  "CHATWOOT_API_TOKEN",
   "CHATWOOT_ACCOUNT_ID",
-  "CHATWOOT_WEBHOOK_SECRET",
-  "GOOGLE_CLOUD_PROJECT",
-  "CLOUD_TASKS_QUEUE_NAME",
-  "CLOUD_TASKS_QUEUE_LOCATION",
-  "CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL",
   "SERVICE_BASE_URL",
   "DATABASE_URL", // read by @openbookings/db
   "STRIPE_SECRET_KEY", // read by @openbookings/stripe
 ] as const;
 
+/**
+ * The Agent Bot's credentials, each under its current name or the older one.
+ * Reported by the current name when both are missing.
+ */
+const ALIASED: ReadonlyArray<readonly [current: string, older: string]> = [
+  ["CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_API_TOKEN"],
+  ["CHATWOOT_AGENT_WH_TOKEN", "CHATWOOT_WEBHOOK_SECRET"],
+];
+
+function aliased(current: string, older: string): string | undefined {
+  return process.env[current] || process.env[older] || undefined;
+}
+
+const QUEUE_REQUIRED: Record<TaskQueue, readonly string[]> = {
+  "cloud-tasks": [
+    "GOOGLE_CLOUD_PROJECT",
+    "CLOUD_TASKS_QUEUE_NAME",
+    "CLOUD_TASKS_QUEUE_LOCATION",
+    "CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL",
+  ],
+  qstash: ["QSTASH_TOKEN", "QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"],
+};
+
+/** Needed only while host support is switched on (SUPPORT_CHAT_ENABLED). */
+const SUPPORT_REQUIRED = [
+  "CHATWOOT_BUSINESS_INBOX_ID",
+  "CHATWOOT_SUPPORT_WEBHOOK_SECRET",
+  "BUSINESS_APP_URL",
+  "LETTERMINT_PROJECT_TOKEN", // read by @openbookings/mailing
+] as const;
+
+export type TaskQueue = "cloud-tasks" | "qstash";
+
+/** TASK_QUEUE: "cloud-tasks" (default, the original setup) or "qstash". */
+export function parseTaskQueue(raw: string | undefined): TaskQueue {
+  const value = raw?.trim().toLowerCase();
+  if (!value || value === "cloud-tasks") return "cloud-tasks";
+  if (value === "qstash") return "qstash";
+  throw new Error(`TASK_QUEUE must be "cloud-tasks" or "qstash", got "${raw}"`);
+}
+
+function flag(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "true" || value === "1";
+}
+
+/** The variables this configuration needs. Exported for the startup check's tests. */
+export function requiredAtStartup(): string[] {
+  const names: string[] = [...ALWAYS_REQUIRED];
+  for (const [current, older] of ALIASED) if (!aliased(current, older)) names.push(current);
+  // Inline dispatch never touches a queue.
+  if (!flag("TASKS_INLINE")) names.push(...QUEUE_REQUIRED[parseTaskQueue(process.env.TASK_QUEUE)]);
+  if (flag("SUPPORT_CHAT_ENABLED")) names.push(...SUPPORT_REQUIRED);
+  return names;
+}
+
 /** Throw listing *every* missing variable, not just the first one. */
 export function assertRequiredEnv(): void {
-  const missing = REQUIRED_AT_STARTUP.filter((name) => !process.env[name]);
+  const missing = requiredAtStartup().filter((name) => !process.env[name]);
   if (missing.length > 0) {
     throw new Error(
       `support-bot is missing required environment variables:\n  ${missing.join("\n  ")}`,
     );
   }
 
+  // Parse the values whose format matters now, not on the first webhook.
+  parseTaskQueue(process.env.TASK_QUEUE);
+  if (flag("SUPPORT_CHAT_ENABLED")) void env.businessInboxId;
+
   // The local-dev escape hatches disable webhook-to-task authentication
-  // entirely. Refuse to boot rather than let a stray value in a Cloud Run
+  // entirely. Refuse to boot rather than let a stray value in a production
   // revision leave /tasks/* open to anyone who can reach the service.
   if (process.env.NODE_ENV === "production") {
     const unsafe = (["TASKS_AUTH_DISABLED", "TASKS_INLINE"] as const).filter(
@@ -63,17 +121,30 @@ export const env = {
   get mistralApiKey() {
     return required("MISTRAL_API_KEY");
   },
+  /** Model for every assistant call, guest and host. */
+  get mistralModel() {
+    return required("MISTRAL_MODEL").trim();
+  },
   get chatwootBaseUrl() {
     return required("CHATWOOT_BASE_URL").replace(/\/$/, "");
   },
+  /** The Agent Bot's access token (CHATWOOT_API_TOKEN is the older name). */
   get chatwootApiToken() {
-    return required("CHATWOOT_API_TOKEN");
+    const value = aliased("CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_API_TOKEN");
+    if (!value) throw new Error("CHATWOOT_AGENT_ACCESS_TOKEN is not set");
+    return value;
   },
   get chatwootAccountId() {
     return required("CHATWOOT_ACCOUNT_ID");
   },
+  /**
+   * Secret Chatwoot signs the Agent Bot's webhook with (the bot's own
+   * secret; CHATWOOT_WEBHOOK_SECRET is the older name).
+   */
   get chatwootWebhookSecret() {
-    return required("CHATWOOT_WEBHOOK_SECRET");
+    const value = aliased("CHATWOOT_AGENT_WH_TOKEN", "CHATWOOT_WEBHOOK_SECRET");
+    if (!value) throw new Error("CHATWOOT_AGENT_WH_TOKEN is not set");
+    return value;
   },
   get cloudTasksProject() {
     // Set automatically on Cloud Run; explicit locally.
@@ -108,6 +179,53 @@ export const env = {
     // this silently false, and the failure mode (auth unexpectedly ON in
     // local dev) looks like a broken queue rather than a typo.
     return process.env.TASKS_AUTH_DISABLED?.trim() === "true";
+  },
+  get taskQueue(): TaskQueue {
+    return parseTaskQueue(process.env.TASK_QUEUE);
+  },
+  get qstashToken() {
+    return required("QSTASH_TOKEN");
+  },
+  /** QStash's publish endpoint; the EU region uses its own URL. */
+  get qstashUrl() {
+    return (process.env.QSTASH_URL?.trim() || "https://qstash.upstash.io").replace(/\/$/, "");
+  },
+  get qstashCurrentSigningKey() {
+    return required("QSTASH_CURRENT_SIGNING_KEY");
+  },
+  get qstashNextSigningKey() {
+    return required("QSTASH_NEXT_SIGNING_KEY");
+  },
+  /** Host support (the business app's tickets) is switched on. */
+  get supportChatEnabled() {
+    return flag("SUPPORT_CHAT_ENABLED");
+  },
+  /** The assistant answers host tickets. Off: host messages are left to people. */
+  get supportAssistantEnabled() {
+    return flag("SUPPORT_ASSISTANT_ENABLED");
+  },
+  /**
+   * Numeric id of the Business support API inbox. Messages from it are host
+   * tickets; everything else is guest support. Null when unset, so a
+   * misconfiguration can only ever route a host message to "ignored", never
+   * to the guest tools.
+   */
+  get businessInboxId(): number | null {
+    const raw = process.env.CHATWOOT_BUSINESS_INBOX_ID?.trim();
+    if (!raw) return null;
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error(`CHATWOOT_BUSINESS_INBOX_ID must be a positive integer, got "${raw}"`);
+    }
+    return id;
+  },
+  /** Secret of the separate account webhook that keeps support_tickets current. */
+  get supportWebhookSecret() {
+    return required("CHATWOOT_SUPPORT_WEBHOOK_SECRET");
+  },
+  /** Public URL of apps/business, for links in reply emails. */
+  get businessAppUrl() {
+    return required("BUSINESS_APP_URL").replace(/\/$/, "");
   },
   /**
    * Refunds at or above this amount (euros) force escalation to a human

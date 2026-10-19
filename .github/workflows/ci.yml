@@ -244,6 +244,9 @@ jobs:
             NEXT_PUBLIC_REALTIME_WORKER_URL=${{ vars.NEXT_PUBLIC_BUSINESS_REALTIME_WORKER_URL }}
             # Its own Sentry project -- see build-web for why these are split.
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_BUSINESS_SENTRY_DSN }}
+            # Host support: the browser's Chatwoot websocket origin (also added
+            # to the CSP). Runtime switches and secrets are set on the deployment.
+            NEXT_PUBLIC_CHATWOOT_BASE_URL=${{ vars.NEXT_PUBLIC_CHATWOOT_BASE_URL }}
 
             # General Args
             NEXT_PUBLIC_COOKIE_VERSION=${{ vars.NEXT_PUBLIC_COOKIE_VERSION }}

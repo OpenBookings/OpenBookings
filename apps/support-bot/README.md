@@ -13,7 +13,7 @@ Guest message → Chatwoot (status: pending) → POST /webhooks/chatwoot
   → enqueue Cloud Task → 200
 Cloud Task → POST /tasks/process-conversation (OIDC-authenticated)
   → context from support_context_cache (fallback: Chatwoot messages API)
-  → Mistral loop (mistral-medium-latest, max 5 tool iterations)
+  → Mistral loop (MISTRAL_MODEL, max 5 tool iterations)
       tools: get_reservation · get_payment_status · get_cancellation_policy · escalate_to_human
   → final text → Create Message API   |   escalation → private note + status "open"
 ```
@@ -22,6 +22,22 @@ Chatwoot signs `{X-Chatwoot-Timestamp}.{raw_body}`, not the body alone, and
 sends the digest as `sha256=<hex>`. Binding the timestamp is what makes the
 signature non-replayable, so `src/chatwoot/signature.ts` also rejects
 requests outside a 5-minute window.
+
+**Host tickets** (the Business support inbox, `CHATWOOT_BUSINESS_INBOX_ID`)
+take the same pipeline with a separate agent: `src/host/` has its own prompt
+and tools (`get_booking`, `get_payment_status`, `escalate_to_human`), scoped
+in SQL to the properties the host can read. The host is identified by the
+Chatwoot contact identifier (their business user id, HMAC-verified when the
+contact was created). Guest tools never see a host conversation, and the
+reverse. Host tickets are only answered while `SUPPORT_CHAT_ENABLED` and
+`SUPPORT_ASSISTANT_ENABLED` are both on. An API-channel message from any
+other inbox is dropped rather than treated as a guest.
+
+`POST /webhooks/business-support` is a second account webhook with its own
+secret. It keeps `support_tickets` current for the business app and
+schedules a reply email (10 min later, at most one per ticket per hour, no
+message content). See `packages/support/README.md` for the full host-support
+setup.
 
 Escalation is two-layered: the model can call `escalate_to_human`, and
 rule-based checks (`src/escalation.ts`) force a hand-off on dispute/chargeback
@@ -39,8 +55,11 @@ guest-facing post, so Cloud Tasks retries never double-reply.
 - `src/agent/` — system prompt (`prompt.ts`), tool registry with Zod-validated
   dispatch (`tools.ts`), Mistral loop (`loop.ts`)
 - `src/escalation.ts` — rule-driven escalation checks
-- `src/chatwoot/` — signature verification + minimal API client
-- `src/tasks.ts` — Cloud Tasks enqueue + OIDC verification
+- `src/chatwoot/` — re-exports of the shared Chatwoot client and signature
+  check in `@openbookings/support` (also used by apps/business)
+- `src/host/` — host-ticket agent: prompt, tools, booking queries
+- `src/support/` — business-support webhook and reply-email task
+- `src/tasks.ts` — task queue (Cloud Tasks or QStash) + delivery verification
 
 - `src/testing/mocks.ts` — shared `@openbookings/db` / Chatwoot test doubles
   (registered once, because `mock.module` is process-global)
@@ -58,23 +77,47 @@ idempotent, so re-running the file is safe.
 
 ```
 MISTRAL_API_KEY
+MISTRAL_MODEL                       # e.g. mistral-small-2603
 CHATWOOT_BASE_URL
 CHATWOOT_API_TOKEN
 CHATWOOT_ACCOUNT_ID
 CHATWOOT_WEBHOOK_SECRET
+SERVICE_BASE_URL                    # public URL of this service (task target, OIDC audience)
+REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
+TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*
+
+TASK_QUEUE=cloud-tasks              # default; or "qstash"
+# cloud-tasks:
 GOOGLE_CLOUD_PROJECT
 CLOUD_TASKS_QUEUE_NAME
 CLOUD_TASKS_QUEUE_LOCATION
 CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL   # SA the queue mints OIDC tokens for
-SERVICE_BASE_URL                    # public URL of this service (OIDC audience)
-REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
-TASKS_AUTH_DISABLED=true            # local dev only: skip OIDC on /tasks/*
+# qstash:
+QSTASH_TOKEN
+QSTASH_CURRENT_SIGNING_KEY
+QSTASH_NEXT_SIGNING_KEY
+QSTASH_URL                          # optional, for a non-default region
+
+# host support (only while SUPPORT_CHAT_ENABLED=true):
+SUPPORT_CHAT_ENABLED
+SUPPORT_ASSISTANT_ENABLED           # the assistant answers host tickets
+CHATWOOT_BUSINESS_INBOX_ID          # numeric id of the Business support inbox
+CHATWOOT_SUPPORT_WEBHOOK_SECRET     # secret of the business-support webhook
+BUSINESS_APP_URL                    # links in reply emails
+LETTERMINT_PROJECT_TOKEN            # read by @openbookings/mailing
 ```
+
+`CHATWOOT_AGENT_ACCESS_TOKEN` (older name `CHATWOOT_API_TOKEN`) must be the
+**Agent Bot's** access token, so its replies reach Chatwoot (and the business
+panel) as `agent_bot`, not as a person. `CHATWOOT_AGENT_WH_TOKEN` (older name
+`CHATWOOT_WEBHOOK_SECRET`) is the secret Chatwoot signs the Agent Bot's
+webhook (`/webhooks/chatwoot`) with.
 
 `DATABASE_URL` and `STRIPE_SECRET_KEY` are read inside `@openbookings/db` and
 `@openbookings/stripe` — no separate copies here, but they are still required.
 
-All of the above except the two optional entries are asserted at startup
+Everything the current configuration needs (the chosen queue's credentials,
+and the host-support set while it is on) is asserted at startup
 (`assertRequiredEnv` in `src/env.ts`, called only when `src/index.ts` is the
 entrypoint). A revision with incomplete config fails to go live rather than
 starting healthy and 500-ing every webhook — which Chatwoot would retry.

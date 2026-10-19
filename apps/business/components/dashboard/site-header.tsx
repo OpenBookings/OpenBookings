@@ -16,6 +16,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Kbd } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
 
 function formatSegment(segment: string): string {
   return segment
@@ -24,7 +25,7 @@ function formatSegment(segment: string): string {
     .join(" ");
 }
 
-export function SiteHeader({ title }: { title: string }) {
+export function SiteHeader({ title, actions }: { title: string; actions?: React.ReactNode }) {
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
   const labels = useBreadcrumbLabels();
@@ -72,10 +73,15 @@ export function SiteHeader({ title }: { title: string }) {
             ))}
           </BreadcrumbList>
         </Breadcrumb>
+        {/* Page-level secondary actions sit just before search. */}
+        {actions ? <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          className="ml-auto flex w-full max-w-64 items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-muted-foreground text-sm shadow-xs transition-colors hover:bg-accent dark:bg-input/30"
+          className={cn(
+            "flex w-full max-w-64 items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-muted-foreground text-sm shadow-xs transition-colors hover:bg-accent dark:bg-input/30",
+            !actions && "ml-auto",
+          )}
         >
           <Search className="size-4 shrink-0" />
           <span className="flex-1 truncate text-left">Search...</span>

@@ -8,13 +8,22 @@ import {
 import type { PaymentSummary } from "@openbookings/stripe";
 import {
   getConversationMessages,
-  postPrivateNote,
+  handOffToHuman,
   postReply,
-  setConversationStatus,
+  setTypingStatus,
 } from "./chatwoot/client";
 import { env } from "./env";
 import { messageTriggersEscalation, paymentTriggersEscalation } from "./escalation";
-import { mistralChat, runAgentLoop, type ChatFn, type ToolCallLogEntry } from "./agent/loop";
+import {
+  GUEST_AGENT,
+  mistralChat,
+  runAgentLoop,
+  type AgentOutcome,
+  type ChatFn,
+  type ToolCallLogEntry,
+} from "./agent/loop";
+import { hostTicketNote } from "./host/prompt";
+import { HOST_AGENT } from "./host/tools";
 import type { ProcessConversationPayload } from "./tasks";
 import { trace } from "./trace";
 
@@ -43,9 +52,20 @@ function escalationNote(reason: string, toolLog: ToolCallLogEntry[]): string {
   return lines.join("\n");
 }
 
-/** Map Chatwoot history to model turns: public incoming ↔ user, public outgoing ↔ assistant. */
+/**
+ * Map Chatwoot history to model turns: public incoming ↔ user, public
+ * outgoing ↔ assistant. Agent Bot tokens may not list messages (Chatwoot
+ * 4.18 allows bots only a few endpoints), so a refused read starts from the
+ * current message; the context cache carries the conversation from there.
+ */
 async function fetchTurnsFromChatwoot(conversationId: number): Promise<CachedTurn[]> {
-  const messages = await getConversationMessages(conversationId);
+  let messages: Awaited<ReturnType<typeof getConversationMessages>>;
+  try {
+    messages = await getConversationMessages(conversationId);
+  } catch (err) {
+    trace("process", "history unavailable, starting from this message", { err: String(err).slice(0, 120) });
+    return [];
+  }
   return messages
     .filter((m) => !m.private && m.content && (m.message_type === 0 || m.message_type === 1))
     .map((m): CachedTurn => ({
@@ -67,7 +87,9 @@ export async function processConversation(
   // The one place the guest's identity enters the agent. It comes from the
   // Chatwoot contact via the HMAC-verified webhook, never from message text,
   // so no amount of prompt injection can widen what the tools will read.
-  const guestEmail = payload.guestEmail?.trim().toLowerCase() || null;
+  // Host tickets never carry a guest identity, whatever the payload says.
+  const guestEmail =
+    payload.audience === "host" ? null : payload.guestEmail?.trim().toLowerCase() || null;
 
   trace("process", "start", { eventId, conversationId, identified: guestEmail !== null });
 
@@ -78,8 +100,7 @@ export async function processConversation(
 
   const escalate = async (reason: string, toolLog: ToolCallLogEntry[]) => {
     trace("process", "escalating", { conversationId, reason, toolCalls: toolLog.length });
-    await postPrivateNote(conversationId, escalationNote(reason, toolLog));
-    await setConversationStatus(conversationId, "open");
+    await handOffToHuman(conversationId, escalationNote(reason, toolLog));
     await markEventReplied(eventId);
   };
 
@@ -105,19 +126,43 @@ export async function processConversation(
   }
   turns = turns.slice(-MAX_CONTEXT_TURNS);
 
-  const outcome = await runAgentLoop({
-    turns,
-    chat: deps.chat ?? mistralChat(),
-    toolContext: { guestEmail },
-    // Rule-driven safety net #2: payment lookups revealing a dispute or
-    // large refund force escalation regardless of what the model would do.
-    onToolResult: (toolName, result) => {
-      if (toolName !== "get_payment_status") return null;
-      const summary = result as Partial<PaymentSummary>;
-      if (typeof summary?.status !== "string" || typeof summary.amount !== "number") return null;
-      return paymentTriggersEscalation(summary as PaymentSummary, env.refundEscalationThresholdEur);
-    },
-  });
+  // Rule-driven safety net #2: payment lookups revealing a dispute or large
+  // refund force escalation regardless of what the model would do. Same rule
+  // for guests and hosts.
+  const onToolResult = (toolName: string, result: unknown) => {
+    if (toolName !== "get_payment_status") return null;
+    const summary = result as Partial<PaymentSummary>;
+    if (typeof summary?.status !== "string" || typeof summary.amount !== "number") return null;
+    return paymentTriggersEscalation(summary as PaymentSummary, env.refundEscalationThresholdEur);
+  };
+
+  // The contact sees "Writing a reply…" while the model works. Best effort:
+  // a failed indicator must never cost the reply.
+  await setTypingStatus(conversationId, true).catch((err) =>
+    trace("process", "typing on failed", { err: String(err) }),
+  );
+  let outcome: AgentOutcome;
+  try {
+    outcome =
+      payload.audience === "host"
+        ? await runAgentLoop({
+            turns,
+            chat: deps.chat ?? mistralChat(HOST_AGENT),
+            profile: HOST_AGENT,
+            // Identity comes from the HMAC-verified contact, never the chat.
+            toolContext: { hostUserId: payload.hostUserId?.trim() || null },
+            contextNote: payload.ticket ? hostTicketNote(payload.ticket) : undefined,
+            onToolResult,
+          })
+        : await runAgentLoop({
+            turns,
+            chat: deps.chat ?? mistralChat(GUEST_AGENT),
+            toolContext: { guestEmail },
+            onToolResult,
+          });
+  } finally {
+    await setTypingStatus(conversationId, false).catch(() => {});
+  }
 
   if (outcome.kind === "escalate") {
     await escalate(outcome.reason, outcome.toolLog);

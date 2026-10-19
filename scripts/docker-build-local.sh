@@ -85,5 +85,5 @@ if [[ $PUSH -eq 1 ]]; then
   echo "==> Pushed $IMAGE"
 else
   echo "==> Built $IMAGE (not pushed). Run with --push to publish."
-  echo "    Local smoke test: docker run --rm -p 8080:8080 --env-file .env.local $IMAGE"
+  echo "    Local smoke test: docker run --rm -p 8080:8080 --env-file $ENV_FILE $IMAGE"
 fi

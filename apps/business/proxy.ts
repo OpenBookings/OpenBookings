@@ -76,5 +76,6 @@ export const config = {
     "/dashboard/:path*",
     "/onboarding/:path*",
     "/account/:path*",
+    "/support/:path*",
   ],
 };

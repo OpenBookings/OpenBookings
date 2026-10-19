@@ -2,10 +2,15 @@ import { Mistral } from "@mistralai/mistralai";
 import type { CachedTurn } from "@openbookings/db";
 import { env } from "../env";
 import { SYSTEM_PROMPT } from "./prompt";
-import { executeTool, mistralToolSchemas, TOOLS, type ToolContext } from "./tools";
+import {
+  escalateArgs,
+  executeTool,
+  mistralToolSchemas,
+  type ToolContext,
+  type ToolExecutionResult,
+} from "./tools";
 import { trace } from "../trace";
 
-export const MISTRAL_MODEL = "mistral-medium-latest";
 export const MAX_TOOL_ITERATIONS = 5;
 
 /** Structural message type shared by the loop and the injectable chat fn. */
@@ -25,6 +30,26 @@ export type ChatResponse = { content: string | null; toolCalls?: LoopToolCall[] 
 export type ChatFn = (messages: LoopMessage[]) => Promise<ChatResponse>;
 
 export type ToolCallLogEntry = { name: string; args: unknown; result: unknown };
+
+/**
+ * Who the agent is talking to: its system prompt and its tools. The guest
+ * profile is the default; host tickets use the one in src/host/. Profiles
+ * never share tools, so a host conversation can't reach guest lookups and
+ * the reverse.
+ */
+export type AgentProfile<Ctx> = {
+  name: string;
+  systemPrompt: string;
+  toolSchemas: () => ReturnType<typeof mistralToolSchemas>;
+  executeTool: (name: string, args: unknown, ctx: Ctx) => Promise<ToolExecutionResult>;
+};
+
+export const GUEST_AGENT: AgentProfile<ToolContext> = {
+  name: "guest",
+  systemPrompt: SYSTEM_PROMPT,
+  toolSchemas: mistralToolSchemas,
+  executeTool,
+};
 
 export type AgentOutcome =
   | { kind: "reply"; text: string; toolLog: ToolCallLogEntry[] }
@@ -52,16 +77,25 @@ function parseArgs(raw: string | Record<string, unknown>): unknown {
  * its lookups to. It is threaded through the loop rather than read from the
  * turns, because the turns are guest-authored text.
  */
-export async function runAgentLoop(opts: {
+export async function runAgentLoop<Ctx = ToolContext>(opts: {
   turns: CachedTurn[];
   chat: ChatFn;
-  toolContext: ToolContext;
+  toolContext: Ctx;
+  /** Defaults to the guest profile. */
+  profile?: AgentProfile<Ctx>;
+  /**
+   * Facts from the support system (never from the chat), given to the model
+   * as a second system message — e.g. the ticket's category.
+   */
+  contextNote?: string;
   onToolResult?: (toolName: string, result: unknown) => string | null;
   maxIterations?: number;
 }): Promise<AgentOutcome> {
   const maxIterations = opts.maxIterations ?? MAX_TOOL_ITERATIONS;
+  const profile = opts.profile ?? (GUEST_AGENT as unknown as AgentProfile<Ctx>);
   const messages: LoopMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: profile.systemPrompt },
+    ...(opts.contextNote ? [{ role: "system" as const, content: opts.contextNote }] : []),
     ...opts.turns.map((t): LoopMessage => ({ role: t.role, content: t.content })),
   ];
   const toolLog: ToolCallLogEntry[] = [];
@@ -94,13 +128,13 @@ export async function runAgentLoop(opts: {
       trace("loop", `tool call: ${name}`, { args });
 
       if (name === "escalate_to_human") {
-        const parsed = TOOLS.escalate_to_human.schema.safeParse(args);
+        const parsed = escalateArgs.safeParse(args);
         const reason = parsed.success ? parsed.data.reason : "Model requested escalation.";
         trace("loop", "escalate_to_human called by model", { reason });
         return { kind: "escalate", reason, toolLog };
       }
 
-      const execution = await executeTool(name, args, opts.toolContext);
+      const execution = await profile.executeTool(name, args, opts.toolContext);
       const result = execution.ok ? execution.result : { error: execution.error };
       toolLog.push({ name, args, result });
       trace("loop", `tool result: ${name}`, execution.ok ? { ok: true, result } : { ok: false, error: execution.error });
@@ -127,12 +161,13 @@ export async function runAgentLoop(opts: {
 }
 
 /** Production ChatFn backed by the Mistral SDK. */
-export function mistralChat(): ChatFn {
+export function mistralChat<Ctx>(profile: AgentProfile<Ctx> = GUEST_AGENT as unknown as AgentProfile<Ctx>): ChatFn {
   const client = new Mistral({ apiKey: env.mistralApiKey });
-  const tools = mistralToolSchemas();
+  const model = env.mistralModel;
+  const tools = profile.toolSchemas();
   return async (messages) => {
     const response = await client.chat.complete({
-      model: MISTRAL_MODEL,
+      model,
       messages: messages as never,
       tools: tools as never,
       toolChoice: "auto",
