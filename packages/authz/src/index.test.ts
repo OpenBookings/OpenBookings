@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  propertyReadAccessSql,
   getHostScopedDb,
   getThreadForParticipant,
   userOwnsProperty,
@@ -194,5 +195,24 @@ describe("userOwnsRatePlan", () => {
 
   test("missing session fails closed", async () => {
     expect(await userOwnsRatePlan(null, "plan-1", deps)).toBe(false);
+  });
+});
+
+describe("propertyReadAccessSql", () => {
+  test("binds the user only through the given parameter", () => {
+    const sql = propertyReadAccessSql("$3");
+    expect(sql).toContain("p.owner_user_id = $3");
+    expect(sql).toContain('m."userId" = $3');
+    expect(sql).not.toContain("$1");
+  });
+
+  test("org-wide roles read everything; scoped roles need property_access; unknown roles nothing", () => {
+    const sql = propertyReadAccessSql("$1");
+    expect(sql).toMatch(/m\.role IN \('owner', 'admin', 'finance'\)/);
+    expect(sql).toMatch(/m\.role IN \('manager', 'frontdesk'\) AND EXISTS/);
+  });
+
+  test("refuses anything but a bind parameter", () => {
+    expect(() => propertyReadAccessSql("'x' OR 1=1")).toThrow("Not a bind parameter");
   });
 });

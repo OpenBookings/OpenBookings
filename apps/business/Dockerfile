@@ -45,6 +45,7 @@
     ARG NEXT_PUBLIC_MAPTILER_STYLE_ID
     ARG NEXT_PUBLIC_SENTRY_DSN
     ARG NEXT_PUBLIC_REALTIME_WORKER_URL
+    ARG NEXT_PUBLIC_CHATWOOT_BASE_URL
     # The commit this image was built from. NEXT_PUBLIC_ so the browser bundle
     # carries it too: Sentry and PostHog both tag client-side events with it,
     # which is what makes "which release served this?" answerable at all.
@@ -59,6 +60,7 @@
     ENV NEXT_PUBLIC_MAPTILER_STYLE_ID=$NEXT_PUBLIC_MAPTILER_STYLE_ID
     ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
     ENV NEXT_PUBLIC_REALTIME_WORKER_URL=$NEXT_PUBLIC_REALTIME_WORKER_URL
+    ENV NEXT_PUBLIC_CHATWOOT_BASE_URL=$NEXT_PUBLIC_CHATWOOT_BASE_URL
     ENV NEXT_PUBLIC_RELEASE_SHA=$NEXT_PUBLIC_RELEASE_SHA
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in

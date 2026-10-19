@@ -9,6 +9,15 @@ import { DEVICE_SIZES, IMAGE_QUALITIES, IMAGE_SIZES } from "@openbookings/images
 const isDev = process.env.NODE_ENV !== "production";
 const DEV_SCRIPT_SRC = isDev ? " 'unsafe-eval' http://localhost:3000" : "";
 
+// Host support: the panel's websocket to Chatwoot (contact room, read-only
+// events) and the attachment images it shows. Everything else goes through
+// our own server. Empty when NEXT_PUBLIC_CHATWOOT_BASE_URL is unset.
+const chatwootOrigin = process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL).origin
+  : "";
+const CHATWOOT_IMG = chatwootOrigin ? ` ${chatwootOrigin}` : "";
+const CHATWOOT_CONNECT = chatwootOrigin ? ` ${chatwootOrigin.replace(/^http/, "ws")}` : "";
+
 // The R2 host in connect-src is wildcarded over its first label because the
 // S3 SDK signs virtual-hosted-style URLs, so browser uploads go to
 // `<bucket>.<account>.eu.r2.cloudflarestorage.com`, not to the bare R2_ENDPOINT
@@ -18,10 +27,10 @@ const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com${DEV_SCRIPT_SRC};
   style-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com;
-  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com;
+  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com${CHATWOOT_IMG};
   font-src 'self';
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev;
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev${CHATWOOT_CONNECT};
   worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';
@@ -32,7 +41,7 @@ const ContentSecurityPolicy = `
 `.replace(/\s{2,}/g, " ").trim();
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@openbookings/analytics", "@openbookings/images", "@openbookings/maps", "@openbookings/messaging"],
+  transpilePackages: ["@openbookings/analytics", "@openbookings/images", "@openbookings/maps", "@openbookings/messaging", "@openbookings/support"],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
 

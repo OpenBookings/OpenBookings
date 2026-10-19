@@ -172,7 +172,7 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
           </div>
           {!loading && detail && (
             <DrawerFooter className="border-t">
-              <ReservationQuickActions />
+              <ReservationQuickActions reservationId={detail.id} />
             </DrawerFooter>
           )}
         </DrawerContent>

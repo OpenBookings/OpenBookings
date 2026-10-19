@@ -692,6 +692,79 @@ export const supportContextCache = pgTable("support_context_cache", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Host support (apps/business): one Chatwoot contact per business user. The
+ * `sourceId` is the Client API credential for that contact's conversations
+ * and never leaves the server. FKs to Better Auth's `user` and
+ * `organization` tables live in the SQL only, as for host_onboarding.
+ *
+ * Mirrors packages/db/drizzle/0025_business_support.sql; keep the two in sync.
+ */
+export const supportContacts = pgTable("support_contacts", {
+  userId: text("user_id").primaryKey(),
+  chatwootContactId: bigint("chatwoot_contact_id", { mode: "number" }).notNull(),
+  sourceId: text("source_id").notNull(),
+  pubsubToken: text("pubsub_token").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One row per host support ticket, which is always exactly one Chatwoot
+ * conversation. Messages stay in Chatwoot; this holds what the business app
+ * lists and badges, kept current by the support webhook.
+ */
+export const supportTickets = pgTable(
+  "support_tickets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "set null" }),
+    openedByUserId: text("opened_by_user_id"),
+    /** Chatwoot display id: what its APIs and webhooks use, and the `#1234` hosts see. */
+    chatwootConversationId: bigint("chatwoot_conversation_id", { mode: "number" }).notNull().unique(),
+    category: text("category").notNull(),
+    /** 'booking' | 'listing', enforced by a DB check constraint. */
+    linkedType: text("linked_type"),
+    linkedId: text("linked_id"),
+    followUpOf: uuid("follow_up_of"),
+    title: text("title").notNull(),
+    /** 'pending' | 'open' | 'snoozed' | 'resolved' (Chatwoot's statuses). */
+    status: text("status").notNull().default("pending"),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    lastMessagePreview: text("last_message_preview"),
+    /** 'contact' | 'agent_bot' | 'user'. */
+    lastMessageSender: text("last_message_sender"),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+    handedOffAt: timestamp("handed_off_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("support_tickets_org_activity_idx").on(table.organizationId, table.lastActivityAt.desc()),
+    index("support_tickets_opener_activity_idx").on(table.openedByUserId, table.lastActivityAt.desc()),
+    check(
+      "support_tickets_status_check",
+      sql`${table.status} IN ('pending', 'open', 'snoozed', 'resolved')`,
+    ),
+  ],
+);
+
+/** Per-user read state for support tickets. */
+export const supportTicketReads = pgTable(
+  "support_ticket_reads",
+  {
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ticketId, table.userId] })],
+);
+
 // Note: relational query config (db.query.*) uses drizzle-orm v1's `defineRelations` API,
 // which differs from the stable `relations()` helper. Add it here if/when a consumer needs
 // db.query instead of the select/execute APIs used so far.

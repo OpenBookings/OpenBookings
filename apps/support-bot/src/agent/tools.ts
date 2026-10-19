@@ -159,11 +159,11 @@ const escalateArgs = z.object({
     .describe("Short summary for the human agent: what the guest needs and why the bot is handing off."),
 });
 
-export type ToolDefinition = {
+export type ToolDefinition<Ctx = ToolContext> = {
   description: string;
   schema: z.ZodType;
   /** Absent for signal tools (escalate_to_human) — the loop intercepts those. */
-  execute?: (args: never, ctx: ToolContext) => Promise<unknown>;
+  execute?: (args: never, ctx: Ctx) => Promise<unknown>;
 };
 
 export const TOOLS = {
@@ -235,15 +235,15 @@ export const TOOLS = {
 
 export type ToolName = keyof typeof TOOLS;
 
-/** Tool declarations in the shape Mistral's chat API expects. */
-export function mistralToolSchemas() {
-  return Object.entries(TOOLS).map(([name, def]) => ({
+/** Tool declarations in the shape Mistral's chat API expects, for any registry. */
+export function buildToolSchemas<Ctx>(registry: Record<string, ToolDefinition<Ctx>>) {
+  return Object.entries(registry).map(([name, def]) => ({
     type: "function" as const,
     function: {
       name,
       description: def.description,
       // Refinements (the "at least one of" checks) don't serialize to JSON
-      // schema; the runtime schema in executeTool still enforces them.
+      // schema; the runtime schema in runTool still enforces them.
       parameters: z.toJSONSchema(def.schema, { io: "input", target: "draft-7" }) as Record<
         string,
         unknown
@@ -252,25 +252,31 @@ export function mistralToolSchemas() {
   }));
 }
 
+/** The guest registry's declarations. */
+export function mistralToolSchemas() {
+  return buildToolSchemas(TOOLS as Record<string, ToolDefinition>);
+}
+
 export type ToolExecutionResult =
   | { ok: true; result: unknown }
   | { ok: false; error: string };
 
 /**
- * Validate and run a tool call coming back from the model. Unknown tools and
- * invalid arguments become error results fed back to the model — never throws
- * for model-controlled input. `escalate_to_human` must be intercepted by the
- * loop before this is called.
+ * Validate and run a tool call coming back from the model against a registry.
+ * Unknown tools and invalid arguments become error results fed back to the
+ * model — never throws for model-controlled input. `escalate_to_human` must be
+ * intercepted by the loop before this is called.
  *
  * `ctx` is required, not optional: a default would silently re-open the
  * unauthorized-lookup hole at any call site that forgot to pass it.
  */
-export async function executeTool(
+export async function runTool<Ctx>(
+  registry: Record<string, ToolDefinition<Ctx>>,
   name: string,
   rawArgs: unknown,
-  ctx: ToolContext,
+  ctx: Ctx,
 ): Promise<ToolExecutionResult> {
-  const def = (TOOLS as Record<string, ToolDefinition>)[name];
+  const def = Object.hasOwn(registry, name) ? registry[name] : undefined;
   if (!def || !def.execute) {
     return { ok: false, error: `Unknown tool: ${name}` };
   }
@@ -287,6 +293,15 @@ export async function executeTool(
     trace("tools", `${name} threw`, { err: String(err) });
     return { ok: false, error: `Tool ${name} failed to execute. Do not retry more than once; escalate if this blocks you.` };
   }
+}
+
+/** Run a guest tool. */
+export async function executeTool(
+  name: string,
+  rawArgs: unknown,
+  ctx: ToolContext,
+): Promise<ToolExecutionResult> {
+  return runTool(TOOLS as Record<string, ToolDefinition>, name, rawArgs, ctx);
 }
 
 export { escalateArgs };

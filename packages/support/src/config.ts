@@ -1,0 +1,67 @@
+/**
+ * Chatwoot connection settings, read lazily so importing this package never
+ * requires the env to be complete; each getter throws with the variable's
+ * name the moment it is needed.
+ *
+ * Shared by apps/support-bot and apps/business. The names match the ones the
+ * bot already used, so one set of values configures both.
+ */
+
+function required(name: string, value: string | undefined): string {
+  if (!value?.trim()) throw new Error(`${name} is not set`);
+  return value.trim();
+}
+
+/** A boolean env flag: only "true" or "1" turn it on. */
+export function envFlag(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "true" || value === "1";
+}
+
+export const chatwootConfig = {
+  /** Server-side base URL. Falls back to the public one the browser uses. */
+  get baseUrl(): string {
+    return required(
+      "CHATWOOT_BASE_URL",
+      process.env.CHATWOOT_BASE_URL || process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL,
+    ).replace(/\/$/, "");
+  },
+  /**
+   * Application API: the Agent Bot's access token, never a person's — the
+   * bot's messages must reach the host labelled as the assistant.
+   * CHATWOOT_API_TOKEN is the older name for the same value.
+   */
+  get apiToken(): string {
+    return required(
+      "CHATWOOT_AGENT_ACCESS_TOKEN",
+      process.env.CHATWOOT_AGENT_ACCESS_TOKEN || process.env.CHATWOOT_API_TOKEN,
+    );
+  },
+  get accountId(): string {
+    return required("CHATWOOT_ACCOUNT_ID", process.env.CHATWOOT_ACCOUNT_ID);
+  },
+  /** The Business support API inbox's public identifier (Client API). */
+  get inboxIdentifier(): string {
+    return required("CHATWOOT_INBOX_ID", process.env.CHATWOOT_INBOX_ID);
+  },
+  /** That inbox's identity-validation (HMAC) token. Server-only. */
+  get hmacToken(): string {
+    return required("CHATWOOT_HMAC_TOKEN", process.env.CHATWOOT_HMAC_TOKEN);
+  },
+};
+
+/** The two switches that gate host support. Both default to off. */
+export const supportFlags = {
+  /** The support panel, the /support ticket list and the support webhook. */
+  get chatEnabled(): boolean {
+    return envFlag("SUPPORT_CHAT_ENABLED");
+  },
+  /**
+   * The AI assistant on host tickets: the bot answers, and the panel shows the
+   * orb, "Talk to a person" and the answer check. Off means tickets go
+   * straight to the support team.
+   */
+  get assistantEnabled(): boolean {
+    return envFlag("SUPPORT_ASSISTANT_ENABLED");
+  },
+};

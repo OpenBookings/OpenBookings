@@ -27,6 +27,7 @@ import {
   useNavAttention,
 } from "@/components/dashboard/sidebar-08/use-nav-attention";
 import { WhatsNewDialog } from "@/components/dashboard/sidebar-08/whats-new-dialog";
+import { useOptionalSupport } from "@/components/support/support-provider";
 import { PAGE_IDS, PAGES } from "@/lib/analytics/pages";
 import type { PropertyBrand } from "@/lib/property-brand";
 import {
@@ -37,6 +38,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const navMain: NavItem[] = [
@@ -83,6 +85,8 @@ export function DashboardSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar> & { brand?: PropertyBrand | null }) {
   const { counts, markSeen } = useNavAttention();
+  const support = useOptionalSupport();
+  const { setOpenMobile } = useSidebar();
   const [openDialog, setOpenDialog] = useState<AttentionKey | null>(null);
 
   const openAttentionDialog = (key: AttentionKey) => {
@@ -105,12 +109,20 @@ export function DashboardSidebar({
       attention: counts.whatsNew > 0,
       onSelect: () => openAttentionDialog("whatsNew"),
     },
-    {
-      title: "Support",
-      url: "/support",
-      icon: LifeBuoy,
-      attention: counts.support > 0,
-    },
+    // With support switched on this opens the panel (from any page, and from
+    // the mobile sheet); otherwise it stays a link to the Support page.
+    support
+      ? {
+          title: "Support",
+          type: "dialog",
+          icon: LifeBuoy,
+          attention: support.hasUnread,
+          onSelect: () => {
+            setOpenMobile(false);
+            support.openPanel();
+          },
+        }
+      : { title: "Support", url: "/support", icon: LifeBuoy },
     {
       title: "Documentation",
       type: "external",
