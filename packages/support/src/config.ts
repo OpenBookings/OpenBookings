@@ -27,26 +27,32 @@ export const chatwootConfig = {
     ).replace(/\/$/, "");
   },
   /**
-   * Application API: the Agent Bot's access token, never a person's — the
-   * bot's messages must reach the host labelled as the assistant.
-   * CHATWOOT_API_TOKEN is the older name for the same value.
+   * Application API: Settings → Bots → your bot → Access token. Never a
+   * person's token — the bot's messages must reach the host labelled as the
+   * assistant.
    */
   get apiToken(): string {
-    return required(
-      "CHATWOOT_AGENT_ACCESS_TOKEN",
-      process.env.CHATWOOT_AGENT_ACCESS_TOKEN || process.env.CHATWOOT_API_TOKEN,
-    );
+    return required("CHATWOOT_BOT_ACCESS_TOKEN", process.env.CHATWOOT_BOT_ACCESS_TOKEN);
   },
   get accountId(): string {
     return required("CHATWOOT_ACCOUNT_ID", process.env.CHATWOOT_ACCOUNT_ID);
   },
-  /** The Business support API inbox's public identifier (Client API). */
+  /**
+   * Client API: the Business support inbox → Configuration → Inbox identifier
+   * (the long text token, not the numeric id).
+   */
   get inboxIdentifier(): string {
-    return required("CHATWOOT_INBOX_ID", process.env.CHATWOOT_INBOX_ID);
+    return required(
+      "CHATWOOT_BUSINESS_INBOX_IDENTIFIER",
+      process.env.CHATWOOT_BUSINESS_INBOX_IDENTIFIER,
+    );
   },
-  /** That inbox's identity-validation (HMAC) token. Server-only. */
+  /** That inbox → Configuration → Identity validation → HMAC token. Server-only. */
   get hmacToken(): string {
-    return required("CHATWOOT_HMAC_TOKEN", process.env.CHATWOOT_HMAC_TOKEN);
+    return required(
+      "CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN",
+      process.env.CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN,
+    );
   },
 };
 

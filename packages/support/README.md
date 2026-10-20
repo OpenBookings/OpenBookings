@@ -49,8 +49,8 @@ Apply `packages/db/drizzle/0025_business_support.sql`. CI does this on merge (`d
 In Chatwoot → Settings → Inboxes:
 
 1. Use the existing API inbox (or create one called "Business support", channel **API**, webhook URL empty).
-2. **Configuration → Identity validation:** on, and enforced. Copy its HMAC token → `CHATWOOT_HMAC_TOKEN`.
-3. Note two values: the inbox **identifier** (the long token on the inbox page, also in the inbox URL settings) → `CHATWOOT_INBOX_ID`, and the **numeric inbox id** (in the settings URL, `/inboxes/<id>`) → `CHATWOOT_BUSINESS_INBOX_ID` (bot only).
+2. **Configuration → Identity validation:** on, and enforced. Copy its HMAC token → `CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN`.
+3. Note two values: the **inbox identifier** (the long text token under Configuration) → `CHATWOOT_BUSINESS_INBOX_IDENTIFIER`, and the **numeric inbox id** (in the settings URL, `/inboxes/<id>`) → `CHATWOOT_BUSINESS_INBOX_ID` (bot only).
 4. **Settings:** "Lock to single conversation" **off**, "Allow messages after conversation is resolved" **off**.
 5. **Business hours:** on, with your hours and timezone. The panel's response line reads them.
 6. **Bot configuration:** attach the existing Agent Bot. That's what makes new tickets start `pending` ("With assistant").
@@ -59,7 +59,7 @@ In Chatwoot → Settings → Inboxes:
 
 The Application API calls (hand-off, custom attributes, typing, the bot's replies) must authenticate as the **Agent Bot**, never as a person. Otherwise the bot's replies show up as written by a person, which breaks the AI labelling (EU AI Act Art. 50).
 
-Settings → Bots → your bot → copy its access token → `CHATWOOT_AGENT_ACCESS_TOKEN` (same value in the business app and the bot), and its webhook secret → `CHATWOOT_AGENT_WH_TOKEN` (bot only). Set the bot's outgoing URL to `https://<support-bot>/webhooks/chatwoot`. The older names `CHATWOOT_API_TOKEN` and `CHATWOOT_WEBHOOK_SECRET` still work.
+Settings → Bots → your bot → copy its access token → `CHATWOOT_BOT_ACCESS_TOKEN` (same value in the business app and the bot), and its webhook secret → `CHATWOOT_BOT_WEBHOOK_SECRET` (bot only). Set the bot's outgoing URL to `https://<support-bot>/webhooks/chatwoot`. Don't use a person's token from Profile → Access token here.
 
 ### 4. Conversation custom attributes
 
@@ -79,7 +79,7 @@ Settings → Custom attributes → **Conversation**. Create these keys (display 
 
 ### 5. Webhook
 
-Settings → Integrations → Webhooks → add: URL `https://<support-bot>/webhooks/business-support`, events **Conversation created**, **Conversation status changed** and **Message created**. Copy its secret → `CHATWOOT_SUPPORT_WEBHOOK_SECRET` (bot). This is separate from the guest webhook and its secret.
+Settings → Integrations → Webhooks → add: URL `https://<support-bot>/webhooks/business-support`, events **Conversation created**, **Conversation status changed** and **Message created**. Copy its secret → `CHATWOOT_ACCOUNT_WEBHOOK_SECRET` (bot). This is separate from the Agent Bot's webhook and its secret.
 
 Chatwoot refuses `localhost` webhook URLs. For local testing run `cloudflared tunnel --url http://localhost:3003` and use the tunnel URL. Without the webhook everything still works, but the list only updates when a chat is opened, and no reply emails go out.
 
@@ -95,15 +95,28 @@ Cloud Tasks doesn't exist on Scaleway, so the bot can now use **Upstash QStash**
 
 ### 7. Environment
 
+Each Chatwoot value is named after the screen it comes from:
+
+| Variable | Chatwoot | Used by |
+| --- | --- | --- |
+| `CHATWOOT_BASE_URL` | Your Chatwoot URL | bot, business |
+| `CHATWOOT_ACCOUNT_ID` | `/app/accounts/<id>/…` in the URL | bot, business |
+| `CHATWOOT_BOT_ACCESS_TOKEN` | Settings → Bots → your bot → Access token | bot, business |
+| `CHATWOOT_BOT_WEBHOOK_SECRET` | Settings → Bots → your bot → Webhook secret | bot |
+| `CHATWOOT_BUSINESS_INBOX_ID` | Business support inbox → `/inboxes/<id>` in the URL | bot |
+| `CHATWOOT_BUSINESS_INBOX_IDENTIFIER` | Business support inbox → Configuration → Inbox identifier | business |
+| `CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN` | Business support inbox → Configuration → Identity validation → HMAC token | business |
+| `CHATWOOT_ACCOUNT_WEBHOOK_SECRET` | Settings → Integrations → Webhooks → the `/webhooks/business-support` entry | bot |
+
 **apps/business** (runtime):
 
 ```
 SUPPORT_CHAT_ENABLED=true
 SUPPORT_ASSISTANT_ENABLED=false          # true once step 6 works
 CHATWOOT_BASE_URL=https://chat.…          # server → Chatwoot (defaults to the public one)
-CHATWOOT_INBOX_ID=<inbox identifier>
-CHATWOOT_HMAC_TOKEN=<inbox HMAC token>
-CHATWOOT_AGENT_ACCESS_TOKEN=<agent bot token>
+CHATWOOT_BUSINESS_INBOX_IDENTIFIER=<inbox identifier>
+CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN=<inbox HMAC token>
+CHATWOOT_BOT_ACCESS_TOKEN=<agent bot access token>
 CHATWOOT_ACCOUNT_ID=1
 ```
 
@@ -114,12 +127,12 @@ If Chatwoot stores attachments in S3/R2 instead of on its own disk, add that sto
 **apps/support-bot**, on top of what it already has:
 
 ```
-CHATWOOT_AGENT_ACCESS_TOKEN=<agent bot token>        # replaces CHATWOOT_API_TOKEN
-CHATWOOT_AGENT_WH_TOKEN=<agent bot webhook secret>   # replaces CHATWOOT_WEBHOOK_SECRET
+CHATWOOT_BOT_ACCESS_TOKEN=<agent bot access token>
+CHATWOOT_BOT_WEBHOOK_SECRET=<agent bot webhook secret>
 SUPPORT_CHAT_ENABLED=true
 SUPPORT_ASSISTANT_ENABLED=false
 CHATWOOT_BUSINESS_INBOX_ID=<numeric inbox id>
-CHATWOOT_SUPPORT_WEBHOOK_SECRET=<step 5>
+CHATWOOT_ACCOUNT_WEBHOOK_SECRET=<step 5>
 BUSINESS_APP_URL=https://business.openbookings.co
 LETTERMINT_PROJECT_TOKEN=…
 EMAIL_FROM_ADDRESS="OpenBookings Support <noreply@openbookings.co>"   # optional

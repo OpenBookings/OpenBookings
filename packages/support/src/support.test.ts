@@ -10,9 +10,9 @@ beforeEach(() => {
   calls.length = 0;
   responses = [];
   process.env.CHATWOOT_BASE_URL = "https://chat.example.test/";
-  process.env.CHATWOOT_INBOX_ID = "inbox token/with space";
-  process.env.CHATWOOT_HMAC_TOKEN = "test-hmac-token";
-  process.env.CHATWOOT_API_TOKEN = "bot-token";
+  process.env.CHATWOOT_BUSINESS_INBOX_IDENTIFIER = "inbox token/with space";
+  process.env.CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN = "test-hmac-token";
+  process.env.CHATWOOT_BOT_ACCESS_TOKEN = "bot-token";
   process.env.CHATWOOT_ACCOUNT_ID = "7";
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     calls.push({

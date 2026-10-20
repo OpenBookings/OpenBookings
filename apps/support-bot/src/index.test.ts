@@ -11,8 +11,7 @@ import type { ProcessConversationPayload } from "./tasks";
  */
 
 const SECRET = "test-webhook-secret";
-process.env.CHATWOOT_WEBHOOK_SECRET = SECRET;
-process.env.CHATWOOT_AGENT_WH_TOKEN = SECRET;
+process.env.CHATWOOT_BOT_WEBHOOK_SECRET = SECRET;
 
 const enqueued: ProcessConversationPayload[] = [];
 /** Generic task enqueues (the support webhook's reply-email checks). */
@@ -228,7 +227,7 @@ describe("POST /webhooks/business-support", () => {
   }
 
   beforeEach(() => {
-    process.env.CHATWOOT_SUPPORT_WEBHOOK_SECRET = SUPPORT_SECRET;
+    process.env.CHATWOOT_ACCOUNT_WEBHOOK_SECRET = SUPPORT_SECRET;
     process.env.CHATWOOT_BUSINESS_INBOX_ID = "9";
     process.env.SUPPORT_CHAT_ENABLED = "true";
     supportTickets.set(88, { id: "t-1", organization_id: "org-1", opened_by_user_id: "user_host_1", status: "pending" });

@@ -28,23 +28,12 @@ const ALWAYS_REQUIRED = [
   "MISTRAL_MODEL",
   "CHATWOOT_BASE_URL",
   "CHATWOOT_ACCOUNT_ID",
+  "CHATWOOT_BOT_ACCESS_TOKEN",
+  "CHATWOOT_BOT_WEBHOOK_SECRET",
   "SERVICE_BASE_URL",
   "DATABASE_URL", // read by @openbookings/db
   "STRIPE_SECRET_KEY", // read by @openbookings/stripe
 ] as const;
-
-/**
- * The Agent Bot's credentials, each under its current name or the older one.
- * Reported by the current name when both are missing.
- */
-const ALIASED: ReadonlyArray<readonly [current: string, older: string]> = [
-  ["CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_API_TOKEN"],
-  ["CHATWOOT_AGENT_WH_TOKEN", "CHATWOOT_WEBHOOK_SECRET"],
-];
-
-function aliased(current: string, older: string): string | undefined {
-  return process.env[current] || process.env[older] || undefined;
-}
 
 const QUEUE_REQUIRED: Record<TaskQueue, readonly string[]> = {
   "cloud-tasks": [
@@ -59,7 +48,7 @@ const QUEUE_REQUIRED: Record<TaskQueue, readonly string[]> = {
 /** Needed only while host support is switched on (SUPPORT_CHAT_ENABLED). */
 const SUPPORT_REQUIRED = [
   "CHATWOOT_BUSINESS_INBOX_ID",
-  "CHATWOOT_SUPPORT_WEBHOOK_SECRET",
+  "CHATWOOT_ACCOUNT_WEBHOOK_SECRET",
   "BUSINESS_APP_URL",
   "LETTERMINT_PROJECT_TOKEN", // read by @openbookings/mailing
 ] as const;
@@ -82,7 +71,6 @@ function flag(name: string): boolean {
 /** The variables this configuration needs. Exported for the startup check's tests. */
 export function requiredAtStartup(): string[] {
   const names: string[] = [...ALWAYS_REQUIRED];
-  for (const [current, older] of ALIASED) if (!aliased(current, older)) names.push(current);
   // Inline dispatch never touches a queue.
   if (!flag("TASKS_INLINE")) names.push(...QUEUE_REQUIRED[parseTaskQueue(process.env.TASK_QUEUE)]);
   if (flag("SUPPORT_CHAT_ENABLED")) names.push(...SUPPORT_REQUIRED);
@@ -128,23 +116,19 @@ export const env = {
   get chatwootBaseUrl() {
     return required("CHATWOOT_BASE_URL").replace(/\/$/, "");
   },
-  /** The Agent Bot's access token (CHATWOOT_API_TOKEN is the older name). */
+  /** Settings → Bots → your bot → Access token. */
   get chatwootApiToken() {
-    const value = aliased("CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_API_TOKEN");
-    if (!value) throw new Error("CHATWOOT_AGENT_ACCESS_TOKEN is not set");
-    return value;
+    return required("CHATWOOT_BOT_ACCESS_TOKEN");
   },
   get chatwootAccountId() {
     return required("CHATWOOT_ACCOUNT_ID");
   },
   /**
-   * Secret Chatwoot signs the Agent Bot's webhook with (the bot's own
-   * secret; CHATWOOT_WEBHOOK_SECRET is the older name).
+   * Settings → Bots → your bot → Webhook secret. Chatwoot signs the bot's
+   * outgoing webhook (/webhooks/chatwoot) with it.
    */
   get chatwootWebhookSecret() {
-    const value = aliased("CHATWOOT_AGENT_WH_TOKEN", "CHATWOOT_WEBHOOK_SECRET");
-    if (!value) throw new Error("CHATWOOT_AGENT_WH_TOKEN is not set");
-    return value;
+    return required("CHATWOOT_BOT_WEBHOOK_SECRET");
   },
   get cloudTasksProject() {
     // Set automatically on Cloud Run; explicit locally.
@@ -219,9 +203,12 @@ export const env = {
     }
     return id;
   },
-  /** Secret of the separate account webhook that keeps support_tickets current. */
+  /**
+   * Settings → Integrations → Webhooks → the /webhooks/business-support entry.
+   * Keeps support_tickets current.
+   */
   get supportWebhookSecret() {
-    return required("CHATWOOT_SUPPORT_WEBHOOK_SECRET");
+    return required("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
   },
   /** Public URL of apps/business, for links in reply emails. */
   get businessAppUrl() {
