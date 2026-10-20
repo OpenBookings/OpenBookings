@@ -5,7 +5,7 @@
  *   bun run scripts/send-webhook.ts --conversation 42 "hallo"
  *   bun run scripts/send-webhook.ts --replay "..."   # reuse the last message id
  *
- * Signs with CHATWOOT_WEBHOOK_SECRET exactly as Chatwoot does, so this
+ * Signs with CHATWOOT_BOT_WEBHOOK_SECRET exactly as Chatwoot does, so this
  * exercises the real verification path — no tunnel and no Chatwoot needed.
  *
  * --replay reuses the previous message id, which is how you check idempotency:
@@ -31,9 +31,9 @@ if (!content) {
   process.exit(1);
 }
 
-const secret = process.env.CHATWOOT_WEBHOOK_SECRET;
+const secret = process.env.CHATWOOT_BOT_WEBHOOK_SECRET;
 if (!secret) {
-  console.error("CHATWOOT_WEBHOOK_SECRET is not set");
+  console.error("CHATWOOT_BOT_WEBHOOK_SECRET is not set");
   process.exit(1);
 }
 

@@ -79,9 +79,9 @@ idempotent, so re-running the file is safe.
 MISTRAL_API_KEY
 MISTRAL_MODEL                       # e.g. mistral-small-2603
 CHATWOOT_BASE_URL
-CHATWOOT_API_TOKEN
 CHATWOOT_ACCOUNT_ID
-CHATWOOT_WEBHOOK_SECRET
+CHATWOOT_BOT_ACCESS_TOKEN           # Settings → Bots → your bot → Access token
+CHATWOOT_BOT_WEBHOOK_SECRET         # Settings → Bots → your bot → Webhook secret
 SERVICE_BASE_URL                    # public URL of this service (task target, OIDC audience)
 REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
 TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*
@@ -101,17 +101,17 @@ QSTASH_URL                          # optional, for a non-default region
 # host support (only while SUPPORT_CHAT_ENABLED=true):
 SUPPORT_CHAT_ENABLED
 SUPPORT_ASSISTANT_ENABLED           # the assistant answers host tickets
-CHATWOOT_BUSINESS_INBOX_ID          # numeric id of the Business support inbox
-CHATWOOT_SUPPORT_WEBHOOK_SECRET     # secret of the business-support webhook
+CHATWOOT_BUSINESS_INBOX_ID          # numeric id of the Business support inbox (/inboxes/<id>)
+CHATWOOT_ACCOUNT_WEBHOOK_SECRET     # Settings → Integrations → Webhooks → business-support entry
 BUSINESS_APP_URL                    # links in reply emails
 LETTERMINT_PROJECT_TOKEN            # read by @openbookings/mailing
 ```
 
-`CHATWOOT_AGENT_ACCESS_TOKEN` (older name `CHATWOOT_API_TOKEN`) must be the
-**Agent Bot's** access token, so its replies reach Chatwoot (and the business
-panel) as `agent_bot`, not as a person. `CHATWOOT_AGENT_WH_TOKEN` (older name
-`CHATWOOT_WEBHOOK_SECRET`) is the secret Chatwoot signs the Agent Bot's
-webhook (`/webhooks/chatwoot`) with.
+`CHATWOOT_BOT_ACCESS_TOKEN` must be the **Agent Bot's** access token, never a
+person's (Profile → Access token), so its replies reach Chatwoot (and the
+business panel) as `agent_bot`. `CHATWOOT_BOT_WEBHOOK_SECRET` is the secret
+Chatwoot signs the Agent Bot's webhook (`/webhooks/chatwoot`) with. The full
+name → Chatwoot screen map is in `packages/support/README.md`.
 
 `DATABASE_URL` and `STRIPE_SECRET_KEY` are read inside `@openbookings/db` and
 `@openbookings/stripe` — no separate copies here, but they are still required.
@@ -147,7 +147,7 @@ bun run scripts/send-webhook.ts --conversation 1 "what time is check-in?"
 bun run scripts/send-webhook.ts --replay --conversation 1 "..."   # idempotency
 ```
 
-`send-webhook.ts` signs with `CHATWOOT_WEBHOOK_SECRET` exactly as Chatwoot
+`send-webhook.ts` signs with `CHATWOOT_BOT_WEBHOOK_SECRET` exactly as Chatwoot
 does, so it exercises the real verification path. `--replay` reuses the
 previous message id: the second delivery must return `duplicate: true` and
 must not produce a second reply.

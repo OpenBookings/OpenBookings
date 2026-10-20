@@ -182,23 +182,10 @@ describe("requiredAtStartup", () => {
     }
   };
 
-  it("accepts the Agent Bot credentials under either name", () => {
-    const names = ["CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_API_TOKEN", "CHATWOOT_AGENT_WH_TOKEN", "CHATWOOT_WEBHOOK_SECRET"];
-    const before = Object.fromEntries(names.map((k) => [k, process.env[k]]));
-    try {
-      for (const k of names) delete process.env[k];
-      expect(requiredAtStartup()).toEqual(expect.arrayContaining(["CHATWOOT_AGENT_ACCESS_TOKEN", "CHATWOOT_AGENT_WH_TOKEN"]));
-      process.env.CHATWOOT_API_TOKEN = "old";
-      process.env.CHATWOOT_AGENT_WH_TOKEN = "new";
-      const required = requiredAtStartup();
-      expect(required).not.toContain("CHATWOOT_AGENT_ACCESS_TOKEN");
-      expect(required).not.toContain("CHATWOOT_AGENT_WH_TOKEN");
-    } finally {
-      for (const k of names) {
-        if (before[k] === undefined) delete process.env[k];
-        else process.env[k] = before[k];
-      }
-    }
+  it("always asks for the Agent Bot credentials", () => {
+    expect(requiredAtStartup()).toEqual(
+      expect.arrayContaining(["CHATWOOT_BOT_ACCESS_TOKEN", "CHATWOOT_BOT_WEBHOOK_SECRET"]),
+    );
   });
 
   it("asks for the configured queue's credentials and support settings only when used", () => {
@@ -209,13 +196,13 @@ describe("requiredAtStartup", () => {
       const qstash = requiredAtStartup();
       expect(qstash).toContain("QSTASH_TOKEN");
       expect(qstash).not.toContain("CLOUD_TASKS_QUEUE_NAME");
-      expect(qstash).not.toContain("CHATWOOT_SUPPORT_WEBHOOK_SECRET");
+      expect(qstash).not.toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
 
       delete process.env.TASK_QUEUE;
       process.env.SUPPORT_CHAT_ENABLED = "true";
       const cloud = requiredAtStartup();
       expect(cloud).toContain("CLOUD_TASKS_QUEUE_NAME");
-      expect(cloud).toContain("CHATWOOT_SUPPORT_WEBHOOK_SECRET");
+      expect(cloud).toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
       expect(cloud).toContain("LETTERMINT_PROJECT_TOKEN");
 
       process.env.TASK_QUEUE = "sqs";
