@@ -17,9 +17,9 @@
   },
   "dependencies": {
     "@better-auth/infra": "^0.4.17",
-    "@better-auth/passkey": "1.7.7",
+    "@better-auth/passkey": "1.7.12",
     "@openbookings/authz": "workspace:*",
-    "better-auth": "1.7.7",
+    "better-auth": "1.7.12",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
