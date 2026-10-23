@@ -56,8 +56,6 @@
         "stripe",
         "hono",
         "@mistralai/mistralai",
-        "google-auth-library",
-        "@google-cloud/**",
         "typescript"
       ],
       "automerge": false

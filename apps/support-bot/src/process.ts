@@ -75,7 +75,7 @@ async function fetchTurnsFromChatwoot(conversationId: number): Promise<CachedTur
 }
 
 /**
- * The async side of the pipeline, invoked by Cloud Tasks. Safe to retry: the
+ * The async side of the pipeline, invoked by the task queue. Safe to retry: the
  * replied_at guard makes re-runs of an already-replied event no-ops, so
  * retries never post a duplicate guest-facing reply.
  */

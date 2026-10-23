@@ -173,8 +173,8 @@ app.post('/webhooks/business-support', async (c) => {
 })
 
 /**
- * Task callbacks — the slow paths. Only callable by our queue (Cloud Tasks
- * OIDC or a QStash signature). Non-2xx makes the queue retry; each handler is
+ * Task callbacks — the slow paths. Only callable by our queue (a QStash
+ * signature). Non-2xx makes the queue retry; each handler is
  * idempotent, so retries never double-post or double-send.
  */
 app.post('/tasks/process-conversation', async (c) => {
@@ -182,11 +182,7 @@ app.post('/tasks/process-conversation', async (c) => {
   const authorized = await verifyTaskRequest({
     name: 'process-conversation',
     rawBody,
-    headers: {
-      authorization: c.req.header('Authorization'),
-      queueName: c.req.header('X-CloudTasks-QueueName'),
-      upstashSignature: c.req.header('Upstash-Signature'),
-    },
+    headers: { upstashSignature: c.req.header('Upstash-Signature') },
   })
   if (!authorized) {
     trace('task', 'unauthorized request rejected')
@@ -220,11 +216,7 @@ app.post('/tasks/support-reply-notify', async (c) => {
   const authorized = await verifyTaskRequest({
     name: 'support-reply-notify',
     rawBody,
-    headers: {
-      authorization: c.req.header('Authorization'),
-      queueName: c.req.header('X-CloudTasks-QueueName'),
-      upstashSignature: c.req.header('Upstash-Signature'),
-    },
+    headers: { upstashSignature: c.req.header('Upstash-Signature') },
   })
   if (!authorized) return c.json({ error: 'unauthorized' }, 403)
 

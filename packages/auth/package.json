@@ -19,13 +19,13 @@
     "@better-auth/passkey": "1.7.12",
     "@openbookings/authz": "workspace:*",
     "better-auth": "1.7.12",
-    "pg": "^8.22.0",
-    "zod": "^4.4.3"
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@types/bun": "^1.3.14",
-    "@types/pg": "^8.20.0",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.9.3"
   }
 }

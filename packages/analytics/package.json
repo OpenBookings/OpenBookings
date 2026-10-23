@@ -13,9 +13,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "posthog-js": "^1.422.5",
-    "posthog-node": "^5.51.4",
-    "zod": "^4.4.3"
+    "posthog-js": "^1.438.16",
+    "posthog-node": "^5.56.4",
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
     "next": "*",
@@ -24,7 +24,7 @@
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@types/node": "^26.0.0",
-    "@types/react": "19.2.14",
+    "@types/react": "19.3.0",
     "typescript": "^5.9.3",
     "@types/bun": "^1.3.14"
   }
