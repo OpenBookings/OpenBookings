@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google-cloud/tasks": "^6.2.0",
+    "@google-cloud/tasks": "^7.0.0",
     "@mistralai/mistralai": "^1.10.0",
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
