@@ -20,7 +20,7 @@
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@openbookings/db": "workspace:*",
-    "turbo": "2.10.8"
+    "turbo": "2.11.9"
   },
   "overrides": {
     "@types/react": "19.2.14",
