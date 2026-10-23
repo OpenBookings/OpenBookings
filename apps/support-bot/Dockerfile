@@ -61,7 +61,7 @@
     COPY --from=prod-deps --chown=hono:nodejs /app/ .
 
     USER hono
-    # Cloud Run injects PORT; Bun's default export honours it, and 8080 is the
+    # The platform may inject PORT; Bun's default export honours it, and 8080 is the
     # fallback used when running the image directly.
     ENV PORT=8080
     EXPOSE 8080
