@@ -5,7 +5,7 @@ import type { ChatFn, ChatResponse } from "./agent/loop";
 /**
  * Async-processor tests. The DB and the Chatwoot API are mocked so the whole
  * pipeline runs offline; what's under test is the second idempotency layer
- * (a Cloud Tasks retry must not double-post to the guest) and that both
+ * (a queue retry must not double-post to the guest) and that both
  * escalation paths — rule-based and model-driven — leave the conversation in
  * the same state.
  */
@@ -71,7 +71,7 @@ describe("processConversation idempotency", () => {
     expect(processedEvents.get(EVENT_ID)?.repliedAt).toBe(true);
   });
 
-  it("does not post a second reply when Cloud Tasks retries the same task", async () => {
+  it("does not post a second reply when the queue retries the same task", async () => {
     await processConversation(payload(), {
       chat: scriptedChat([{ content: "Check-in is from 15:00." }]),
     });

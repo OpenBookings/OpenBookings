@@ -669,7 +669,7 @@ export const messages = pgTable(
  * Idempotency ledger for the support bot's Chatwoot webhook. One row per
  * Chatwoot event (e.g. `message_created:<message_id>`). The webhook inserts
  * before enqueueing (ON CONFLICT DO NOTHING → duplicate delivery is a no-op);
- * the task handler sets `replied_at` after posting to Chatwoot so Cloud Tasks
+ * the task handler sets `replied_at` after posting to Chatwoot so queue
  * retries never produce a second guest-facing reply.
  */
 export const processedEvents = pgTable("processed_events", {

@@ -20,8 +20,8 @@ function required(name: string): string {
  * can never succeed — so the entrypoint asserts the whole set up front and the
  * revision fails to go live instead.
  *
- * The set depends on the configuration: the task queue backend decides which
- * queue credentials are needed, and host support adds its own.
+ * The set depends on the configuration: inline dispatch (local dev) needs no
+ * queue credentials, and host support adds its own.
  */
 const ALWAYS_REQUIRED = [
   "MISTRAL_API_KEY",
@@ -35,15 +35,7 @@ const ALWAYS_REQUIRED = [
   "STRIPE_SECRET_KEY", // read by @openbookings/stripe
 ] as const;
 
-const QUEUE_REQUIRED: Record<TaskQueue, readonly string[]> = {
-  "cloud-tasks": [
-    "GOOGLE_CLOUD_PROJECT",
-    "CLOUD_TASKS_QUEUE_NAME",
-    "CLOUD_TASKS_QUEUE_LOCATION",
-    "CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL",
-  ],
-  qstash: ["QSTASH_TOKEN", "QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"],
-};
+const QUEUE_REQUIRED = ["QSTASH_TOKEN", "QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY"] as const;
 
 /** Needed only while host support is switched on (SUPPORT_CHAT_ENABLED). */
 const SUPPORT_REQUIRED = [
@@ -52,16 +44,6 @@ const SUPPORT_REQUIRED = [
   "BUSINESS_APP_URL",
   "LETTERMINT_PROJECT_TOKEN", // read by @openbookings/mailing
 ] as const;
-
-export type TaskQueue = "cloud-tasks" | "qstash";
-
-/** TASK_QUEUE: "cloud-tasks" (default, the original setup) or "qstash". */
-export function parseTaskQueue(raw: string | undefined): TaskQueue {
-  const value = raw?.trim().toLowerCase();
-  if (!value || value === "cloud-tasks") return "cloud-tasks";
-  if (value === "qstash") return "qstash";
-  throw new Error(`TASK_QUEUE must be "cloud-tasks" or "qstash", got "${raw}"`);
-}
 
 function flag(name: string): boolean {
   const value = process.env[name]?.trim().toLowerCase();
@@ -72,7 +54,7 @@ function flag(name: string): boolean {
 export function requiredAtStartup(): string[] {
   const names: string[] = [...ALWAYS_REQUIRED];
   // Inline dispatch never touches a queue.
-  if (!flag("TASKS_INLINE")) names.push(...QUEUE_REQUIRED[parseTaskQueue(process.env.TASK_QUEUE)]);
+  if (!flag("TASKS_INLINE")) names.push(...QUEUE_REQUIRED);
   if (flag("SUPPORT_CHAT_ENABLED")) names.push(...SUPPORT_REQUIRED);
   return names;
 }
@@ -87,7 +69,6 @@ export function assertRequiredEnv(): void {
   }
 
   // Parse the values whose format matters now, not on the first webhook.
-  parseTaskQueue(process.env.TASK_QUEUE);
   if (flag("SUPPORT_CHAT_ENABLED")) void env.businessInboxId;
 
   // The local-dev escape hatches disable webhook-to-task authentication
@@ -130,42 +111,28 @@ export const env = {
   get chatwootWebhookSecret() {
     return required("CHATWOOT_BOT_WEBHOOK_SECRET");
   },
-  get cloudTasksProject() {
-    // Set automatically on Cloud Run; explicit locally.
-    return required("GOOGLE_CLOUD_PROJECT");
-  },
-  get cloudTasksQueueName() {
-    return required("CLOUD_TASKS_QUEUE_NAME");
-  },
-  get cloudTasksQueueLocation() {
-    return required("CLOUD_TASKS_QUEUE_LOCATION");
-  },
-  /** Public base URL of this service — Cloud Tasks posts back to it and it is the OIDC audience. */
+  /**
+   * Public base URL of this service. QStash posts back to it, and the
+   * delivery signature binds this URL, so it must match exactly.
+   */
   get serviceBaseUrl() {
     return required("SERVICE_BASE_URL").replace(/\/$/, "");
   },
-  /** Service account Cloud Tasks uses to mint OIDC tokens for the task handler. */
-  get tasksServiceAccountEmail() {
-    return required("CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL");
-  },
   /**
    * Local-dev escape hatch: dispatch straight to the task handler instead of
-   * enqueueing, so the pipeline is testable without a Cloud Tasks queue.
+   * enqueueing, so the pipeline is testable without a QStash account.
    * Requires TASKS_AUTH_DISABLED too, or the self-call is rejected with 403.
    * Never set in production.
    */
   get tasksInline() {
     return process.env.TASKS_INLINE?.trim() === "true";
   },
-  /** Local-dev escape hatch: skip OIDC verification on /tasks/*. Never set in production. */
+  /** Local-dev escape hatch: skip signature verification on /tasks/*. Never set in production. */
   get tasksAuthDisabled() {
     // Trimmed: a stray trailing space in a .env file would otherwise make
     // this silently false, and the failure mode (auth unexpectedly ON in
     // local dev) looks like a broken queue rather than a typo.
     return process.env.TASKS_AUTH_DISABLED?.trim() === "true";
-  },
-  get taskQueue(): TaskQueue {
-    return parseTaskQueue(process.env.TASK_QUEUE);
   },
   get qstashToken() {
     return required("QSTASH_TOKEN");
