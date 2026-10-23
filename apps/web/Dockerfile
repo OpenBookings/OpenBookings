@@ -4,7 +4,7 @@
     COPY . .
     # Pinned: the pruner has no node_modules, so an unpinned `bunx turbo` would
     # fetch whatever is latest on npm. Keep in sync with turbo in package.json (pinned exact there).
-    RUN bunx turbo@2.10.8 prune @openbookings/web --docker
+    RUN bunx turbo@2.11.10 prune @openbookings/web --docker
     
     # ---------- Installer ----------
     FROM oven/bun:1.3-alpine AS installer

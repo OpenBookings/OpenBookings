@@ -2,7 +2,6 @@ import { betterAuth, APIError } from "better-auth";
 import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { passkey } from "@better-auth/passkey";
-import { dash } from "@better-auth/infra";
 import { ac, roles } from "@openbookings/authz/permissions";
 import {
   accountLinkingOptions,
@@ -326,7 +325,6 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     plugins: [
       magicLink(magicLinkOptions(config)),
-      ...(config.dashApiKey ? [dash({ apiKey: config.dashApiKey })] : []),
       organization({
         ac,
         roles,

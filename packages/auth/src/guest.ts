@@ -1,6 +1,5 @@
 import { betterAuth } from "better-auth";
 import { magicLink } from "better-auth/plugins";
-import { dash } from "@better-auth/infra";
 import {
   accountLinkingOptions,
   accountTypeHooksForPool,
@@ -40,7 +39,6 @@ export function createGuestAuth(config: GuestAuthConfig) {
     databaseHooks: accountTypeHooksForPool(pool, "private"),
     plugins: [
       magicLink(magicLinkOptions(config)),
-      ...(config.dashApiKey ? [dash({ apiKey: config.dashApiKey })] : []),
     ],
     socialProviders: {
       ...(config.googleClientId && config.googleClientSecret

@@ -23,7 +23,6 @@ export const auth = createHostAuth({
     "https://openbookings.co",
     "http://business.localhost:3001",
   ],
-  dashApiKey: process.env.BETTER_AUTH_DASH_API_KEY,
   googleClientId: process.env.GOOGLE_CLIENT_ID_BUSINESS,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET_BUSINESS,
   microsoftClientId: process.env.MICROSOFT_CLIENT_ID,

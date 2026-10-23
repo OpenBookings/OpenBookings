@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "lettermint": "^2.0.0"
+    "lettermint": "^2.8.0"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
