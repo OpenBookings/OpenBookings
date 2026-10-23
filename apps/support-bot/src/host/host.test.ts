@@ -173,7 +173,7 @@ describe("reply email", () => {
 });
 
 describe("requiredAtStartup", () => {
-  const keys = ["TASK_QUEUE", "TASKS_INLINE", "SUPPORT_CHAT_ENABLED"];
+  const keys = ["TASKS_INLINE", "SUPPORT_CHAT_ENABLED"];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   const restore = () => {
     for (const k of keys) {
@@ -188,25 +188,21 @@ describe("requiredAtStartup", () => {
     );
   });
 
-  it("asks for the configured queue's credentials and support settings only when used", () => {
+  it("asks for queue credentials and support settings only when used", () => {
     try {
       delete process.env.TASKS_INLINE;
       delete process.env.SUPPORT_CHAT_ENABLED;
-      process.env.TASK_QUEUE = "qstash";
-      const qstash = requiredAtStartup();
-      expect(qstash).toContain("QSTASH_TOKEN");
-      expect(qstash).not.toContain("CLOUD_TASKS_QUEUE_NAME");
-      expect(qstash).not.toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
+      const queued = requiredAtStartup();
+      expect(queued).toContain("QSTASH_TOKEN");
+      expect(queued).not.toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
 
-      delete process.env.TASK_QUEUE;
       process.env.SUPPORT_CHAT_ENABLED = "true";
-      const cloud = requiredAtStartup();
-      expect(cloud).toContain("CLOUD_TASKS_QUEUE_NAME");
-      expect(cloud).toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
-      expect(cloud).toContain("LETTERMINT_PROJECT_TOKEN");
+      const support = requiredAtStartup();
+      expect(support).toContain("CHATWOOT_ACCOUNT_WEBHOOK_SECRET");
+      expect(support).toContain("LETTERMINT_PROJECT_TOKEN");
 
-      process.env.TASK_QUEUE = "sqs";
-      expect(() => requiredAtStartup()).toThrow('TASK_QUEUE must be "cloud-tasks" or "qstash"');
+      process.env.TASKS_INLINE = "true";
+      expect(requiredAtStartup()).not.toContain("QSTASH_TOKEN");
     } finally {
       restore();
     }

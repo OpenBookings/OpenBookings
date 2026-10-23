@@ -10,8 +10,8 @@ to a human) back into the conversation.
 ```
 Guest message → Chatwoot (status: pending) → POST /webhooks/chatwoot
   → verify X-Chatwoot-Signature (+ timestamp) → dedupe (processed_events)
-  → enqueue Cloud Task → 200
-Cloud Task → POST /tasks/process-conversation (OIDC-authenticated)
+  → enqueue QStash task → 200
+QStash → POST /tasks/process-conversation (signature-verified)
   → context from support_context_cache (fallback: Chatwoot messages API)
   → Mistral loop (MISTRAL_MODEL, max 5 tool iterations)
       tools: get_reservation · get_payment_status · get_cancellation_policy · escalate_to_human
@@ -46,7 +46,7 @@ regardless of model judgment.
 
 Idempotency is two-layered too: the webhook dedupes event ids on insert, and
 the task handler checks/sets `processed_events.replied_at` around the
-guest-facing post, so Cloud Tasks retries never double-reply.
+guest-facing post, so queue retries never double-reply.
 
 ## Layout
 
@@ -59,7 +59,7 @@ guest-facing post, so Cloud Tasks retries never double-reply.
   check in `@openbookings/support` (also used by apps/business)
 - `src/host/` — host-ticket agent: prompt, tools, booking queries
 - `src/support/` — business-support webhook and reply-email task
-- `src/tasks.ts` — task queue (Cloud Tasks or QStash) + delivery verification
+- `src/tasks.ts` — task queue (QStash) + delivery verification
 
 - `src/testing/mocks.ts` — shared `@openbookings/db` / Chatwoot test doubles
   (registered once, because `mock.module` is process-global)
@@ -82,17 +82,10 @@ CHATWOOT_BASE_URL
 CHATWOOT_ACCOUNT_ID
 CHATWOOT_BOT_ACCESS_TOKEN           # Settings → Bots → your bot → Access token
 CHATWOOT_BOT_WEBHOOK_SECRET         # Settings → Bots → your bot → Webhook secret
-SERVICE_BASE_URL                    # public URL of this service (task target, OIDC audience)
+SERVICE_BASE_URL                    # public URL of this service (QStash task target)
 REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
 TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*
 
-TASK_QUEUE=cloud-tasks              # default; or "qstash"
-# cloud-tasks:
-GOOGLE_CLOUD_PROJECT
-CLOUD_TASKS_QUEUE_NAME
-CLOUD_TASKS_QUEUE_LOCATION
-CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL   # SA the queue mints OIDC tokens for
-# qstash:
 QSTASH_TOKEN
 QSTASH_CURRENT_SIGNING_KEY
 QSTASH_NEXT_SIGNING_KEY
@@ -133,7 +126,7 @@ bun run build # tsc --noEmit; there is no bundle, Bun runs the TS directly
 
 ## Testing locally
 
-Two local-dev flags in `.env.local` make the pipeline runnable without GCP:
+Two local-dev flags in `.env.local` make the pipeline runnable without QStash:
 `TASKS_INLINE=true` dispatches straight to the task handler instead of
 enqueueing, and `TASKS_AUTH_DISABLED=true` lets that self-call through. Both
 are refused at startup when `NODE_ENV=production`.
@@ -169,8 +162,8 @@ turbo-prune shape as web/business). Runtime config — both the non-secret env
 vars and the secrets — is set on the deployment target, not at build time, so
 secrets never appear in build logs.
 
-`SERVICE_BASE_URL` is both the Cloud Tasks target and the OIDC audience, so
-it must equal the service's own public URL. That URL does not exist until the
+`SERVICE_BASE_URL` is the QStash target, and QStash signs each delivery for
+that exact URL, so it must equal the service's own public URL. That URL does not exist until the
 first deploy — deploy once, then set the variable and redeploy.
 
 ```sh

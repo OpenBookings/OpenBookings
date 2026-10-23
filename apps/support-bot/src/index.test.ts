@@ -6,7 +6,7 @@ import type { ProcessConversationPayload } from "./tasks";
 /**
  * Webhook-route tests: the ingress contract only. What's under test is
  * signature gating, the message filter, and the first idempotency layer — a
- * duplicate Chatwoot delivery must never enqueue a second Cloud Task.
+ * duplicate Chatwoot delivery must never enqueue a second task.
  * (process.test.ts covers the slow path.)
  */
 
@@ -24,7 +24,6 @@ mock.module("./tasks", () => ({
   enqueueTask: async (name: string, payload: unknown, opts: { delaySeconds?: number } = {}) => {
     enqueuedTasks.push({ name, payload, delaySeconds: opts.delaySeconds });
   },
-  verifyCloudTasksRequest: async () => true,
   verifyTaskRequest: async () => true,
 }));
 
