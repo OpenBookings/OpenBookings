@@ -60,12 +60,21 @@ export async function RateLock() {
   const commits = await getLatestCommits();
 
   return (
-    <section id="rate-lock" className="border-t border-white/5 bg-[#05101e] px-6 py-24 sm:px-16 sm:py-[120px]">
+    <section
+      id="rate-lock"
+      className="border-t border-white/5 px-6 py-24 sm:px-16 sm:py-[120px]"
+      // Same neutral as the rest of the page, with a faint pool of light
+      // behind the pledge so the section still feels a little set apart.
+      style={{
+        background:
+          "radial-gradient(ellipse 50% 45% at 22% 18%, var(--mk-glow-light) 0%, transparent 65%), radial-gradient(ellipse 40% 40% at 8% 60%, var(--mk-glow-mint) 0%, transparent 60%), var(--mk-bg-raised)",
+      }}
+    >
       <div className="mx-auto max-w-[1100px]">
         <div className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-24">
           {/* The pledge */}
           <div>
-            <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-[#00C8A8] uppercase">
+            <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-spectrum-mint uppercase">
               Rate Lock
             </div>
             <h2 className="mb-10 font-(family-name:--font-cormorant) text-[44px] leading-[1.04] font-bold tracking-[-1px] text-white sm:text-[62px] sm:tracking-[-1.5px]">
@@ -74,7 +83,7 @@ export async function RateLock() {
               plan around.
             </h2>
             <p className="mb-12 max-w-[48ch] font-(family-name:--font-cormorant) text-[24px] leading-[1.45] font-normal text-white/75 sm:text-[27px]">
-              Our commission is set at <span className="text-[#00C8A8]">4.5%</span>. Any change requires 30
+              Our commission is set at <span className="spectrum-underline text-white">4.5%</span>. Any change requires 30
               days&apos; notice, is published here before it takes effect, and never applies to bookings
               already made.
             </p>
@@ -95,12 +104,12 @@ export async function RateLock() {
 
           {/* Proof, not promises — live commits */}
           <div className="lg:pt-24">
-            <div className="rounded-2xl border border-white/8 bg-[#0a1526] p-7">
+            <div className="rounded-2xl border border-white/8 bg-mk-surface p-7">
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#4ade80] opacity-50" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#4ade80]" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-spectrum-mint opacity-50" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-spectrum-mint" />
                   </span>
                   <span className="text-[11px] font-medium tracking-[0.15em] text-white/40 uppercase">
                     Live from GitHub
@@ -162,7 +171,7 @@ export async function RateLock() {
           <div className="grid gap-y-10 sm:grid-cols-2 sm:gap-x-16">
             <div>
               <div className="mb-3 flex items-center gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-[#00C8A8]" />
+                <span className="h-2 w-2 rounded-full bg-spectrum-mint" />
                 <span className="text-[15px] font-medium tracking-[-0.01em] text-white">Booking data — stays in the EU</span>
               </div>
               <p className="text-[14px] leading-[1.75] text-white/40">
@@ -173,7 +182,7 @@ export async function RateLock() {
             </div>
             <div>
               <div className="mb-3 flex items-center gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-[#7B6AEE]" />
+                <span className="h-2 w-2 rounded-full bg-spectrum-lilac" />
                 <span className="text-[15px] font-medium tracking-[-0.01em] text-white">Payment data — never touches us</span>
               </div>
               <p className="text-[14px] leading-[1.75] text-white/40">

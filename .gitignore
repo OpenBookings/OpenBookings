@@ -63,3 +63,6 @@ graphify-out
 # stages them into public/ at dev and build time so they stay in lockstep with the
 # installed version rather than drifting as a vendored copy.
 apps/*/public/maplibre/
+
+# brainstorming mockups (local only)
+.superpowers/

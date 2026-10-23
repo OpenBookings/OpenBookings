@@ -3,14 +3,16 @@ import { Footer } from "./Footer";
 
 export function FinalCTA() {
   return (
-    <section className="bg-[#080808] p-3 pt-0 sm:p-6 sm:pt-0">
+    <section className="bg-mk-bg p-3 pt-0 sm:p-6 sm:pt-0">
       <div
-        className="overflow-hidden rounded-[24px] border border-white/8 sm:rounded-[32px]"
+        className="relative overflow-hidden rounded-[24px] border border-white/8 sm:rounded-[32px]"
         style={{
+          // Pale light falls in from the top edge, under the hairline.
           background:
-            "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(88,64,224,0.12) 0%, transparent 60%), radial-gradient(ellipse 50% 45% at 85% 100%, rgba(0,200,168,0.05) 0%, transparent 55%), #0d1117",
+            "radial-gradient(ellipse 55% 50% at 50% 0%, var(--mk-glow-light) 0%, transparent 65%), radial-gradient(ellipse 40% 38% at 18% 0%, var(--mk-glow-mint) 0%, transparent 60%), radial-gradient(ellipse 40% 38% at 82% 0%, var(--mk-glow-sky) 0%, transparent 60%), var(--mk-bg-raised)",
         }}
       >
+        <div aria-hidden className="spectrum-hairline absolute inset-x-[10%] top-0" />
         <div className="px-6 py-24 text-center sm:px-16 sm:py-[140px]">
           <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
             Get Started
@@ -25,7 +27,7 @@ export function FinalCTA() {
           <div className="flex flex-wrap justify-center gap-3">
             <Link
               href="/login"
-              className="rounded-[10px] bg-white px-8 py-[15px] text-[15px] font-medium tracking-[-0.01em] text-[#0d1117] transition-opacity hover:opacity-90"
+              className="cta-spectrum rounded-[10px] bg-mk-paper px-8 py-[15px] text-[15px] font-medium tracking-[-0.01em] text-mk-ink transition-colors hover:bg-white"
             >
               List Your Property →
             </Link>

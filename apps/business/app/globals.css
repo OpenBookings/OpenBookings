@@ -86,6 +86,36 @@
   --ob-sidebar: oklch(10.5% 0.008 262);
 
   /*
+   * Marketing site — "light through glass".
+   * The spectrum is the logo's own (coral → amber → lemon → mint → sky →
+   * lilac), lifted to pastels so it reads as refracted light on the dark
+   * page rather than as flags. Use it sparingly: a hairline, a ring, the
+   * one bar that is ours. Neutrals stay nearly neutral, and the large
+   * glows use the light end (lemon, mint, sky), so no
+   * big area reads as one warm hue.
+   */
+  --spectrum-coral: oklch(80% 0.1 35);
+  --spectrum-amber: oklch(86% 0.1 75);
+  --spectrum-lemon: oklch(91% 0.1 105);
+  --spectrum-mint: oklch(85% 0.11 160);
+  --spectrum-sky: oklch(80% 0.09 235);
+  --spectrum-lilac: oklch(77% 0.1 305);
+  --spectrum: var(--spectrum-coral), var(--spectrum-amber), var(--spectrum-lemon), var(--spectrum-mint),
+    var(--spectrum-sky), var(--spectrum-lilac);
+
+  --mk-bg: oklch(13.5% 0.003 290);
+  --mk-bg-deep: oklch(11% 0.003 290);
+  --mk-bg-raised: oklch(15.5% 0.005 290);
+  --mk-surface: oklch(18% 0.005 290);
+  --mk-paper: oklch(97.5% 0.008 95);
+  --mk-ink: oklch(17% 0.006 290);
+
+  /* Large glows draw from the light end of the spectrum, never the warm end. */
+  --mk-glow-light: oklch(92% 0.06 110 / 0.1);
+  --mk-glow-mint: oklch(85% 0.11 160 / 0.09);
+  --mk-glow-sky: oklch(80% 0.09 235 / 0.1);
+
+  /*
    * Rates & availability grid.
    *
    * The grid needs distinctions the app-wide scale does not carry: a group
@@ -184,6 +214,20 @@
   --color-ob-brand-light: var(--ob-brand-light);
   --color-ob-sidebar: var(--ob-sidebar);
 
+  /* Marketing site */
+  --color-spectrum-coral: var(--spectrum-coral);
+  --color-spectrum-amber: var(--spectrum-amber);
+  --color-spectrum-lemon: var(--spectrum-lemon);
+  --color-spectrum-mint: var(--spectrum-mint);
+  --color-spectrum-sky: var(--spectrum-sky);
+  --color-spectrum-lilac: var(--spectrum-lilac);
+  --color-mk-bg: var(--mk-bg);
+  --color-mk-bg-deep: var(--mk-bg-deep);
+  --color-mk-bg-raised: var(--mk-bg-raised);
+  --color-mk-surface: var(--mk-surface);
+  --color-mk-paper: var(--mk-paper);
+  --color-mk-ink: var(--mk-ink);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
@@ -222,6 +266,104 @@
   .search-box-field {
     border-radius: var(--radius-xl); /* rounded-xl */
     padding: 0.75rem; /* p-3 */
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Marketing site — spectrum details. Each one is a place where light
+ * "catches", never a fill: hairlines, ring arcs, a halo, an underline.
+ * ------------------------------------------------------------------ */
+
+.mk ::selection {
+  background-color: color-mix(in oklch, var(--spectrum-lilac) 40%, transparent);
+  color: var(--mk-paper);
+}
+
+/* A 1px line that fades in from nothing, runs through the spectrum, and fades out. */
+.spectrum-hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--spectrum), transparent);
+}
+
+/* The one bar on the page that is ours. */
+.spectrum-fill {
+  background: linear-gradient(90deg, var(--spectrum));
+}
+
+/* Thin spectrum rule under a key figure. Decoration under the text, not in it. */
+.spectrum-underline {
+  background-image: linear-gradient(90deg, var(--spectrum));
+  background-size: 100% 2px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  padding-bottom: 0.08em;
+}
+
+/*
+ * An arc of light along a hero orbit. It sits exactly on top of the white
+ * hairline ring and covers about a third of it, so the ring looks like it
+ * is catching light on one side. Size it with width/height = 2r, and give
+ * each ring its own --arc-from so the arcs land on different sides.
+ */
+.spectrum-arc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from var(--arc-from, 0deg),
+    transparent 0deg,
+    var(--spectrum-coral) 20deg,
+    var(--spectrum-amber) 40deg,
+    var(--spectrum-lemon) 60deg,
+    var(--spectrum-mint) 80deg,
+    var(--spectrum-sky) 100deg,
+    var(--spectrum-lilac) 115deg,
+    transparent 140deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1px));
+  animation: spectrum-drift var(--arc-speed, 160s) linear infinite var(--arc-direction, normal);
+}
+
+@keyframes spectrum-drift {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* A soft spectrum glow beneath the primary call to action. */
+.cta-spectrum {
+  position: relative;
+  isolation: isolate;
+}
+
+.cta-spectrum::before {
+  content: "";
+  position: absolute;
+  inset: 4px 2px -6px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--spectrum));
+  filter: blur(16px);
+  opacity: 0.22;
+  transform: scaleX(0.86);
+  transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cta-spectrum:hover::before,
+.cta-spectrum:focus-visible::before {
+  opacity: 0.55;
+  transform: scaleX(1) translateY(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spectrum-arc {
+    animation: none;
+  }
+  .cta-spectrum::before {
+    transition: none;
   }
 }
 

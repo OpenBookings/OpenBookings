@@ -55,7 +55,7 @@ function renderAnswer(answer: AnswerPart[]): ReactNode {
       <a
         key={i}
         href={part.href}
-        className="text-white/70 underline underline-offset-2 hover:text-white"
+        className="text-white/70 underline decoration-spectrum-lilac/50 underline-offset-[3px] transition-colors hover:text-white hover:decoration-spectrum-lilac"
         target={part.href.startsWith("http") ? "_blank" : undefined}
         rel={part.href.startsWith("http") ? "noopener noreferrer" : undefined}
       >
@@ -67,7 +67,7 @@ function renderAnswer(answer: AnswerPart[]): ReactNode {
 
 export function FAQ() {
   return (
-    <section id="faq" className="border-t border-white/5 bg-[#080808] px-6 py-24 sm:px-16 sm:py-[120px]">
+    <section id="faq" className="border-t border-white/5 bg-mk-bg px-6 py-24 sm:px-16 sm:py-[120px]">
       <div className="mx-auto max-w-[760px]">
         <div className="mb-[18px] text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
           Common Questions

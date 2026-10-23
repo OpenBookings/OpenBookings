@@ -10,15 +10,14 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
       className={
         embedded
           ? "border-t border-white/7 px-6 pt-16 pb-12 sm:px-16"
-          : "border-t border-white/5 bg-[#040404] px-6 pt-16 pb-12 sm:px-16"
+          : "border-t border-white/5 bg-mk-bg-deep px-6 pt-16 pb-12 sm:px-16"
       }
     >
-      <div className="mx-auto max-w-[1200px]">
-        <div className="mb-12 flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-[340px]">
+      <div className="mx-auto max-w-300">
+        <div className="mb-12 flex flex-col gap-10 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-85">
             <div className="mb-4 flex items-center gap-[11px]">
-              <Image src="/OB-LOGO-LIGHT.png" alt="OpenBookings Business" width={100} height={75} unoptimized />
-              <span className="text-[15px] font-medium tracking-[-0.02em] text-white">OpenBookings Business</span>
+              <Image src="https://cdn.openbookings.co/Public/OB-LIGHT-WORDMARK.png" alt="OpenBookings Business" width={200} height={40} preload />
             </div>
             <p className="text-[13px] leading-[1.7] text-white/28">
               Open-Source Core · EU Data Residency · No surprises.

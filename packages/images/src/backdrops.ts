@@ -13,7 +13,7 @@ const FILES: { name: string; file: string }[] = [
   { name: "Iceland", file: "Iceland-Reykjavik.avif" },
   { name: "Rome", file: "Italy-Rome.avif" },
   { name: "Osaka", file: "Japan-Osaka.avif" },
-  { name: "Morroco", file: "Morroco-Chefchaouen.avif" },
+  { name: "Morocco", file: "Morroco-Chefchaouen.avif" },
   { name: "Amsterdam", file: "Netherlands-Amsterdam.avif" },
   { name: "San Francisco", file: "USA-SanFrancisco.avif" },
   { name: "Rio de Janeiro", file: "Brazil-RioDeJaneiro.avif" },
