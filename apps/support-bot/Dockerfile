@@ -9,7 +9,7 @@
     COPY . .
     # Pinned: the pruner has no node_modules, so an unpinned `bunx turbo` would
     # fetch whatever is latest on npm. Keep in sync with turbo in package.json (pinned exact there).
-    RUN bunx turbo@2.10.8 prune @openbookings/support-bot --docker
+    RUN bunx turbo@2.11.10 prune @openbookings/support-bot --docker
     # Produces:
     #   /app/out/json/   -> package.jsons only, for install caching
     #   /app/out/full/   -> full source of the packages actually needed
