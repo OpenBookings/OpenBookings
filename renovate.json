@@ -11,38 +11,43 @@
   },
   "packageRules": [
     {
-      "description": "Telemetry / analytics SDKs — auto-merge once a release has aged 3 days (supply-chain safeguard, https://posthog.com/docs/health-checks/keeping-sdks-current)",
-      "matchPackageNames": ["posthog-js", "posthog-node", "posthog-react-native", "@sentry/nextjs"],
-      "automerge": true,
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Type definitions — no runtime impact, a bad update fails typecheck at build time",
-      "matchPackageNames": ["@types/**"],
-      "automerge": true,
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Dev-only lint / CSS tooling — patch + minor",
-      "matchDepTypes": ["devDependencies"],
+      "description": "Safe minors: every minor and patch update in one weekly PR, auto-merged once CI is green. Excludes the framework group and the packages that always need a human (rules below).",
+      "matchUpdateTypes": ["minor", "patch"],
       "matchPackageNames": [
-        "eslint",
-        "eslint-config-next",
-        "turbo",
-        "tw-animate-css",
-        "@tailwindcss/postcss",
-        "tailwindcss",
-        "postcss"
+        "*",
+        "!next",
+        "!@next/**",
+        "!eslint-config-next",
+        "!react",
+        "!react-dom",
+        "!@types/react",
+        "!@types/react-dom",
+        "!better-auth",
+        "!@better-auth/**",
+        "!drizzle-orm",
+        "!drizzle-kit",
+        "!stripe",
+        "!hono",
+        "!@mistralai/mistralai",
+        "!typescript"
       ],
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true,
-      "minimumReleaseAge": "3 days"
+      "groupName": "safe minors",
+      "schedule": ["before 6am on monday"],
+      "automerge": true
     },
     {
-      "description": "Everything else: auto-merge patch releases only; minor / major open a PR for review",
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "minimumReleaseAge": "3 days"
+      "description": "Framework: Next, React and their types move together in one PR as soon as a release is 3 days old (these often carry security fixes). Never auto-merged.",
+      "matchPackageNames": [
+        "next",
+        "@next/**",
+        "eslint-config-next",
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ],
+      "groupName": "framework",
+      "automerge": false
     },
     {
       "description": "Never auto-merge — security, DB, payments, and framework core need a human",
@@ -51,7 +56,7 @@
         "react",
         "react-dom",
         "better-auth",
-        "@better-auth/infra",
+        "@better-auth/**",
         "drizzle-orm",
         "drizzle-kit",
         "stripe",
@@ -60,6 +65,17 @@
         "typescript"
       ],
       "automerge": false
+    },
+    {
+      "description": "Majors: one PR per package, opened only after it is ticked on the Dependency Dashboard, never auto-merged",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "automerge": false
+    },
+    {
+      "description": "@types/node follows the Node runtime (22: engines.node and the Dockerfile builders), not the newest Node. Raise together with the runtime.",
+      "matchPackageNames": ["@types/node"],
+      "allowedVersions": "<23"
     }
   ]
 }
