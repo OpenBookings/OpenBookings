@@ -4,7 +4,7 @@
 # before it can ship, and the runtime stage carries source + prod deps only.
 
 # ---------- Pruner ----------
-    FROM oven/bun:1.3-alpine AS pruner
+    FROM oven/bun:1.4-alpine AS pruner
     WORKDIR /app
     COPY . .
     # Pinned: the pruner has no node_modules, so an unpinned `bunx turbo` would
@@ -16,7 +16,7 @@
     #   /app/out/bun.lock, /app/out/package.json, /app/out/turbo.json -> at root
 
 # ---------- Installer (dev deps included, for the typecheck) ----------
-    FROM oven/bun:1.3-alpine AS installer
+    FROM oven/bun:1.4-alpine AS installer
     # Floor, not an exact pin: Alpine drops old -rN revisions when the repo
     # rotates, which turns an exact pin into a sudden 404 on an unrelated day.
     RUN apk add --no-cache 'openssl>=3.5.7'
@@ -28,7 +28,7 @@
     RUN bun install --frozen-lockfile
 
 # ---------- Builder (typecheck gate) ----------
-    FROM oven/bun:1.3-alpine AS builder
+    FROM oven/bun:1.4-alpine AS builder
     WORKDIR /app
 
     # Bun's isolated linker keeps each workspace's deps (and its .bin) in
@@ -48,7 +48,7 @@
         bun install --frozen-lockfile --production
 
 # ---------- Production ----------
-    FROM oven/bun:1.3-alpine
+    FROM oven/bun:1.4-alpine
     RUN apk add --no-cache 'openssl>=3.5.7'
     WORKDIR /app
     ENV NODE_ENV=production
