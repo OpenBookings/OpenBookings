@@ -16,7 +16,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/infra": "^0.4.17",
     "@better-auth/passkey": "1.7.12",
     "@openbookings/authz": "workspace:*",
     "better-auth": "1.7.12",

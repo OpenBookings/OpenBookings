@@ -24,7 +24,6 @@ export type BaseAuthConfig = {
    */
   cookiePrefix: string;
   trustedOrigins?: string[];
-  dashApiKey?: string;
 };
 
 /** Which portal a given account_type belongs to. */
