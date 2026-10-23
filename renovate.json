@@ -51,7 +51,6 @@
         "react",
         "react-dom",
         "better-auth",
-        "@better-auth/infra",
         "drizzle-orm",
         "drizzle-kit",
         "stripe",
