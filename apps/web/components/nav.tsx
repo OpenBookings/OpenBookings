@@ -3,17 +3,9 @@
 import Image from "next/image";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
-import { useCookieConsent } from "@openbookings/analytics/client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
-import FocusOverlay from "@/components/plug-in/FocusOverlay";
-
-// Inlined at build time, so a non-production web build links at the matching
-// business deployment rather than sending the visitor to production.
-const BUSINESS_URL =
-  process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co/";
 
 interface NavProps {
   authError: string | null;
@@ -23,8 +15,6 @@ interface NavProps {
 export function Nav({ authError, onDismissAuthError }: NavProps) {
   const router = useRouter();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const { reopen: reopenCookieBanner } = useCookieConsent();
   const [cookiesEnabled, setCookiesEnabled] = useState<boolean | null>(null);
   const profileMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,14 +93,6 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
           </div>
         )}
         <div className="flex flex-row items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="h-7 w-7 sm:h-9 sm:w-9 md:h-11 md:w-11 rounded-full border border-white/30 bg-black/30 backdrop-blur-sm flex items-center justify-center text-white/80 hover:bg-white/15 hover:text-white transition-colors text-sm sm:text-base md:text-lg font-semibold select-none"
-            aria-label="Help and information"
-          >
-            ?
-          </button>
           {sessionPending ? null : user ? (
             <div
               className="relative flex items-center"
@@ -179,58 +161,6 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
           )}
         </div>
       </div>
-
-      <FocusOverlay open={helpOpen} onClose={() => setHelpOpen(false)}>
-        <div className="rounded-2xl border border-white/12 bg-black/85 backdrop-blur-xl shadow-2xl overflow-hidden w-full max-w-xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 pt-6 pb-5">
-            <div>
-              <p className="text-white font-serif text-xl font-semibold tracking-tight">OpenBookings</p>
-              <p className="text-white/40 text-xs mt-0.5">Quick, Easy &amp; Open-Source</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setHelpOpen(false)}
-              className="h-8 w-8 rounded-full border border-white/15 bg-white/5 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-colors text-sm"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Columns */}
-          <div className="px-6 pb-6 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-6">
-            <div className="flex flex-col gap-2">
-              <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Contact</p>
-              <a href="/support" className="text-sm text-white/65 hover:text-white transition-colors">Booking Support</a>
-              <a href="/press" className="text-sm text-white/65 hover:text-white transition-colors">Press & Media</a>
-              <Link href="/legal" className="text-sm text-white/65 hover:text-white transition-colors">Legal Questions</Link>
-              <a href="/suggestions" className="text-sm text-white/65 hover:text-white transition-colors">Suggestions</a>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Legal</p>
-              <Link href="/legal/en/privacy" className="text-sm text-white/65 hover:text-white transition-colors">Privacy Notice</Link>
-              <a href="/terms" className="text-sm text-white/65 hover:text-white transition-colors">Terms of Service</a>
-              <a href="/disputes" className="text-sm text-white/65 hover:text-white transition-colors">Dispute Resolution</a>
-              <button
-                type="button"
-                onClick={() => {
-                  reopenCookieBanner();
-                  setHelpOpen(false);
-                }}
-                className="text-sm text-white/65 hover:text-white transition-colors text-left"
-              >
-                Cookie Settings
-              </button>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="text-[11px] uppercase tracking-widest text-white/35 font-medium mb-1">Company</p>
-              <a href="/company" className="text-sm text-white/65 hover:text-white transition-colors">Company Info</a>
-              <a href={BUSINESS_URL} className="text-sm text-white/65 hover:text-white transition-colors">List your property</a>
-            </div>
-          </div>
-        </div>
-      </FocusOverlay>
     </>
   );
 }

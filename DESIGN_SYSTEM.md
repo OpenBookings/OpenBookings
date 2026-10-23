@@ -97,7 +97,7 @@ Fonts loaded via `next/font`:
 | `Trust Through Density Control` → `FocusOverlay Portal Overlay Pattern` | INFERRED | **T4 — overlays**: web mandates `FocusOverlay`, business uses Radix `dialog.tsx`/`sheet.tsx` |
 | `Business-Grade Polish` → `OpenBookings Web Design System` | INFERRED (`rationale_for`) | confirms the docs were meant to share a rationale — supports unification |
 
-A fifth tension is **not** in the doc graph but is visible in code: **T5 — accent colour**. `.impeccable.md` names "cyan-on-dark AI aesthetics" as an anti-reference, yet `#00C8A8` (teal) is used 11 times across `apps/business/components/business/` as the marketing accent, in place of the established blue.
+A fifth tension is **not** in the doc graph but is visible in code: **T5 — accent colour**. `.impeccable.md` names "cyan-on-dark AI aesthetics" as an anti-reference, yet `#00C8A8` (teal) is used 11 times across `apps/business/components/business/` as the marketing accent, in place of the established blue. *(Resolved: see D6 and §3.5.)*
 
 ### 1.4 Surface effects by app
 
@@ -154,7 +154,7 @@ Shared brand tokens, currently business-only, move to the foundation:
 --ob-sidebar:     oklch(10.5% 0.008 262)
 ```
 
-**Accent is blue.** `.impeccable.md` §Aesthetic Direction: *"Accent color is blue (already established)"*, realised as `--accent-9` / `--ob-brand`. Teal `#00C8A8` is not part of the foundation (see D6).
+**Accent is blue.** `.impeccable.md` §Aesthetic Direction: *"Accent color is blue (already established)"*, realised as `--accent-9` / `--ob-brand`. Teal `#00C8A8` is not part of the foundation (see D6). The `--spectrum-*` / `--mk-*` tokens are **not** foundation either. They are the business marketing voice (§3.5), defined only in `apps/business/app/globals.css`. If `apps/web` wants the same voice, promote them deliberately rather than copying them.
 
 ### 2.2 Type scale
 
@@ -267,7 +267,7 @@ Measured radius usage confirms the split is already real: web skews `rounded-xl`
 |---|---|---|
 | `apps/web` | `app/p/[hotel_slug]`, `app/search`, `app/(root)`, `components/plug-in`, `components/search`, `components/auth`, `components/nav.tsx` | **Glass** |
 | `apps/web` | `app/checkout`, `components/ui` | **Console** |
-| `apps/business` | `app/page.tsx` + `components/business/*` (marketing), `app/(auth)`, `components/auth` | **Glass** — pending D1/D2 |
+| `apps/business` | `app/page.tsx` + `components/business/*` (marketing), `app/(auth)`, `components/auth` | **Glass** — pending D1/D2; marketing also follows §3.5 |
 | `apps/business` | `app/(dashboard)`, `components/dashboard`, `components/ui` | **Console** |
 | `apps/business` | `app/(onboarding)` | **contested** — see D3 |
 
@@ -340,6 +340,59 @@ From `apps/web/DESIGN.md` §Accessibility — these are not Glass-specific and b
 - `select-none` on non-interactive display text (logo, hero copy, avatar).
 
 From `apps/web/DESIGN.md` §Analytics — PostHog event names are `snake_case`, captured for every meaningful interaction, imported from `posthog-js` on the client and `lib/posthog-server.ts` on the server.
+
+### 3.5 Business marketing voice — subtle pride ("light through glass")
+
+Applies to `apps/business/app/page.tsx` + `components/business/*` only. It sits on top of Glass mode: everything in §3.2 still holds, and this section adds the colour voice.
+
+**Intent.** A soft, gentle pride feeling. Warm and inclusive, never loud. No flags, no neon, and no rainbow blocks. Someone who's looking for it should feel it, and nobody else should feel shouted at.
+
+**The idea.** The hero says *Transparent*. Clear glass splits white light into a spectrum, and the logo already is that spectrum (sampled from `public/OB-LOGO-LIGHT.png`: coral → amber → yellow → green → sky → violet). So the pride colours enter the page as **refracted light catching on things**, never as fills. The reference that fits is Apple's 2026 Pride Luminance watch face, where the colours "refract dynamically".
+
+**Tokens** (`apps/business/app/globals.css`, all exposed to Tailwind as `--color-*`):
+
+| Token | Value | Role |
+|---|---|---|
+| `--spectrum-coral` | `oklch(80% 0.1 35)` | spectrum stop 1 |
+| `--spectrum-amber` | `oklch(86% 0.1 75)` | spectrum stop 2; "new booking" status |
+| `--spectrum-lemon` | `oklch(91% 0.1 105)` | spectrum stop 3 |
+| `--spectrum-mint` | `oklch(85% 0.11 160)` | spectrum stop 4; **money-positive** (you receive, you keep, live, ↑ trends) |
+| `--spectrum-sky` | `oklch(80% 0.09 235)` | spectrum stop 5; trust/security (GDPR shield) |
+| `--spectrum-lilac` | `oklch(77% 0.1 305)` | spectrum stop 6; focus, links, text selection |
+| `--spectrum` | the six stops, comma-separated | drop into any `linear-`/`conic-gradient()` |
+| `--mk-bg` / `-deep` / `-raised` | `oklch(13.5% / 11% / 15.5% 0.003–0.005 290)` | page, footer, hero/CTA base: **near-neutral** |
+| `--mk-surface` | `oklch(18% 0.005 290)` | cards and pills on the dark |
+| `--mk-paper` / `--mk-ink` | `oklch(97.5% 0.008 95)` / `oklch(17% 0.006 290)` | primary button fill / its text |
+| `--mk-glow-light` / `-mint` / `-sky` | lemon / mint / sky at 9–10% alpha | the only colours allowed in large glows |
+
+The spectrum is pastel on purpose: L 77–91%, C ≈ 0.1. Do not raise the chroma. Saturated versions turn "soft pride" into "neon rainbow".
+
+**Where the spectrum is allowed** (this is the complete list — add to it deliberately):
+
+| Element | Class / where | Treatment |
+|---|---|---|
+| Hero orbit rings | `.spectrum-arc` in `Hero.tsx` | one arc per ring, ~⅓ of the circle, on a different side per ring (inner bottom-left, middle right, outer upper-left); drifts 180–320s, middle ring in reverse |
+| Ring dots | `Hero.tsx` SVG | six dots, one spectrum colour each, 40–55% opacity |
+| Our bar in the calculator | `.spectrum-fill` in `CostCalculator.tsx` | only the OpenBookings bar; competitor bars stay `bg-white/15` |
+| The commission figure | `.spectrum-underline` in `RateLock.tsx` | 2px rule *under* "4.5%", text stays white |
+| Closing card edge | `.spectrum-hairline` in `FinalCTA.tsx` | 1px line along the top edge, fading out at both ends |
+| Primary CTA | `.cta-spectrum` on "List Your Property" | blurred spectrum halo beneath the button, 22% at rest → 55% on hover |
+| Small accents | status dots, ↑ arrows, founder-note numbers, FAQ link underlines, `::selection` | single spectrum colour each, per the token roles above |
+
+**Rules**
+
+1. **Light, not paint.** The spectrum appears as hairlines, arcs, halos and underlines. It never fills a section, card, or button.
+2. **Large areas stay neutral.** Page and section backgrounds use `--mk-bg*`. No section takes on a full colour. A tinted section stands out as the odd one out (tried with sea-glass on Rate Lock, then removed). To set a section apart, add a faint pool of light, not a colour.
+3. **Large glows use the light end only.** Radial glows behind the hero, Rate Lock and the closing card use `--mk-glow-light` / `-mint` / `-sky`. Never coral or lilac, because big warm or purple glows make the whole page read red/purple.
+4. **Spread it out.** Colour must not pool in one corner. Every ring has its own start angle (`--arc-from`), and one arc per ring is enough. Two arcs per ring was tried and was too much.
+5. **One lead moment per view.** Each screenful has one obvious spectrum moment: the rings in the hero, the bar in the calculator, the underline in Rate Lock, the hairline on the closing card. Anything else nearby (ring dots, the CTA halo) stays quieter than the lead, and the rest are single-colour accents.
+6. **No gradient text.** The spectrum goes under or around type, never inside it (`background-clip: text` is banned).
+7. **Colour is never the only signal.** Money figures are also labelled ("You keep", "You receive"); the calculator bar also has its number.
+8. **Motion is ambient and optional.** Arc drift and the CTA halo transition are disabled under `prefers-reduced-motion`. Animate `rotate`/`transform`/`opacity` only.
+
+**Anti-references:** pride flags or flag stripes as decoration; full rainbow gradients across headings or backgrounds; neon or saturated hues on dark; the old purple + teal "AI glow" blobs this replaced; "rainbow logo for June" tokenism. This is a year-round brand voice, not a seasonal campaign.
+
+**Tuning knobs:** glow strength → the three `--mk-glow-*` alphas; ring arcs → `opacity-*` on each `.spectrum-arc` in `Hero.tsx`, plus `--arc-from` / `--arc-speed` / `--arc-direction` via the `arc()` helper.
 
 ---
 
@@ -419,7 +472,10 @@ Two public-facing marketing surfaces for one brand currently use two entirely di
 
 ---
 
-### D6 — Teal `#00C8A8` in business marketing
+### D6 — Teal `#00C8A8` in business marketing — **resolved**
+
+**Resolved 2026-10-23:** all 11 uses are gone. Business marketing now uses the pastel spectrum in §3.5. The money-positive semantic this entry asked to keep survives as `--spectrum-mint` (savings, payouts, ↑ trends). Decorative dots and arrows now cycle through the spectrum instead of repeating one hue. The text below is kept as the record of the original finding.
+
 
 **Violation:** 11 uses across `Hero.tsx` (4), `RateLock.tsx` (3), `CostCalculator.tsx` (3), `Mechanism.tsx` (1) as the marketing accent — status dots, emphasis text, an inline SVG stroke, a progress fill. `.impeccable.md` §Aesthetic Direction names **"cyan-on-dark AI aesthetics"** as an anti-reference and states the accent **is blue, already established**. Graph tension **T5** — the second doc-level conflict, found in code rather than in the doc graph.
 
@@ -486,7 +542,7 @@ Two costs to accept up front: `shadcn add` writes to `@/components/ui` per `comp
 | **D3 (a)** | `_steps/legal-n-boring.tsx`, `_steps/core-info-text.tsx`, `_steps/core-info-location.tsx`, `_steps/verify.tsx`, `_components/step-nav.tsx`, `(onboarding)/layout.tsx` | ~104 raw-alpha → token swaps; replace `#1a1d23`, `#0d1117`, `#13161b`; keep the 2 modal scrims. **Largest change in the log.** |
 | **D4 (a)** | `_steps/core-info-location.tsx:263,272` | `bg-[#1a1d23]/90 backdrop-blur-sm` → `bg-card/90 border border-border`. |
 | **D5 (a)** | `apps/business/app/layout.tsx` + 8 files in `components/business/` | Drop Allura/Cormorant/DM Sans; move to `font-serif` (Gloock) / `font-sans` (Libre Franklin). |
-| **D6 (a)** | `Hero.tsx`, `RateLock.tsx`, `CostCalculator.tsx`, `Mechanism.tsx` | 11 × `#00C8A8` → `--ob-brand`, or scope a named `--ob-positive` for the 3 money-semantic uses only. |
+| ~~**D6**~~ | `Hero.tsx`, `RateLock.tsx`, `CostCalculator.tsx`, `Mechanism.tsx` | **Done** — replaced by the §3.5 spectrum tokens; money-positive is `--spectrum-mint`. |
 | **D7 (extract)** | new `packages/ui` | Move 10 primitives + `cn()` + `CookieBanner` + `backgrounds.json`. Exclude `map.tsx`, `AuthFormFields.tsx`. Promote business's `xs` / `icon-xs` button sizes into the shared variant set. |
 
 ### Known gaps, tracked but not scheduled

@@ -6,7 +6,7 @@ const absentFees = [
 
 export function Mechanism() {
   return (
-    <section id="mechanism" className="border-t border-white/5 bg-[#080808] px-6 py-24 sm:px-16 sm:py-[120px]">
+    <section id="mechanism" className="border-t border-white/5 bg-mk-bg px-6 py-24 sm:px-16 sm:py-[120px]">
       <div className="mx-auto max-w-[1200px]">
         <div className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-24">
           {/* Left — the argument */}
@@ -42,7 +42,7 @@ export function Mechanism() {
 
           {/* Right — anatomy of a booking, set like a payout statement */}
           <div className="lg:pt-24">
-            <div className="rounded-2xl border border-white/8 bg-[#0f1115] p-7 sm:p-9">
+            <div className="rounded-2xl border border-white/8 bg-mk-surface p-7 sm:p-9">
               <div className="mb-7 flex items-baseline justify-between">
                 <span className="text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
                   Anatomy of a booking
@@ -71,7 +71,7 @@ export function Mechanism() {
 
               <div className="mt-5 flex items-baseline justify-between border-t border-white/8 pt-5">
                 <span className="text-[14px] font-medium text-white">You receive</span>
-                <span className="font-(family-name:--font-cormorant) text-[30px] font-bold tracking-[-0.5px] text-[#00C8A8]">
+                <span className="font-(family-name:--font-cormorant) text-[30px] font-bold tracking-[-0.5px] text-spectrum-mint">
                   €338.15
                 </span>
               </div>

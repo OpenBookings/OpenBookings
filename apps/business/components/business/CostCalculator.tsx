@@ -108,7 +108,7 @@ export function CostCalculator() {
   ];
 
   return (
-    <section id="calculator" className="border-t border-white/5 bg-[#080808] px-6 py-24 sm:px-16 sm:py-[120px]">
+    <section id="calculator" className="border-t border-white/5 bg-mk-bg px-6 py-24 sm:px-16 sm:py-[120px]">
       <div className="mx-auto max-w-[1100px]">
         <div className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-24">
           {/* Left — your three numbers */}
@@ -144,7 +144,7 @@ export function CostCalculator() {
                       onChange={(e) => f.onChange(e.target.value)}
                       onBlur={commit}
                       onKeyDown={(e) => e.key === "Enter" && commit()}
-                      className={`${f.width} border-b border-white/20 bg-transparent pb-1 text-right text-[17px] font-medium tracking-[-0.01em] text-white tabular-nums transition-colors outline-none hover:border-white/35 focus:border-[#00C8A8]`}
+                      className={`${f.width} border-b border-white/20 bg-transparent pb-1 text-right text-[17px] font-medium tracking-[-0.01em] text-white tabular-nums transition-colors outline-none hover:border-white/35 focus:border-spectrum-lilac`}
                     />
                     <span className="w-16 text-[12px] text-white/28">{f.suffix}</span>
                   </div>
@@ -162,7 +162,7 @@ export function CostCalculator() {
 
           {/* Right — the year's commissions, set like a payout statement */}
           <div className="lg:pt-24">
-            <div className="rounded-2xl border border-white/8 bg-[#0f1115] p-7 sm:p-9">
+            <div className="rounded-2xl border border-white/8 bg-mk-surface p-7 sm:p-9">
               <div className="mb-7 flex items-baseline justify-between">
                 <span className="text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
                   Commission per year
@@ -179,7 +179,7 @@ export function CostCalculator() {
                       </span>
                       <span
                         className={`text-[15px] tracking-[-0.01em] tabular-nums ${
-                          row.highlight ? "font-semibold text-[#00C8A8]" : "text-white/40"
+                          row.highlight ? "font-semibold text-spectrum-mint" : "text-white/40"
                         }`}
                       >
                         {eur.format(row.cost)}
@@ -189,7 +189,7 @@ export function CostCalculator() {
                     <div className="h-[6px] overflow-hidden rounded-full bg-white/5">
                       <div
                         className={`h-full rounded-full transition-[width] duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                          row.highlight ? "bg-[#00C8A8]" : "bg-white/15"
+                          row.highlight ? "spectrum-fill" : "bg-white/15"
                         }`}
                         style={{ width: `${Math.max((row.cost / maxCost) * 100, 1.5)}%` }}
                       />
@@ -202,7 +202,7 @@ export function CostCalculator() {
                 <div className="mb-1 text-[14px] font-medium text-white">You keep</div>
                 <CountUpEuro
                   value={saved}
-                  className="font-(family-name:--font-cormorant) text-[42px] leading-none font-bold tracking-[-1px] text-[#00C8A8] tabular-nums"
+                  className="font-(family-name:--font-cormorant) text-[42px] leading-none font-bold tracking-[-1px] text-spectrum-mint tabular-nums"
                 />
                 <p className="mt-3 text-[13px] leading-[1.7] text-white/40">
                   more than with Booking.com, every year — about{" "}

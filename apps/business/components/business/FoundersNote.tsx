@@ -1,5 +1,8 @@
 import Image from "next/image";
 
+// One colour each, spread across the spectrum, so the list reads as a set.
+const numberColors = ["text-spectrum-coral/70", "text-spectrum-mint/70", "text-spectrum-lilac/75"];
+
 const goals = [
   {
     title: "Commission at cost, permanently",
@@ -17,7 +20,7 @@ const goals = [
 
 export function FoundersNote() {
   return (
-    <section id="why" className="border-t border-white/5 bg-[#080808] px-6 py-24 sm:px-16 sm:py-[120px]">
+    <section id="why" className="border-t border-white/5 bg-mk-bg px-6 py-24 sm:px-16 sm:py-[120px]">
       <div className="mx-auto max-w-[1100px]">
         <div className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-28">
           {/* The letter */}
@@ -76,7 +79,7 @@ export function FoundersNote() {
                   className={`border-t border-white/6 py-6 ${i === goals.length - 1 ? "border-b" : ""}`}
                 >
                   <div className="mb-2 flex items-baseline gap-4">
-                    <span className="font-(family-name:--font-cormorant) text-[20px] font-bold text-white/25">
+                    <span className={`font-(family-name:--font-cormorant) text-[20px] font-bold ${numberColors[i]}`}>
                       0{i + 1}
                     </span>
                     <span className="text-[15px] font-medium tracking-[-0.01em] text-white">{goal.title}</span>

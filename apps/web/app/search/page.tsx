@@ -1,5 +1,6 @@
 "use client";
 import { Nav } from "@/components/nav";
+import { FooterLinks } from "@/components/FooterLinks";
 import { HotelCard, type HotelCardData } from "@/components/search/HotelCard";
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -269,6 +270,7 @@ function SearchPageInner() {
         </div>
       </div>
 
+      <FooterLinks />
     </div>
   );
 }

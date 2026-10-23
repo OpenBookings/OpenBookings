@@ -9,7 +9,7 @@ import { FinalCTA } from "@/components/business/FinalCTA";
 
 export default function MarketingPage() {
   return (
-    <div className="min-h-screen bg-[#080808] font-(family-name:--font-dm-sans) text-white">
+    <div className="mk min-h-screen bg-mk-bg font-(family-name:--font-dm-sans) text-white">
       <Nav />
       <Hero />
       <Mechanism />

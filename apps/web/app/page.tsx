@@ -8,6 +8,7 @@ import { useBackdrop } from "@/lib/use-backdrop";
 
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Nav } from "@/components/nav";
+import { FooterLinks } from "@/components/FooterLinks";
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   ATTEMPTS_EXCEEDED: "Too many sign-in attempts. Please request a new magic link.",
@@ -124,7 +125,8 @@ export default function Home() {
             onSearch={performSearch}
           />
         </div>
-  
+
+        <FooterLinks photoName={backdrop?.name} />
       </main>
     </>
   );
