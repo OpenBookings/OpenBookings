@@ -10,17 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google-cloud/tasks": "^6.2.0",
     "@mistralai/mistralai": "^1.10.0",
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",
-    "@upstash/qstash": "2.12.1",
-    "google-auth-library": "^10.4.1",
-    "hono": "^4.13.13",
-    "zod": "^4.6.7"
+    "@upstash/qstash": "2.8.4",
+    "hono": "^4.12.33",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",

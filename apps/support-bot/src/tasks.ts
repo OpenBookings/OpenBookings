@@ -1,17 +1,13 @@
-import { CloudTasksClient } from "@google-cloud/tasks";
 import { Receiver } from "@upstash/qstash";
-import { OAuth2Client } from "google-auth-library";
 import { env } from "./env";
 import { trace } from "./trace";
 
 /**
  * Task decoupling: webhooks enqueue and ack immediately; the queue POSTs the
- * task back to /tasks/<name> on this service. Three dispatchers:
+ * task back to /tasks/<name> on this service. Two dispatchers:
  *
- * - **Cloud Tasks** (TASK_QUEUE=cloud-tasks, the default): the queue mints an
- *   OIDC token for our service account; the handler verifies it.
- * - **Upstash QStash** (TASK_QUEUE=qstash): QStash signs each delivery with a
- *   JWT over the body; the handler verifies it with the signing keys.
+ * - **Upstash QStash**: QStash signs each delivery with a JWT over the body;
+ *   the handler verifies it with the signing keys.
  * - **Inline** (TASKS_INLINE=true, local dev only): POST to ourselves.
  */
 
@@ -53,8 +49,6 @@ export type TaskPayloads = {
 };
 export type TaskName = keyof TaskPayloads;
 
-let tasksClient: CloudTasksClient | undefined;
-
 function taskUrl(name: TaskName): string {
   return `${env.serviceBaseUrl}/tasks/${name}`;
 }
@@ -72,7 +66,7 @@ function dispatchInline(name: TaskName, payload: unknown, delaySeconds: number):
   const send = () =>
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CloudTasks-QueueName": "inline-dev" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
       .then(async (res) => {
@@ -96,34 +90,6 @@ function dispatchInline(name: TaskName, payload: unknown, delaySeconds: number):
   else void send();
 }
 
-async function enqueueCloudTask(name: TaskName, payload: unknown, delaySeconds: number): Promise<void> {
-  trace("tasks", "creating cloud task", { name, delaySeconds });
-  tasksClient ??= new CloudTasksClient();
-  const parent = tasksClient.queuePath(
-    env.cloudTasksProject,
-    env.cloudTasksQueueLocation,
-    env.cloudTasksQueueName,
-  );
-  await tasksClient.createTask({
-    parent,
-    task: {
-      ...(delaySeconds > 0
-        ? { scheduleTime: { seconds: Math.floor(Date.now() / 1000) + delaySeconds } }
-        : {}),
-      httpRequest: {
-        httpMethod: "POST",
-        url: taskUrl(name),
-        headers: { "Content-Type": "application/json" },
-        body: Buffer.from(JSON.stringify(payload)).toString("base64"),
-        oidcToken: {
-          serviceAccountEmail: env.tasksServiceAccountEmail,
-          audience: env.serviceBaseUrl,
-        },
-      },
-    },
-  });
-}
-
 async function enqueueQStash(name: TaskName, payload: unknown, delaySeconds: number): Promise<void> {
   trace("tasks", "publishing to qstash", { name, delaySeconds });
   const res = await fetch(`${env.qstashUrl}/v2/publish/${taskUrl(name)}`, {
@@ -141,7 +107,7 @@ async function enqueueQStash(name: TaskName, payload: unknown, delaySeconds: num
   }
 }
 
-/** Enqueue a task on the configured queue, optionally delayed. */
+/** Enqueue a task on QStash (or inline in local dev), optionally delayed. */
 export async function enqueueTask<N extends TaskName>(
   name: N,
   payload: TaskPayloads[N],
@@ -149,51 +115,11 @@ export async function enqueueTask<N extends TaskName>(
 ): Promise<void> {
   const delaySeconds = Math.max(0, Math.floor(opts.delaySeconds ?? 0));
   if (env.tasksInline) return dispatchInline(name, payload, delaySeconds);
-  if (env.taskQueue === "qstash") return enqueueQStash(name, payload, delaySeconds);
-  return enqueueCloudTask(name, payload, delaySeconds);
+  return enqueueQStash(name, payload, delaySeconds);
 }
 
 export async function enqueueProcessConversation(payload: ProcessConversationPayload): Promise<void> {
   await enqueueTask("process-conversation", payload);
-}
-
-const oidcVerifier = new OAuth2Client();
-
-/**
- * True when the request came from our Cloud Tasks queue: queue header present
- * and a valid Google OIDC token for our service account with this service as
- * audience. TASKS_AUTH_DISABLED=true bypasses for local development only.
- */
-export async function verifyCloudTasksRequest(headers: {
-  authorization?: string;
-  queueName?: string;
-}): Promise<boolean> {
-  if (env.tasksAuthDisabled) {
-    trace("tasks", "OIDC check bypassed (TASKS_AUTH_DISABLED)");
-    return true;
-  }
-  if (!headers.queueName) {
-    trace("tasks", "OIDC check failed: missing queue header");
-    return false;
-  }
-  const token = headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (!token) {
-    trace("tasks", "OIDC check failed: missing bearer token");
-    return false;
-  }
-  try {
-    const ticket = await oidcVerifier.verifyIdToken({
-      idToken: token,
-      audience: env.serviceBaseUrl,
-    });
-    const claims = ticket.getPayload();
-    const ok = claims?.email === env.tasksServiceAccountEmail && claims.email_verified === true;
-    trace("tasks", ok ? "OIDC check passed" : "OIDC check failed: email mismatch", { email: claims?.email });
-    return ok;
-  } catch (err) {
-    trace("tasks", "OIDC check failed: token verification error", { err: String(err) });
-    return false;
-  }
 }
 
 let qstashReceiver: Receiver | undefined;
@@ -230,14 +156,11 @@ export async function verifyQStashRequest(req: {
   }
 }
 
-/** Authenticate a task delivery against whichever queue is configured. */
+/** Authenticate a task delivery. */
 export async function verifyTaskRequest(req: {
   name: TaskName;
   rawBody: string;
-  headers: { authorization?: string; queueName?: string; upstashSignature?: string };
+  headers: { upstashSignature?: string };
 }): Promise<boolean> {
-  if (env.taskQueue === "qstash" && !env.tasksInline) {
-    return verifyQStashRequest({ signature: req.headers.upstashSignature, rawBody: req.rawBody, name: req.name });
-  }
-  return verifyCloudTasksRequest(req.headers);
+  return verifyQStashRequest({ signature: req.headers.upstashSignature, rawBody: req.rawBody, name: req.name });
 }

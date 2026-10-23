@@ -85,13 +85,11 @@ Chatwoot refuses `localhost` webhook URLs. For local testing run `cloudflared tu
 
 ### 6. Task queue (needed for the assistant and reply emails)
 
-Cloud Tasks doesn't exist on Scaleway, so the bot can now use **Upstash QStash** instead:
+The bot queues its slow work on **Upstash QStash**:
 
 1. Upstash console → QStash → copy `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`. If the QStash region is EU, also set `QSTASH_URL` to the URL shown there.
-2. On the bot: `TASK_QUEUE=qstash` plus those variables. `SERVICE_BASE_URL` must be the bot's public URL: QStash calls `<SERVICE_BASE_URL>/tasks/process-conversation` and `/tasks/support-reply-notify` and signs every call.
+2. On the bot: set those variables. `SERVICE_BASE_URL` must be the bot's public URL: QStash calls `<SERVICE_BASE_URL>/tasks/process-conversation` and `/tasks/support-reply-notify` and signs every call.
 3. Locally, `TASKS_INLINE=true` + `TASKS_AUTH_DISABLED=true` still work. Delays then run as in-process timers.
-
-`TASK_QUEUE=cloud-tasks` (the default) keeps the old setup.
 
 ### 7. Environment
 
@@ -136,7 +134,6 @@ CHATWOOT_ACCOUNT_WEBHOOK_SECRET=<step 5>
 BUSINESS_APP_URL=https://business.openbookings.co
 LETTERMINT_PROJECT_TOKEN=…
 EMAIL_FROM_ADDRESS="OpenBookings Support <noreply@openbookings.co>"   # optional
-TASK_QUEUE=qstash
 QSTASH_TOKEN=…  QSTASH_CURRENT_SIGNING_KEY=…  QSTASH_NEXT_SIGNING_KEY=…
 ```
 
