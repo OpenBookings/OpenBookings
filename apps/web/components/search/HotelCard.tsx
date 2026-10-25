@@ -139,7 +139,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
   return (
     <Card
       className={cn(
-        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
+        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 backdrop-blur-md @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
       )}
       style={
         {
@@ -155,7 +155,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
       />
 
       <CardContent
-        className="-mt-px flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)] backdrop-blur-xl"
+        className="-mt-px flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)]"
         style={{ backgroundColor: CARD_BODY_BG }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
@@ -260,7 +260,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
           <div className="flex items-center gap-2">
             <span
               aria-hidden="true"
-              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none backdrop-blur-sm transition-all duration-200 group-hover:bg-white/20"
+              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none pointer-events-none transition-all duration-200 group-hover:bg-white/20"
             >
               Explore
             </span>
