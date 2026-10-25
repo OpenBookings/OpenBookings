@@ -57,7 +57,7 @@ function HotelCardHeroImage({
 
   return (
     <div
-      className="group/image relative z-10 w-full shrink-0"
+      className="group/image relative w-full shrink-0"
       style={
         {
           aspectRatio: IMAGE_ASPECT,
@@ -159,7 +159,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
         style={{ backgroundColor: CARD_BODY_BG }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative mb-[clamp(4px,2.2cqw,8px)]">
+          <div className="mb-[clamp(4px,2.2cqw,8px)]">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1 pr-3">
                 <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-snug tracking-tight text-white/97">
