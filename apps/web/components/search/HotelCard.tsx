@@ -1,14 +1,12 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Fragment, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Fragment, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
-  ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Heart,
   MapPin,
   Star,
 } from "lucide-react";
@@ -59,7 +57,7 @@ function HotelCardHeroImage({
 
   return (
     <div
-      className="group/image relative w-full shrink-0"
+      className="group/image relative z-10 w-full shrink-0"
       style={
         {
           aspectRatio: IMAGE_ASPECT,
@@ -132,42 +130,6 @@ function HotelCardHeroImage({
   );
 }
 
-function TruncatedName({ name }: { name: string }) {
-  const spanRef = useRef<HTMLSpanElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-
-  const handleMouseEnter = () => {
-    const el = spanRef.current;
-    if (el && el.scrollWidth > el.clientWidth) {
-      const rect = el.getBoundingClientRect();
-      setPos({ x: rect.left, y: rect.bottom + 6 });
-    }
-  };
-
-  return (
-    <>
-      <span
-        ref={spanRef}
-        className="truncate block"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setPos(null)}
-      >
-        {name}
-      </span>
-      {pos &&
-        createPortal(
-          <div
-            className="pointer-events-none fixed z-[9999] max-w-[280px] rounded-lg border border-white/20 bg-[rgba(18,18,18,0.96)] px-3 py-2 font-serif text-sm font-bold leading-snug text-white shadow-2xl backdrop-blur-md"
-            style={{ left: pos.x, top: pos.y }}
-          >
-            {name}
-          </div>,
-          document.body,
-        )}
-    </>
-  );
-}
-
 export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eager?: boolean }) {
   const gallery =
     hotel.images?.filter(Boolean).map((image) => buildHotelImageUrl(hotel.id, image)) ?? [];
@@ -177,7 +139,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
   return (
     <Card
       className={cn(
-        "group relative h-full w-full min-w-0 cursor-pointer gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
+        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
       )}
       style={
         {
@@ -200,8 +162,13 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
           <div className="relative mb-[clamp(4px,2.2cqw,8px)]">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1 pr-3">
-                <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-tight tracking-tight text-white/97">
-                  <TruncatedName name={hotel.name} />
+                <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-snug tracking-tight text-white/97">
+                  <Link
+                    href={`/p/${hotel.slug}`}
+                    className="line-clamp-2 outline-none after:absolute after:inset-0 after:z-0 after:content-['']"
+                  >
+                    {hotel.name}
+                  </Link>
                 </h3>
               </div>
               {rating ? (
@@ -291,21 +258,12 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Save to wishlist"
-              className="flex size-8 items-center justify-center rounded-full border border-white/20 bg-white/10 transition-colors duration-200 hover:bg-white/20"
-            >
-              <Heart className="size-4 text-white" aria-hidden />
-            </button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none backdrop-blur-sm transition-all duration-200 hover:scale-[1.02] hover:bg-white/20 active:scale-[0.98]"
-         
+            <span
+              aria-hidden="true"
+              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none backdrop-blur-sm transition-all duration-200 group-hover:bg-white/20"
             >
               Explore
-            </Button>
+            </span>
           </div>
         </div>
       </CardContent>
