@@ -1,55 +1,17 @@
 "use client";
 import { Nav } from "@/components/nav";
 import { FooterLinks } from "@/components/FooterLinks";
-import { HotelCard, type HotelCardData } from "@/components/search/HotelCard";
+import { HotelCard } from "@/components/search/HotelCard";
+import type { HotelCardData } from "@/components/search/hotel-card-data";
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
 import Image from "next/image";
 import { useBackdrop } from "@/lib/use-backdrop";
 import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
+import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
-
-/** Shape returned by GET /api/query — see resolveSearchResults() in @openbookings/pricing */
-interface HotelSearchApiResult {
-  hotel_id: string;
-  hotel_name: string;
-  hotel_slug: string;
-  city: string;
-  country: string;
-  hero_image_url: string | null;
-  room_name: string;
-  room_description: string;
-  currency: string;
-  is_refundable: boolean;
-  total_price: number;
-  nights: { date: string }[];
-}
-
-function mapToHotelCardData(result: HotelSearchApiResult): HotelCardData {
-  const nightCount = result.nights.length || 1;
-  const tags = [result.city, result.country, result.is_refundable ? "Free Cancellation" : "Non-refundable"].filter(
-    Boolean,
-  );
-
-  return {
-    id: result.hotel_id,
-    name: result.hotel_name,
-    slug: result.hotel_slug,
-    distance: `${result.city}, ${result.country}`,
-    rating: 0,
-    reviews: 0,
-    price: Math.round(result.total_price / nightCount),
-    tags,
-    images: result.hero_image_url ? [result.hero_image_url] : [],
-    description: {
-      type: result.room_name,
-      bed: "",
-      size: "",
-    },
-  };
-}
 
 function SearchPageInner() {
   const router = useRouter();
@@ -94,7 +56,7 @@ function SearchPageInner() {
 
     // Demo mode: any search shows the demo properties, no API call.
     if (isDemoMode()) {
-      setHotels(getDemoSearchResults());
+      setHotels(getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)));
       setSearchError(null);
       return;
     }
@@ -125,7 +87,7 @@ function SearchPageInner() {
           throw new Error(body?.error ?? `Search failed (${res.status})`);
         }
         const results: HotelSearchApiResult[] = await res.json();
-        setHotels(results.map(mapToHotelCardData));
+        setHotels(results.map(mapSearchResult));
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         setSearchError(err instanceof Error ? err.message : "Search failed");

@@ -16,28 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import type { HotelCardData } from "./hotel-card-data";
 
 const CARD_BODY_BG = "rgba(0,0,0,0.70)";
 
 /** Hero image aspect — keeps image height locked to the same width as the card. */
 const IMAGE_ASPECT = "280 / 210" as const;
-
-export type HotelCardData = {
-  id: string;
-  name: string;
-  slug: string,
-  distance: string;
-  rating: number;
-  reviews: number;
-  price: number;
-  tags: string[];
-  description: {
-    type: string;
-    bed: string;
-    size: string;
-  };
-  images: string[];
-};
 
 function buildHotelImageUrl(hotelId: string, image: string): string {
   if (!image) return "";
@@ -233,7 +217,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
                 strokeWidth={1.6}
                 style={{ width: 13, height: 13, flexShrink: 0, marginRight: 4, opacity: 0.7 }}
               />
-              <span className="truncate">{hotel.distance}</span>
+              <span className="truncate">{hotel.location}</span>
             </div>
 
             <div className="mb-2.5 flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide text-white/70" style={{ maxHeight: "calc(2 * 1.4em)" }}>
@@ -264,14 +248,9 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
               aria-label="Hotel amenities"
               style={{ maxHeight: "3.25rem" }}
             >
-              {hotel.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center rounded-lg border border-white/15 bg-white/10 px-[clamp(8px,2.8cqw,11px)] py-[clamp(2px,0.8cqw,4px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-medium tracking-[0.08em] whitespace-nowrap text-white/60 uppercase"
-                >
-                  {tag}
-                </span>
-              ))}
+              <span className="inline-flex items-center rounded-lg border border-white/15 bg-white/10 px-[clamp(8px,2.8cqw,11px)] py-[clamp(2px,0.8cqw,4px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-medium tracking-[0.08em] whitespace-nowrap text-white/60 uppercase">
+                {hotel.freeCancellation ? "Free cancellation" : "Non-refundable"}
+              </span>
             </div>
           </div>
         </div>

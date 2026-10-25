@@ -1,5 +1,5 @@
 import { BACKDROPS } from "@openbookings/images";
-import type { HotelCardData } from "@/components/search/HotelCard";
+import type { HotelCardData } from "@/components/search/hotel-card-data";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import type { PropertyPagePayload, RawAmenity } from "./hotel-page-data";
 import type { HotelPageData } from "./hotel-page-query";
@@ -185,20 +185,23 @@ const DEMO_PROPERTIES: DemoProperty[] = [
 
 // ── What the pages read ─────────────────────────────────────────────────────
 
-/** Cards for the search page. Price is the cheapest nightly rate. */
-export function getDemoSearchResults(): HotelCardData[] {
+/** Cards for the search page. Price is the cheapest nightly rate; the total covers `nights`. */
+export function getDemoSearchResults(nights: number | null): HotelCardData[] {
   return DEMO_PROPERTIES.map(({ slug, rating, reviews, page: { hotel, rooms } }) => {
     const cheapest = rooms.flatMap((r) => r.rate_plans).reduce((a, b) => (b.bar < a.bar ? b : a));
-    const room = rooms[0];
+    const room = rooms.find((r) => r.rate_plans.includes(cheapest)) ?? rooms[0];
     return {
       id: hotel.id,
       name: hotel.name,
       slug,
-      distance: `${hotel.city}, ${hotel.country}`,
+      location: `${hotel.city}, ${hotel.country}`,
       rating,
       reviews,
       price: cheapest.bar,
-      tags: [hotel.city, hotel.country, "Free Cancellation"],
+      totalPrice: nights ? cheapest.bar * nights : null,
+      nights,
+      currency: cheapest.currency,
+      freeCancellation: cheapest.is_refundable,
       images: [...new Set([hotel.hero_image_url, ...hotel.gallery_images.map((g) => g.url)])].filter((u): u is string => !!u),
       description: { type: room.name, bed: room.bed_type ?? "", size: room.size_sqm ? `${room.size_sqm} m²` : "" },
     };
