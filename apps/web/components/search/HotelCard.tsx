@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import {
@@ -16,7 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import type { HotelCardData } from "./hotel-card-data";
+import {
+  formatRating,
+  photoAlt,
+  priceSummary,
+  roomDetails,
+  type HotelCardData,
+} from "./hotel-card-data";
 
 const CARD_BODY_BG = "rgba(0,0,0,0.70)";
 
@@ -65,7 +71,7 @@ function HotelCardHeroImage({
         {currentSrc ? (
           <Image
             src={currentSrc}
-            alt={hotelName}
+            alt={photoAlt(hotelName, imageIndex, gallery.length)}
             fill
             sizes="(min-width: 1024px) 320px, (min-width: 768px) 50vw, 100vw"
             loading={eager ? "eager" : "lazy"}
@@ -165,9 +171,9 @@ function TruncatedName({ name }: { name: string }) {
 export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eager?: boolean }) {
   const gallery =
     hotel.images?.filter(Boolean).map((image) => buildHotelImageUrl(hotel.id, image)) ?? [];
-  const displayRating = Math.round(
-    Number.isFinite(hotel.rating) ? hotel.rating : 0,
-  );
+  const rating = formatRating(hotel.rating, hotel.reviews);
+  const room = roomDetails(hotel.description);
+  const price = priceSummary(hotel);
   return (
     <Card
       className={cn(
@@ -198,15 +204,20 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
                   <TruncatedName name={hotel.name} />
                 </h3>
               </div>
-              <div
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-1"
-                aria-label={`Rating: ${displayRating} out of 10, ${hotel.reviews} reviews`}
-              >
-                <Star className="size-3 fill-[#E6C97B] text-[#E6C97B]" aria-hidden />
-                <span className="font-sans text-sm font-semibold leading-none text-white">
-                  {displayRating}
-                </span>
-              </div>
+              {rating ? (
+                <div
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-1"
+                  aria-label={rating.label}
+                >
+                  <Star className="size-3 fill-[#E6C97B] text-[#E6C97B]" aria-hidden />
+                  <span className="font-sans text-sm font-semibold leading-none text-white">
+                    {rating.value}
+                  </span>
+                  <span className="font-sans text-xs font-normal leading-none text-white/60">
+                    ({rating.count})
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -232,15 +243,16 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
                 <path d="M8.5 10c-.276 0-.5-.448-.5-1s.224-1 .5-1 .5.448.5 1-.224 1-.5 1" />
                 <path d="M10.828.122A.5.5 0 0 1 11 .5V1h.5A1.5 1.5 0 0 1 13 2.5V15h1.5a.5.5 0 0 1 0 1h-13a.5.5 0 0 1 0-1H3V1.5a.5.5 0 0 1 .43-.495l7-1a.5.5 0 0 1 .398.117M11.5 2H11v13h1V2.5a.5.5 0 0 0-.5-.5M4 1.934V15h6V1.077z" />
               </svg>
-              <span>{hotel.description.type}</span>
-              <span aria-hidden className="mx-1 opacity-40">
-                ·
-              </span>
-              <span>{hotel.description.bed}</span>
-              <span aria-hidden className="mx-1 opacity-40">
-                ·
-              </span>
-              <span>{hotel.description.size}</span>
+              {room.map((part, i) => (
+                <Fragment key={part}>
+                  {i > 0 ? (
+                    <span aria-hidden className="mx-1 opacity-40">
+                      ·
+                    </span>
+                  ) : null}
+                  <span>{part}</span>
+                </Fragment>
+              ))}
             </div>
 
             <div
@@ -258,17 +270,24 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
         <Separator className="mb-[clamp(12px,4.3cqw,18px)] h-px shrink-0 bg-linear-to-r from-white/10 to-transparent" />
         <div className="flex shrink-0 items-end justify-between gap-3">
           <div>
-            <span className="block font-sans text-[clamp(10px,2.8cqw,11px)] text-[rgba(255,255,255,0.52)] uppercase">
-              from
-            </span>
+            {price.caption ? (
+              <span className="block font-sans text-[clamp(10px,2.8cqw,11px)] text-[rgba(255,255,255,0.52)] uppercase">
+                {price.caption}
+              </span>
+            ) : null}
             <div className="flex items-baseline gap-1">
               <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none font-semibold tracking-tight text-white/95">
-                €{hotel.price}
+                {price.amount}
               </span>
               <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-[rgba(255,255,255,0.52)]">
-                /night
+                {price.suffix}
               </span>
             </div>
+            {price.detail ? (
+              <span className="mt-1 block font-sans text-[12px] text-white/60">
+                {price.detail}
+              </span>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">
