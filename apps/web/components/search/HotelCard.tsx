@@ -134,9 +134,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
   const price = priceSummary(hotel);
   return (
     <Card
-      className={cn(
-        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-black/70 py-0 backdrop-blur-md @container shadow-2xl has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
-      )}
+      className="group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-black/70 py-0 backdrop-blur-md @container shadow-2xl has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70"
     >
       <HotelCardHeroImage
         eager={eager}
@@ -146,7 +144,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
       />
 
       <CardContent
-        className="-mt-px flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)]"
+        className="flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)]"
       >
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-[clamp(4px,2.2cqw,8px)]">
@@ -155,7 +153,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
                 <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-snug tracking-tight text-white">
                   <Link
                     href={`/p/${hotel.slug}`}
-                    className="line-clamp-2 outline-none after:absolute after:inset-0 after:z-0 after:content-['']"
+                    className="line-clamp-2 outline-hidden after:absolute after:inset-0 after:z-0 after:content-['']"
                   >
                     {hotel.name}
                   </Link>
@@ -164,6 +162,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
               {rating ? (
                 <div
                   className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-1"
+                  role="img"
                   aria-label={rating.label}
                 >
                   <Star className="size-3 fill-rating text-rating" aria-hidden />
@@ -191,7 +190,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
             <div className="mb-2.5 flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide text-white/70 max-h-[2.8em]">
               <DoorIcon className="size-4 shrink-0" />
               {room.map((part, i) => (
-                <Fragment key={part}>
+                <Fragment key={i}>
                   {i > 0 ? (
                     <span aria-hidden className="mx-1 opacity-40">
                       ·
@@ -225,7 +224,7 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
               </span>
             ) : null}
             <div className="flex items-baseline gap-1">
-              <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none font-semibold tracking-tight text-white">
+              <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none whitespace-nowrap font-semibold tracking-tight text-white">
                 {price.amount}
               </span>
               <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-white/60">
@@ -239,14 +238,12 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
             ) : null}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="h-auto rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white shadow-none pointer-events-none transition-all duration-200 group-hover:bg-white/20"
+          <span
+            aria-hidden="true"
+            className="rounded-xl border border-white/20 bg-white/10 px-[clamp(12px,4cqw,17px)] py-[clamp(8px,2.9cqw,11px)] font-sans text-[clamp(12px,3cqw,15px)] font-semibold tracking-[0.04em] text-white transition-all duration-200 group-hover:bg-white/20"
             >
-              Explore
-            </span>
-          </div>
+            Explore
+          </span>
         </div>
       </CardContent>
     </Card>

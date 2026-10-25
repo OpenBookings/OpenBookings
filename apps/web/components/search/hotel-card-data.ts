@@ -15,13 +15,15 @@ export type HotelCardData = {
 };
 
 export function formatMoney(amount: number, currency: string): string {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  })
-    .format(amount)
-    .replace(/ /g, " ");
+  try {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${currency} ${Math.round(amount)}`;
+  }
 }
 
 export function formatRating(
