@@ -57,7 +57,7 @@ function HotelCardHeroImage({
 
   return (
     <div
-      className="group/image relative w-full shrink-0"
+      className="relative w-full shrink-0"
       style={
         {
           aspectRatio: IMAGE_ASPECT,
@@ -96,7 +96,7 @@ function HotelCardHeroImage({
             className={cn(
               "absolute top-1/2 left-2 z-10 h-8 w-8 -translate-y-1/2 rounded-full border border-white/22 bg-white/14 text-white shadow-none backdrop-blur-sm",
               "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
-              "group-hover/image:pointer-events-auto group-hover/image:opacity-100",
+              "group-hover:pointer-events-auto group-hover:opacity-100",
               "focus-visible:pointer-events-auto focus-visible:opacity-100",
             )}
             onClick={(e) => {
@@ -114,7 +114,7 @@ function HotelCardHeroImage({
             className={cn(
               "absolute top-1/2 right-2 z-10 h-8 w-8 -translate-y-1/2 rounded-full border border-white/22 bg-white/14 text-white shadow-none backdrop-blur-sm",
               "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
-              "group-hover/image:pointer-events-auto group-hover/image:opacity-100",
+              "group-hover:pointer-events-auto group-hover:opacity-100",
               "focus-visible:pointer-events-auto focus-visible:opacity-100",
             )}
             onClick={(e) => {
