@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { Fragment, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,6 +10,7 @@ import {
   MapPin,
   Star,
 } from "lucide-react";
+import { DoorIcon } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -22,8 +22,6 @@ import {
   roomDetails,
   type HotelCardData,
 } from "./hotel-card-data";
-
-const CARD_BODY_BG = "rgba(0,0,0,0.70)";
 
 /** Hero image aspect — keeps image height locked to the same width as the card. */
 const IMAGE_ASPECT = "280 / 210" as const;
@@ -59,12 +57,7 @@ function HotelCardHeroImage({
   return (
     <div
       className="relative w-full shrink-0"
-      style={
-        {
-          aspectRatio: IMAGE_ASPECT,
-          backgroundColor: CARD_BODY_BG,
-        } satisfies CSSProperties
-      }
+      style={{ aspectRatio: IMAGE_ASPECT }}
     >
       <div className="absolute inset-0 overflow-hidden">
         {currentSrc ? (
@@ -142,13 +135,8 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
   return (
     <Card
       className={cn(
-        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-transparent py-0 backdrop-blur-md @container shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-300 ease-out hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
+        "group relative h-full w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-white/20 bg-black/70 py-0 backdrop-blur-md @container shadow-2xl has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-white/70",
       )}
-      style={
-        {
-          backgroundColor: CARD_BODY_BG,
-        } satisfies CSSProperties
-      }
     >
       <HotelCardHeroImage
         eager={eager}
@@ -159,13 +147,12 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
 
       <CardContent
         className="-mt-px flex min-h-0 flex-1 flex-col px-[clamp(14px,5cqw,22px)] pt-[clamp(10px,3.8cqw,14px)] pb-[clamp(14px,5.4cqw,22px)]"
-        style={{ backgroundColor: CARD_BODY_BG }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-[clamp(4px,2.2cqw,8px)]">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1 pr-3">
-                <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-snug tracking-tight text-white/97">
+                <h3 className="font-serif text-[clamp(1.1rem,7cqw,1.35rem)] font-bold leading-snug tracking-tight text-white">
                   <Link
                     href={`/p/${hotel.slug}`}
                     className="line-clamp-2 outline-none after:absolute after:inset-0 after:z-0 after:content-['']"
@@ -176,10 +163,10 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
               </div>
               {rating ? (
                 <div
-                  className="flex shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-2 py-1"
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-1"
                   aria-label={rating.label}
                 >
-                  <Star className="size-3 fill-[#E6C97B] text-[#E6C97B]" aria-hidden />
+                  <Star className="size-3 fill-rating text-rating" aria-hidden />
                   <span className="font-sans text-sm font-semibold leading-none text-white">
                     {rating.value}
                   </span>
@@ -192,27 +179,17 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
           </div>
 
           <div className="mb-[clamp(14px,5.2cqw,20px)]">
-            <div className="mb-2.5 flex items-center truncate font-sans text-[clamp(12.5px,3.3cqw,14px)] leading-snug text-white/42">
+            <div className="mb-2.5 flex items-center truncate font-sans text-[clamp(12.5px,3.3cqw,14px)] leading-snug text-white/60">
               <MapPin
                 aria-hidden
                 strokeWidth={1.6}
-                style={{ width: 13, height: 13, flexShrink: 0, marginRight: 4, opacity: 0.7 }}
+                className="mr-1 size-[13px] shrink-0 opacity-70"
               />
               <span className="truncate">{hotel.location}</span>
             </div>
 
-            <div className="mb-2.5 flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide text-white/70" style={{ maxHeight: "calc(2 * 1.4em)" }}>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                fill="currentColor"
-                viewBox="0 0 16 16"
-                aria-hidden
-              >
-                <path d="M8.5 10c-.276 0-.5-.448-.5-1s.224-1 .5-1 .5.448.5 1-.224 1-.5 1" />
-                <path d="M10.828.122A.5.5 0 0 1 11 .5V1h.5A1.5 1.5 0 0 1 13 2.5V15h1.5a.5.5 0 0 1 0 1h-13a.5.5 0 0 1 0-1H3V1.5a.5.5 0 0 1 .43-.495l7-1a.5.5 0 0 1 .398.117M11.5 2H11v13h1V2.5a.5.5 0 0 0-.5-.5M4 1.934V15h6V1.077z" />
-              </svg>
+            <div className="mb-2.5 flex flex-wrap items-center gap-x-1 gap-y-0 overflow-hidden font-sans text-[clamp(13px,3.5cqw,14.5px)] leading-snug tracking-wide text-white/70 max-h-[2.8em]">
+              <DoorIcon className="size-4 shrink-0" />
               {room.map((part, i) => (
                 <Fragment key={part}>
                   {i > 0 ? (
@@ -243,15 +220,15 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
         <div className="flex shrink-0 items-end justify-between gap-3">
           <div>
             {price.caption ? (
-              <span className="block font-sans text-[clamp(10px,2.8cqw,11px)] text-[rgba(255,255,255,0.52)] uppercase">
+              <span className="block font-sans text-[clamp(10px,2.8cqw,11px)] text-white/60 uppercase">
                 {price.caption}
               </span>
             ) : null}
             <div className="flex items-baseline gap-1">
-              <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none font-semibold tracking-tight text-white/95">
+              <span className="font-sans text-[clamp(24px,9cqw,32px)] leading-none font-semibold tracking-tight text-white">
                 {price.amount}
               </span>
-              <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-[rgba(255,255,255,0.52)]">
+              <span className="font-sans text-[clamp(12px,3.7cqw,14px)] font-normal text-white/60">
                 {price.suffix}
               </span>
             </div>
