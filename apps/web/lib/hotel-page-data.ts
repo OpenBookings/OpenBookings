@@ -3,6 +3,7 @@ import { cached, propertyPageKey } from "@openbookings/cache";
 import { getDb, sql } from "@openbookings/db";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import { buildHeroQuery, type HotelPageData } from "./hotel-page-query";
+import { getDemoHotelPage, isDemoMode } from "./demo-data";
 
 /** One `amenities` row as the page groups it; the grouping itself stays in the page. */
 export interface RawAmenity {
@@ -143,6 +144,10 @@ async function loadFromDb(slug: string): Promise<PropertyPagePayload | null> {
  * cannot. Returns `null` for a slug with no active property.
  */
 export function getHotelPage(slug: string): Promise<PropertyPagePayload | null> {
+  if (isDemoMode()) {
+    const demo = getDemoHotelPage(slug);
+    if (demo) return Promise.resolve(demo);
+  }
   return cached<PropertyPagePayload>(propertyPageKey(slug), () => loadFromDb(slug), {
     ...PROPERTY_PAGE_TTL,
     onError: (error, ctx) =>

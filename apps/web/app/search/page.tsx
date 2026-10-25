@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SlidersHorizontal } from "lucide-react";
 import Image from "next/image";
 import { useBackdrop } from "@/lib/use-backdrop";
+import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
@@ -90,6 +91,13 @@ function SearchPageInner() {
       setHotels([]);
       setSearchError(null);
     };
+
+    // Demo mode: any search shows the demo properties, no API call.
+    if (isDemoMode()) {
+      setHotels(getDemoSearchResults());
+      setSearchError(null);
+      return;
+    }
 
     if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
       clearResults();
