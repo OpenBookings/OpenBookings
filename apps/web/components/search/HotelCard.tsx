@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -81,7 +82,7 @@ function HotelCardHeroImage({
       </div>
 
       {hasGallery ? (
-        <span className="pointer-events-none absolute left-3 bottom-3 z-10 inline-flex h-6 items-center rounded-full border border-white/22 bg-white/14 px-2.5 font-sans text-[10px] font-medium tracking-[0.08em] text-white backdrop-blur-sm">
+        <span className="pointer-events-none absolute left-3 bottom-3 z-10 inline-flex h-6 items-center rounded-full border border-white/22 bg-white/14 px-2.5 font-sans text-[11px] font-medium tracking-[0.08em] text-white backdrop-blur-sm">
           {imageIndex + 1} / {gallery.length}
         </span>
       ) : null}
@@ -98,6 +99,7 @@ function HotelCardHeroImage({
               "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
               "group-hover:pointer-events-auto group-hover:opacity-100",
               "focus-visible:pointer-events-auto focus-visible:opacity-100",
+              "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:size-11",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -116,6 +118,7 @@ function HotelCardHeroImage({
               "pointer-events-none opacity-0 transition-[opacity,background-color,border-color] duration-200 hover:bg-white/22 hover:text-white",
               "group-hover:pointer-events-auto group-hover:opacity-100",
               "focus-visible:pointer-events-auto focus-visible:opacity-100",
+              "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:size-11",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -222,15 +225,17 @@ export function HotelCard({ hotel, eager = false }: { hotel: HotelCardData; eage
               ))}
             </div>
 
-            <div
-              className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1.5 overflow-hidden"
-              aria-label="Hotel amenities"
-              style={{ maxHeight: "3.25rem" }}
+            <p
+              className={cn(
+                "flex items-center gap-1.5 font-sans text-[13px] font-medium",
+                hotel.freeCancellation ? "text-emerald-300" : "text-white/60",
+              )}
             >
-              <span className="inline-flex items-center rounded-lg border border-white/15 bg-white/10 px-[clamp(8px,2.8cqw,11px)] py-[clamp(2px,0.8cqw,4px)] font-sans text-[clamp(9px,2.5cqw,10px)] font-medium tracking-[0.08em] whitespace-nowrap text-white/60 uppercase">
-                {hotel.freeCancellation ? "Free cancellation" : "Non-refundable"}
-              </span>
-            </div>
+              {hotel.freeCancellation ? (
+                <Check className="size-3.5" aria-hidden />
+              ) : null}
+              {hotel.freeCancellation ? "Free cancellation" : "Non-refundable"}
+            </p>
           </div>
         </div>
 
