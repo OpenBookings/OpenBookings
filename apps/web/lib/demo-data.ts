@@ -1,5 +1,5 @@
 import { BACKDROPS } from "@openbookings/images";
-import type { HotelCardData } from "@/components/search/hotel-card-data";
+import { DEFAULT_FOCAL, type StayPosterData } from "@/components/search/stay-poster-data";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import type { PropertyPagePayload, RawAmenity } from "./hotel-page-data";
 import type { HotelPageData } from "./hotel-page-query";
@@ -125,17 +125,19 @@ const DEFAULT_AMENITIES: RawAmenity[] = [
 
 // ── The demo set ────────────────────────────────────────────────────────────
 
-type DemoProperty = { slug: string; rating: number; reviews: number; page: PropertyPagePayload };
+/** How a demo property looks on the search page. Tints are hand-picked dark tones from each photo. */
+type DemoCard = { highlights: string[]; tint: string; unavailable?: true };
+type DemoProperty = { slug: string; card: DemoCard; page: PropertyPagePayload };
 
 function demoProperty(
   slug: string,
   hotel: Partial<HotelPageData>,
   rooms: DbRoom[],
-  extra: { rating: number; reviews: number },
+  card: DemoCard,
 ): DemoProperty {
   return {
     slug,
-    ...extra,
+    card,
     page: { hotel: makeDemoHotel({ id: `demo-${slug}`, ...hotel }), amenities: DEFAULT_AMENITIES, rooms },
   };
 }
@@ -161,49 +163,54 @@ const DEMO_PROPERTIES: DemoProperty[] = [
       makeDemoRoom({ name: "Classic Room", size_sqm: 28, price: 300 }),
       makeDemoRoom({ name: "Spa Suite", room_type: "Suite", size_sqm: 55, max_occupancy: 3, images: [image("Lake Como")], price: 500 }),
     ],
-    { rating: 4.8, reviews: 1243 },
+    { highlights: ["Thermal pools", "Medical spa"], tint: "#14100c" },
   ),
   demoProperty(
     "hotel-lago-como",
     { name: "Hotel Lago", subtitle: "Lakefront rooms with mountain views", hero_image_url: image("Lake Como"), city: "Como", lat: 45.8081, lon: 9.0852 },
     [makeDemoRoom({ name: "Lake View Double", images: [image("Lake Como")] })],
-    { rating: 4.6, reviews: 512 },
+    { highlights: ["Lakefront", "Mountain views"], tint: "#0a0f16" },
   ),
   demoProperty(
     "casa-roma",
     { name: "Casa Roma", subtitle: "Boutique rooms near the Pantheon", hero_image_url: image("Rome"), city: "Rome", lat: 41.8986, lon: 12.4769 },
     [makeDemoRoom({ name: "Superior Double", images: [image("Rome")], price: 200 })],
-    { rating: 4.4, reviews: 287 },
+    // Shows the "not available for your dates" card state.
+    { highlights: ["Near the Pantheon"], tint: "#120e0c", unavailable: true },
   ),
   demoProperty(
     "chalet-zermatt",
     { name: "Chalet Matterhorn", subtitle: "Ski-in, ski-out alpine lodge", hero_image_url: image("Zermatt"), city: "Zermatt", country: "CH", lat: 46.0207, lon: 7.7491 },
     [makeDemoRoom({ name: "Alpine Room", images: [image("Zermatt")], price: 360, currency: "CHF" })],
-    { rating: 4.9, reviews: 98 },
+    { highlights: ["Ski-in, ski-out", "Mountain views"], tint: "#0b0e12" },
   ),
 ];
 
 // ── What the pages read ─────────────────────────────────────────────────────
 
-/** Cards for the search page. Price is the cheapest nightly rate; the total covers `nights`. */
-export function getDemoSearchResults(nights: number | null): HotelCardData[] {
-  return DEMO_PROPERTIES.map(({ slug, rating, reviews, page: { hotel, rooms } }) => {
+/**
+ * Cards for the search page, priced at the cheapest rate plan for `nights`.
+ * Demo results ignore the searched place, so they carry no distance.
+ */
+export function getDemoSearchResults(nights: number | null): StayPosterData[] {
+  return DEMO_PROPERTIES.map(({ slug, card, page: { hotel, rooms } }) => {
     const cheapest = rooms.flatMap((r) => r.rate_plans).reduce((a, b) => (b.bar < a.bar ? b : a));
-    const room = rooms.find((r) => r.rate_plans.includes(cheapest)) ?? rooms[0];
     return {
       id: hotel.id,
       name: hotel.name,
       slug,
       location: `${hotel.city}, ${hotel.country}`,
-      rating,
-      reviews,
-      price: cheapest.bar,
-      totalPrice: nights ? cheapest.bar * nights : null,
-      nights,
-      currency: cheapest.currency,
-      freeCancellation: cheapest.is_refundable,
-      images: [...new Set([hotel.hero_image_url, ...hotel.gallery_images.map((g) => g.url)])].filter((u): u is string => !!u),
-      description: { type: room.name, bed: room.bed_type ?? "", size: room.size_sqm ? `${room.size_sqm} m²` : "" },
+      distanceKm: null,
+      refundable: cheapest.is_refundable,
+      highlights: card.highlights,
+      cover: hotel.hero_image_url
+        ? { url: hotel.hero_image_url, tint: card.tint, focalX: DEFAULT_FOCAL.x, focalY: DEFAULT_FOCAL.y }
+        : null,
+      availability: card.unavailable
+        ? { status: "unavailable" }
+        : nights
+          ? { status: "available", nights, total: cheapest.bar * nights, currency: cheapest.currency }
+          : { status: "undated" },
     };
   });
 }

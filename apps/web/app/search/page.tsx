@@ -1,8 +1,14 @@
 "use client";
 import { Nav } from "@/components/nav";
 import { FooterLinks } from "@/components/FooterLinks";
-import { HotelCard } from "@/components/search/HotelCard";
-import type { HotelCardData } from "@/components/search/hotel-card-data";
+import { StayPosterCard } from "@/components/search/StayPosterCard";
+import { StayPosterSkeleton } from "@/components/search/StayPosterSkeleton";
+import {
+  comparePrice,
+  resultsListLabel,
+  type PriceMode,
+  type StayPosterData,
+} from "@/components/search/stay-poster-data";
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
@@ -12,6 +18,10 @@ import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
 import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
+
+// 1072 = the 1120px content width minus the 24px side padding the page already has.
+const RESULTS_GRID =
+  "mx-auto grid w-full max-w-[1072px] grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] sm:gap-x-8 sm:gap-y-10";
 
 function SearchPageInner() {
   const router = useRouter();
@@ -44,7 +54,8 @@ function SearchPageInner() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("top");
 
-  const [hotels, setHotels] = useState<HotelCardData[]>([]);
+  const [hotels, setHotels] = useState<StayPosterData[]>([]);
+  const [priceMode] = useState<PriceMode>("total");
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -103,9 +114,8 @@ function SearchPageInner() {
 
   const sortedHotels = useMemo(() => {
     const list = [...hotels];
-    if (sortBy === "price_asc") return list.sort((a, b) => a.price - b.price);
-    if (sortBy === "price_desc") return list.sort((a, b) => b.price - a.price);
-    if (sortBy === "rating") return list.sort((a, b) => b.rating - a.rating);
+    if (sortBy === "price_asc") return list.sort((a, b) => comparePrice(a, b, "asc"));
+    if (sortBy === "price_desc") return list.sort((a, b) => comparePrice(a, b, "desc"));
     return list;
   }, [hotels, sortBy]);
 
@@ -138,7 +148,7 @@ function SearchPageInner() {
   }
 
   return (
-    <div className="min-h-screen px-10 py-20 pb-[100px] font-sans">
+    <div className="min-h-screen px-4 py-20 pb-[100px] font-sans sm:px-6">
       {/* Background layer */}
       <div className="fixed inset-0 bg-black">
         {backdrop && (
@@ -214,28 +224,40 @@ function SearchPageInner() {
                   <SelectItem value="top" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Recommended</SelectItem>
                   <SelectItem value="price_asc" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Price: low to high</SelectItem>
                   <SelectItem value="price_desc" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Price: high to low</SelectItem>
-                  <SelectItem value="rating" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Highest rated</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </div>
 
-        {/* Hotel cards */}
-        <div className="relative z-10 mx-auto max-w-5xl w-full">
-          {!isLoading && !searchError && sortedHotels.length === 0 ? (
-            <p className="text-center font-sans text-sm text-white/60">
-              {committed.lat && committed.lon
-                ? "No hotels matched your search. Try different dates or guest counts."
-                : "Search for a destination to see available hotels."}
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-8 items-start md:grid-cols-2 lg:grid-cols-3">
-              {sortedHotels.map((hotel, index) => (
-                // The first row is above the fold at every breakpoint.
-                <HotelCard key={hotel.id} hotel={hotel} eager={index < 3} />
+        {/* Results: 3 columns from 892px, 2 from 640px, 1 below (minmax 260px, 32px gaps). */}
+        <div className="relative z-10">
+          {isLoading ? (
+            <ul aria-busy="true" aria-label="Loading stays" className={RESULTS_GRID}>
+              {Array.from({ length: 6 }, (_, i) => (
+                <li key={i}>
+                  <StayPosterSkeleton />
+                </li>
               ))}
-            </div>
+            </ul>
+          ) : sortedHotels.length === 0 ? (
+            // A failed search already shows its error in the results bar.
+            searchError ? null : (
+              <p className="text-center font-sans text-sm text-white/60">
+                {committed.lat && committed.lon
+                  ? "No hotels matched your search. Try different dates or guest counts."
+                  : "Search for a destination to see available hotels."}
+              </p>
+            )
+          ) : (
+            <ul aria-label={resultsListLabel(sortedHotels.length, committed.destination)} className={RESULTS_GRID}>
+              {sortedHotels.map((stay, index) => (
+                <li key={stay.id}>
+                  {/* The first row is above the fold at every width. */}
+                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}`} priority={index < 3} />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

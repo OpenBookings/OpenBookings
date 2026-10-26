@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "./search-results";
+import { mapSearchResult, nightsBetween, resolveCoverUrl, type HotelSearchApiResult } from "./search-results";
 import { getDemoSearchResults } from "./demo-data";
 
 const base: HotelSearchApiResult = {
@@ -18,33 +18,46 @@ describe("nightsBetween", () => {
 });
 
 describe("mapSearchResult", () => {
-  test("maps totals, currency, cancellation", () => {
-    expect(mapSearchResult(base)).toMatchObject({
-      id: "h1", slug: "hotel-lago", location: "Como, IT", price: 211, totalPrice: 422, nights: 2,
-      currency: "EUR", freeCancellation: true, rating: 0, reviews: 0,
-      description: { type: "Lake View Double", bed: "", size: "" }, images: ["https://x/a.jpg"],
-    });
-  });
-  test("no nights → per-night only", () => {
-    expect(mapSearchResult({ ...base, nights: [] })).toMatchObject({ price: 422, totalPrice: null, nights: null });
-  });
-  test("non-refundable, no image", () => {
-    expect(mapSearchResult({ ...base, is_refundable: false, hero_image_url: null }))
-      .toMatchObject({ freeCancellation: false, images: [] });
-  });
+  test("maps a priced result", () =>
+    expect(mapSearchResult({ ...base, distance_m: 812 })).toEqual({
+      id: "h1", name: "Hotel Lago", slug: "hotel-lago", location: "Como, IT", distanceKm: 0.812,
+      refundable: true, highlights: [],
+      cover: { url: "https://x/a.jpg", tint: null, focalX: 0.5, focalY: 0.4 },
+      availability: { status: "available", nights: 2, total: 422, currency: "EUR" },
+    }));
+  test("no nights → undated", () =>
+    expect(mapSearchResult({ ...base, nights: [] }).availability).toEqual({ status: "undated" }));
+  test("no image, no distance", () =>
+    expect(mapSearchResult({ ...base, hero_image_url: null })).toMatchObject({ cover: null, distanceKm: null }));
+});
+
+describe("resolveCoverUrl", () => {
+  test("absolute unchanged", () => expect(resolveCoverUrl("h1", "https://x/a.jpg")).toBe("https://x/a.jpg"));
+  test("protocol-relative", () => expect(resolveCoverUrl("h1", "//x/a.jpg")).toBe("https://x/a.jpg"));
+  test("relative → CDN under the hotel id", () =>
+    expect(resolveCoverUrl("h1", "/rooms/a.jpg")).toBe("https://cdn.openbookings.co/h1/rooms/a.jpg"));
+  test("empty → null", () => expect(resolveCoverUrl("h1", "")).toBeNull());
 });
 
 describe("getDemoSearchResults", () => {
-  test("totals follow nights and keep the rate currency", () => {
-    const chalet = getDemoSearchResults(2).find((h) => h.name === "Chalet Matterhorn")!;
-    expect(chalet.currency).toBe("CHF");
-    expect(chalet.totalPrice).toBe(chalet.price * 2);
-    expect(chalet.nights).toBe(2);
+  test("totals follow nights and keep the rate currency", () =>
+    // non-refundable bar: round(360 × 0.88) = 317
+    expect(getDemoSearchResults(2).find((s) => s.name === "Chalet Matterhorn")!.availability).toEqual({
+      status: "available", nights: 2, total: 634, currency: "CHF",
+    }));
+  test("Casa Roma is unavailable, dated or not", () => {
+    for (const n of [2, null]) {
+      expect(getDemoSearchResults(n).find((s) => s.name === "Casa Roma")!.availability.status).toBe("unavailable");
+    }
   });
-  test("no nights → no total", () => {
-    expect(getDemoSearchResults(null).every((h) => h.totalPrice === null && h.nights === null)).toBe(true);
-  });
-  test("cancellation follows the cheapest plan (non-refundable in every demo property)", () => {
-    expect(getDemoSearchResults(null).every((h) => h.freeCancellation === false)).toBe(true);
-  });
+  test("no nights → others undated", () =>
+    expect(
+      getDemoSearchResults(null)
+        .filter((s) => s.name !== "Casa Roma")
+        .every((s) => s.availability.status === "undated"),
+    ).toBe(true));
+  test("every demo cover has a tint; no demo distance", () =>
+    expect(getDemoSearchResults(2).every((s) => !!s.cover?.tint && s.distanceKm === null)).toBe(true));
+  test("cancellation follows the cheapest plan", () =>
+    expect(getDemoSearchResults(null).every((s) => s.refundable === false)).toBe(true));
 });

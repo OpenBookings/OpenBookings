@@ -1,4 +1,4 @@
-import type { HotelCardData } from "@/components/search/hotel-card-data";
+import { DEFAULT_FOCAL, type StayPosterData } from "@/components/search/stay-poster-data";
 
 /** Shape returned by GET /api/query — see resolveSearchResults() in @openbookings/pricing */
 export interface HotelSearchApiResult {
@@ -30,21 +30,33 @@ export function nightsBetween(checkIn: string, checkOut: string): number | null 
   return Number.isInteger(nights) && nights > 0 ? nights : null;
 }
 
-export function mapSearchResult(result: HotelSearchApiResult): HotelCardData {
-  const nights = result.nights.length || null;
+const CDN_ORIGIN = "https://cdn.openbookings.co";
+
+/** Absolute URL for a stored image path; relative paths live under the hotel's folder on the CDN. */
+export function resolveCoverUrl(hotelId: string, url: string): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  return `${CDN_ORIGIN}/${hotelId}/${url.replace(/^\/+/, "")}`;
+}
+
+export function mapSearchResult(result: HotelSearchApiResult): StayPosterData {
+  const nights = result.nights.length;
+  const coverUrl = result.hero_image_url ? resolveCoverUrl(result.hotel_id, result.hero_image_url) : null;
   return {
     id: result.hotel_id,
     name: result.hotel_name,
     slug: result.hotel_slug,
     location: `${result.city}, ${result.country}`,
-    rating: 0,
-    reviews: 0,
-    price: Math.round(result.total_price / (nights ?? 1)),
-    totalPrice: nights ? Math.round(result.total_price) : null,
-    nights,
-    currency: result.currency,
-    freeCancellation: result.is_refundable,
-    images: result.hero_image_url ? [result.hero_image_url] : [],
-    description: { type: result.room_name, bed: "", size: "" },
+    distanceKm: Number.isFinite(result.distance_m) ? (result.distance_m as number) / 1000 : null,
+    refundable: result.is_refundable,
+    // Host highlights aren't modelled yet.
+    highlights: [],
+    // Tint and focal point come from the cover pipeline, which doesn't exist yet.
+    cover: coverUrl ? { url: coverUrl, tint: null, focalX: DEFAULT_FOCAL.x, focalY: DEFAULT_FOCAL.y } : null,
+    availability:
+      nights > 0
+        ? { status: "available", nights, total: result.total_price, currency: result.currency }
+        : { status: "undated" },
   };
 }
