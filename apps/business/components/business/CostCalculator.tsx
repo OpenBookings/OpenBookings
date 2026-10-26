@@ -186,10 +186,10 @@ export function CostCalculator() {
                         <span className="ml-1.5 text-[11px] font-normal text-white/25">{row.pct.toFixed(1)}%</span>
                       </span>
                     </div>
-                    <div className="h-[6px] overflow-hidden rounded-full bg-white/5">
+                    <div className="h-[6px] rounded-full bg-white/5">
                       <div
                         className={`h-full rounded-full transition-[width] duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                          row.highlight ? "spectrum-fill" : "bg-white/15"
+                          row.highlight ? "spectrum-glow-bar" : "bg-white/15"
                         }`}
                         style={{ width: `${Math.max((row.cost / maxCost) * 100, 1.5)}%` }}
                       />

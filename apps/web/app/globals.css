@@ -57,9 +57,15 @@
   --shadow-xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
     0rem 8px 10px -1.5px hsl(240 10% 3.9% / 0.1);
   --shadow-2xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.25);
+
+  /* Search results: posters sit one step darker than --background so they lift off it. */
+  --results-background: oklch(0.12 0.004 285.8);
+  --poster-skeleton: oklch(0.17 0.005 285.8);
+  --poster-tint-fallback: #0c0b0d;
 }
 
 @theme inline {
+  --color-rating: #E6C97B;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -110,6 +116,30 @@
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+
+  --color-results: var(--results-background);
+  --color-poster-skeleton: var(--poster-skeleton);
+  --radius-poster: 18px;
+  --radius-cta: 6px;
+  --shadow-poster: 0 14px 34px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-poster-hover: 0 30px 60px rgb(0 0 0 / 0.6), 0 8px 20px rgb(0 0 0 / 0.4);
+  --ease-poster: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Search poster card scrim, over the photo only (the price strip below is plain tint).
+   A soft top fade, then the photo's own tint (`--tint`, set per card) rising to solid
+   at the photo's bottom edge. Stops are px up from that edge so the fade sits behind
+   the text block at every card width; they match the handoff's 2:3 design minus the
+   price strip. */
+.poster-scrim {
+  --scrim-tint: var(--tint, var(--poster-tint-fallback));
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.38) 0%, transparent 20%),
+    linear-gradient(0deg,
+      var(--scrim-tint) 0px,
+      color-mix(in oklch, var(--scrim-tint) 92%, transparent) 68px,
+      color-mix(in oklch, var(--scrim-tint) 55%, transparent) 140px,
+      transparent 212px);
 }
 
 /* Glassmorphism search box field — shared token for all search form fields */

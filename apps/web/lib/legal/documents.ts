@@ -163,6 +163,32 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
       },
     ],
   },
+  {
+    slug: "terms",
+    fallbackLocale: "en",
+    currentVersion: "2026-10-24",
+    versions: [
+      {
+        version: "2026-10-24",
+        effectiveFrom: "2026-10-24",
+        lastUpdated: "2026-10-24",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/terms/2026-10-24/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-10-24/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-10-24/fr.mdx"),
+          },
+        },
+      },
+    ],
+  },
 ];
 
 export function getDocument(slug: string): LegalDocument | undefined {

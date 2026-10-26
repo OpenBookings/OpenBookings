@@ -42,7 +42,7 @@ export function Section({
 /** The intro block directly under the document title. */
 export function Lead({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-12 rounded-2xl border border-white/8 bg-white/3 p-6 backdrop-blur-sm [&>p]:mb-3 [&>p]:text-base [&>p]:leading-relaxed [&>p]:text-white/70 [&>p:last-child]:mb-0">
+    <div className="mb-12 rounded-2xl border border-white/8 bg-white/3 p-6 backdrop-blur-sm [&>p]:mb-3 [&>p]:text-base [&>p]:leading-relaxed [&>p]:text-white/70 [&>p:last-child]:mb-0 [&>ul:last-child]:mb-0">
       {children}
     </div>
   );

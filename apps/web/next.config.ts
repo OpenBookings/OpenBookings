@@ -87,6 +87,12 @@ const nextConfig: NextConfig = {
         destination: "/legal/en/privacy",
         permanent: true,
       },
+      // Short link for the guest Terms of Service, used by the site footer.
+      {
+        source: "/terms",
+        destination: "/legal/en/terms",
+        permanent: true,
+      },
     ];
   },
 

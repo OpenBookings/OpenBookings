@@ -1,54 +1,32 @@
 "use client";
 import { Nav } from "@/components/nav";
 import { FooterLinks } from "@/components/FooterLinks";
-import { HotelCard, type HotelCardData } from "@/components/search/HotelCard";
+import { StayPosterCard } from "@/components/search/StayPosterCard";
+import { StayPosterSkeleton } from "@/components/search/StayPosterSkeleton";
+import {
+  comparePrice,
+  resultsListLabel,
+  type PriceMode,
+  type StayPosterData,
+} from "@/components/search/stay-poster-data";
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
 import Image from "next/image";
 import { useBackdrop } from "@/lib/use-backdrop";
+import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
+import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
-/** Shape returned by GET /api/query — see resolveSearchResults() in @openbookings/pricing */
-interface HotelSearchApiResult {
-  hotel_id: string;
-  hotel_name: string;
-  hotel_slug: string;
-  city: string;
-  country: string;
-  hero_image_url: string | null;
-  room_name: string;
-  room_description: string;
-  currency: string;
-  is_refundable: boolean;
-  total_price: number;
-  nights: { date: string }[];
-}
+// 1072 = the 1120px content width minus the 24px side padding the page already has.
+const RESULTS_GRID =
+  "mx-auto grid w-full max-w-[1072px] grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] sm:gap-x-8 sm:gap-y-10";
 
-function mapToHotelCardData(result: HotelSearchApiResult): HotelCardData {
-  const nightCount = result.nights.length || 1;
-  const tags = [result.city, result.country, result.is_refundable ? "Free Cancellation" : "Non-refundable"].filter(
-    Boolean,
-  );
-
-  return {
-    id: result.hotel_id,
-    name: result.hotel_name,
-    slug: result.hotel_slug,
-    distance: `${result.city}, ${result.country}`,
-    rating: 0,
-    reviews: 0,
-    price: Math.round(result.total_price / nightCount),
-    tags,
-    images: result.hero_image_url ? [result.hero_image_url] : [],
-    description: {
-      type: result.room_name,
-      bed: "",
-      size: "",
-    },
-  };
-}
+const PRICE_MODES: { mode: PriceMode; label: string }[] = [
+  { mode: "total", label: "Total" },
+  { mode: "night", label: "Per night" },
+];
 
 function SearchPageInner() {
   const router = useRouter();
@@ -81,11 +59,21 @@ function SearchPageInner() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("top");
 
-  const [hotels, setHotels] = useState<HotelCardData[]>([]);
+  const [hotels, setHotels] = useState<StayPosterData[]>([]);
+  // Resets to the all-in total on every visit; whether to remember it is still open.
+  const [priceMode, setPriceMode] = useState<PriceMode>("total");
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // Demo mode: any search shows the demo properties, no API call.
+  const demoHotels = useMemo(
+    () => (isDemoMode() ? getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)) : null),
+    [committed.checkIn, committed.checkOut],
+  );
+
   useEffect(() => {
+    if (isDemoMode()) return;
+
     const clearResults = () => {
       setHotels([]);
       setSearchError(null);
@@ -117,7 +105,7 @@ function SearchPageInner() {
           throw new Error(body?.error ?? `Search failed (${res.status})`);
         }
         const results: HotelSearchApiResult[] = await res.json();
-        setHotels(results.map(mapToHotelCardData));
+        setHotels(results.map(mapSearchResult));
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         setSearchError(err instanceof Error ? err.message : "Search failed");
@@ -132,12 +120,11 @@ function SearchPageInner() {
   }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms]);
 
   const sortedHotels = useMemo(() => {
-    const list = [...hotels];
-    if (sortBy === "price_asc") return list.sort((a, b) => a.price - b.price);
-    if (sortBy === "price_desc") return list.sort((a, b) => b.price - a.price);
-    if (sortBy === "rating") return list.sort((a, b) => b.rating - a.rating);
+    const list = [...(demoHotels ?? hotels)];
+    if (sortBy === "price_asc") return list.sort((a, b) => comparePrice(a, b, "asc"));
+    if (sortBy === "price_desc") return list.sort((a, b) => comparePrice(a, b, "desc"));
     return list;
-  }, [hotels, sortBy]);
+  }, [demoHotels, hotels, sortBy]);
 
   const isDirty =
     destination !== committed.destination ||
@@ -168,7 +155,7 @@ function SearchPageInner() {
   }
 
   return (
-    <div className="min-h-screen px-10 py-20 pb-[100px] font-sans">
+    <div className="min-h-screen px-4 py-20 pb-[100px] font-sans sm:px-6">
       {/* Background layer */}
       <div className="fixed inset-0 bg-black">
         {backdrop && (
@@ -217,7 +204,7 @@ function SearchPageInner() {
             isDirty={isDirty}
           />
           {/* Results bar */}
-          <div className="flex items-center justify-between mb-6 mt-3 ml-3 mr-3">
+          <div className="mx-3 mt-3 mb-6 flex flex-wrap items-center justify-between gap-3">
             <p className="font-sans text-sm text-white/60">
               {isLoading ? (
                 "Searching…"
@@ -231,7 +218,28 @@ function SearchPageInner() {
                 </>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                role="group"
+                aria-label="Show prices as"
+                className="flex h-9 items-center rounded-xl border border-white/20 bg-white/10 p-0.5 backdrop-blur-sm"
+              >
+                {PRICE_MODES.map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={priceMode === mode}
+                    onClick={() => setPriceMode(mode)}
+                    className={
+                      priceMode === mode
+                        ? "h-full rounded-[10px] bg-white px-3 font-sans text-sm text-[#111114] transition-colors"
+                        : "h-full rounded-[10px] px-3 font-sans text-sm text-white/80 transition-colors hover:text-white"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button className="flex h-9 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 font-sans text-sm text-white/80 backdrop-blur-sm transition-colors hover:bg-white/15">
                 <SlidersHorizontal className="h-4 w-4 text-white/50" />
                 Filters
@@ -244,28 +252,40 @@ function SearchPageInner() {
                   <SelectItem value="top" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Recommended</SelectItem>
                   <SelectItem value="price_asc" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Price: low to high</SelectItem>
                   <SelectItem value="price_desc" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Price: high to low</SelectItem>
-                  <SelectItem value="rating" className="font-sans text-sm text-white/80 focus:bg-white/10 focus:text-white">Highest rated</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </div>
 
-        {/* Hotel cards */}
-        <div className="relative z-10 mx-auto max-w-5xl w-full">
-          {!isLoading && !searchError && sortedHotels.length === 0 ? (
-            <p className="text-center font-sans text-sm text-white/60">
-              {committed.lat && committed.lon
-                ? "No hotels matched your search. Try different dates or guest counts."
-                : "Search for a destination to see available hotels."}
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-8 items-start md:grid-cols-2 lg:grid-cols-3">
-              {sortedHotels.map((hotel, index) => (
-                // The first row is above the fold at every breakpoint.
-                <HotelCard key={hotel.id} hotel={hotel} eager={index < 3} />
+        {/* Results: 3 columns from 892px, 2 from 640px, 1 below (minmax 260px, 32px gaps). */}
+        <div className="relative z-10">
+          {isLoading ? (
+            <ul aria-busy="true" aria-label="Loading stays" className={RESULTS_GRID}>
+              {Array.from({ length: 6 }, (_, i) => (
+                <li key={i}>
+                  <StayPosterSkeleton />
+                </li>
               ))}
-            </div>
+            </ul>
+          ) : sortedHotels.length === 0 ? (
+            // A failed search already shows its error in the results bar.
+            searchError ? null : (
+              <p className="text-center font-sans text-sm text-white/60">
+                {committed.lat && committed.lon
+                  ? "No hotels matched your search. Try different dates or guest counts."
+                  : "Search for a destination to see available hotels."}
+              </p>
+            )
+          ) : (
+            <ul aria-label={resultsListLabel(sortedHotels.length, committed.destination)} className={RESULTS_GRID}>
+              {sortedHotels.map((stay, index) => (
+                <li key={stay.id}>
+                  {/* The first row is above the fold at every width. */}
+                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}`} priority={index < 3} />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

@@ -122,6 +122,10 @@ candidate_rooms AS (
       ORDER BY (CASE WHEN pi.group = 'hero-image' THEN 0 ELSE 1 END) ASC, pi.sort_order ASC, pi.created_at ASC
       LIMIT 1
     )                AS hero_image_url,
+    ST_Distance(
+      p.location::geography,
+      ST_SetSRID(ST_MakePoint(u.lng, u.lat), 4326)::geography
+    )                AS distance_m,
     r.id             AS room_id,
     r.name           AS room_name,
     r.description    AS room_description,
@@ -235,6 +239,7 @@ SELECT
   cr.city,
   cr.country,
   cr.hero_image_url,
+  cr.distance_m,
   cr.room_id,
   cr.room_name,
   cr.room_description,
