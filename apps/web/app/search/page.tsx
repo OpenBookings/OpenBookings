@@ -23,6 +23,11 @@ import { useEffect, useMemo, useState, Suspense } from "react";
 const RESULTS_GRID =
   "mx-auto grid w-full max-w-[1072px] grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] sm:gap-x-8 sm:gap-y-10";
 
+const PRICE_MODES: { mode: PriceMode; label: string }[] = [
+  { mode: "total", label: "Total" },
+  { mode: "night", label: "Per night" },
+];
+
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,7 +60,8 @@ function SearchPageInner() {
   const [sortBy, setSortBy] = useState("top");
 
   const [hotels, setHotels] = useState<StayPosterData[]>([]);
-  const [priceMode] = useState<PriceMode>("total");
+  // Resets to the all-in total on every visit; whether to remember it is still open.
+  const [priceMode, setPriceMode] = useState<PriceMode>("total");
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -212,6 +218,27 @@ function SearchPageInner() {
               )}
             </p>
             <div className="flex items-center gap-2">
+              <div
+                role="group"
+                aria-label="Show prices as"
+                className="flex h-9 items-center rounded-xl border border-white/20 bg-white/10 p-0.5 backdrop-blur-sm"
+              >
+                {PRICE_MODES.map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={priceMode === mode}
+                    onClick={() => setPriceMode(mode)}
+                    className={
+                      priceMode === mode
+                        ? "h-full rounded-[10px] bg-white px-3 font-sans text-sm text-[#111114] transition-colors"
+                        : "h-full rounded-[10px] px-3 font-sans text-sm text-white/80 transition-colors hover:text-white"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button className="flex h-9 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 font-sans text-sm text-white/80 backdrop-blur-sm transition-colors hover:bg-white/15">
                 <SlidersHorizontal className="h-4 w-4 text-white/50" />
                 Filters
