@@ -12,6 +12,8 @@ import {
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
+import Image from "next/image";
+import { useBackdrop } from "@/lib/use-backdrop";
 import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
 import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -52,6 +54,7 @@ function SearchPageInner() {
   const [openSearchBar, setOpenSearchBar] = useState(false);
   const [openDatePicker, setOpenDatePicker] = useState(false);
   const [openGuestSelector, setOpenGuestSelector] = useState(false);
+  const backdrop = useBackdrop();
 
   const [authError, setAuthError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("top");
@@ -152,8 +155,25 @@ function SearchPageInner() {
 
   return (
     <div className="min-h-screen px-4 py-20 pb-[100px] font-sans sm:px-6">
-      {/* Flat and one step darker than the app background, so the posters lift off it. */}
-      <div className="fixed inset-0 bg-results" />
+      {/* Background layer */}
+      <div className="fixed inset-0 bg-black">
+        {backdrop && (
+          // Deliberately low resolution: it sits under a blur and a 70% black
+          // layer, so a quarter-width, low-quality image is indistinguishable.
+          <Image
+            src={backdrop.url}
+            alt=""
+            fill
+            sizes="25vw"
+            quality={40}
+            className="object-cover object-center"
+          />
+        )}
+        <div
+          className="absolute inset-0 backdrop-blur-md"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+        />
+      </div>
 
       <div className="flex flex-col">
         <Nav authError={authError} onDismissAuthError={() => setAuthError(null)} />
