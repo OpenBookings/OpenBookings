@@ -58,37 +58,42 @@ export function StayPosterCard({
       <article
         aria-labelledby={nameId}
         style={{ "--tint": cover?.tint ?? POSTER_TINT_FALLBACK } as CSSProperties}
-        className="relative isolate flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-poster bg-(--tint) font-sans text-white"
+        className="relative isolate grid aspect-[3/4] grid-cols-[minmax(0,1fr)] grid-rows-[1fr_auto] overflow-hidden rounded-poster bg-(--tint) font-sans text-white"
       >
-        {cover && !failed ? (
-          <div
-            data-loaded={loaded}
-            className="absolute inset-0 -z-20 opacity-0 transition-opacity duration-300 ease-out data-[loaded=true]:opacity-100 motion-reduce:transition-none"
-          >
-            <Image
-              src={cover.url}
-              alt=""
-              fill
-              sizes="(max-width: 639px) calc(100vw - 32px), (max-width: 891px) 50vw, 336px"
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : undefined}
-              draggable={false}
-              onLoad={() => setLoaded(true)}
-              onError={() => setFailed(true)}
-              style={{ objectPosition: coverPosition(cover) }}
-              className={cn(
-                "origin-[50%_40%] object-cover transition-transform duration-[1400ms] ease-poster",
-                PUSH_IN,
-                unavailable && "brightness-60 grayscale-80",
-              )}
-            />
-          </div>
-        ) : null}
+        {/* The photo fills only the top row, so it stays closer to square than the card;
+            the price strip below sits on the plain tint. Negative z keeps it under the text. */}
+        <div className="relative -z-10 col-start-1 row-start-1 overflow-hidden">
+          {cover && !failed ? (
+            <div
+              data-loaded={loaded}
+              className="absolute inset-0 opacity-0 transition-opacity duration-300 ease-out data-[loaded=true]:opacity-100 motion-reduce:transition-none"
+            >
+              <Image
+                src={cover.url}
+                alt=""
+                fill
+                sizes="(max-width: 639px) calc(100vw - 32px), (max-width: 891px) 50vw, 336px"
+                loading={priority ? "eager" : "lazy"}
+                fetchPriority={priority ? "high" : undefined}
+                draggable={false}
+                onLoad={() => setLoaded(true)}
+                onError={() => setFailed(true)}
+                style={{ objectPosition: coverPosition(cover) }}
+                className={cn(
+                  "origin-[50%_40%] object-cover transition-transform duration-[1400ms] ease-poster",
+                  PUSH_IN,
+                  unavailable && "brightness-60 grayscale-80",
+                )}
+              />
+            </div>
+          ) : null}
 
-        <div aria-hidden className="poster-scrim pointer-events-none absolute inset-0 -z-10" />
+          <div aria-hidden className="poster-scrim pointer-events-none absolute inset-0" />
+        </div>
 
-        {/* Not positioned, so the link's ::after stretches over the whole article. */}
-        <div className="pointer-events-none px-5 pb-5">
+        {/* Text over the photo's bottom edge. Not positioned, so the link's ::after
+            stretches over the whole article, price strip included. */}
+        <div className="pointer-events-none col-start-1 row-start-1 self-end px-5 pb-4">
           <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-white/74">
             {posterEyebrow(stay)}
           </p>
@@ -107,7 +112,10 @@ export function StayPosterCard({
           <p className="mt-2.5 line-clamp-2 text-[13px] leading-[1.4] text-white/78">
             {posterTags(stay).join(" • ")}
           </p>
-          <div aria-hidden className="mt-4 h-px bg-white/14" />
+        </div>
+
+        <div className="pointer-events-none col-start-1 row-start-2 px-5 pb-5">
+          <div aria-hidden className="h-px bg-white/14" />
           <div className="mt-3.5 flex items-end justify-between gap-3">
             <div className="min-w-0">
               {price.kind === "price" ? (
