@@ -83,7 +83,7 @@ export async function RateLock() {
               plan around.
             </h2>
             <p className="mb-12 max-w-[48ch] font-(family-name:--font-cormorant) text-[24px] leading-[1.45] font-normal text-white/75 sm:text-[27px]">
-              Our commission is set at <span className="spectrum-underline text-white">4.5%</span>. Any change requires 30
+              Our commission is set at <span className="text-white">4.5%</span>. Any change requires 30
               days&apos; notice, is published here before it takes effect, and never applies to bookings
               already made.
             </p>

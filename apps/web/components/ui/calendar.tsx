@@ -47,7 +47,7 @@ function Calendar({
       classNames={{
         root: cn("w-fit", defaultClassNames.root),
         months: cn(
-          "flex gap-4 flex-col md:flex-row relative text-white/80",
+          "flex gap-4 flex-col md:flex-row relative",
           defaultClassNames.months
         ),
         month: cn("flex flex-col w-full gap-4", defaultClassNames.month),
@@ -212,7 +212,7 @@ function CalendarDayButton({
         // layout
         "flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none",
         // typography
-        "font-normal text-gray-500 [&>span]:text-xs [&>span]:opacity-70",
+        "font-normal [&>span]:text-xs [&>span]:opacity-70",
         // dark mode
         "dark:hover:text-accent-foreground",
         // focus ring
@@ -224,7 +224,6 @@ function CalendarDayButton({
         "data-[range-start=true]:rounded-l-md data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground",
         "data-[range-end=true]:rounded-r-md data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground",
         "data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground",
-        "data-[today=true]:text-white/80",
         defaultClassNames.day,
         className
       )}

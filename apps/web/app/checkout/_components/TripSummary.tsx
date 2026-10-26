@@ -340,9 +340,12 @@ function PolicyFooter({
       </div>
 
       <p className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-white/60">
-        {/* Destinations are not built yet — these are placeholders by design. */}
+        {/* Legal pages open in a new tab so the guest doesn't lose checkout.
+            The cancellation policy page is not built yet, so it stays a placeholder. */}
         <a
-          href="#"
+          href="/legal/en/terms"
+          target="_blank"
+          rel="noopener noreferrer"
           className="underline-offset-4 transition-colors hover:text-white/85 hover:underline"
         >
           Terms of service
@@ -354,7 +357,9 @@ function PolicyFooter({
           Cancellation policy
         </a>
         <a
-          href="#"
+          href="/legal/en/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
           className="underline-offset-4 transition-colors hover:text-white/85 hover:underline"
         >
           Privacy policy

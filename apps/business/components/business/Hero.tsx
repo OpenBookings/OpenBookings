@@ -160,7 +160,7 @@ export function Hero() {
           <div className="flex flex-wrap justify-center gap-3">
             <Link
               href="/login"
-              className="cta-spectrum rounded-[10px] bg-mk-paper px-8 py-[15px] text-[15px] font-medium tracking-[-0.01em] text-mk-ink transition-colors hover:bg-white"
+              className="rounded-[10px] bg-mk-paper px-8 py-[15px] text-[15px] font-medium tracking-[-0.01em] text-mk-ink transition-colors hover:bg-white"
             >
               List Your Property →
             </Link>

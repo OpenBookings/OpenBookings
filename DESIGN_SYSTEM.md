@@ -373,22 +373,20 @@ The spectrum is pastel on purpose: L 77–91%, C ≈ 0.1. Do not raise the chrom
 |---|---|---|
 | Hero orbit rings | `.spectrum-arc` in `Hero.tsx` | one arc per ring, ~⅓ of the circle, on a different side per ring (inner bottom-left, middle right, outer upper-left); drifts 180–320s, middle ring in reverse |
 | Ring dots | `Hero.tsx` SVG | six dots, one spectrum colour each, 40–55% opacity |
-| Our bar in the calculator | `.spectrum-fill` in `CostCalculator.tsx` | only the OpenBookings bar; competitor bars stay `bg-white/15` |
-| The commission figure | `.spectrum-underline` in `RateLock.tsx` | 2px rule *under* "4.5%", text stays white |
+| Our bar in the calculator | `.spectrum-glow-bar` in `CostCalculator.tsx` | only the OpenBookings bar: same 6px pill as the others but white, with a soft blurred spectrum glow around it (35%); competitor bars stay `bg-white/15` |
 | Closing card edge | `.spectrum-hairline` in `FinalCTA.tsx` | 1px line along the top edge, fading out at both ends |
-| Primary CTA | `.cta-spectrum` on "List Your Property" | blurred spectrum halo beneath the button, 22% at rest → 55% on hover |
 | Small accents | status dots, ↑ arrows, founder-note numbers, FAQ link underlines, `::selection` | single spectrum colour each, per the token roles above |
 
 **Rules**
 
-1. **Light, not paint.** The spectrum appears as hairlines, arcs, halos and underlines. It never fills a section, card, or button.
+1. **Light, not paint.** The spectrum appears as hairlines, arcs and halos. It never fills a section, card, or button.
 2. **Large areas stay neutral.** Page and section backgrounds use `--mk-bg*`. No section takes on a full colour. A tinted section stands out as the odd one out (tried with sea-glass on Rate Lock, then removed). To set a section apart, add a faint pool of light, not a colour.
 3. **Large glows use the light end only.** Radial glows behind the hero, Rate Lock and the closing card use `--mk-glow-light` / `-mint` / `-sky`. Never coral or lilac, because big warm or purple glows make the whole page read red/purple.
 4. **Spread it out.** Colour must not pool in one corner. Every ring has its own start angle (`--arc-from`), and one arc per ring is enough. Two arcs per ring was tried and was too much.
-5. **One lead moment per view.** Each screenful has one obvious spectrum moment: the rings in the hero, the bar in the calculator, the underline in Rate Lock, the hairline on the closing card. Anything else nearby (ring dots, the CTA halo) stays quieter than the lead, and the rest are single-colour accents.
+5. **One lead moment per view.** Each screenful has one obvious spectrum moment: the rings in the hero, the bar in the calculator, the hairline on the closing card. Anything else nearby (ring dots) stays quieter than the lead, and the rest are single-colour accents.
 6. **No gradient text.** The spectrum goes under or around type, never inside it (`background-clip: text` is banned).
 7. **Colour is never the only signal.** Money figures are also labelled ("You keep", "You receive"); the calculator bar also has its number.
-8. **Motion is ambient and optional.** Arc drift and the CTA halo transition are disabled under `prefers-reduced-motion`. Animate `rotate`/`transform`/`opacity` only.
+8. **Motion is ambient and optional.** Arc drift is disabled under `prefers-reduced-motion`. Animate `rotate`/`transform`/`opacity` only.
 
 **Anti-references:** pride flags or flag stripes as decoration; full rainbow gradients across headings or backgrounds; neon or saturated hues on dark; the old purple + teal "AI glow" blobs this replaced; "rainbow logo for June" tokenism. This is a year-round brand voice, not a seasonal campaign.
 
