@@ -1,9 +1,9 @@
-/** Placeholder in the poster's 2:3 frame, with bars where the real content sits. No animation. */
+/** Placeholder in the poster's 3:4 frame, with bars where the real content sits. No animation. */
 export function StayPosterSkeleton() {
   return (
     <div
       aria-hidden
-      className="flex aspect-[2/3] flex-col justify-end gap-2.5 rounded-poster bg-poster-skeleton p-5 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]"
+      className="flex aspect-[3/4] flex-col justify-end gap-2.5 rounded-poster bg-poster-skeleton p-5 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]"
     >
       <div className="h-2.5 w-[58%] rounded bg-white/7" />
       <div className="h-[26px] w-[80%] rounded-md bg-white/9" />

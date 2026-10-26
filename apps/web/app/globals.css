@@ -127,15 +127,17 @@
 }
 
 /* Search poster card scrim: a soft top fade behind the corner controls, then the
-   photo's own tint (`--tint`, set per card) rising from 34% to solid at the bottom. */
+   photo's own tint (`--tint`, set per card) rising from 26% to solid at the bottom.
+   The stops sit at the same distance from the bottom as the handoff's 2:3 design
+   (34/50/66%), since the card is now 3:4 and its text block didn't shrink. */
 .poster-scrim {
   --scrim-tint: var(--tint, var(--poster-tint-fallback));
   background:
     linear-gradient(180deg, rgb(0 0 0 / 0.38) 0%, transparent 20%),
     linear-gradient(180deg,
-      transparent 0%, transparent 34%,
-      color-mix(in oklch, var(--scrim-tint) 55%, transparent) 50%,
-      color-mix(in oklch, var(--scrim-tint) 92%, transparent) 66%,
+      transparent 0%, transparent 26%,
+      color-mix(in oklch, var(--scrim-tint) 55%, transparent) 44%,
+      color-mix(in oklch, var(--scrim-tint) 92%, transparent) 62%,
       var(--scrim-tint) 100%);
 }
 

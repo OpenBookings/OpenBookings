@@ -58,7 +58,7 @@ export function StayPosterCard({
       <article
         aria-labelledby={nameId}
         style={{ "--tint": cover?.tint ?? POSTER_TINT_FALLBACK } as CSSProperties}
-        className="relative isolate flex aspect-[2/3] flex-col justify-end overflow-hidden rounded-poster bg-(--tint) font-sans text-white"
+        className="relative isolate flex aspect-[3/4] flex-col justify-end overflow-hidden rounded-poster bg-(--tint) font-sans text-white"
       >
         {cover && !failed ? (
           <div
