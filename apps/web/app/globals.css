@@ -57,6 +57,11 @@
   --shadow-xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.1),
     0rem 8px 10px -1.5px hsl(240 10% 3.9% / 0.1);
   --shadow-2xl: 0rem 0.5rem 1.5rem -0.5rem hsl(240 10% 3.9% / 0.25);
+
+  /* Search results: posters sit one step darker than --background so they lift off it. */
+  --results-background: oklch(0.12 0.004 285.8);
+  --poster-skeleton: oklch(0.17 0.005 285.8);
+  --poster-tint-fallback: #0c0b0d;
 }
 
 @theme inline {
@@ -111,6 +116,27 @@
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+
+  --color-results: var(--results-background);
+  --color-poster-skeleton: var(--poster-skeleton);
+  --radius-poster: 18px;
+  --radius-cta: 6px;
+  --shadow-poster: 0 14px 34px rgb(0 0 0 / 0.45), 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-poster-hover: 0 30px 60px rgb(0 0 0 / 0.6), 0 8px 20px rgb(0 0 0 / 0.4);
+  --ease-poster: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Search poster card scrim: a soft top fade behind the corner controls, then the
+   photo's own tint (`--tint`, set per card) rising from 34% to solid at the bottom. */
+.poster-scrim {
+  --scrim-tint: var(--tint, var(--poster-tint-fallback));
+  background:
+    linear-gradient(180deg, rgb(0 0 0 / 0.38) 0%, transparent 20%),
+    linear-gradient(180deg,
+      transparent 0%, transparent 34%,
+      color-mix(in oklch, var(--scrim-tint) 55%, transparent) 50%,
+      color-mix(in oklch, var(--scrim-tint) 92%, transparent) 66%,
+      var(--scrim-tint) 100%);
 }
 
 /* Glassmorphism search box field — shared token for all search form fields */
