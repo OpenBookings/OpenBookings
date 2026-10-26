@@ -112,13 +112,18 @@ export function StayPosterCard({
             <div className="min-w-0">
               {price.kind === "price" ? (
                 <>
-                  <p className="flex items-baseline gap-1.5">
+                  {/* Neither span may break inside; on a cramped card the unit wraps below the amount. */}
+                  <p className="flex flex-wrap items-baseline gap-x-1.5">
                     <span
-                      className={cn("font-serif leading-none text-white", price.long ? "text-[22px]" : "text-[26px]")}
+                      className={cn(
+                        "font-serif whitespace-nowrap text-white",
+                        // Size and line-height together: tailwind-merge drops a separate leading-* after a text size.
+                        price.long ? "text-[22px]/none" : "text-[26px]/none",
+                      )}
                     >
                       {price.amount}
                     </span>
-                    <span className="text-xs text-white/72">{price.unit}</span>
+                    <span className="whitespace-nowrap text-xs text-white/72">{price.unit}</span>
                   </p>
                   <p className="mt-[5px] truncate text-xs leading-[1.4] text-white/66">{price.detail}</p>
                 </>

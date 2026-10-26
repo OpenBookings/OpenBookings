@@ -31,8 +31,11 @@ export const POSTER_TINT_FALLBACK = "#0c0b0d";
 export const DEFAULT_FOCAL = { x: 0.5, y: 0.4 } as const;
 
 const MAX_HIGHLIGHTS = 2;
-/** Up to 6 digits fit the 26px price at 300px wide; longer amounts drop to 22px. */
-const LONG_AMOUNT_DIGITS = 6;
+/**
+ * Longest amount that fits the 26px price beside "View" on the narrowest (260px)
+ * card, counted in visible characters so currency codes ("CHF 1,234") count too.
+ */
+const LONG_AMOUNT_CHARS = 7;
 
 export function formatMoney(amount: number, currency: string): string {
   try {
@@ -75,10 +78,6 @@ export function formatDateRange(from: string, to: string): string {
   return `${DAY_MONTH.format(start)} – ${DAY_MONTH.format(end)}`;
 }
 
-function digitCount(text: string): number {
-  return text.replace(/\D/g, "").length;
-}
-
 export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
   if (a.status === "unavailable") {
     return {
@@ -102,7 +101,7 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
     amount,
     unit: mode === "total" ? "total" : "avg / night",
     detail: mode === "total" ? `${nights} · avg ${perNight} / night` : `${total} total · ${nights}`,
-    long: digitCount(amount) > LONG_AMOUNT_DIGITS,
+    long: amount.length > LONG_AMOUNT_CHARS,
     cta: "View",
   };
 }

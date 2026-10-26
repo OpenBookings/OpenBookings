@@ -96,9 +96,15 @@ describe("posterPrice", () => {
   });
   test("other currencies", () =>
     expect(posterPrice(avail(720, 2, "CHF"), "total")).toMatchObject({ amount: "CHF 720" }));
-  test("more than 6 digits → long", () => {
+  // Measured on the narrowest (260px) card: up to 7 visible characters fit at 26px.
+  test("more than 7 characters → long", () => {
+    expect(posterPrice(avail(99_999, 3), "total")).toMatchObject({ amount: "€99,999", long: false });
+    expect(posterPrice(avail(123_456, 3), "total")).toMatchObject({ amount: "€123,456", long: true });
     expect(posterPrice(avail(1_234_567, 3), "total")).toMatchObject({ long: true });
-    expect(posterPrice(avail(123_456, 3), "total")).toMatchObject({ long: false });
+  });
+  test("currency codes count towards the length", () => {
+    expect(posterPrice(avail(720, 2, "CHF"), "total")).toMatchObject({ long: false });
+    expect(posterPrice(avail(1_234, 2, "CHF"), "total")).toMatchObject({ long: true });
   });
   test("unavailable with a next window", () =>
     expect(posterPrice({ status: "unavailable", nextFrom: "2026-12-04", nextTo: "2026-12-07" }, "total")).toEqual({
