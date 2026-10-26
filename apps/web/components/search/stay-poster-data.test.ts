@@ -4,7 +4,7 @@ import {
   coverPosition,
   formatDateRange,
   formatDistance,
-  formatMoney,
+  formatEuro,
   posterEyebrow,
   posterPrice,
   posterTags,
@@ -13,8 +13,7 @@ import {
   type StayPosterData,
 } from "./stay-poster-data";
 
-const avail = (total: number, nights: number, currency = "EUR") =>
-  ({ status: "available", nights, total, currency }) as const;
+const avail = (total: number, nights: number) => ({ status: "available", nights, total }) as const;
 
 function stay(id: string, availability: StayAvailability): StayPosterData {
   return {
@@ -30,12 +29,10 @@ function stay(id: string, availability: StayAvailability): StayPosterData {
   };
 }
 
-test("formatMoney", () => {
-  expect(formatMoney(422, "EUR")).toBe("€422");
-  expect(formatMoney(720, "CHF")).toBe("CHF 720");
-  expect(formatMoney(211.6, "EUR")).toBe("€212");
-  expect(() => formatMoney(10, "EU ")).not.toThrow();
-  expect(formatMoney(10, "EU ")).toBe("EU  10");
+test("formatEuro: whole euros, rounded for display only", () => {
+  expect(formatEuro(422)).toBe("€422");
+  expect(formatEuro(211.6)).toBe("€212");
+  expect(formatEuro(1_234_567)).toBe("€1,234,567");
 });
 
 describe("formatDistance", () => {
@@ -94,17 +91,11 @@ describe("posterPrice", () => {
     expect(posterPrice(avail(487, 3), "night")).toMatchObject({ amount: "€162" });
     expect(posterPrice(avail(162, 1), "total")).toMatchObject({ detail: "1 night · avg €162 / night" });
   });
-  test("other currencies", () =>
-    expect(posterPrice(avail(720, 2, "CHF"), "total")).toMatchObject({ amount: "CHF 720" }));
   // Measured on the narrowest (260px) card: up to 7 visible characters fit at 26px.
   test("more than 7 characters → long", () => {
     expect(posterPrice(avail(99_999, 3), "total")).toMatchObject({ amount: "€99,999", long: false });
     expect(posterPrice(avail(123_456, 3), "total")).toMatchObject({ amount: "€123,456", long: true });
     expect(posterPrice(avail(1_234_567, 3), "total")).toMatchObject({ long: true });
-  });
-  test("currency codes count towards the length", () => {
-    expect(posterPrice(avail(720, 2, "CHF"), "total")).toMatchObject({ long: false });
-    expect(posterPrice(avail(1_234, 2, "CHF"), "total")).toMatchObject({ long: true });
   });
   test("unavailable with a next window", () =>
     expect(posterPrice({ status: "unavailable", nextFrom: "2026-12-04", nextTo: "2026-12-07" }, "total")).toEqual({

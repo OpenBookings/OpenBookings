@@ -179,9 +179,10 @@ const DEMO_PROPERTIES: DemoProperty[] = [
     { highlights: ["Near the Pantheon"], tint: "#120e0c", unavailable: true },
   ),
   demoProperty(
-    "chalet-zermatt",
-    { name: "Chalet Matterhorn", subtitle: "Ski-in, ski-out alpine lodge", hero_image_url: image("Zermatt"), city: "Zermatt", country: "CH", lat: 46.0207, lon: 7.7491 },
-    [makeDemoRoom({ name: "Alpine Room", images: [image("Zermatt")], price: 360, currency: "CHF" })],
+    // The Italian side of the Matterhorn, so the Zermatt photo still fits.
+    "chalet-cervinia",
+    { name: "Chalet Matterhorn", subtitle: "Ski-in, ski-out alpine lodge", hero_image_url: image("Zermatt"), city: "Breuil-Cervinia", country: "IT", lat: 45.9339, lon: 7.6295 },
+    [makeDemoRoom({ name: "Alpine Room", images: [image("Zermatt")], price: 360 })],
     { highlights: ["Ski-in, ski-out", "Mountain views"], tint: "#0b0e12" },
   ),
 ];
@@ -209,7 +210,7 @@ export function getDemoSearchResults(nights: number | null): StayPosterData[] {
       availability: card.unavailable
         ? { status: "unavailable" }
         : nights
-          ? { status: "available", nights, total: cheapest.bar * nights, currency: cheapest.currency }
+          ? { status: "available", nights, total: cheapest.bar * nights }
           : { status: "undated" },
     };
   });

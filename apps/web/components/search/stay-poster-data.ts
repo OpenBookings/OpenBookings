@@ -1,8 +1,8 @@
 export type PriceMode = "total" | "night";
 
 export type StayAvailability =
-  /** `total` is the all-in price for the searched dates and guests, in major units. */
-  | { status: "available"; nights: number; total: number; currency: string }
+  /** `total` is the all-in price in euros (OpenBookings is EUR-only) for the searched dates and guests. */
+  | { status: "available"; nights: number; total: number }
   /** Next free window as YYYY-MM-DD check-in and check-out dates, when known. */
   | { status: "unavailable"; nextFrom?: string; nextTo?: string }
   | { status: "undated" };
@@ -31,22 +31,14 @@ export const POSTER_TINT_FALLBACK = "#0c0b0d";
 export const DEFAULT_FOCAL = { x: 0.5, y: 0.4 } as const;
 
 const MAX_HIGHLIGHTS = 2;
-/**
- * Longest amount that fits the 26px price beside "View" on the narrowest (260px)
- * card, counted in visible characters so currency codes ("CHF 1,234") count too.
- */
+/** Longest amount ("€99,999") that fits the 26px price beside "View" on the narrowest (260px) card. */
 const LONG_AMOUNT_CHARS = 7;
 
-export function formatMoney(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${currency} ${Math.round(amount)}`;
-  }
+const EURO = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
+/** Whole euros. Rounds for display only; never feed the result back into a price. */
+export function formatEuro(amount: number): string {
+  return EURO.format(amount);
 }
 
 /** "0.8 km" below 10 km, "26 km" from 10 km up. */
@@ -91,9 +83,9 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
     return { kind: "notice", heading: "Add dates for prices", detail: null, cta: "Dates" };
   }
 
-  const total = formatMoney(a.total, a.currency);
+  const total = formatEuro(a.total);
   // An average, because rate modifiers can make individual nights differ.
-  const perNight = formatMoney(Math.round(a.total / a.nights), a.currency);
+  const perNight = formatEuro(Math.round(a.total / a.nights));
   const nights = `${a.nights} ${a.nights === 1 ? "night" : "nights"}`;
   const amount = mode === "total" ? total : perNight;
   return {

@@ -56,7 +56,7 @@ export function mapSearchResult(result: HotelSearchApiResult): StayPosterData {
     cover: coverUrl ? { url: coverUrl, tint: null, focalX: DEFAULT_FOCAL.x, focalY: DEFAULT_FOCAL.y } : null,
     availability:
       nights > 0
-        ? { status: "available", nights, total: result.total_price, currency: result.currency }
+        ? { status: "available", nights, total: result.total_price }
         : { status: "undated" },
   };
 }

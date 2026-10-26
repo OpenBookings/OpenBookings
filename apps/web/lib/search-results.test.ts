@@ -23,7 +23,7 @@ describe("mapSearchResult", () => {
       id: "h1", name: "Hotel Lago", slug: "hotel-lago", location: "Como, IT", distanceKm: 0.812,
       refundable: true, highlights: [],
       cover: { url: "https://x/a.jpg", tint: null, focalX: 0.5, focalY: 0.4 },
-      availability: { status: "available", nights: 2, total: 422, currency: "EUR" },
+      availability: { status: "available", nights: 2, total: 422 },
     }));
   test("no nights → undated", () =>
     expect(mapSearchResult({ ...base, nights: [] }).availability).toEqual({ status: "undated" }));
@@ -40,11 +40,15 @@ describe("resolveCoverUrl", () => {
 });
 
 describe("getDemoSearchResults", () => {
-  test("totals follow nights and keep the rate currency", () =>
+  test("totals follow nights", () =>
     // non-refundable bar: round(360 × 0.88) = 317
     expect(getDemoSearchResults(2).find((s) => s.name === "Chalet Matterhorn")!.availability).toEqual({
-      status: "available", nights: 2, total: 634, currency: "CHF",
+      status: "available", nights: 2, total: 634,
     }));
+  test("every demo stay is in the EU", () =>
+    expect(getDemoSearchResults(2).map((s) => s.location)).toEqual([
+      "Saturnia, IT", "Como, IT", "Rome, IT", "Breuil-Cervinia, IT",
+    ]));
   test("Casa Roma is unavailable, dated or not", () => {
     for (const n of [2, null]) {
       expect(getDemoSearchResults(n).find((s) => s.name === "Casa Roma")!.availability.status).toBe("unavailable");
