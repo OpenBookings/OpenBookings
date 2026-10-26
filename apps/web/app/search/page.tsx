@@ -183,7 +183,7 @@ function SearchPageInner() {
             isDirty={isDirty}
           />
           {/* Results bar */}
-          <div className="flex items-center justify-between mb-6 mt-3 ml-3 mr-3">
+          <div className="mx-3 mt-3 mb-6 flex flex-wrap items-center justify-between gap-3">
             <p className="font-sans text-sm text-white/60">
               {isLoading ? (
                 "Searching…"
@@ -197,7 +197,7 @@ function SearchPageInner() {
                 </>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div
                 role="group"
                 aria-label="Show prices as"
