@@ -148,7 +148,7 @@ const DEMO_PROPERTIES: DemoProperty[] = [
     {
       name: "Terme di Saturnia",
       subtitle: "A haven for regeneration and relaxation",
-      hero_image_url: image("Tuscany"),
+      hero_image_url: "https://cdn.openbookings.co/Public/44ca5796-7461-488a-9613-be71394d4aaa/hero-image.jpg",
       lat: 42.6584,
       lon: 11.5041,
       address_line_1: "Via della Follonata",
