@@ -8,6 +8,8 @@ export interface HotelSearchApiResult {
   city: string;
   country: string;
   hero_image_url: string | null;
+  /** Metres from the searched point. */
+  distance_m?: number;
   room_name: string;
   room_description: string;
   currency: string;

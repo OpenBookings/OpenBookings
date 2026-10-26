@@ -36,6 +36,8 @@ export interface RoomRow {
   city: string
   country: string
   hero_image_url: string | null
+  /** Metres from the searched point. Set by the search query. */
+  distance_m?: number
   room_id: string
   room_name: string
   room_description: string
