@@ -65,18 +65,19 @@ function SearchPageInner() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // Demo mode: any search shows the demo properties, no API call.
+  const demoHotels = useMemo(
+    () => (isDemoMode() ? getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)) : null),
+    [committed.checkIn, committed.checkOut],
+  );
+
   useEffect(() => {
+    if (isDemoMode()) return;
+
     const clearResults = () => {
       setHotels([]);
       setSearchError(null);
     };
-
-    // Demo mode: any search shows the demo properties, no API call.
-    if (isDemoMode()) {
-      setHotels(getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)));
-      setSearchError(null);
-      return;
-    }
 
     if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
       clearResults();
@@ -119,11 +120,11 @@ function SearchPageInner() {
   }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms]);
 
   const sortedHotels = useMemo(() => {
-    const list = [...hotels];
+    const list = [...(demoHotels ?? hotels)];
     if (sortBy === "price_asc") return list.sort((a, b) => comparePrice(a, b, "asc"));
     if (sortBy === "price_desc") return list.sort((a, b) => comparePrice(a, b, "desc"));
     return list;
-  }, [hotels, sortBy]);
+  }, [demoHotels, hotels, sortBy]);
 
   const isDirty =
     destination !== committed.destination ||
