@@ -1,3 +1,7 @@
+import { formatMoney } from "./stay-poster-data";
+
+export { formatMoney };
+
 export type HotelCardData = {
   id: string;
   name: string;
@@ -13,18 +17,6 @@ export type HotelCardData = {
   description: { type: string; bed: string; size: string };
   images: string[];
 };
-
-export function formatMoney(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${currency} ${Math.round(amount)}`;
-  }
-}
 
 export function formatRating(
   rating: number,

@@ -1,13 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatMoney, formatRating, photoAlt, priceSummary, roomDetails } from "./hotel-card-data";
-
-test("formatMoney", () => {
-  expect(formatMoney(422, "EUR")).toBe("€422");
-  expect(formatMoney(720, "CHF")).toBe("CHF\u00a0720");
-  expect(formatMoney(211.6, "EUR")).toBe("€212");
-  expect(() => formatMoney(10, "EU ")).not.toThrow();
-  expect(formatMoney(10, "EU ")).toBe("EU  10");
-});
+import { formatRating, photoAlt, priceSummary, roomDetails } from "./hotel-card-data";
 
 describe("formatRating", () => {
   test("one decimal, grouped count, /5 label", () =>
