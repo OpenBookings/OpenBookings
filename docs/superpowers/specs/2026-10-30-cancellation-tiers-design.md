@@ -58,10 +58,10 @@ Follows the repo convention: plain SQL, applied by hand before deploying the cod
 
 **`rate_plans`**
 - Keep `is_refundable`. Its meaning narrows to "true = follows the property tier, false = Non-refundable".
-- Stop reading `cancellation_policy` (free text). The column stays for now and is dropped in a later migration, so the deploy window never has code reading a missing column. *(My call.)*
+- Drop `cancellation_policy` (free text). There are no live bookings yet, so this happens in the same migration (Wouter, 2026-10-30).
 
 **`property_content`**
-- Stop reading `free_cancellation_days`. Same two-step drop. *(My call.)*
+- Drop `free_cancellation_days`, in the same migration.
 
 **`bookings`**
 - `confirmed_at timestamptz` — the Booking Time Annex B measures the grace period from. `created_at` is when the pending intent was made, which is earlier.
@@ -76,6 +76,7 @@ Follows the repo convention: plain SQL, applied by hand before deploying the cod
 - `partial_refund_until timestamptz NULL` (Limited only: check-in minus 7 days)
 - `nights jsonb NOT NULL DEFAULT '[]'` — `[{ "date": "2026-11-03", "price": 100, "touristTax": 3 }]`, one entry per night, in major units like the rest of the schema. Charges that are owed once per stay, rather than per night, are attributed to the first night. *(My call: that night is always stayed when there is an early departure, and every night is refunded on a cancellation, so the result is the same either way.)*
 - `policy_version text NOT NULL DEFAULT 'annex-b-2026-10-30'` — which wording of Annex B the guest agreed to.
+- `cancelled_at timestamptz NULL` — set when this room is cancelled (rooms cancel individually; see §5).
 
 **`refunds`** — new table, one row per refund OpenBookings executes or records:
 - `id`, `booking_id` (FK), `reservation_id` (FK, nullable: a host cancellation covers the whole booking)
@@ -123,8 +124,8 @@ Replace every place that derives "free cancellation" from `is_refundable` and a 
 ### 5. Executing refunds — `packages/stripe` + a booking service
 - `packages/stripe`: `refundPayment({ paymentIntentId, stripeAccountId, amountCents, idempotencyKey })` — creates the refund on the connected account (`Stripe-Account` header) with `refund_application_fee: true`. The existing `charge.refunded` handler then finds no commission left to return, which is correct and idempotent.
 - A booking service (`packages/db` or a new small module next to the business app's server actions):
-  - `cancelByGuest(bookingId, userId)`
-  - `cancelByHost(bookingId, hostUserId)`
+  - `cancelByGuest(bookingId, userId, reservationIds?)` — leave out `reservationIds` to cancel every room
+  - `cancelByHost(bookingId, hostUserId, reservationIds?)`
   - `recordEarlyDeparture(bookingId, lastNightStayed)`
   - `markNoShow(bookingId)`
   - `markCheckedIn(bookingId)`
@@ -135,14 +136,14 @@ Replace every place that derives "free cancellation" from `is_refundable` and a 
   - `checked_in` → `completed`, or early departure (status stays `checked_in` until checkout, with `departed_early_on` set)
   - A no-show can only be marked after the check-in window closes: `check_in_until` on the arrival date, or the end of that day if the property has no cut-off.
 - Hosts often won't bother marking a check-in, so *Record early departure* is also allowed straight from `confirmed` once check-in time has passed (it implies the guest checked in).
-- **Multi-room bookings:** a guest cancellation cancels the whole booking; each reservation's refund is calculated from its own snapshot, and the amounts are summed into one Stripe refund with one `refunds` row per reservation. Cancelling a single room out of several is a non-goal.
+- **Multi-room bookings — rooms cancel individually** (Wouter, 2026-10-30; matches Booking.com and Expedia). A guest or host can cancel one room or all of them. Each room's refund comes from its own snapshot. Cancelling a room sets `reservations.cancelled_at` and frees its availability. The booking only becomes `cancelled` once every room is cancelled. "Cancel everything" is one Stripe refund for the summed amount, with one `refunds` row per room.
 - Moving bookings to `completed` after check-out has no owner today, and stays out of scope.
 - `markNoShow` moves no money and creates no `refunds` row.
 - A failed Stripe refund leaves the booking cancelled, with the `refunds` row `failed` and an audit entry. A failed refund is retried with the same key. It is not hidden.
 
 ### 6. UI for the actions
 These pages don't exist yet: `apps/web/app/bookings/[booking-ref]` is a placeholder, and the business reservations list runs on `mock-reservations`. This job builds the minimum:
-- **Guest booking page** (`/bookings/[booking-ref]`, signed-in owner only): stay details, the policy with exact deadlines, and a **Cancel booking** button. The button shows the exact refund ("You'll get €415 back. The hotel keeps €100.") before the guest confirms.
+- **Guest booking page** (`/bookings/[booking-ref]`, signed-in owner only): stay details, the policy with exact deadlines, a **Cancel this room** button per room, and **Cancel booking** for everything. The button shows the exact refund ("You'll get €415 back. The hotel keeps €100.") before the guest confirms.
 - **Host booking detail** in the business app, opened from the reservations list, which now reads real bookings instead of mock data. Shows the snapshot, and offers the actions allowed in the current state: *Mark checked in*, *Mark no-show* (only after the window closes), *Record early departure* (date picker), *Cancel booking* (full refund, with a warning), *Goodwill refund* (an amount, capped at what's left unrefunded).
 
 ### 7. Notion
