@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  allowedActions,
   buildPolicySnapshot,
+  checkInClosesAt,
   calculateRefund,
   localTimeToUtc,
   nonRefundableQualifies,
@@ -299,4 +301,77 @@ describe("nonRefundableQualifies", () => {
   test("no refundable rate to sit next to → does not qualify", () => {
     expect(nonRefundableQualifies(50, [])).toBe(false);
   });
+});
+
+describe("checkInClosesAt", () => {
+  test("the end of the arrival window on the arrival day", () => {
+    expect(
+      checkInClosesAt({ arrivalDate: "2026-11-10", checkInUntil: "22:00", timeZone: "Europe/Amsterdam" }).toISOString(),
+    ).toBe("2026-11-10T21:00:00.000Z");
+  });
+
+  test("midnight after the arrival day when the property has no cut-off", () => {
+    expect(
+      checkInClosesAt({ arrivalDate: "2026-11-10", checkInUntil: null, timeZone: "Europe/Amsterdam" }).toISOString(),
+    ).toBe("2026-11-10T23:00:00.000Z");
+  });
+});
+
+describe("allowedActions", () => {
+  const base = {
+    checkInAt: CHECK_IN_AT,
+    checkInClosesAt: new Date("2026-11-10T23:00:00Z"),
+    checkOutDate: "2026-11-15",
+    timeZone: "Europe/Amsterdam",
+  };
+  const at = (iso: string) => new Date(iso);
+
+  test("confirmed, two days before arrival: cancel or goodwill only", () => {
+    expect(allowedActions({ ...base, status: "confirmed", now: at("2026-11-08T12:00:00Z") })).toEqual([
+      "cancel",
+      "goodwill_refund",
+    ]);
+  });
+
+  test("confirmed, on the morning of arrival: can be checked in", () => {
+    expect(allowedActions({ ...base, status: "confirmed", now: at("2026-11-10T09:00:00Z") })).toEqual([
+      "cancel",
+      "mark_checked_in",
+      "goodwill_refund",
+    ]);
+  });
+
+  test("confirmed, after the arrival window closed: no-show and early departure open up", () => {
+    expect(allowedActions({ ...base, status: "confirmed", now: at("2026-11-11T08:00:00Z") })).toEqual([
+      "cancel",
+      "mark_checked_in",
+      "mark_no_show",
+      "record_early_departure",
+      "goodwill_refund",
+    ]);
+  });
+
+  test("checked in: early departure and goodwill", () => {
+    expect(allowedActions({ ...base, status: "checked_in", now: at("2026-11-12T08:00:00Z") })).toEqual([
+      "record_early_departure",
+      "goodwill_refund",
+    ]);
+  });
+
+  test("after check-out a confirmed booking can only get goodwill", () => {
+    expect(allowedActions({ ...base, status: "confirmed", now: at("2026-11-16T08:00:00Z") })).toEqual([
+      "mark_no_show",
+      "goodwill_refund",
+    ]);
+  });
+
+  test("completed: goodwill only", () => {
+    expect(allowedActions({ ...base, status: "completed", now: at("2026-11-16T08:00:00Z") })).toEqual(["goodwill_refund"]);
+  });
+
+  for (const status of ["pending", "cancelled", "no_show"] as const) {
+    test(`${status}: nothing`, () => {
+      expect(allowedActions({ ...base, status, now: at("2026-11-08T12:00:00Z") })).toEqual([]);
+    });
+  }
 });

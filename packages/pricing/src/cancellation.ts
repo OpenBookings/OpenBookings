@@ -273,3 +273,60 @@ export function nonRefundableQualifies(nonRefundableTotal: number, refundableTot
   const nr = toCents(nonRefundableTotal);
   return refundableTotals.some((r) => nr * 10 <= toCents(r) * 9);
 }
+
+// ── What can happen to a booking now ──────────────────────────────────────────
+
+export type BookingStatus = "pending" | "confirmed" | "checked_in" | "cancelled" | "completed" | "no_show";
+export type BookingAction =
+  | "cancel"
+  | "mark_checked_in"
+  | "mark_no_show"
+  | "record_early_departure"
+  | "goodwill_refund";
+
+/**
+ * When the arrival window closes: the property's `check_in_until` on the
+ * arrival day, or midnight after it when the property states no cut-off.
+ * A guest who hasn't arrived by then can be marked a no-show.
+ */
+export function checkInClosesAt(i: { arrivalDate: string; checkInUntil: string | null; timeZone: string }): Date {
+  if (i.checkInUntil) return localTimeToUtc(i.arrivalDate, i.checkInUntil, i.timeZone);
+  const next = new Date(Date.parse(`${i.arrivalDate}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
+  return localTimeToUtc(next, "00:00", i.timeZone);
+}
+
+/**
+ * The actions a host or guest may take on a booking right now, in display
+ * order. Who may take which one is the caller's business.
+ */
+export function allowedActions(i: {
+  status: BookingStatus;
+  checkInAt: Date;
+  checkInClosesAt: Date;
+  checkOutDate: string;
+  timeZone: string;
+  now: Date;
+}): BookingAction[] {
+  const now = i.now.getTime();
+  const checkIn = i.checkInAt.getTime();
+  const stayOver = now >= localTimeToUtc(i.checkOutDate, "00:00", i.timeZone).getTime();
+  const actions: BookingAction[] = [];
+
+  switch (i.status) {
+    case "confirmed":
+      if (!stayOver) actions.push("cancel");
+      if (!stayOver && now >= checkIn - DAY) actions.push("mark_checked_in");
+      if (now >= i.checkInClosesAt.getTime()) actions.push("mark_no_show");
+      if (!stayOver && now >= checkIn) actions.push("record_early_departure");
+      actions.push("goodwill_refund");
+      break;
+    case "checked_in":
+      if (!stayOver) actions.push("record_early_departure");
+      actions.push("goodwill_refund");
+      break;
+    case "completed":
+      actions.push("goodwill_refund");
+      break;
+  }
+  return actions;
+}

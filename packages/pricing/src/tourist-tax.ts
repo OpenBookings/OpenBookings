@@ -122,6 +122,43 @@ export function calculateTouristTax(
   return { total: round2(lines.reduce((sum, line) => sum + line.amount, 0)), lines };
 }
 
+/**
+ * The tax owed per night of the stay, for refunds of the nights not stayed.
+ * Per-night charges land on their night; charges owed once per stay land on
+ * the first night, which is always stayed when a guest leaves early. Rounding
+ * differences also go to the first night, so the nights always add up to
+ * `calculateTouristTax(...).total` exactly.
+ */
+export function touristTaxByNight(rules: TouristTaxRule[], stay: TouristTaxStay): number[] {
+  if (stay.nights.length === 0) return [];
+
+  const guests = (rule: TouristTaxRule) =>
+    rule.childrenExempt ? stay.adults : stay.adults + stay.children;
+
+  const exact = stay.nights.map((night, nightIndex) => {
+    const rule = ruleInForce(rules, night.date);
+    if (!rule) return 0;
+    if (rule.maxNights !== null && nightIndex >= rule.maxNights) return 0;
+    return rule.charges.reduce((sum, charge) => {
+      if (charge.kind === "percent") return sum + (taxableRoomPrice(charge, night.price) * charge.amount) / 100;
+      if (charge.perNight) return sum + fixedAmount(charge, guests(rule), stay.rooms);
+      return sum;
+    }, 0);
+  });
+
+  const arrivalRule = ruleInForce(rules, stay.nights[0].date);
+  arrivalRule?.charges.forEach((charge) => {
+    if (charge.kind === "fixed" && !charge.perNight) {
+      exact[0] += fixedAmount(charge, guests(arrivalRule), stay.rooms);
+    }
+  });
+
+  const cents = exact.map((amount) => Math.round(amount * 100));
+  const totalCents = Math.round(calculateTouristTax(rules, stay).total * 100);
+  cents[0] += totalCents - cents.reduce((sum, c) => sum + c, 0);
+  return cents.map((c) => c / 100);
+}
+
 function fixedAmount(charge: TouristTaxCharge, guests: number, rooms: number): number {
   return charge.amount * (charge.perPerson ? guests : 1) * (charge.perRoom ? rooms : 1);
 }

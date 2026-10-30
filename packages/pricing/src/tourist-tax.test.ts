@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   calculateTouristTax,
   ruleInForce,
+  touristTaxByNight,
   type TouristTaxCharge,
   type TouristTaxRule,
   type TouristTaxStay,
@@ -215,5 +216,36 @@ describe("ruleInForce", () => {
 
   test("nothing is in force before the first rule", () => {
     expect(ruleInForce(rules, "2025-12-31")).toBeNull();
+  });
+});
+
+describe("touristTaxByNight", () => {
+  test("a per-person-per-night charge lands on each night", () => {
+    const rules = [rule([fixed(3, { perPerson: true, perNight: true })])];
+    expect(touristTaxByNight(rules, stay())).toEqual([6, 6, 6]);
+  });
+
+  test("a once-per-stay charge goes on the first night", () => {
+    const rules = [rule([fixed(3, { perPerson: true, perNight: true }), fixed(5)])];
+    expect(touristTaxByNight(rules, stay())).toEqual([11, 6, 6]);
+  });
+
+  test("the nights add up to the stay's total to the cent", () => {
+    const rules = [rule([percent(12.5)])];
+    const s = stay({
+      nights: [
+        { date: "2026-07-01", price: 99.99 },
+        { date: "2026-07-02", price: 99.99 },
+        { date: "2026-07-03", price: 99.99 },
+      ],
+    });
+    const perNight = touristTaxByNight(rules, s);
+    const sumCents = perNight.reduce((sum, n) => sum + Math.round(n * 100), 0);
+    expect(sumCents).toBe(Math.round(calculateTouristTax(rules, s).total * 100));
+  });
+
+  test("nights past the cap owe nothing", () => {
+    const rules = [rule([fixed(3, { perPerson: true, perNight: true })], { maxNights: 2 })];
+    expect(touristTaxByNight(rules, stay())).toEqual([6, 6, 0]);
   });
 });
