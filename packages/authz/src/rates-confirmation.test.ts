@@ -56,7 +56,7 @@ const deps = { queryOne: fakeQueryOne };
 
 describe("inclusive-rates confirmation", () => {
   test("the doc id is dated, so a wording change forces re-confirmation", () => {
-    expect(RATES_TAX_INCLUSIVE_DOC_ID).toBe("rates-tax-inclusive@2026-10-02");
+    expect(RATES_TAX_INCLUSIVE_DOC_ID).toBe("rates-vat-inclusive@2026-10-30");
   });
 
   test("a property whose organisation confirmed is confirmed", async () => {

@@ -63,11 +63,12 @@ export function RatesConfirmationDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Your rates include tax</DialogTitle>
+          <DialogTitle>Your rates include VAT</DialogTitle>
           <DialogDescription>
-            Guests see the price you enter as the total they pay. OpenBookings
-            does not add tourist tax or anything else on top, so the rate has to
-            already include it.
+            Guests pay the price you enter plus the tourist tax from your
+            property&apos;s Tourist tax rules, shown as one all-in price.
+            OpenBookings adds nothing else, so the rate has to already include
+            VAT and any other mandatory fees.
           </DialogDescription>
         </DialogHeader>
 

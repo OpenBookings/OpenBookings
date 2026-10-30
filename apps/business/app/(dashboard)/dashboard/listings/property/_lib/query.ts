@@ -6,6 +6,7 @@ import type {
   PropertyEditorData,
   PropertyImageRecord,
   PropertyRecord,
+  TouristTaxRuleRecord,
 } from "./types";
 
 export interface AmenityCatalogEntry {
@@ -68,12 +69,18 @@ interface PropertyRow {
   contact_phone: string | null;
   company_registration: string | null;
   vat_number: string | null;
+  /** numeric — arrives as a string. */
+  commission_rate: string;
+  /** Today in the property's time zone, "YYYY-MM-DD". */
+  today: string;
 }
 
 interface CollectionsRow {
   images: PropertyImageRecord[] | null;
   highlights: HighlightRecord[] | null;
   amenity_ids: string[] | null;
+  /** json_build_object keeps numeric as a JSON number; the date as "YYYY-MM-DD". */
+  tourist_tax_rules: TouristTaxRuleRecord[] | null;
 }
 
 /** int8 arrives as a string; `+` on it concatenates. Convert deliberately. */
@@ -102,7 +109,9 @@ export async function loadEditorData(
        c.children_welcome, c.min_check_in_age,
        c.cot_policy, c.cot_fee, c.extra_bed_fee, c.pets_allowed, c.payment_methods,
        c.legal_company_name, c.contact_email, c.contact_phone,
-       c.company_registration, c.vat_number
+       c.company_registration, c.vat_number,
+       p.commission_rate,
+       (now() AT TIME ZONE p.timezone)::date::text AS today
      FROM properties p
      LEFT JOIN property_content c ON c.property_id = p.id
      WHERE p.owner_user_id = $1
@@ -127,7 +136,12 @@ export async function loadEditorData(
         ) ORDER BY h.sort_order), '[]'::json)
         FROM property_highlights h WHERE h.property_id = p.id) AS highlights,
        (SELECT COALESCE(array_agg(pa.amenity_id), ARRAY[]::uuid[])
-        FROM property_amenities pa WHERE pa.property_id = p.id) AS amenity_ids
+        FROM property_amenities pa WHERE pa.property_id = p.id) AS amenity_ids,
+       (SELECT COALESCE(json_agg(json_build_object(
+          'id', t.id, 'effectiveFrom', t.effective_from::text, 'charges', t.charges,
+          'childrenExempt', t.children_exempt, 'maxNights', t.max_nights
+        ) ORDER BY t.effective_from), '[]'::json)
+        FROM tourist_tax_rules t WHERE t.property_id = p.id) AS tourist_tax_rules
      FROM properties p
      WHERE p.owner_user_id = $1 AND p.id = $2::uuid`,
     [property.id],
@@ -186,6 +200,11 @@ export async function loadEditorData(
     images: collections?.images ?? [],
     highlights: collections?.highlights ?? [],
     amenityIds: collections?.amenity_ids ?? [],
+    touristTax: {
+      rules: collections?.tourist_tax_rules ?? [],
+      commissionRate: Number(property.commission_rate),
+      today: property.today,
+    },
   };
 }
 

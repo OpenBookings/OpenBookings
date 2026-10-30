@@ -8,9 +8,11 @@ const RATE_SCALE = 1_000_000;
 /**
  * OpenBookings' commission on a booking, taken as a Stripe application fee.
  *
- * Charged on the full guest price: rates are tax-inclusive, so there is no
- * pre-tax figure to take it from. Rounded half up to a whole cent, and always
- * below the total — Stripe rejects a fee that swallows the whole payment.
+ * Charged on the stay: the room price, which includes VAT. Tourist tax is
+ * added on top for the host to pay to their town and is never commissioned,
+ * so callers pass the stay alone (see `bookingSplitCents`). Rounded half up
+ * to a whole cent, and always below the total — Stripe rejects a fee that
+ * swallows the whole payment.
  */
 export function applicationFeeCents(totalCents: number, rate: number): number {
   if (!Number.isInteger(totalCents) || totalCents < 0) {
@@ -22,6 +24,27 @@ export function applicationFeeCents(totalCents: number, rate: number): number {
   const scaledRate = Math.round(rate * RATE_SCALE);
   const fee = Math.floor((totalCents * scaledRate + RATE_SCALE / 2) / RATE_SCALE);
   return Math.max(0, Math.min(fee, totalCents - 1));
+}
+
+/**
+ * How one booking's money splits: what the guest pays, what OpenBookings
+ * takes, and what lands on the host's account before Stripe's own fees.
+ *
+ * The guest pays the stay plus tourist tax as one all-in price. Commission is
+ * on the stay only; the tourist tax passes through to the host untouched.
+ */
+export function bookingSplitCents(input: {
+  stayCents: number;
+  touristTaxCents: number;
+  rate: number;
+}): { guestTotalCents: number; commissionCents: number; hostReceivesCents: number } {
+  const { stayCents, touristTaxCents, rate } = input;
+  if (!Number.isInteger(touristTaxCents) || touristTaxCents < 0) {
+    throw new Error(`Tourist tax must be a whole, non-negative amount in minor units, got ${touristTaxCents}`);
+  }
+  const commissionCents = applicationFeeCents(stayCents, rate);
+  const guestTotalCents = stayCents + touristTaxCents;
+  return { guestTotalCents, commissionCents, hostReceivesCents: guestTotalCents - commissionCents };
 }
 
 /**

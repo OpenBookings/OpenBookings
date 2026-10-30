@@ -37,7 +37,7 @@ export interface LegalNBoringData {
   partnerAgreement?: LegalSignatureRecord;
   dpa?: LegalSignatureRecord;
   /**
-   * Confirmation that the host's rates include tax (see
+   * Confirmation that the host's rates include VAT, with tourist tax added on top (see
    * RATES_TAX_INCLUSIVE_STATEMENT). Becomes an org_consent row when the
    * organisation is provisioned.
    */

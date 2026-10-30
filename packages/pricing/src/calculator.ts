@@ -1,3 +1,5 @@
+import { calculateTouristTax, type TouristTaxResult, type TouristTaxRule } from "./tourist-tax";
+
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
@@ -53,6 +55,8 @@ export interface RoomRow {
   max_stay: number | null
   nights: Night[]
   modifiers: Modifier[]
+  /** The property's tourist tax rules. Absent or empty = no tourist tax. */
+  tourist_tax_rules?: TouristTaxRule[]
 }
 
 interface SearchParams {
@@ -451,13 +455,21 @@ function executeModifiers(
 // Main resolver
 // ─────────────────────────────────────────────
 
-export interface ResolvedRoom extends Omit<RoomRow, 'nights' | 'modifiers'> {
+export interface ResolvedRoom
+  extends Omit<RoomRow, 'nights' | 'modifiers' | 'tourist_tax_rules'> {
   nights: Night[]
   modifiers: Modifier[]
   subtotal: number
   /**
-   * What the guest pays. Tax-inclusive by contract with the host: rates are
-   * entered including tourist tax and VAT, so nothing is added after this.
+   * The room price after modifiers: the host's rate, incl. VAT, excl. tourist
+   * tax. OpenBookings' commission is taken on this.
+   */
+  room_price: number
+  /** Worked out from the property's rules, on top of `room_price`. */
+  tourist_tax: TouristTaxResult
+  /**
+   * What the guest pays, all-in: `room_price` plus `tourist_tax.total`. Rates
+   * include VAT by contract with the host, so nothing else is added.
    */
   total_price: number
   applied_modifiers: ModifierType[]
@@ -484,15 +496,38 @@ export function resolveRoom(
     today,
   })
 
+  const roomPrice = round2(state.total)
+  const touristTax = calculateTouristTax(row.tourist_tax_rules ?? [], {
+    nights: pricedNights(state),
+    adults,
+    children,
+    rooms: 1,
+  })
+
+  const { tourist_tax_rules: _rules, ...rest } = row
   return {
-    ...row,
+    ...rest,
     nights: row.nights, // return original nights (drop _surcharge)
     modifiers: row.modifiers,
     subtotal: round2(state.subtotal),
-    total_price: round2(state.total),
+    room_price: roomPrice,
+    tourist_tax: touristTax,
+    total_price: round2(roomPrice + touristTax.total),
     applied_modifiers: [...state.applied],
     trace: roundTrace(state.trace),
   }
+}
+
+/**
+ * What each night actually cost, for a tourist tax percentage.
+ *
+ * Surcharges are per night, but a stay discount (length of stay, early bird)
+ * comes off the total. Spreading the discount over the nights in proportion
+ * keeps every night's share honest and makes the nights add up to the total.
+ */
+function pricedNights(state: CalculationState): { date: string; price: number }[] {
+  const scale = state.subtotal > 0 ? state.total / state.subtotal : 0
+  return state.nights.map(n => ({ date: n.date, price: (n.base_price + n._surcharge) * scale }))
 }
 
 // ─────────────────────────────────────────────

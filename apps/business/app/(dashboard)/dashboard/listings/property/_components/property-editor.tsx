@@ -23,6 +23,7 @@ import { LegalSection } from "./sections/legal";
 import { OverviewSection } from "./sections/overview";
 import { PhotosSection } from "./sections/photos";
 import { PoliciesSection } from "./sections/policies";
+import { TouristTaxSection } from "./sections/tourist-tax";
 
 // The location section pulls in maplibre-gl, which no other section needs, so
 // it is fetched when the tab is first opened.
@@ -105,6 +106,7 @@ export function PropertyEditor({ data, amenities }: PropertyEditorProps) {
           <OverviewSection key="overview" {...sectionProps} amenities={amenities} />
         )}
         {active === "policies" && <PoliciesSection key="policies" {...sectionProps} />}
+        {active === "tourist-tax" && <TouristTaxSection key="tourist-tax" {...sectionProps} />}
         {active === "location" && <LocationSection key="location" {...sectionProps} />}
         {active === "legal" && <LegalSection key="legal" {...sectionProps} />}
       </div>

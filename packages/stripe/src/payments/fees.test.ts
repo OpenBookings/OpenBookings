@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applicationFeeCents, commissionRefundDue } from "./fees";
+import { applicationFeeCents, bookingSplitCents, commissionRefundDue } from "./fees";
 
 describe("applicationFeeCents", () => {
   test("4.5% of the full guest price", () => {
@@ -82,5 +82,27 @@ describe("commissionRefundDue", () => {
     expect(commissionRefundDue({ chargeAmount: 55_500, feeAmount: 0, chargeRefunded: 55_500, feeRefunded: 0 })).toBe(0);
     expect(commissionRefundDue({ chargeAmount: 0, feeAmount: 2498, chargeRefunded: 0, feeRefunded: 0 })).toBe(0);
     expect(commissionRefundDue({ ...charge, chargeRefunded: 0, feeRefunded: 0 })).toBe(0);
+  });
+});
+
+describe("bookingSplitCents", () => {
+  test("commission is taken on the stay, not on tourist tax", () => {
+    expect(bookingSplitCents({ stayCents: 100_00, touristTaxCents: 5_00, rate: 0.045 })).toEqual({
+      guestTotalCents: 105_00,
+      commissionCents: 450,
+      hostReceivesCents: 100_50,
+    });
+  });
+
+  test("with no tourist tax it is the plain commission", () => {
+    const split = bookingSplitCents({ stayCents: 185_00, touristTaxCents: 0, rate: 0.045 });
+    expect(split.commissionCents).toBe(applicationFeeCents(185_00, 0.045));
+    expect(split.guestTotalCents).toBe(185_00);
+  });
+
+  test("tourist tax that is not a whole positive amount is refused", () => {
+    for (const touristTaxCents of [-1, 2.5, Number.NaN]) {
+      expect(() => bookingSplitCents({ stayCents: 100_00, touristTaxCents, rate: 0.045 })).toThrow();
+    }
   });
 });

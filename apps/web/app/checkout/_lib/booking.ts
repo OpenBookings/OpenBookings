@@ -15,9 +15,14 @@
  * the `*Cents` fields below.
  */
 
-import { queryOne } from '@openbookings/db';
+import { query, queryOne } from '@openbookings/db';
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
-import { buildBookingLines, type BookingLine } from './booking-lines';
+import {
+  calculateTouristTax,
+  type TouristTaxResult,
+  type TouristTaxRule,
+} from '@openbookings/pricing';
+import { buildBookingLines, stayCents, type BookingLine } from './booking-lines';
 import { applicationFeeCents } from '@openbookings/stripe';
 
 /** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
@@ -27,6 +32,8 @@ export type { BookingLine } from './booking-lines';
 
 export type StaySummary = {
   intentId: string;
+  /** The reservation row the tourist tax is recorded on. */
+  reservationId: string;
   roomId: string;
 
   propertyName: string;
@@ -59,6 +66,8 @@ export type StaySummary = {
   children: number;
 
   lines: BookingLine[];
+  /** Already in `lines`, one line per charge; kept whole for the record. */
+  touristTax: TouristTaxResult;
   platformFeeCents: number;
   currency: string;
 
@@ -98,6 +107,8 @@ type BookingRow = {
   check_out_time: string | null;
   rates_confirmed: boolean;
   commission_rate: string;
+  reservation_id: string;
+  tourist_tax_rules: TouristTaxRule[];
   stripe_account_id: string | null;
   room_id: string;
   room_name: string;
@@ -144,6 +155,18 @@ const BOOKING_QUERY = `
       where oc.organization_id = p.organization_id and oc.doc_id = $2
     )                   as rates_confirmed,
     p.commission_rate,
+    res.id              as reservation_id,
+    -- Every rule, not just today's: each night of the stay takes the rule in
+    -- force on that night.
+    coalesce((
+      select json_agg(json_build_object(
+        'effectiveFrom',               t.effective_from::text,
+        'charges',                     t.charges,
+        'childrenExempt',              t.children_exempt,
+        'maxNights',                   t.max_nights
+      ) order by t.effective_from)
+      from tourist_tax_rules t where t.property_id = p.id
+    ), '[]'::json)      as tourist_tax_rules,
     p.stripe_account_id,
     r.id                as room_id,
     r.name              as room_name,
@@ -263,7 +286,9 @@ function trimSeconds(value: string | null): string | null {
  */
 function commissionCents(lines: BookingLine[], rate: string): number {
   try {
-    return applicationFeeCents(totalCents(lines), Number(rate));
+    // The stay only. Tourist tax is the host's to pay to their town, and
+    // OpenBookings never takes commission on it.
+    return applicationFeeCents(stayCents(lines), Number(rate));
   } catch {
     return Number.NaN;
   }
@@ -290,11 +315,24 @@ export async function getBookingSummary(): Promise<StaySummary> {
   // actually priced on, and a mismatch would mean charging for a different stay.
   const nights = row.total_nights;
 
+  const pricePerNight = Number(row.price_per_night);
+  const touristTax = calculateTouristTax(row.tourist_tax_rules, {
+    nights: Array.from({ length: nights }, (_, i) => ({
+      date: new Date(checkIn.getTime() + i * MS_PER_NIGHT).toISOString().slice(0, 10),
+      price: pricePerNight,
+    })),
+    adults: row.adults,
+    children: row.children,
+    // A reservation is one room.
+    rooms: 1,
+  });
+
   const lines = buildBookingLines({
     roomName: row.room_name,
     roomType: row.room_type,
-    pricePerNight: Number(row.price_per_night),
+    pricePerNight,
     nights,
+    touristTax: touristTax.lines,
   });
 
   const freeCancellationUntil = row.is_refundable
@@ -303,6 +341,7 @@ export async function getBookingSummary(): Promise<StaySummary> {
 
   return {
     intentId: row.booking_id,
+    reservationId: row.reservation_id,
     roomId: row.room_id,
 
     propertyName: row.property_name,
@@ -328,8 +367,9 @@ export async function getBookingSummary(): Promise<StaySummary> {
     children: row.children,
 
     lines,
-    // OpenBookings' commission on the full guest price, in the units Stripe
-    // wants. Zero until the fee is switched on for this deployment.
+    touristTax,
+    // OpenBookings' commission on the stay, excluding tourist tax, in the
+    // units Stripe wants. Zero until the fee is switched on for this deployment.
     platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, row.commission_rate) : 0,
     currency: row.currency.toLowerCase(),
 
@@ -350,6 +390,19 @@ export async function getBookingSummary(): Promise<StaySummary> {
     ratesConfirmed: row.rates_confirmed === true,
     holdMinutes: HOLD_MINUTES,
   };
+}
+
+/**
+ * Fix the tourist tax on the reservation as it is about to be charged, so a
+ * later change to the property's rules never alters what this booking owed.
+ * Written each time a Checkout Session is created: until the guest pays, the
+ * booking is not made, and the newest figure is the one they are charged.
+ */
+export async function recordTouristTax(summary: StaySummary): Promise<void> {
+  await query(
+    `update reservations set tourist_tax_amount = $1, tourist_tax_lines = $2::jsonb where id = $3`,
+    [summary.touristTax.total, JSON.stringify(summary.touristTax.lines), summary.reservationId],
+  );
 }
 
 /** Sum of every line, in minor units. The one place the total is derived. */

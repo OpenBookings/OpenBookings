@@ -1,9 +1,12 @@
-/** The six groups the editor's nav rail lists, in the order the guest sees them. */
+import type { TouristTaxRule } from "@openbookings/pricing";
+
+/** The groups the editor's nav rail lists, in the order the guest sees them. */
 export const SECTION_IDS = [
   "identity",
   "photos",
   "overview",
   "policies",
+  "tourist-tax",
   "location",
   "legal",
 ] as const;
@@ -15,6 +18,7 @@ export const SECTION_LABELS: Record<SectionId, string> = {
   photos: "Photos",
   overview: "Overview",
   policies: "Policies",
+  "tourist-tax": "Tourist tax",
   location: "Location",
   legal: "Legal",
 };
@@ -86,6 +90,23 @@ export interface HighlightRecord {
   sortOrder: number;
 }
 
+/** A saved row of `tourist_tax_rules`. */
+export interface TouristTaxRuleRecord extends TouristTaxRule {
+  id: string;
+}
+
+export interface TouristTaxData {
+  /** Every rule, oldest first. */
+  rules: TouristTaxRuleRecord[];
+  /** `properties.commission_rate`, e.g. 0.045. The calculator shows it. */
+  commissionRate: number;
+  /**
+   * Today in the property's own time zone, "YYYY-MM-DD". Decides which rule is
+   * current and which may still be deleted, the same way the save path does.
+   */
+  today: string;
+}
+
 /** Everything the editor screen needs, loaded in one pass. */
 export interface PropertyEditorData {
   property: PropertyRecord;
@@ -93,6 +114,7 @@ export interface PropertyEditorData {
   images: PropertyImageRecord[];
   highlights: HighlightRecord[];
   amenityIds: string[];
+  touristTax: TouristTaxData;
 }
 
 export type { FormState } from "../../_lib/editor";

@@ -59,6 +59,8 @@ const RULES: Record<SectionId, Rule[]> = {
     ["Fine print", (d) => d.content.finePrint.length > 0],
     ["Cot fee", (d) => d.content.cotPolicy !== "paid" || d.content.cotFee !== null],
   ],
+  // Optional: not every town charges tourist tax, so no rule is a valid state.
+  "tourist-tax": [],
   location: [
     ["About", (d) => !isBlank(d.content.locationAbout)],
     ["Address", (d) => !isBlank(d.property.addressLine1)],

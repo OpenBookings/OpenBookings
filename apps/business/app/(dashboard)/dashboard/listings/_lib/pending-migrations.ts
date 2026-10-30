@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
  *
  * Remove an entry once that migration is on the dev database.
  */
-const PENDING = ["0023_rooms_editor.sql"];
+const PENDING = ["0023_rooms_editor.sql", "0026_tourist_tax.sql"];
 
 const DRIZZLE_DIR = new URL("../../../../../../../packages/db/drizzle/", import.meta.url);
 

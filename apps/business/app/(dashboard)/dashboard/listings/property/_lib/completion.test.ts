@@ -57,6 +57,7 @@ function complete(): PropertyEditorData {
     ],
     highlights: [],
     amenityIds: ["a1"],
+    touristTax: { rules: [], commissionRate: 0.045, today: "2026-10-30" },
   };
 }
 
@@ -341,15 +342,21 @@ describe("canPublish", () => {
   });
 });
 
+describe("sectionStatus — tourist tax", () => {
+  test("is complete with no rules, because not every town charges tourist tax", () => {
+    expect(sectionStatus("tourist-tax", complete())).toEqual({ complete: true, missing: [] });
+  });
+});
+
 describe("completedCount", () => {
-  test("counts six when everything is done", () => {
-    expect(completedCount(complete())).toBe(6);
+  test("counts seven when everything is done", () => {
+    expect(completedCount(complete())).toBe(7);
   });
 
-  test("counts five when one section is short", () => {
+  test("counts six when one section is short", () => {
     const d = complete();
     d.content.vatNumber = null;
-    expect(completedCount(d)).toBe(5);
+    expect(completedCount(d)).toBe(6);
   });
 });
 
@@ -357,7 +364,7 @@ describe("allSectionStatuses", () => {
   test("returns an entry for every section id", () => {
     const all = allSectionStatuses(complete());
     expect(Object.keys(all).sort()).toEqual(
-      ["identity", "legal", "location", "overview", "policies", "photos"].sort(),
+      ["identity", "legal", "location", "overview", "policies", "photos", "tourist-tax"].sort(),
     );
   });
 });

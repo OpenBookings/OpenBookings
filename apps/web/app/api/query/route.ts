@@ -254,14 +254,27 @@ SELECT
   cr.min_stay,
   cr.max_stay,
   rn.nights,
-  COALESCE(rm.modifiers, '[]'::jsonb) AS modifiers
+  COALESCE(rm.modifiers, '[]'::jsonb) AS modifiers,
+  -- Tourist tax goes on top of the room price, so the guest is ranked and
+  -- shown the all-in price. The resolver picks the rule for each night.
+  COALESCE(tt.rules, '[]'::jsonb) AS tourist_tax_rules
 FROM candidate_rooms cr
 JOIN room_nights rn
   ON rn.property_id  = cr.property_id
  AND rn.room_id      = cr.room_id
  AND rn.rate_plan_id = cr.rate_plan_id
 LEFT JOIN room_modifiers rm
-  ON rm.rate_plan_id = cr.rate_plan_id;
+  ON rm.rate_plan_id = cr.rate_plan_id
+LEFT JOIN LATERAL (
+  SELECT jsonb_agg(jsonb_build_object(
+    'effectiveFrom',               t.effective_from::text,
+    'charges',                     t.charges,
+    'childrenExempt',              t.children_exempt,
+    'maxNights',                   t.max_nights
+  ) ORDER BY t.effective_from) AS rules
+  FROM tourist_tax_rules t
+  WHERE t.property_id = cr.property_id
+) tt ON TRUE;
 `;
 }
 
@@ -277,6 +290,8 @@ async function runSearch(input: HotelSearchInput) {
     ...row,
     nights:    typeof row.nights    === 'string' ? JSON.parse(row.nights)    : row.nights,
     modifiers: typeof row.modifiers === 'string' ? JSON.parse(row.modifiers) : row.modifiers,
+    tourist_tax_rules:
+      typeof row.tourist_tax_rules === 'string' ? JSON.parse(row.tourist_tax_rules) : row.tourist_tax_rules,
   })) as RoomRow[]
   
   return resolveSearchResults(roomRows, {

@@ -3,10 +3,12 @@ import {
   hasStayLengthDiscount,
   resolveNightlyRates,
   resolveRoom,
+  resolveSearchResults,
   type Modifier,
   type Night,
   type RoomRow,
 } from "./calculator";
+import type { TouristTaxRule } from "./tourist-tax";
 
 /**
  * The ARI grid claims its cells are the same computation guests are quoted.
@@ -108,7 +110,67 @@ describe("resolveNightlyRates", () => {
       today: "2026-06-01",
     });
 
-    expect(cell.price).toBe(search.total_price);
+    // The grid shows the host's own rate, which is the room price before
+    // tourist tax.
+    expect(cell.price).toBe(search.room_price);
+  });
+});
+
+describe("resolveRoom with tourist tax", () => {
+  const perPersonPerNight: TouristTaxRule = {
+    effectiveFrom: "2026-01-01",
+    charges: [{ kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false }],
+    childrenExempt: true,
+    maxNights: null,
+  };
+  const tenPercent: TouristTaxRule = {
+    ...perPersonPerNight,
+    charges: [{ kind: "percent", amount: 10, perPerson: false, perNight: false, perRoom: false }],
+  };
+  const row = (extra: Partial<RoomRow> = {}) =>
+    ({
+      base_occupancy: 2,
+      nights: nightsFrom(["2026-07-01", "2026-07-02", "2026-07-03"], 100),
+      modifiers: [],
+      ...extra,
+    }) as unknown as RoomRow;
+  const params = { adults: 2, children: 1, arrivalDate: "2026-07-01" };
+
+  test("without rules the all-in price is the room price", () => {
+    const r = resolveRoom(row(), params, "2026-06-01");
+    expect(r.room_price).toBe(300);
+    expect(r.tourist_tax).toEqual({ total: 0, lines: [] });
+    expect(r.total_price).toBe(300);
+  });
+
+  test("tourist tax is added on top of the room price", () => {
+    const r = resolveRoom(row({ tourist_tax_rules: [perPersonPerNight] }), params, "2026-06-01");
+    // Two adults pay, the child is exempt: €2.50 × 2 × 3
+    expect(r.tourist_tax.total).toBe(15);
+    expect(r.room_price).toBe(300);
+    expect(r.total_price).toBe(315);
+  });
+
+  test("a percentage is taken of the price after discounts", () => {
+    const r = resolveRoom(
+      row({ tourist_tax_rules: [tenPercent], modifiers: [threeNightDiscount] }),
+      params,
+      "2026-06-01",
+    );
+    expect(r.room_price).toBe(270);
+    expect(r.tourist_tax.total).toBe(27);
+    expect(r.total_price).toBe(297);
+  });
+
+  test("search results are ranked by the all-in price", () => {
+    const cheapRoomHighTax = row({
+      hotel_id: "a",
+      nights: nightsFrom(["2026-07-01"], 100),
+      tourist_tax_rules: [{ ...perPersonPerNight, charges: [{ ...perPersonPerNight.charges[0], amount: 10 }] }],
+    });
+    const dearerRoomNoTax = row({ hotel_id: "b", nights: nightsFrom(["2026-07-01"], 110) });
+    const ranked = resolveSearchResults([cheapRoomHighTax, dearerRoomNoTax], params, "2026-06-01");
+    expect(ranked.map((r) => r.hotel_id)).toEqual(["b", "a"]);
   });
 });
 

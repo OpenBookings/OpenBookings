@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import {
   BookingNotFoundError,
   getBookingSummary,
+  recordTouristTax,
   totalCents,
   type BookingSummary,
 } from '@/app/checkout/_lib/booking';
@@ -236,6 +237,8 @@ export async function POST(request: Request) {
       throw new CheckoutError('config_error', 'Property has no connected Stripe account');
     }
 
+    await recordTouristTax(booking);
+
     session = await createBookingCheckout({
       stripeAccountId: booking.stripeAccountId,
       // Prefilled and locked: the booking is attached to this account, so the
@@ -264,6 +267,7 @@ export async function POST(request: Request) {
         // this and the webhook should read it from there.
         userId: authSession.user.id,
         totalCents: String(total),
+        touristTaxCents: String(Math.round(booking.touristTax.total * 100)),
       },
       returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
       expiresAt,
