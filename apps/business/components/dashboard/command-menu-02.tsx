@@ -58,6 +58,8 @@ const statusLabels: Record<MockReservationStatus, string> = {
   checked_in: "In house",
   checked_out: "Checked out",
   pending: "Pending",
+  cancelled: "Cancelled",
+  no_show: "No-show",
 };
 
 const statusDotClasses: Record<MockReservationStatus, string> = {
@@ -65,6 +67,8 @@ const statusDotClasses: Record<MockReservationStatus, string> = {
   checked_in: "bg-blue-500",
   checked_out: "bg-muted-foreground",
   pending: "bg-amber-500",
+  cancelled: "bg-muted-foreground",
+  no_show: "bg-red-500",
 };
 
 type CommandMenu02Props = {

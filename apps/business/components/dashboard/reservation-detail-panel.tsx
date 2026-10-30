@@ -2,7 +2,7 @@
 
 import { GetHelpButton } from "@/components/support/get-help-button";
 import { isUuid, shortBookingRef } from "@/lib/support/references";
-import { Ban, MessageSquare, Pencil, CalendarX2 } from "lucide-react";
+import { MessageSquare, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,50 +12,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { MockReservation } from "@/components/dashboard/mock-reservations";
+import type { HostReservation } from "@/lib/reservations/shape";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
   month: "short",
   year: "numeric",
-});
-
-const nightDateFormatter = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
+  timeZone: "UTC",
 });
 
 const currencyFormatter = new Intl.NumberFormat("en-NL", {
   style: "currency",
   currency: "EUR",
-  maximumFractionDigits: 0,
 });
 
-function nightCount(reservation: MockReservation): number {
-  const checkIn = new Date(reservation.checkInDate).getTime();
-  const checkOut = new Date(reservation.checkOutDate).getTime();
-  return Math.max(1, Math.round((checkOut - checkIn) / 86_400_000));
-}
+const utcDate = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
-// Split the total evenly across nights, giving any rounding remainder to the
-// final night so the per-night rows always sum back to the total.
-function nightBreakdown(
-  reservation: MockReservation
-): { date: Date; amount: number }[] {
-  const nights = nightCount(reservation);
-  const base = Math.floor(reservation.totalAmount / nights);
-  const checkIn = new Date(reservation.checkInDate);
-  return Array.from({ length: nights }, (_, i) => {
-    const date = new Date(checkIn);
-    date.setDate(checkIn.getDate() + i);
-    const amount =
-      i === nights - 1
-        ? reservation.totalAmount - base * (nights - 1)
-        : base;
-    return { date, amount };
-  });
+function nightCount(reservation: HostReservation): number {
+  const nights = (utcDate(reservation.checkOutDate).getTime() - utcDate(reservation.checkInDate).getTime()) / 86_400_000;
+  return Math.max(1, Math.round(nights));
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -87,10 +63,9 @@ function DetailSection({
 export function ReservationDetailBody({
   reservation,
 }: {
-  reservation: MockReservation;
+  reservation: HostReservation;
 }) {
   const nights = nightCount(reservation);
-  const nightlyRows = nightBreakdown(reservation);
   return (
     <div className="flex flex-col gap-8">
       <DetailSection title="Guest">
@@ -101,43 +76,65 @@ export function ReservationDetailBody({
         />
       </DetailSection>
       <DetailSection title="Stay">
-        <DetailField label="Room" value={reservation.roomName} />
         <DetailField
           label="Check-in"
-          value={fullDateFormatter.format(new Date(reservation.checkInDate))}
+          value={fullDateFormatter.format(utcDate(reservation.checkInDate))}
         />
         <DetailField
           label="Check-out"
-          value={fullDateFormatter.format(new Date(reservation.checkOutDate))}
+          value={fullDateFormatter.format(utcDate(reservation.checkOutDate))}
         />
         <DetailField
           label="Nights"
           value={`${nights} ${nights === 1 ? "night" : "nights"}`}
         />
+        {reservation.departedEarlyOn && (
+          <DetailField
+            label="Left early after"
+            value={fullDateFormatter.format(utcDate(reservation.departedEarlyOn))}
+          />
+        )}
       </DetailSection>
-      <DetailSection title="Payment">
-        <div className="flex flex-col gap-2">
-          {nightlyRows.map(({ date, amount }) => (
-            <div
-              key={date.toISOString()}
-              className="flex items-baseline justify-between gap-4"
-            >
-              <span className="text-muted-foreground text-sm tabular-nums">
-                {nightDateFormatter.format(date)}
+      <DetailSection title="Rooms & cancellation">
+        {reservation.rooms.map((room) => (
+          <div key={room.reservationId} className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className={room.cancelledAt ? "text-muted-foreground text-sm line-through" : "text-sm font-medium"}>
+                {room.roomName}
               </span>
-              <span className="text-sm tabular-nums">
-                {currencyFormatter.format(amount)}
+              <span className="text-muted-foreground text-xs">
+                {room.cancelledAt ? "Cancelled" : room.tierLabel}
               </span>
             </div>
-          ))}
-        </div>
+            {!room.cancelledAt && (
+              <ul className="text-muted-foreground list-disc pl-4 text-xs">
+                {room.policyLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </DetailSection>
+      <DetailSection title="Payment">
+        {reservation.rooms.map((room) => (
+          <DetailField key={room.reservationId} label={room.roomName} value={currencyFormatter.format(room.paid)} />
+        ))}
         <Separator />
         <div className="flex items-baseline justify-between gap-4">
-          <span className="text-sm font-semibold">Total</span>
+          <span className="text-sm font-semibold">Total paid</span>
           <span className="text-sm font-semibold tabular-nums">
             {currencyFormatter.format(reservation.totalAmount)}
           </span>
         </div>
+        {reservation.refundedAmount > 0 && (
+          <DetailField label="Refunded" value={`− ${currencyFormatter.format(reservation.refundedAmount)}`} />
+        )}
+        {reservation.refundIssue && (
+          <p className="text-destructive text-xs">
+            A refund hasn&apos;t gone through yet. Use Retry refund below.
+          </p>
+        )}
       </DetailSection>
     </div>
   );
@@ -173,8 +170,7 @@ export function ReservationQuickActions({ reservationId }: { reservationId?: str
   return (
     <TooltipProvider>
       <div className="flex items-center gap-2">
-        {/* Links the booking once reservations are real bookings (UUIDs); the
-            mock RES-… ids only preset the category. Hidden while support is off. */}
+        {/* Links the booking (a UUID) so support sees which one. Hidden while support is off. */}
         <GetHelpButton
           category="bookings"
           iconOnly
@@ -191,15 +187,6 @@ export function ReservationQuickActions({ reservationId }: { reservationId?: str
         </QuickAction>
         <QuickAction label="Message">
           <MessageSquare />
-        </QuickAction>
-        <QuickAction label="Mark no-show">
-          <CalendarX2 />
-        </QuickAction>
-        <QuickAction
-          label="Request Cancellation"
-          className="text-destructive hover:text-destructive ml-auto"
-        >
-          <Ban />
         </QuickAction>
       </div>
     </TooltipProvider>
