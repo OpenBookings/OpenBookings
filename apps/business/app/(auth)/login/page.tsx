@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
+import { BACKDROP_COOKIE } from "@openbookings/images";
+import { getBackdrop } from "@openbookings/images/server";
+import { RememberBackdrop } from "@openbookings/images/react";
 import { resolveCallbackPath } from "@openbookings/auth/callback-url";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginClient } from "./login-client";
 
@@ -19,10 +22,12 @@ export default async function LoginPage({
   // distinguish "signed in as a guest" (show an explanation, sign out) from
   // "not signed in" (show the form), and the validated helper collapses both
   // to null.
-  const [params, session] = await Promise.all([
+  const [params, session, { backdrop, persist }] = await Promise.all([
     searchParams,
     auth.api.getSession({ headers: await headers() }),
+    cookies().then((jar) => getBackdrop(jar.get(BACKDROP_COOKIE)?.value)),
   ]);
+  const remember = persist && backdrop ? <RememberBackdrop id={backdrop.id} /> : null;
 
   if (session?.user) {
     if (session.user.account_type === "business") {
@@ -32,7 +37,12 @@ export default async function LoginPage({
     }
     // Signed in with a non-business account: show the login form with an
     // explanation; the client signs the session out so they can retry.
-    return <LoginClient initialError={PRIVATE_ACCOUNT_MESSAGE} signOutOnMount />;
+    return (
+      <>
+        <LoginClient backdrop={backdrop} initialError={PRIVATE_ACCOUNT_MESSAGE} signOutOnMount />
+        {remember}
+      </>
+    );
   }
 
   const initialError =
@@ -42,5 +52,10 @@ export default async function LoginPage({
         ? NOT_LINKED_MESSAGE
         : null;
 
-  return <LoginClient initialError={initialError} />;
+  return (
+    <>
+      <LoginClient backdrop={backdrop} initialError={initialError} />
+      {remember}
+    </>
+  );
 }

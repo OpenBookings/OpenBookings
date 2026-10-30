@@ -1,0 +1,104 @@
+{
+  "backdrops": [
+    {
+      "id": "australia-sydney",
+      "name": "Sydney",
+      "file": "Australia-Sydney.avif"
+    },
+    {
+      "id": "france-paris",
+      "name": "Paris",
+      "file": "France-Paris.avif"
+    },
+    {
+      "id": "hawaii-honolulu",
+      "name": "Honolulu",
+      "file": "Hawaii-Honolulu.avif"
+    },
+    {
+      "id": "iceland-reykjavik",
+      "name": "Iceland",
+      "file": "Iceland-Reykjavik.avif"
+    },
+    {
+      "id": "italy-rome",
+      "name": "Rome",
+      "file": "Italy-Rome.avif"
+    },
+    {
+      "id": "japan-osaka",
+      "name": "Osaka",
+      "file": "Japan-Osaka.avif"
+    },
+    {
+      "id": "morocco-chefchaouen",
+      "name": "Morocco",
+      "file": "Morroco-Chefchaouen.avif"
+    },
+    {
+      "id": "netherlands-amsterdam",
+      "name": "Amsterdam",
+      "file": "Netherlands-Amsterdam.avif"
+    },
+    {
+      "id": "usa-san-francisco",
+      "name": "San Francisco",
+      "file": "USA-SanFrancisco.avif"
+    },
+    {
+      "id": "brazil-rio-de-janeiro",
+      "name": "Rio de Janeiro",
+      "file": "Brazil-RioDeJaneiro.avif"
+    },
+    {
+      "id": "italy-tuscany",
+      "name": "Tuscany",
+      "file": "Italy-Tuscany.avif"
+    },
+    {
+      "id": "italy-lake-como",
+      "name": "Lake Como",
+      "file": "Italy-LakeComo.avif"
+    },
+    {
+      "id": "usa-new-york-city",
+      "name": "New York City",
+      "file": "USA-NewYorkCity.avif"
+    },
+    {
+      "id": "switzerland-zermatt",
+      "name": "Zermatt",
+      "file": "Switzerland-Zermatt.avif"
+    },
+    {
+      "id": "vietnam-sa-pa",
+      "name": "Sa Pa",
+      "file": "Vietnam-SaPa.avif"
+    },
+    {
+      "id": "uk-scotland",
+      "name": "Scotland",
+      "file": "UK-Scotland.avif"
+    },
+    {
+      "id": "africa-safari",
+      "name": "Africa",
+      "file": "Africa-Safari.avif"
+    },
+    {
+      "id": "iceland-waterfall",
+      "name": "Iceland",
+      "file": "Iceland-Waterfall.avif"
+    },
+    {
+      "id": "costa-rica-volcano",
+      "name": "Costa Rica",
+      "file": "Costa-Rica-Volcano.avif"
+    },
+    {
+      "id": "patagonia-mountains",
+      "name": "Patagonia",
+      "file": "Patagonia-Mountains.avif"
+    }
+  ]
+}

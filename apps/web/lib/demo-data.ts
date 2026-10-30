@@ -1,4 +1,3 @@
-import { BACKDROPS } from "@openbookings/images";
 import { DEFAULT_FOCAL, type StayPosterData } from "@/components/search/stay-poster-data";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import type { PropertyPagePayload, RawAmenity } from "./hotel-page-data";
@@ -8,14 +7,23 @@ import type { HotelPageData } from "./hotel-page-query";
  * Fake properties for showing what the search and listing pages look like
  * without a database. Turn on with NEXT_PUBLIC_DEMO_DATA=true.
  *
- * Images reuse the backdrop set on cdn.openbookings.co, which the CSP already
- * allows.
+ * Images borrow a few backdrop photos from cdn.openbookings.co, which the CSP
+ * already allows. They are listed here by URL, not looked up in the backdrop
+ * manifest, so editing the manifest never changes the demo.
  */
 export function isDemoMode(): boolean {
   return process.env.NEXT_PUBLIC_DEMO_DATA === "true";
 }
 
-const image = (name: string) => BACKDROPS.find((b) => b.name === name)?.url ?? BACKDROPS[0].url;
+const BACKDROP_BASE = "https://cdn.openbookings.co/Public/backgrounds";
+const DEMO_IMAGES = {
+  Tuscany: `${BACKDROP_BASE}/Italy-Tuscany.avif`,
+  Rome: `${BACKDROP_BASE}/Italy-Rome.avif`,
+  "Lake Como": `${BACKDROP_BASE}/Italy-LakeComo.avif`,
+  Zermatt: `${BACKDROP_BASE}/Switzerland-Zermatt.avif`,
+} as const;
+
+const image = (name: keyof typeof DEMO_IMAGES) => DEMO_IMAGES[name];
 
 // ── Factories ───────────────────────────────────────────────────────────────
 
