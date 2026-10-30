@@ -38,6 +38,25 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "cancelled",
   "completed",
   "no_show",
+  /** Guest arrived (0027). Tells an early departure apart from a no-show. */
+  "checked_in",
+]);
+/** A property's base cancellation tier (0027, Annex B). Non-refundable is a rate type, not a tier here. */
+export const cancellationTierEnum = pgEnum("cancellation_tier", ["flex", "standard", "limited"]);
+/** The tier a reserved room was booked under (0027). Unlike a property, a room can be Non-refundable. */
+export const reservationCancellationTierEnum = pgEnum("reservation_cancellation_tier", [
+  "flex",
+  "standard",
+  "limited",
+  "non_refundable",
+]);
+export const refundReasonEnum = pgEnum("refund_reason", [
+  "guest_cancellation",
+  "early_departure",
+  "host_cancellation",
+  "property_unable",
+  "travel_restriction",
+  "goodwill",
 ]);
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -93,6 +112,8 @@ export const properties = pgTable(
     checkOutTime: time("check_out_time").notNull(),
     /** End of the arrival window. NULL = no stated cut-off. */
     checkInUntil: time("check_in_until"),
+    /** Base cancellation tier for every refundable rate (0027). Changes apply to new bookings only. */
+    cancellationTier: cancellationTierEnum("cancellation_tier").notNull().default("standard"),
     stripeAccountId: varchar("stripe_account_id", { length: 255 }).unique(),
     /**
      * OpenBookings' commission, taken as a Stripe application fee on the full
@@ -206,8 +227,8 @@ export const ratePlans = pgTable(
     name: varchar("name", { length: 100 }).notNull(),
     bar: bigint("bar", { mode: "number" }).notNull(),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
+    /** true = follows the property's cancellation tier; false = a Non-refundable rate (0027). */
     isRefundable: boolean("is_refundable").notNull(),
-    cancellationPolicy: text("cancellation_policy"),
     bookingFeeRate: numeric("booking_fee_rate", { precision: 5, scale: 4 }).notNull().default("0.00"),
     minStay: integer("min_stay").notNull().default(1),
     maxStay: integer("max_stay"),
@@ -323,7 +344,6 @@ export const propertyContent = pgTable("property_content", {
 
   // Policy facts. The arrival window itself lives on `properties`.
   reception24h: boolean("reception_24h").notNull().default(false),
-  freeCancellationDays: integer("free_cancellation_days"),
   /** Always true: every payment goes through the platform (0021). Kept for the listing page. */
   prepaymentRequired: boolean("prepayment_required").notNull().default(true),
   childrenWelcome: boolean("children_welcome").notNull().default(true),
@@ -580,6 +600,10 @@ export const bookings = pgTable(
     cancellationReason: text("cancellation_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     noShowReportedAt: timestamp("no_show_reported_at", { withTimezone: true }),
+    /** Booking Time in Annex B (0027): the grace period counts from here, not from `createdAt`. */
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    /** Last night actually stayed when the guest left early (0027). */
+    departedEarlyOn: date("departed_early_on"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -615,10 +639,56 @@ export const reservations = pgTable(
     /** The TouristTaxLine[] breakdown shown at booking time (0026). */
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Policy snapshot (0027), written at confirmation. NULL while pending.
+    // Refund logic reads only these, never the current property tier.
+    cancellationTier: reservationCancellationTierEnum("cancellation_tier"),
+    checkInAt: timestamp("check_in_at", { withTimezone: true }),
+    graceUntil: timestamp("grace_until", { withTimezone: true }),
+    fullRefundUntil: timestamp("full_refund_until", { withTimezone: true }),
+    partialRefundUntil: timestamp("partial_refund_until", { withTimezone: true }),
+    /** NightValue[] — `{ date, price, touristTax }` per night, major units (0027). */
+    nights: jsonb("nights").notNull().default(sql`'[]'::jsonb`),
+    /** Which wording of Annex B the guest agreed to (0027). */
+    policyVersion: text("policy_version"),
+    /** Rooms cancel individually (0027); the booking is cancelled once every room is. */
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   },
   (table) => [
     index("idx_reservations_booking_id").on(table.bookingId),
     index("idx_reservations_room_id").on(table.roomId),
+    check("reservations_nights_array", sql`jsonb_typeof(${table.nights}) = 'array'`),
+  ],
+);
+
+/** One row per refund OpenBookings executes or records (0027). `transactions` stays the payment ledger. */
+export const refunds = pgTable(
+  "refunds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id),
+    /** NULL for refunds that cover the whole booking (goodwill). */
+    reservationId: uuid("reservation_id").references(() => reservations.id),
+    reason: refundReasonEnum("reason").notNull(),
+    accommodationAmount: numeric("accommodation_amount", { precision: 10, scale: 2 }).notNull(),
+    touristTaxAmount: numeric("tourist_tax_amount", { precision: 10, scale: 2 }).notNull(),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    /** The calculator's RefundResult, so host and guest can see why. */
+    breakdown: jsonb("breakdown").notNull().default(sql`'{}'::jsonb`),
+    status: paymentStatusEnum("status").notNull().default("pending"),
+    stripeRefundId: varchar("stripe_refund_id", { length: 255 }),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull().unique("refunds_idempotency_key_unique"),
+    /** Better Auth user id; NULL = the system. */
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_refunds_booking_id").on(table.bookingId),
+    check(
+      "refunds_amount_sum",
+      sql`${table.amount} = ${table.accommodationAmount} + ${table.touristTaxAmount} AND ${table.amount} >= 0`,
+    ),
   ],
 );
 
