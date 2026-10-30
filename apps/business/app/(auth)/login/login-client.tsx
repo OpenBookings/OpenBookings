@@ -2,21 +2,21 @@
 
 import { useEffect } from "react";
 import Image from "next/image";
-import { useBackdrop } from "@/lib/use-backdrop";
+import type { Backdrop } from "@openbookings/images";
 import { authClient } from "@/lib/auth-client";
 
 import { SS_AuthForm } from "@/components/auth/SS-AuthForm";
 import { AuthFormFields, AuthFormPhaseProvider } from "@/components/auth/AuthFormFields";
 
 export function LoginClient({
+  backdrop,
   initialError,
   signOutOnMount,
 }: {
+  backdrop: Backdrop | null;
   initialError?: string | null;
   signOutOnMount?: boolean;
 }) {
-  const backdrop = useBackdrop();
-
   // The server page renders us with an error for non-business sessions;
   // clear that session so the user can retry with a business account.
   useEffect(() => {
@@ -41,8 +41,7 @@ export function LoginClient({
             alt=""
             fill
             sizes="100vw"
-            loading="eager"
-            fetchPriority="high"
+            preload
             className="object-cover object-center"
           />
         )}
