@@ -1,0 +1,423 @@
+/**
+ * The only code that changes a booking's state or records a refund.
+ *
+ * Every action runs the same way: lock the booking, check the action is allowed
+ * right now (`allowedActions`), let `plan.ts` decide the money, write the new
+ * state and a `pending` refund row per room, commit, then ask Stripe. A Stripe
+ * failure never undoes the cancellation: the row is marked `failed`, and
+ * `retryRefunds` sends it again with the same idempotency key, so a refund that
+ * actually went through is never paid twice.
+ *
+ * Who may act is the caller's job (property access for hosts, ownership for
+ * guests). This module trusts `actor` and records it.
+ */
+import {
+  allowedActions,
+  checkInClosesAt,
+  type BookingAction,
+  type BookingStatus,
+  type CancellationTier,
+  type NightValue,
+  type RefundEvent,
+  type RefundResult,
+} from "@openbookings/pricing";
+import { getPool, withTransaction } from "../index";
+// Imported from the package root for the pool only; the root does not import
+// this module back (apps use "@openbookings/db/booking-lifecycle").
+import type { Queryable } from "../reservation-policy";
+import {
+  planCancellation,
+  planEarlyDeparture,
+  planGoodwill,
+  roomPaid,
+  type PlanError,
+  type PlannedRefund,
+  type RefundReason,
+  type RoomState,
+} from "./plan";
+
+export * from "./plan";
+
+export type RefundFn = (i: {
+  paymentIntentId: string;
+  stripeAccountId: string;
+  amountCents: number;
+  idempotencyKey: string;
+  metadata: Record<string, string>;
+}) => Promise<{ id: string; status: string }>;
+
+export type LifecycleDb = Queryable & {
+  transaction: <T>(fn: (tx: Queryable) => Promise<T>) => Promise<T>;
+};
+
+export type LifecycleDeps = {
+  refund: RefundFn;
+  now?: () => Date;
+  /** Defaults to the shared pool. Tests pass a client inside their own transaction. */
+  db?: LifecycleDb;
+};
+
+export type Actor = { kind: "guest" | "host"; userId: string };
+
+export type RefundStatus = "pending" | "succeeded" | "failed";
+
+export type LifecycleResult =
+  | { ok: true; refunds: { reservationId: string | null; amount: number; status: RefundStatus }[] }
+  | { ok: false; error: PlanError };
+
+const defaultDb: LifecycleDb = {
+  query: (text, values) => getPool().query(text, values),
+  transaction: (fn) => withTransaction((client) => fn(client)),
+};
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+
+type BookingRow = {
+  id: string;
+  status: BookingStatus;
+  user_id: string;
+  check_in_date: string;
+  check_out_date: string;
+  confirmed_at: Date | null;
+  departed_early_on: string | null;
+  stripe_payment_intent_id: string | null;
+  timezone: string;
+  check_in_until: string | null;
+  stripe_account_id: string | null;
+};
+
+type ReservationRow = {
+  id: string;
+  cancellation_tier: CancellationTier | null;
+  check_in_at: Date | null;
+  grace_until: Date | null;
+  full_refund_until: Date | null;
+  partial_refund_until: Date | null;
+  policy_version: string | null;
+  nights: NightValue[];
+  cancelled_at: Date | null;
+  refunded: number;
+};
+
+export type BookingState = {
+  booking: BookingRow;
+  rooms: RoomState[];
+  /** What may happen now. Empty for a booking without a policy snapshot (still pending). */
+  actions: BookingAction[];
+  /** Refunded on the whole booking so far, euros (rows that did not fail). */
+  refunded: number;
+};
+
+/** Read a booking with its rooms and what may happen to it at `now`. `lock` = FOR UPDATE. */
+export async function loadBookingState(
+  db: Queryable,
+  bookingId: string,
+  now: Date,
+  lock = false,
+): Promise<BookingState | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(bookingId)) return null;
+  const { rows: bookings } = await db.query(
+    `SELECT b.id, b.status, b.user_id, b.check_in_date::text AS check_in_date,
+            b.check_out_date::text AS check_out_date, b.confirmed_at,
+            b.departed_early_on::text AS departed_early_on, b.stripe_payment_intent_id,
+            p.timezone, to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.stripe_account_id
+     FROM bookings b JOIN properties p ON p.id = b.hotel_id
+     WHERE b.id = $1 ${lock ? "FOR UPDATE OF b" : ""}`,
+    [bookingId],
+  );
+  const booking = bookings[0] as BookingRow | undefined;
+  if (!booking) return null;
+
+  const { rows } = await db.query(
+    `SELECT res.id, res.cancellation_tier, res.check_in_at, res.grace_until, res.full_refund_until,
+            res.partial_refund_until, res.policy_version, res.nights, res.cancelled_at,
+            COALESCE((SELECT SUM(rf.amount) FROM refunds rf
+                      WHERE rf.reservation_id = res.id AND rf.status <> 'failed'), 0)::float8 AS refunded
+     FROM reservations res WHERE res.booking_id = $1
+     ORDER BY res.created_at, res.id`,
+    [bookingId],
+  );
+  const reservations = rows as ReservationRow[];
+
+  const { rows: totals } = await db.query(
+    `SELECT COALESCE(SUM(amount), 0)::float8 AS refunded FROM refunds
+     WHERE booking_id = $1 AND status <> 'failed'`,
+    [bookingId],
+  );
+
+  const snapshotted = reservations.length > 0 && reservations.every((r) => r.cancellation_tier && r.check_in_at);
+  const rooms: RoomState[] = snapshotted
+    ? reservations.map((r) => ({
+        reservationId: r.id,
+        snapshot: {
+          tier: r.cancellation_tier as CancellationTier,
+          confirmedAt: booking.confirmed_at ?? (r.check_in_at as Date),
+          checkInAt: r.check_in_at as Date,
+          graceUntil: r.grace_until,
+          fullRefundUntil: r.full_refund_until,
+          partialRefundUntil: r.partial_refund_until,
+          policyVersion: r.policy_version ?? "",
+        },
+        nights: r.nights,
+        cancelledAt: r.cancelled_at,
+        refunded: Number(r.refunded),
+      }))
+    : [];
+
+  const actions = (snapshotted
+    ? allowedActions({
+        status: booking.status,
+        checkInAt: rooms[0].snapshot.checkInAt,
+        checkInClosesAt: checkInClosesAt({
+          arrivalDate: booking.check_in_date,
+          checkInUntil: booking.check_in_until,
+          timeZone: booking.timezone,
+        }),
+        checkOutDate: booking.check_out_date,
+        timeZone: booking.timezone,
+        now,
+      })
+    : []
+  ).filter((a) => !(a === "record_early_departure" && booking.departed_early_on));
+
+  return { booking, rooms, actions, refunded: Number((totals[0] as { refunded: number }).refunded) };
+}
+
+// ── Writing ───────────────────────────────────────────────────────────────────
+
+type RefundRow = { id: string; reservationId: string | null; amount: number; key: string };
+
+async function insertRefund(
+  tx: Queryable,
+  bookingId: string,
+  actor: Actor,
+  r: { reservationId: string | null; reason: RefundReason; accommodation: number; touristTax: number; key: string; breakdown: unknown },
+): Promise<RefundRow> {
+  const { rows } = await tx.query(
+    `INSERT INTO refunds
+       (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount,
+        breakdown, idempotency_key, created_by)
+     VALUES ($1, $2, $3::refund_reason, $4, $5, $4::numeric + $5::numeric, $6::jsonb, $7, $8)
+     RETURNING id, amount::float8 AS amount`,
+    [bookingId, r.reservationId, r.reason, r.accommodation, r.touristTax, JSON.stringify(r.breakdown), r.key, actor.userId],
+  );
+  const row = rows[0] as { id: string; amount: number };
+  return { id: row.id, reservationId: r.reservationId, amount: row.amount, key: r.key };
+}
+
+async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, planned: PlannedRefund[]) {
+  const out: RefundRow[] = [];
+  for (const p of planned) {
+    if (p.refund.total <= 0) continue;
+    out.push(
+      await insertRefund(tx, bookingId, actor, {
+        reservationId: p.reservationId,
+        reason: p.reason,
+        accommodation: p.refund.accommodation,
+        touristTax: p.refund.touristTax,
+        key: `refund:${p.reservationId}:${p.reason}`,
+        breakdown: p.result satisfies RefundResult,
+      }),
+    );
+  }
+  return out;
+}
+
+/**
+ * Send each refund row to Stripe with its own idempotency key and record the
+ * outcome. Rows stay `pending` when the booking has no payment to refund
+ * (a seeded booking), so nothing pretends money moved.
+ */
+async function sendRefunds(deps: LifecycleDeps, db: Queryable, booking: BookingRow, rows: RefundRow[]) {
+  const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
+  for (const row of rows) {
+    if (!booking.stripe_payment_intent_id || !booking.stripe_account_id) {
+      results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
+      continue;
+    }
+    try {
+      const refund = await deps.refund({
+        paymentIntentId: booking.stripe_payment_intent_id,
+        stripeAccountId: booking.stripe_account_id,
+        amountCents: Math.round(row.amount * 100),
+        idempotencyKey: row.key,
+        metadata: { bookingId: booking.id, refundId: row.id },
+      });
+      await db.query(`UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2`, [refund.id, row.id]);
+      results.push({ reservationId: row.reservationId, amount: row.amount, status: "succeeded" });
+    } catch (error) {
+      console.error("[refund] Stripe refund failed", { refundId: row.id, error });
+      await db.query(`UPDATE refunds SET status = 'failed' WHERE id = $1`, [row.id]);
+      results.push({ reservationId: row.reservationId, amount: row.amount, status: "failed" });
+    }
+  }
+  return results;
+}
+
+function context(deps: LifecycleDeps) {
+  return { db: deps.db ?? defaultDb, now: deps.now?.() ?? new Date() };
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+/** What a refund would be right now, per active room. Read-only. */
+export async function previewRefund(
+  i: { bookingId: string; reservationIds: string[] | null; event?: RefundEvent },
+  deps: Omit<LifecycleDeps, "refund"> = {},
+): Promise<{ perRoom: { reservationId: string; result: RefundResult; refund: PlannedRefund["refund"] }[]; total: number } | null> {
+  const { db, now } = context({ ...deps, refund: async () => ({ id: "", status: "" }) });
+  const state = await loadBookingState(db, i.bookingId, now);
+  if (!state || state.rooms.length === 0) return null;
+
+  const event = i.event ?? { kind: "guest_cancellation", at: now };
+  const plan =
+    event.kind === "early_departure"
+      ? planEarlyDeparture({ rooms: state.rooms, lastNightStayed: event.lastNightStayed })
+      : planCancellation({
+          rooms: state.rooms,
+          reservationIds: i.reservationIds,
+          actor: event.kind === "guest_cancellation" ? "guest" : "host",
+          now: event.kind === "guest_cancellation" ? event.at : now,
+        });
+  if (!plan.ok) return null;
+  return {
+    perRoom: plan.rooms.map((r) => ({ reservationId: r.reservationId, result: r.result, refund: r.refund })),
+    total: plan.totalCents / 100,
+  };
+}
+
+/** Cancel some rooms, or every active one (`reservationIds: null`). */
+export async function cancelRooms(
+  deps: LifecycleDeps,
+  i: { bookingId: string; actor: Actor; reservationIds: string[] | null },
+): Promise<LifecycleResult> {
+  const { db, now } = context(deps);
+  const done = await db.transaction(async (tx) => {
+    const state = await loadBookingState(tx, i.bookingId, now, true);
+    if (!state) return { ok: false as const, error: "not_found" as const };
+    if (!state.actions.includes("cancel")) return { ok: false as const, error: "not_allowed" as const };
+
+    const plan = planCancellation({ rooms: state.rooms, reservationIds: i.reservationIds, actor: i.actor.kind, now });
+    if (!plan.ok) return plan;
+
+    await tx.query(`UPDATE reservations SET cancelled_at = $1 WHERE id = ANY($2::uuid[])`, [
+      now,
+      plan.rooms.map((r) => r.reservationId),
+    ]);
+    if (plan.cancelsBooking) {
+      await tx.query(
+        `UPDATE bookings SET status = 'cancelled', cancelled_at = $2, cancellation_reason = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [i.bookingId, now, i.actor.kind === "host" ? "Cancelled by the host" : "Cancelled by the guest"],
+      );
+    }
+    const rows = await insertPlanned(tx, i.bookingId, i.actor, plan.rooms);
+    return { ok: true as const, booking: state.booking, rows };
+  });
+  if (!done.ok) return done;
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+}
+
+async function setStatus(
+  deps: LifecycleDeps,
+  i: { bookingId: string; actor: Actor },
+  action: BookingAction,
+  update: string,
+): Promise<LifecycleResult> {
+  const { db, now } = context(deps);
+  return db.transaction(async (tx) => {
+    const state = await loadBookingState(tx, i.bookingId, now, true);
+    if (!state) return { ok: false, error: "not_found" };
+    if (!state.actions.includes(action)) return { ok: false, error: "not_allowed" };
+    await tx.query(update, [i.bookingId, now]);
+    return { ok: true, refunds: [] };
+  });
+}
+
+/** The guest arrived. */
+export function markCheckedIn(deps: LifecycleDeps, i: { bookingId: string; actor: Actor }) {
+  return setStatus(deps, i, "mark_checked_in", `UPDATE bookings SET status = 'checked_in', updated_at = $2 WHERE id = $1`);
+}
+
+/** The guest never came. Nothing is refunded, tourist tax included (decided 2026-10-30). */
+export function markNoShow(deps: LifecycleDeps, i: { bookingId: string; actor: Actor }) {
+  return setStatus(
+    deps,
+    i,
+    "mark_no_show",
+    `UPDATE bookings SET status = 'no_show', no_show_reported_at = $2, updated_at = NOW() WHERE id = $1`,
+  );
+}
+
+/** The guest left after `lastNightStayed`; each room is refunded by its tier's early-departure rule. */
+export async function recordEarlyDeparture(
+  deps: LifecycleDeps,
+  i: { bookingId: string; actor: Actor; lastNightStayed: string },
+): Promise<LifecycleResult> {
+  const { db, now } = context(deps);
+  const done = await db.transaction(async (tx) => {
+    const state = await loadBookingState(tx, i.bookingId, now, true);
+    if (!state) return { ok: false as const, error: "not_found" as const };
+    if (!state.actions.includes("record_early_departure")) return { ok: false as const, error: "not_allowed" as const };
+
+    const plan = planEarlyDeparture({ rooms: state.rooms, lastNightStayed: i.lastNightStayed });
+    if (!plan.ok) return plan;
+
+    await tx.query(
+      `UPDATE bookings SET departed_early_on = $2::date, status = 'checked_in', updated_at = NOW() WHERE id = $1`,
+      [i.bookingId, i.lastNightStayed],
+    );
+    const rows = await insertPlanned(tx, i.bookingId, i.actor, plan.rooms);
+    return { ok: true as const, booking: state.booking, rows };
+  });
+  if (!done.ok) return done;
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+}
+
+/** The host refunds an amount of their choosing, capped at what is left unrefunded. Hosts only. */
+export async function issueGoodwillRefund(
+  deps: LifecycleDeps,
+  i: { bookingId: string; actor: Actor; amount: number },
+): Promise<LifecycleResult> {
+  if (i.actor.kind !== "host") return { ok: false, error: "not_allowed" };
+  const { db, now } = context(deps);
+  const done = await db.transaction(async (tx) => {
+    const state = await loadBookingState(tx, i.bookingId, now, true);
+    if (!state) return { ok: false as const, error: "not_found" as const };
+    if (!state.actions.includes("goodwill_refund")) return { ok: false as const, error: "not_allowed" as const };
+
+    const paid = state.rooms.reduce((sum, r) => sum + Math.round(roomPaid(r) * 100), 0) / 100;
+    const plan = planGoodwill({ paid, refunded: state.refunded, amount: i.amount });
+    if (!plan.ok) return plan;
+
+    const { rows: count } = await tx.query(
+      `SELECT COUNT(*)::int AS n FROM refunds WHERE booking_id = $1 AND reason = 'goodwill'`,
+      [i.bookingId],
+    );
+    const row = await insertRefund(tx, i.bookingId, i.actor, {
+      reservationId: null,
+      reason: "goodwill",
+      accommodation: plan.amount,
+      touristTax: 0,
+      key: `refund:${i.bookingId}:goodwill:${(count[0] as { n: number }).n}`,
+      breakdown: { requested: i.amount, capped: plan.amount },
+    });
+    return { ok: true as const, booking: state.booking, rows: [row] };
+  });
+  if (!done.ok) return done;
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+}
+
+/** Send refunds that failed, or never reached Stripe, again — with their original keys. */
+export async function retryRefunds(deps: LifecycleDeps, i: { bookingId: string }): Promise<LifecycleResult> {
+  const { db, now } = context(deps);
+  const state = await loadBookingState(db, i.bookingId, now);
+  if (!state) return { ok: false, error: "not_found" };
+  const { rows } = await db.query(
+    `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount, idempotency_key AS key
+     FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') ORDER BY created_at`,
+    [i.bookingId],
+  );
+  if (rows.length === 0) return { ok: false, error: "nothing_to_refund" };
+  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[]) };
+}

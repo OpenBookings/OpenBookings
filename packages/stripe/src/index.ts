@@ -13,3 +13,4 @@ export {
 export { applicationFeeCents, bookingSplitCents, commissionRefundDue } from './payments/fees';
 export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
 export { constructWebhookEvent, type StripeEvent } from './webhooks';
+export { buildRefundParams, refundPayment, type RefundPaymentInput } from './payments/refund';

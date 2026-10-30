@@ -78,7 +78,7 @@ export class NotFoundError extends Error {
  * checkout, and archiving or shrinking a room underneath them is the failure
  * this guard exists for.
  */
-const HOLDING_STATUSES = `('pending', 'confirmed', 'completed')`;
+const HOLDING_STATUSES = `('pending', 'confirmed', 'checked_in', 'completed')`;
 const PROPERTY_TODAY = `(now() AT TIME ZONE p.timezone)::date`;
 
 function fieldErrors(error: z.ZodError): Record<string, string[]> {
@@ -144,6 +144,7 @@ async function futureRoomBookings(roomId: string, deps: Pick<MutationDeps, "quer
      JOIN properties p ON p.id = r.property_id
      WHERE res.room_id = $1
        AND b.status IN ${HOLDING_STATUSES}
+       AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}`,
     [roomId],
   );
@@ -307,6 +308,7 @@ async function peakFutureUnits(roomId: string, deps: Pick<MutationDeps, "queryOn
      ) AS d
      WHERE res.room_id = $1
        AND b.status IN ${HOLDING_STATUSES}
+       AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}
      GROUP BY d
      ORDER BY units DESC, d
@@ -720,6 +722,7 @@ export async function archiveRate(
      JOIN properties p ON p.id = r.property_id
      WHERE res.rate_plan_id = $1
        AND b.status IN ${HOLDING_STATUSES}
+       AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}`,
     [plan.id],
   );

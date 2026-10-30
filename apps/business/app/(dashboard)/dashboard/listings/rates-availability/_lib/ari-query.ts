@@ -157,8 +157,12 @@ booked AS (
   FROM reservations res
   JOIN bookings b ON b.id = res.booking_id
   JOIN scope_rooms sr ON sr.id = res.room_id
-  JOIN dates d ON d.d >= b.check_in_date AND d.d < b.check_out_date
-  WHERE b.status IN ('confirmed', 'completed')
+  -- A guest who left early frees the nights after the last one they stayed.
+  JOIN dates d ON d.d >= b.check_in_date
+              AND d.d < LEAST(b.check_out_date, COALESCE(b.departed_early_on + 1, b.check_out_date))
+  -- Rooms cancel one by one (0027): a cancelled room holds nothing.
+  WHERE b.status IN ('confirmed', 'checked_in', 'completed')
+    AND res.cancelled_at IS NULL
   GROUP BY res.room_id, d.d
 )
 SELECT
