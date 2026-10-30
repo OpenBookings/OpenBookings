@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from './cancellation'
 import { calculateTouristTax, type TouristTaxResult, type TouristTaxRule } from "./tourist-tax";
 
 // ─────────────────────────────────────────────
@@ -50,7 +51,10 @@ export interface RoomRow {
   rate_plan_name: string
   currency: string
   is_refundable: boolean
-  cancellation_policy: string
+  /** The property's base cancellation tier and arrival details, for the free-cancellation tag. */
+  cancellation_tier?: PropertyCancellationTier
+  timezone?: string
+  check_in_time?: string
   min_stay: number
   max_stay: number | null
   nights: Night[]

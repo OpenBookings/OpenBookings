@@ -1,3 +1,5 @@
+import type { CancellationTier } from "@openbookings/pricing";
+
 export const NAV_SECTIONS = [
   { id: "overview", label: "Overview" },
   { id: "rooms",    label: "Rooms" },
@@ -21,9 +23,13 @@ export type DbRatePlan = {
   name: string;
   bar: number;
   currency: string;
+  /** true = follows the property's cancellation tier; false = Non-refundable. */
   is_refundable: boolean;
-  cancellation_policy: string | null;
   meal_plan: string | null;
+  /** Set at render time by withCancellationTerms. */
+  cancellation_tier?: CancellationTier;
+  /** Non-refundable only: how much less a night costs than the cheapest refundable rate. */
+  saving_vs_refundable?: number;
   /**
    * What the guest pays for one night, all-in: `bar` plus tourist tax. Set at
    * render time by withAllInPrices; absent on demo data.

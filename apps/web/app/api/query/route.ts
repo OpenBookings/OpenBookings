@@ -1,6 +1,6 @@
 import type { HotelSearchInput } from "@/types/hotel";
 import { getDb, sql } from "@openbookings/db";
-import { resolveSearchResults } from "@openbookings/pricing";
+import { freeCancellationUntil, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
 import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -137,7 +137,9 @@ candidate_rooms AS (
     rp.bar,
     rp.currency,
     rp.is_refundable,
-    rp.cancellation_policy,
+    p.cancellation_tier,
+    p.timezone,
+    to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     rp.min_stay,
     rp.max_stay
   FROM properties p
@@ -146,11 +148,13 @@ candidate_rooms AS (
    AND r.is_active
   CROSS JOIN user_input u
   JOIN LATERAL (
-    SELECT id, name, bar, currency, is_refundable, cancellation_policy, min_stay, max_stay
+    SELECT id, name, bar, currency, is_refundable, min_stay, max_stay
     FROM rate_plans
     WHERE room_id = r.id
       AND is_active
-    ORDER BY created_at DESC
+    -- A search card shows one rate, and a Non-refundable rate may only be
+    -- offered beside a refundable one (Annex B B.4.3), so prefer refundable.
+    ORDER BY is_refundable DESC, created_at DESC
     LIMIT 1
   ) rp ON TRUE
   WHERE p.is_active
@@ -250,7 +254,9 @@ SELECT
   cr.rate_plan_name,
   cr.currency,
   cr.is_refundable,
-  cr.cancellation_policy,
+  cr.cancellation_tier,
+  cr.timezone,
+  cr.check_in_time,
   cr.min_stay,
   cr.max_stay,
   rn.nights,
@@ -294,10 +300,23 @@ async function runSearch(input: HotelSearchInput) {
       typeof row.tourist_tax_rules === 'string' ? JSON.parse(row.tourist_tax_rules) : row.tourist_tax_rules,
   })) as RoomRow[]
   
+  const now = new Date()
   return resolveSearchResults(roomRows, {
     adults: input.adults,
     children,
     arrivalDate: input.checkin,
+  }).map(result => {
+    const until =
+      result.cancellation_tier && result.timezone
+        ? freeCancellationUntil({
+            tier: snapshotTier(result.cancellation_tier, result.is_refundable),
+            timeZone: result.timezone,
+            checkInTime: result.check_in_time ?? null,
+            arrivalDate: input.checkin,
+            now,
+          })
+        : null
+    return { ...result, free_cancellation_until: until ? until.toISOString() : null }
   })
 }
 

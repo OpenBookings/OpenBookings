@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getHotelPage } from "@/lib/hotel-page-data";
-import { withAllInPrices } from "@/lib/listing-prices";
+import { withAllInPrices, withCancellationTerms } from "@/lib/listing-prices";
 import type { DbAmenityCategory } from "./_components/constants";
 
 import { NavWrapper }       from "./_components/NavWrapper";
@@ -26,10 +26,10 @@ export default async function HotelPage({
 
   const { hotel, amenities: rawAmenities } = page;
   // All-in per night, tourist tax included, priced for today.
-  const rooms = withAllInPrices(
-    page.rooms,
-    page.touristTaxRules ?? [],
-    new Date().toISOString().slice(0, 10),
+  // Non-refundable rates that are not at least 10% cheaper are left out.
+  const rooms = withCancellationTerms(
+    withAllInPrices(page.rooms, page.touristTaxRules ?? [], new Date().toISOString().slice(0, 10)),
+    hotel.cancellation_tier ?? "standard",
   );
 
   const gallery = hotel.gallery_images ?? [];
@@ -59,7 +59,10 @@ export default async function HotelPage({
 
       <OverviewSection hotel={hotel} amenityCategories={amenityCategories} />
       <RoomsSection rooms={rooms} ratesConfirmed={hotel.rates_confirmed === true} />
-      <PoliciesSection hotel={hotel} />
+      <PoliciesSection
+        hotel={hotel}
+        hasNonRefundable={rooms.some((room) => room.rate_plans.some((plan) => !plan.is_refundable))}
+      />
       <LocationSection hotel={hotel} />
       <FootnoteSection hotel={hotel} />
 

@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from "@openbookings/pricing";
 import { sql } from "@openbookings/db";
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 
@@ -48,7 +49,8 @@ export interface HotelPageData {
   cta_body: string | null;
   fine_print: string[] | null;
   reception_24h: boolean | null;
-  free_cancellation_days: number | null;
+  /** Base tier for the property's refundable rates (0027). */
+  cancellation_tier: PropertyCancellationTier;
   prepayment_required: boolean | null;
   children_welcome: boolean | null;
   min_check_in_age: number | null;
@@ -105,9 +107,10 @@ export function buildHeroQuery(slug: string) {
     to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
+    p.cancellation_tier,
     c.overview_headline, c.overview_description, c.location_about,
     c.cta_headline, c.cta_body, c.fine_print,
-    c.reception_24h, c.free_cancellation_days, c.prepayment_required,
+    c.reception_24h, c.prepayment_required,
     c.children_welcome, c.min_check_in_age, c.cot_policy, c.cot_fee,
     c.extra_bed_fee, c.pets_allowed,
     c.legal_company_name, c.contact_email, c.contact_phone,

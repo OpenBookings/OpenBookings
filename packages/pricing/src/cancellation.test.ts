@@ -3,6 +3,7 @@ import {
   allowedActions,
   buildPolicySnapshot,
   checkInClosesAt,
+  freeCancellationUntil,
   calculateRefund,
   localTimeToUtc,
   nonRefundableQualifies,
@@ -374,4 +375,22 @@ describe("allowedActions", () => {
       expect(allowedActions({ ...base, status, now: at("2026-11-08T12:00:00Z") })).toEqual([]);
     });
   }
+});
+
+describe("freeCancellationUntil", () => {
+  const stay = { timeZone: "Europe/Amsterdam", checkInTime: "15:00", arrivalDate: ARRIVAL };
+
+  test("booking today, a refundable rate still has its free window", () => {
+    expect(
+      freeCancellationUntil({ ...stay, tier: "limited", now: new Date("2026-10-01T10:00:00Z") })?.toISOString(),
+    ).toBe("2026-10-27T14:00:00.000Z");
+  });
+
+  test("once the window has passed there is no free cancellation for these dates", () => {
+    expect(freeCancellationUntil({ ...stay, tier: "limited", now: new Date("2026-11-05T10:00:00Z") })).toBeNull();
+  });
+
+  test("Non-refundable never has one", () => {
+    expect(freeCancellationUntil({ ...stay, tier: "non_refundable", now: new Date("2026-10-01T10:00:00Z") })).toBeNull();
+  });
 });

@@ -330,3 +330,20 @@ export function allowedActions(i: {
   }
   return actions;
 }
+
+/**
+ * For a stay being browsed or booked right now: until when it could still be
+ * cancelled for free, or null when it can't (Non-refundable, or the free
+ * window for these dates has already passed). The 24h grace period is left
+ * out on purpose: "free cancellation" on a listing means the tier's window.
+ */
+export function freeCancellationUntil(i: {
+  tier: CancellationTier;
+  timeZone: string;
+  checkInTime: string | null;
+  arrivalDate: string;
+  now: Date;
+}): Date | null {
+  const s = buildPolicySnapshot({ ...i, confirmedAt: i.now });
+  return s.fullRefundUntil && s.fullRefundUntil.getTime() > i.now.getTime() ? s.fullRefundUntil : null;
+}
