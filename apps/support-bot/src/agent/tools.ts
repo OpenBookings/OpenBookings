@@ -6,6 +6,7 @@ import {
 } from "@openbookings/db";
 import { getPaymentSummary } from "@openbookings/stripe";
 import { trace } from "../trace";
+import { policyView } from "../policy-view";
 
 /**
  * Tool registry for the Mistral agent: one Zod schema per tool's arguments,
@@ -83,25 +84,6 @@ async function findOwnedReservation(
   return r;
 }
 
-export type PolicyTier = "Flexible" | "Moderate" | "Limited" | "Firm";
-
-/**
- * Rate plans store cancellation policy as host-written free text plus an
- * is_refundable flag; the four marketplace tiers are derived: explicit tier
- * word in the text wins, otherwise refundability decides the extreme.
- */
-export function classifyPolicyTier(
-  isRefundable: boolean,
-  policyText: string | null,
-): PolicyTier {
-  const text = policyText ?? "";
-  if (/\bflexible\b/i.test(text)) return "Flexible";
-  if (/\bmoderate\b/i.test(text)) return "Moderate";
-  if (/\blimited\b/i.test(text)) return "Limited";
-  if (/\bfirm\b|non.?refundable|no refunds?\b/i.test(text)) return "Firm";
-  return isRefundable ? "Flexible" : "Firm";
-}
-
 function reservationView(r: SupportReservation) {
   return {
     booking_reference: r.booking_id,
@@ -122,10 +104,7 @@ function reservationView(r: SupportReservation) {
       children: room.children,
       nights: room.total_nights,
       price_per_night_cents: room.price_per_night,
-      cancellation_policy_tier: classifyPolicyTier(room.is_refundable, room.cancellation_policy),
-      cancellation_policy_terms:
-        room.cancellation_policy ??
-        (room.is_refundable ? "Free cancellation" : "Non-refundable"),
+      cancellation: policyView(room, r.timezone, r.confirmed_at, new Date()),
     })),
   };
 }
@@ -202,7 +181,7 @@ export const TOOLS = {
   },
   get_cancellation_policy: {
     description:
-      "Get the cancellation policy that applies to one of this guest's bookings: the tier (Flexible / Moderate / Limited / Firm) and its terms, per room, for that booking's dates.",
+      "Get the cancellation policy that applies to one of this guest's bookings, per room: the tier (Flex / Standard / Limited / Non-refundable), its rule, the exact deadlines for that booking in the property's local time, and the no-show rule (a no-show gets nothing back).",
     schema: getCancellationPolicyArgs,
     execute: async (args: z.infer<typeof getCancellationPolicyArgs>, ctx: ToolContext) => {
       const guestEmail = identifiedGuest(ctx);
@@ -217,10 +196,7 @@ export const TOOLS = {
         policies: r.rooms.map((room) => ({
           room: room.room_name,
           rate_plan: room.rate_plan_name,
-          tier: classifyPolicyTier(room.is_refundable, room.cancellation_policy),
-          terms:
-            room.cancellation_policy ??
-            (room.is_refundable ? "Free cancellation" : "Non-refundable"),
+          ...policyView(room, r.timezone, r.confirmed_at, new Date()),
         })),
       };
     },

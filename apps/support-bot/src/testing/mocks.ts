@@ -79,6 +79,8 @@ function reservationRow(fake: FakeReservation): SupportReservation {
     check_out_date: "2026-09-03",
     check_in_time: "15:00:00",
     check_out_time: "11:00:00",
+    timezone: "Europe/Amsterdam",
+    confirmed_at: "2026-08-01T00:00:00+00:00",
     total_amount: 32500,
     currency: "eur",
     stripe_payment_intent_id: "pi_test",
@@ -94,8 +96,12 @@ function reservationRow(fake: FakeReservation): SupportReservation {
       {
         room_name: "Suite",
         rate_plan_name: "Standard",
-        is_refundable: true,
-        cancellation_policy: "Flexible",
+        cancellation_tier: "standard",
+        check_in_at: "2026-09-01T13:00:00+00:00",
+        grace_until: null,
+        full_refund_until: "2026-08-27T13:00:00+00:00",
+        partial_refund_until: null,
+        cancelled_at: null,
         adults: 2,
         children: 0,
         total_nights: 2,
@@ -107,6 +113,8 @@ function reservationRow(fake: FakeReservation): SupportReservation {
 }
 
 mock.module("@openbookings/db", () => ({
+  // The real SQL fragment: host lookups interpolate it into their statement.
+  ROOM_POLICY_JSON: "'cancellation_tier', 'standard'",
   // Host lookups (src/host/queries.ts) go through raw SQL; tests script the
   // rows and assert the scoping in the statement text.
   query: async (text: string, values: unknown[] = []) => {

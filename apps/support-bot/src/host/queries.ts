@@ -1,5 +1,5 @@
 import { propertyReadAccessSql } from "@openbookings/authz";
-import { query } from "@openbookings/db";
+import { query, ROOM_POLICY_JSON, type SupportRoomPolicy } from "@openbookings/db";
 
 /**
  * Booking lookups for host tickets. Every query is scoped in SQL to the
@@ -15,8 +15,7 @@ import { query } from "@openbookings/db";
 export type HostBookingRoom = {
   room_name: string;
   rate_plan_name: string;
-  is_refundable: boolean;
-  cancellation_policy: string | null;
+} & SupportRoomPolicy & {
   adults: number;
   children: number;
   total_nights: number;
@@ -38,6 +37,8 @@ export type HostBooking = {
   created_at: string;
   guest_name: string | null;
   property_name: string;
+  timezone: string;
+  confirmed_at: string | null;
   rooms: HostBookingRoom[];
 };
 
@@ -57,13 +58,14 @@ const SELECT = `
     b.created_at::text AS created_at,
     u.name AS guest_name,
     p.name AS property_name,
+    p.timezone,
+    b.confirmed_at::text AS confirmed_at,
     COALESCE(
       (
         SELECT json_agg(json_build_object(
           'room_name', rm.name,
           'rate_plan_name', rp.name,
-          'is_refundable', rp.is_refundable,
-          'cancellation_policy', rp.cancellation_policy,
+          ${ROOM_POLICY_JSON},
           'adults', r.adults,
           'children', r.children,
           'total_nights', r.total_nights
