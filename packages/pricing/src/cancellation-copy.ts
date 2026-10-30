@@ -26,6 +26,14 @@ const AFTER_DEADLINE: Record<CancellationTier, string> = {
   non_refundable: "This rate is non-refundable.",
 };
 
+/** The same rule when no earlier deadline is left to say "after that" to. */
+const NOW_APPLIES: Record<CancellationTier, string> = {
+  flex: "If you cancel, the first night is charged and the other nights are refunded.",
+  standard: "If you cancel, the first night and half of the other nights are charged.",
+  limited: "If you cancel, there is no refund.",
+  non_refundable: "This rate is non-refundable.",
+};
+
 export const TOURIST_TAX_LINE = "Tourist tax is refunded for nights you don't stay.";
 export const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
 
@@ -68,6 +76,6 @@ export function describePolicy(s: PolicySnapshot, timeZone: string, now: Date): 
   if (s.tier === "limited" && future(s.partialRefundUntil)) {
     lines.push(`50% refund if you cancel by ${at(s.partialRefundUntil)}.`);
   }
-  lines.push(AFTER_DEADLINE[s.tier], TOURIST_TAX_LINE, NO_SHOW_LINE);
+  lines.push(lines.length > 0 ? AFTER_DEADLINE[s.tier] : NOW_APPLIES[s.tier], TOURIST_TAX_LINE, NO_SHOW_LINE);
   return lines;
 }

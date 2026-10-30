@@ -38,8 +38,12 @@ export type TripSummaryProps = {
   nightsLabel: string;
   guestsLabel: string;
 
-  cancellationPolicy: string;
-  freeCancellationLabel: string | null;
+  /** "Flex", "Non-refundable", ... */
+  cancellationTierLabel: string;
+  /** The policy as sentences with exact local deadlines, most urgent first. */
+  policyLines: string[];
+  /** A Non-refundable rate: the guest confirms it before the card form shows. */
+  requiresNonRefundableConsent: boolean;
 };
 
 /* ─────────────────────────── identity ─────────────────────────── */
@@ -305,14 +309,19 @@ function Ledger() {
  * The policy, quiet but not hidden.
  *
  * Previously an opaque white card, which read as a second thing to act on and
- * competed with the payment form. The date is stated outright — "until Wed 7
- * Oct" answers the question the sentence only describes.
+ * competed with the payment form. Deadlines are stated outright, as dates and
+ * times in the property's zone: "until Mon 9 Nov 2026, 15:00" answers the
+ * question a rule like "24 hours before check-in" only describes.
  */
 function PolicyFooter({
-  freeCancellationLabel,
+  cancellationTierLabel,
+  policyLines,
 }: {
-  freeCancellationLabel: string | null;
+  cancellationTierLabel: string;
+  policyLines: string[];
 }) {
+  const [headline, ...rest] = policyLines;
+  const freeWindow = headline?.startsWith('Free cancellation') || headline?.startsWith('Full refund');
   return (
     <footer>
       {/*
@@ -324,18 +333,27 @@ function PolicyFooter({
         guest actually has to act on, which the rule alone cannot tell them.
       */}
       <div className="rounded-2xl border border-[#a5b4f0]/25 bg-[#a5b4f0]/[0.07] p-5 backdrop-blur-md sm:p-6">
-        {freeCancellationLabel && (
-          <p className="flex items-start gap-3">
-            <ShieldCheck
-              className="mt-0.5 size-6 shrink-0 text-green-400"
-         
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-            <span className="font-serif text-xl leading-snug text-white sm:text-2xl">
-              Cancel free until {freeCancellationLabel}
-            </span>
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-white/55 uppercase">
+          Cancellation · {cancellationTierLabel}
+        </p>
+        {headline && (
+          <p className="mt-2 flex items-start gap-3">
+            {freeWindow && (
+              <ShieldCheck
+                className="mt-0.5 size-6 shrink-0 text-green-400"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+            )}
+            <span className="font-serif text-xl leading-snug text-white sm:text-2xl">{headline}</span>
           </p>
+        )}
+        {rest.length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm text-white/70">
+            {rest.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         )}
       </div>
 
@@ -403,9 +421,7 @@ export function TripSummary(props: TripSummaryProps) {
 
       <Ledger />
 
-      <PolicyFooter
-        freeCancellationLabel={props.freeCancellationLabel}
-      />
+      <PolicyFooter cancellationTierLabel={props.cancellationTierLabel} policyLines={props.policyLines} />
     </section>
   );
 }

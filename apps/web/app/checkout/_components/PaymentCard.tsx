@@ -31,6 +31,12 @@ export type PaymentCardProps = {
   expiresAt: number | null;
   /** Asks the parent for a brand new Session. */
   onRestart: () => void;
+  /**
+   * A Non-refundable rate (Annex B B.4.3): the guest ticks that they
+   * understand before the card form appears. The form has its own pay
+   * button, so holding the form back is the one reliable way to gate it.
+   */
+  requiresNonRefundableConsent?: boolean;
 };
 
 /** `setTimeout` treats delays past this as zero and fires immediately. */
@@ -42,8 +48,9 @@ function CardShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PaymentCard({ expiresAt, onRestart }: PaymentCardProps) {
+export function PaymentCard({ expiresAt, onRestart, requiresNonRefundableConsent = false }: PaymentCardProps) {
   const checkoutState = useCheckoutForm();
+  const [consented, setConsented] = useState(false);
   const [holdLapsed, setHoldLapsed] = useState(false);
   const [formFailed, setFormFailed] = useState(false);
 
@@ -190,14 +197,30 @@ export function PaymentCard({ expiresAt, onRestart }: PaymentCardProps) {
         alone: they are the two the guest's own device offers, and they cost
         nothing in trust.
       */}
-      <CheckoutForm
-        options={{
-          layout: 'expanded',
-          expressCheckout: { paymentMethods: { link: 'never', amazonPay: 'never' } },
-        }}
-        onConfirm={onConfirm}
-        onLoadError={onLoadError}
-      />
+      {requiresNonRefundableConsent && (
+        <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl border border-neutral-300 bg-white/80 p-4 text-sm text-neutral-800">
+          <input
+            type="checkbox"
+            checked={consented}
+            onChange={(e) => setConsented(e.target.checked)}
+            className="mt-0.5 size-4 accent-neutral-900"
+          />
+          <span>
+            <span className="font-medium">I understand this rate is non-refundable.</span>{' '}
+            If I cancel or don&apos;t show up, I won&apos;t get the room price back.
+          </span>
+        </label>
+      )}
+      {(!requiresNonRefundableConsent || consented) && (
+        <CheckoutForm
+          options={{
+            layout: 'expanded',
+            expressCheckout: { paymentMethods: { link: 'never', amazonPay: 'never' } },
+          }}
+          onConfirm={onConfirm}
+          onLoadError={onLoadError}
+        />
+      )}
       {/*
         Signed off under the pay button, where a payment page conventionally
         says who handled the money. Decorative to a screen reader — the fields

@@ -87,4 +87,15 @@ describe("describePolicy", () => {
       "Free cancellation until Mon 9 Nov 2026, 15:00.",
     );
   });
+
+  test("once every deadline has passed, it says what a cancellation costs now", () => {
+    const late = new Date("2026-11-09T20:00:00Z");
+    expect(describePolicy(snapshot("flex"), TZ, late)[0]).toBe(
+      "If you cancel, the first night is charged and the other nights are refunded.",
+    );
+    expect(describePolicy(snapshot("standard"), TZ, late)[0]).toBe(
+      "If you cancel, the first night and half of the other nights are charged.",
+    );
+    expect(describePolicy(snapshot("limited"), TZ, late)[0]).toBe("If you cancel, there is no refund.");
+  });
 });

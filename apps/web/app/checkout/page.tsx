@@ -7,7 +7,6 @@ import {
   formatDayNumber,
   formatGuests,
   formatNights,
-  formatShortDate,
   formatWeekdayMonth,
   getBookingSummary,
 } from './_lib/booking';
@@ -73,10 +72,9 @@ export default async function CheckoutPage() {
       checkOutTime={summary.checkOutTime}
       nightsLabel={formatNights(summary.nights)}
       guestsLabel={formatGuests(summary.adults, summary.children)}
-      cancellationPolicy={summary.cancellationPolicy}
-      freeCancellationLabel={
-        summary.freeCancellationUntil ? formatShortDate(summary.freeCancellationUntil) : null
-      }
+      cancellationTierLabel={summary.cancellation.tierLabel}
+      policyLines={summary.cancellation.policyLines}
+      requiresNonRefundableConsent={summary.cancellation.requiresNonRefundableConsent}
     />
   );
 }

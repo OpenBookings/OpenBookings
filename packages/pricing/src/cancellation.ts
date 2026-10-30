@@ -12,6 +12,8 @@
  * guest's favour.
  */
 
+import { touristTaxByNight, type TouristTaxRule } from "./tourist-tax";
+
 export const POLICY_VERSION = "annex-b-2026-10-30";
 
 /** What a property picks. Non-refundable is a type of rate, not a property setting. */
@@ -346,4 +348,37 @@ export function freeCancellationUntil(i: {
 }): Date | null {
   const s = buildPolicySnapshot({ ...i, confirmedAt: i.now });
   return s.fullRefundUntil && s.fullRefundUntil.getTime() > i.now.getTime() ? s.fullRefundUntil : null;
+}
+
+/**
+ * Everything a reserved room stores when its booking is confirmed: the policy
+ * snapshot, and each night's price and tourist tax. Refunds read only this.
+ */
+export function reservationPolicy(i: {
+  propertyTier: PropertyCancellationTier;
+  isRefundable: boolean;
+  timeZone: string;
+  checkInTime: string | null;
+  arrivalDate: string;
+  confirmedAt: Date;
+  nightPrices: { date: string; price: number }[];
+  touristTaxRules: TouristTaxRule[];
+  adults: number;
+  children: number;
+}): { snapshot: PolicySnapshot; nights: NightValue[] } {
+  const snapshot = buildPolicySnapshot({
+    tier: snapshotTier(i.propertyTier, i.isRefundable),
+    timeZone: i.timeZone,
+    checkInTime: i.checkInTime,
+    arrivalDate: i.arrivalDate,
+    confirmedAt: i.confirmedAt,
+  });
+  const tax = touristTaxByNight(i.touristTaxRules, {
+    nights: i.nightPrices,
+    adults: i.adults,
+    children: i.children,
+    // A reservation is one room.
+    rooms: 1,
+  });
+  return { snapshot, nights: i.nightPrices.map((n, idx) => ({ ...n, touristTax: tax[idx] })) };
 }

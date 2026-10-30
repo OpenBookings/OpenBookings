@@ -19,9 +19,21 @@
  */
 
 import { Pool } from "pg";
+import { confirmBookingPolicy } from "../src/reservation-policy";
 
 /** The demo booking, and the rate plan it is priced against. */
 export const DEMO_BOOKING_ID = "b0000000-0000-4000-8000-000000000001";
+/**
+ * A confirmed two-room booking for the cancellation screens (guest booking
+ * page, host reservations). Reset to a fresh confirmed state on every run,
+ * 30 days out, so its free-cancellation window is always open.
+ */
+export const DEMO_CONFIRMED_BOOKING_ID = "b0000000-0000-4000-8000-000000000011";
+const DEMO_CONFIRMED_RESERVATION_IDS = [
+  "b0000000-0000-4000-8000-000000000012",
+  "b0000000-0000-4000-8000-000000000013",
+];
+const CONFIRMED_NIGHTS = 3;
 const DEMO_RESERVATION_ID = "b0000000-0000-4000-8000-000000000002";
 const DEMO_RATE_PLAN_ID = "b0000000-0000-4000-8000-000000000003";
 
@@ -39,14 +51,6 @@ const CHILDREN = 0;
 const PRICE_PER_NIGHT = 185;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
 const BOOKING_FEE_RATE = 0.045;
-
-/**
- * The sentence the checkout page quotes verbatim. The 7 days here is the same
- * 7 as `FREE_CANCELLATION_DAYS` in `apps/web/app/checkout/_lib/booking.ts`,
- * which is what turns it into an actual date under the policy.
- */
-const CANCELLATION_POLICY =
-  "Free cancellation until 7 days before check-in. After that the first night is charged.";
 
 const ROOM_SUBTOTAL = PRICE_PER_NIGHT * NIGHTS;
 const BOOKING_FEE = Math.round(ROOM_SUBTOTAL * BOOKING_FEE_RATE);
@@ -71,25 +75,19 @@ async function main() {
     if (!roomExists) throw new Error(`Room ${ROOM_ID} is not on property ${PROPERTY_ID}`);
 
     // The Deluxe room shipped with no rate plan of its own, so the demo brings
-    // the one it is priced against. Refundable, with a policy the checkout page
-    // can actually quote — the existing plans all carry a null policy.
+    // the one it is priced against. Refundable: it follows the property's
+    // cancellation tier.
     await pool.query(
       `insert into rate_plans
-         (id, room_id, name, bar, currency, is_refundable, cancellation_policy,
+         (id, room_id, name, bar, currency, is_refundable,
           booking_fee_rate, min_stay, is_active)
-       values ($1, $2, 'Flexible', $3, 'EUR', true, $4, $5, 1, true)
+       values ($1, $2, 'Flexible', $3, 'EUR', true, $4, 1, true)
        on conflict (id) do update set
          bar = excluded.bar,
-         cancellation_policy = excluded.cancellation_policy,
+         is_refundable = true,
          booking_fee_rate = excluded.booking_fee_rate,
          updated_at = now()`,
-      [
-        DEMO_RATE_PLAN_ID,
-        ROOM_ID,
-        PRICE_PER_NIGHT,
-        CANCELLATION_POLICY,
-        BOOKING_FEE_RATE.toFixed(4),
-      ],
+      [DEMO_RATE_PLAN_ID, ROOM_ID, PRICE_PER_NIGHT, BOOKING_FEE_RATE.toFixed(4)],
     );
 
     // `pending` is the pre-payment state: the room is held, nothing is charged.
@@ -170,8 +168,60 @@ async function main() {
     console.log(
       `Seeded booking ${DEMO_BOOKING_ID}: ${NIGHTS} nights, ${ADULTS} adults, €${TOTAL} total (€${BOOKING_FEE} fee).`,
     );
+
+    await seedConfirmedBooking(pool, userId);
+    console.log(
+      `Seeded confirmed booking ${DEMO_CONFIRMED_BOOKING_ID}: 2 rooms × ${CONFIRMED_NIGHTS} nights, 30 days out.`,
+    );
   } finally {
     await pool.end();
+  }
+}
+
+/**
+ * The confirmed two-room booking, reset on every run: any cancellations,
+ * refunds and snapshot from a previous run are cleared, and the policy is
+ * snapshotted afresh through the same code real bookings will use.
+ */
+async function seedConfirmedBooking(pool: Pool, userId: string) {
+  const day = 86_400_000;
+  const checkIn = new Date(Date.now() + 30 * day).toISOString().slice(0, 10);
+  const checkOut = new Date(Date.now() + (30 + CONFIRMED_NIGHTS) * day).toISOString().slice(0, 10);
+  const roomTotal = PRICE_PER_NIGHT * CONFIRMED_NIGHTS;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`delete from refunds where booking_id = $1`, [DEMO_CONFIRMED_BOOKING_ID]);
+    await client.query(
+      `insert into bookings
+         (id, hotel_id, user_id, check_in_date, check_out_date, status, total_amount, currency)
+       values ($1, $2, $3, $4, $5, 'pending', $6, 'EUR')
+       on conflict (id) do update set
+         check_in_date = excluded.check_in_date, check_out_date = excluded.check_out_date,
+         status = 'pending', total_amount = excluded.total_amount, confirmed_at = null,
+         cancelled_at = null, cancellation_reason = null, no_show_reported_at = null,
+         departed_early_on = null, updated_at = now()`,
+      [DEMO_CONFIRMED_BOOKING_ID, PROPERTY_ID, userId, checkIn, checkOut, roomTotal * 2],
+    );
+    for (const id of DEMO_CONFIRMED_RESERVATION_IDS) {
+      await client.query(
+        `insert into reservations
+           (id, booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night, total_amount)
+         values ($1, $2, $3, $4, $5, 0, $6, $7, $8)
+         on conflict (id) do update set
+           total_nights = excluded.total_nights, price_per_night = excluded.price_per_night,
+           total_amount = excluded.total_amount, check_in_at = null, cancelled_at = null`,
+        [id, DEMO_CONFIRMED_BOOKING_ID, ROOM_ID, DEMO_RATE_PLAN_ID, ADULTS, CONFIRMED_NIGHTS, PRICE_PER_NIGHT, roomTotal],
+      );
+    }
+    await confirmBookingPolicy(client, { bookingId: DEMO_CONFIRMED_BOOKING_ID, confirmedAt: new Date() });
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

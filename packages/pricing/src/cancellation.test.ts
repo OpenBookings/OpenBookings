@@ -4,6 +4,7 @@ import {
   buildPolicySnapshot,
   checkInClosesAt,
   freeCancellationUntil,
+  reservationPolicy,
   calculateRefund,
   localTimeToUtc,
   nonRefundableQualifies,
@@ -392,5 +393,45 @@ describe("freeCancellationUntil", () => {
 
   test("Non-refundable never has one", () => {
     expect(freeCancellationUntil({ ...stay, tier: "non_refundable", now: new Date("2026-10-01T10:00:00Z") })).toBeNull();
+  });
+});
+
+describe("reservationPolicy", () => {
+  const input = {
+    propertyTier: "limited" as const,
+    isRefundable: true,
+    timeZone: "Europe/Amsterdam",
+    checkInTime: "15:00:00",
+    arrivalDate: ARRIVAL,
+    confirmedAt: CONFIRMED_AT,
+    nightPrices: nightsFrom(ARRIVAL, 3).map(({ date, price }) => ({ date, price })),
+    touristTaxRules: [
+      {
+        effectiveFrom: "2026-01-01",
+        charges: [{ kind: "fixed" as const, amount: 3, perPerson: true, perNight: true, perRoom: false }],
+        childrenExempt: false,
+        maxNights: null,
+      },
+    ],
+    adults: 2,
+    children: 0,
+  };
+
+  test("snapshots the property tier for a refundable rate", () => {
+    const { snapshot } = reservationPolicy(input);
+    expect(snapshot.tier).toBe("limited");
+    expect(snapshot.checkInAt.toISOString()).toBe(CHECK_IN_AT.toISOString());
+  });
+
+  test("a non-refundable rate is snapshotted as Non-refundable", () => {
+    expect(reservationPolicy({ ...input, isRefundable: false }).snapshot.tier).toBe("non_refundable");
+  });
+
+  test("each night carries its price and its tourist tax", () => {
+    expect(reservationPolicy(input).nights).toEqual([
+      { date: "2026-11-10", price: 100, touristTax: 6 },
+      { date: "2026-11-11", price: 100, touristTax: 6 },
+      { date: "2026-11-12", price: 100, touristTax: 6 },
+    ]);
   });
 });
