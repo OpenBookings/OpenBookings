@@ -9,43 +9,44 @@ Every rate today carries a yes/no "refundable" flag and a free-text policy, and 
 
 ## Decisions (Wouter, 2026-10-30)
 
-1. **The base tier is set once per property, not per room or rate:** Flex, Standard or Limited. It applies to every "normal" rate plan.
+1. **The base tier is set once per property, not per room or rate:** Flex or Standard (rev. 2). It applies to every "normal" rate plan.
 2. **Non-refundable is a separate type of rate plan,** not a fourth property setting. A rate plan is either *refundable* (follows the property's tier) or *non-refundable*. This is the existing `rate_plans.is_refundable` flag.
 3. **No-show = no money back, on every tier.** The hotel keeps everything, **including tourist tax** for the nights not stayed, and OpenBookings keeps its commission. This overrides Annex B B.5.3 (no-show treated as a cancellation at check-in time) and, for no-shows only, B.5.2 (tourist tax always refunded).
 4. **Nightly prices are stored as a JSON list on the reservation,** not in a separate table.
 
 ## The rules the code implements
 
-Taken from Annex B, with decision 3 applied. "Check-in Time" = the property's `check_in_time` on the arrival date, in the property's time zone.
+> **Updated 30 Oct 2026, during the build:** Annex B was rewritten to **rev. 2**, and the code follows it, with decisions 1 and 3 above still applying. The first version of this section (four tiers, partial refunds, 24h grace period) is superseded.
 
-| Tier | Full refund | Partial refund | No refund | Early departure |
-|---|---|---|---|---|
-| Flex | ≥ 24h before check-in | < 24h: host keeps the first night, the rest is refunded | — | First unused night kept, the rest refunded |
-| Standard | ≥ 5 days before | < 5 days: host keeps the first night + 50% of the remaining nights | — | First unused night kept, 50% of the rest refunded |
-| Limited | ≥ 14 days before | 14 to 7 days: 50% refunded | < 7 days | Next 7 unused nights kept, the rest refunded |
-| Non-refundable | — | — | Always | Nothing refunded |
+"Check-in Time" = the property's `check_in_time` on the arrival date, in the property's time zone.
+
+| Tier | Free cancellation until | After that | Early departure |
+|---|---|---|---|
+| Flex | 24h before check-in | Room price not refunded | Next 7 unused nights kept, the rest refunded |
+| Standard | 7 days before check-in | Room price not refunded | Same |
+| Non-refundable | — | Room price not refunded | Same |
 
 On every booking:
-- **Grace period:** a full refund if cancelled within 24h of booking **and** at least 7 days before check-in. Not on Non-refundable.
-- **Tourist tax** for nights not stayed is refunded on every tier, including Non-refundable, **except on a no-show**.
-- **Full refund regardless of tier:** host cancels, property can't host the guest (B.5.5), travel ban or declared emergency (B.5.6, human review).
+- **No grace period.**
+- **Tourist tax** for nights not stayed is refunded on cancellations and early departures, on every tier, **except on a no-show** (decision 3).
+- **Full refund regardless of tier:** host cancels, property can't host the guest, travel ban or declared emergency (human review).
 - **No-show:** no refund of anything.
-- **Percentages** apply to the accommodation price only (the night values), never tourist tax.
-- **Rounding:** to the cent, in the guest's favour (round the refund up).
+- **Rounding:** to the cent, in the guest's favour.
 - **Commission** is returned in proportion to the refund. Stripe's processing fee is not returned (the host bears it).
-- **The tier a guest booked under never changes.** Each reservation stores a snapshot at booking time, and refund logic reads only the snapshot.
-- **Non-refundable guardrail (B.4):** a non-refundable rate needs an active refundable rate on the same room, and must be at least 10% cheaper than it.
+- **The tier a guest booked under never changes:** each reservation stores a snapshot at booking time (`policy_version = annex-b-2026-10-30-rev2`).
+- **Non-refundable guardrail (B.4):** a Non-refundable rate needs an active refundable rate on the same room, and must be at least 10% cheaper than it.
 
-### Worked example (from Annex B, extended)
+### Worked example
 
 5 nights at €100, €3 tourist tax per night, €515 paid.
 
 | Situation | Host keeps | Guest refund |
 |---|---|---|
-| Flex, cancelled 10h before | €100 | €415 |
-| Standard, cancelled 3 days before | €300 | €215 |
-| Limited, cancelled 10 days before | €250 | €265 |
-| Limited or Non-refundable, cancelled 3 days before | €500 | €15 (tourist tax) |
+| Flex, cancelled 2 days before | €0 | €515 |
+| Flex, cancelled 10h before | €500 | €15 (tourist tax) |
+| Standard, cancelled 10 days before | €0 | €515 |
+| Standard, cancelled 3 days before | €500 | €15 |
+| Non-refundable, any time | €500 | €15 |
 | **Any tier, no-show** | **€515** | **€0** |
 | Any tier, host cancels | €0 | €515 |
 
@@ -54,7 +55,7 @@ On every booking:
 Follows the repo convention: plain SQL, applied by hand before deploying the code that reads it, mirrored in `packages/db/src/schema.ts`.
 
 **`properties`**
-- `cancellation_tier` — new enum `cancellation_tier` (`flex`, `standard`, `limited`), `NOT NULL DEFAULT 'standard'`. *(My call: Standard as the default and for existing rows, as the closest match to today's "free until 7 days".)*
+- `cancellation_tier` — new enum `cancellation_tier` (`flex`, `standard`), `NOT NULL DEFAULT 'standard'`. *(Standard is exactly the old "free until 7 days" promise.)*
 
 **`rate_plans`**
 - Keep `is_refundable`. Its meaning narrows to "true = follows the property tier, false = Non-refundable".
@@ -64,16 +65,14 @@ Follows the repo convention: plain SQL, applied by hand before deploying the cod
 - Drop `free_cancellation_days`, in the same migration.
 
 **`bookings`**
-- `confirmed_at timestamptz` — the Booking Time Annex B measures the grace period from. `created_at` is when the pending intent was made, which is earlier.
+- `confirmed_at timestamptz` — the Booking Time (when it was paid). `created_at` is when the pending intent was made, which is earlier.
 - Add `checked_in` to the `booking_status` enum (`ALTER TYPE … ADD VALUE IF NOT EXISTS`). This is how an early departure is told apart from a no-show.
 - `departed_early_on date` — the last night actually stayed, set when the host records an early departure.
 
 **`reservations`** — the policy snapshot, written when the booking is confirmed:
-- `cancellation_tier` — snapshot enum `reservation_cancellation_tier` (`flex`, `standard`, `limited`, `non_refundable`). A separate enum, because a snapshot can be Non-refundable but a property setting cannot.
+- `cancellation_tier` — snapshot enum `reservation_cancellation_tier` (`flex`, `standard`, `non_refundable`). A separate enum, because a snapshot can be Non-refundable but a property setting cannot.
 - `check_in_at timestamptz`
-- `grace_until timestamptz NULL` (NULL when there is no grace period: Non-refundable, or check-in less than 7 days away)
-- `full_refund_until timestamptz NULL` (NULL on Non-refundable)
-- `partial_refund_until timestamptz NULL` (Limited only: check-in minus 7 days)
+- `full_refund_until timestamptz NULL` — the cancellation deadline (NULL on Non-refundable)
 - `nights jsonb NOT NULL DEFAULT '[]'` — `[{ "date": "2026-11-03", "price": 100, "touristTax": 3 }]`, one entry per night, in major units like the rest of the schema. Charges that are owed once per stay, rather than per night, are attributed to the first night. *(My call: that night is always stayed when there is an early departure, and every night is refunded on a cancellation, so the result is the same either way.)*
 - `policy_version text NOT NULL DEFAULT 'annex-b-2026-10-30'` — which wording of Annex B the guest agreed to.
 - `cancelled_at timestamptz NULL` — set when this room is cancelled (rooms cancel individually; see §5).
@@ -107,7 +106,7 @@ Wherever a reservation becomes confirmed, call `buildPolicySnapshot` and write t
 - calls it from the seed (`packages/db/seed/demo-booking.ts`), so the test bookings have snapshots
 
 ### 3. Business app — the host picks the tier
-- **Property → Policies → Cancellation:** replace the "Coming soon" block in `listings/property/_components/sections/policies.tsx` with a three-option picker (Flex / Standard / Limited). Each option shows its rule in one line, plus the worked example for a 3-night stay. Saving notes that the change only applies to new bookings (B.1.3).
+- **Property → Policies → Cancellation:** replace the "Coming soon" block in `listings/property/_components/sections/policies.tsx` with a two-option picker (Flex / Standard). Each option shows its rule in one line, plus the worked example for a 3-night stay. Saving notes that the change only applies to new bookings (B.1.3).
 - **Rooms → rate sheet:** replace the free-text "Cancellation policy" field in `rate-sheet.tsx` with a choice: "Refundable — follows your property's policy (Standard)" or "Non-refundable". Choosing Non-refundable shows the B.4 rule inline.
 - **B.4 validation on save** (`rooms/_lib/schema.ts` + `mutations.ts`): block saving an active Non-refundable rate unless the room has an active refundable rate whose BAR is at least 10% higher. Also block deactivating or archiving the last refundable rate while an active Non-refundable rate depends on it.
 - **The rates & availability grid** shows a small "NR" marker on Non-refundable rates (it currently reads `is_refundable` for display).

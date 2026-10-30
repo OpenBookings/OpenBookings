@@ -84,7 +84,7 @@ describe("localTimeToUtc", () => {
 
 describe("snapshotTier", () => {
   test("a refundable rate follows the property tier", () => {
-    expect(snapshotTier("limited", true)).toBe("limited");
+    expect(snapshotTier("standard", true)).toBe("standard");
   });
 
   test("a non-refundable rate is Non-refundable whatever the property tier", () => {
@@ -99,53 +99,28 @@ describe("buildPolicySnapshot", () => {
 
   test("records the policy version", () => {
     expect(snapshot("flex").policyVersion).toBe(POLICY_VERSION);
-    expect(POLICY_VERSION).toBe("annex-b-2026-10-30");
+    expect(POLICY_VERSION).toBe("annex-b-2026-10-30-rev2");
   });
 
-  test("Flex: full refund until 24 hours before check-in", () => {
+  test("Flex: free cancellation until 24 hours before check-in", () => {
     expect(snapshot("flex").fullRefundUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - DAY);
-    expect(snapshot("flex").partialRefundUntil).toBeNull();
   });
 
-  test("Standard: full refund until 5 days before check-in", () => {
-    expect(snapshot("standard").fullRefundUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - 5 * DAY);
+  test("Standard: free cancellation until 7 days before check-in", () => {
+    expect(snapshot("standard").fullRefundUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - 7 * DAY);
   });
 
-  test("Limited: full refund until 14 days, 50% until 7 days before", () => {
-    const s = snapshot("limited");
-    expect(s.fullRefundUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - 14 * DAY);
-    expect(s.partialRefundUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - 7 * DAY);
-  });
-
-  test("Non-refundable has no deadlines and no grace period", () => {
-    const s = snapshot("non_refundable");
-    expect(s.fullRefundUntil).toBeNull();
-    expect(s.partialRefundUntil).toBeNull();
-    expect(s.graceUntil).toBeNull();
-  });
-
-  test("grace is 24 hours after booking when check-in is far away", () => {
-    expect(snapshot("flex").graceUntil?.getTime()).toBe(CONFIRMED_AT.getTime() + DAY);
-  });
-
-  test("no grace period when booked less than 7 days before check-in", () => {
-    const confirmed = new Date(CHECK_IN_AT.getTime() - 3 * DAY);
-    expect(snapshot("flex", confirmed).graceUntil).toBeNull();
-  });
-
-  test("grace stops 7 days before check-in when that comes first", () => {
-    const confirmed = new Date(CHECK_IN_AT.getTime() - 7 * DAY - 2 * HOUR);
-    expect(snapshot("flex", confirmed).graceUntil?.getTime()).toBe(CHECK_IN_AT.getTime() - 7 * DAY);
+  test("Non-refundable has no deadline", () => {
+    expect(snapshot("non_refundable").fullRefundUntil).toBeNull();
   });
 });
 
 describe("calculateRefund — the Annex B worked examples", () => {
   const cases: [string, CancellationTier, number, number][] = [
     ["Flex, cancelled 2 days before", "flex", 2 * DAY, 515],
-    ["Flex, cancelled 10 hours before", "flex", 10 * HOUR, 415],
-    ["Standard, cancelled 3 days before", "standard", 3 * DAY, 215],
-    ["Limited, cancelled 10 days before", "limited", 10 * DAY, 265],
-    ["Limited, cancelled 3 days before", "limited", 3 * DAY, 15],
+    ["Flex, cancelled 10 hours before", "flex", 10 * HOUR, 15],
+    ["Standard, cancelled 10 days before", "standard", 10 * DAY, 515],
+    ["Standard, cancelled 3 days before", "standard", 3 * DAY, 15],
     ["Non-refundable, cancelled 60 days before", "non_refundable", 60 * DAY, 15],
   ];
 
@@ -164,24 +139,20 @@ describe("calculateRefund — the Annex B worked examples", () => {
   });
 
   test("host cancellation → everything back", () => {
-    const result = calculateRefund(snapshot("limited"), FIVE_NIGHTS, { kind: "host_cancellation" });
+    const result = calculateRefund(snapshot("standard"), FIVE_NIGHTS, { kind: "host_cancellation" });
     expect(result.refund).toEqual({ accommodation: 500, touristTax: 15, total: 515 });
   });
 
-  test("the refund splits into accommodation and tourist tax", () => {
+  test("after the deadline only the tourist tax comes back", () => {
     const result = calculateRefund(snapshot("standard"), FIVE_NIGHTS, cancelAt(3 * DAY));
-    expect(result.refund).toEqual({ accommodation: 200, touristTax: 15, total: 215 });
-    expect(result.retained).toEqual({ accommodation: 300, touristTax: 0, total: 300 });
-    expect(result.rule).toBe("partial_refund_window");
-  });
-
-  test("nothing left to refund on the room is the no-refund window", () => {
-    expect(calculateRefund(snapshot("limited"), FIVE_NIGHTS, cancelAt(3 * DAY)).rule).toBe("no_refund_window");
+    expect(result.refund).toEqual({ accommodation: 0, touristTax: 15, total: 15 });
+    expect(result.retained).toEqual({ accommodation: 500, touristTax: 0, total: 500 });
+    expect(result.rule).toBe("no_refund_window");
   });
 });
 
 describe("calculateRefund — no-shows", () => {
-  for (const tier of ["flex", "standard", "limited", "non_refundable"] as const) {
+  for (const tier of ["flex", "standard", "non_refundable"] as const) {
     test(`${tier}: a no-show gets nothing back, tourist tax included`, () => {
       const result = calculateRefund(snapshot(tier), FIVE_NIGHTS, { kind: "no_show" });
       expect(result.refund.total).toBe(0);
@@ -199,91 +170,53 @@ describe("calculateRefund — deadlines", () => {
     expect(result.rule).toBe("full_refund_window");
   });
 
-  test("one millisecond after the deadline is the partial window", () => {
+  test("one millisecond after the deadline only the tourist tax comes back", () => {
     const s = snapshot("flex");
     const at = new Date(s.fullRefundUntil!.getTime() + 1);
-    expect(calculateRefund(s, FIVE_NIGHTS, { kind: "guest_cancellation", at }).refund.total).toBe(415);
-  });
-
-  test("the grace period beats the tier's window", () => {
-    // Booked 10 days out on Limited: the 14-day full-refund window has passed,
-    // but cancelling 2 hours after booking is inside the grace period.
-    const confirmed = new Date(CHECK_IN_AT.getTime() - 10 * DAY);
-    const s = snapshot("limited", confirmed);
-    const at = new Date(confirmed.getTime() + 2 * HOUR);
-    const result = calculateRefund(s, FIVE_NIGHTS, { kind: "guest_cancellation", at });
-    expect(result.refund.total).toBe(515);
-    expect(result.rule).toBe("grace_period");
-  });
-
-  test("Non-refundable has no grace period", () => {
-    const confirmed = new Date(CHECK_IN_AT.getTime() - 30 * DAY);
-    const s = snapshot("non_refundable", confirmed);
-    const at = new Date(confirmed.getTime() + HOUR);
     expect(calculateRefund(s, FIVE_NIGHTS, { kind: "guest_cancellation", at }).refund.total).toBe(15);
   });
 
-  test("Limited between 14 and 7 days refunds half, after 7 days nothing", () => {
-    const s = snapshot("limited");
-    const atSeven = { kind: "guest_cancellation" as const, at: s.partialRefundUntil! };
-    expect(calculateRefund(s, FIVE_NIGHTS, atSeven).refund.accommodation).toBe(250);
-    const after = { kind: "guest_cancellation" as const, at: new Date(s.partialRefundUntil!.getTime() + 1) };
-    expect(calculateRefund(s, FIVE_NIGHTS, after).refund.accommodation).toBe(0);
+  test("there is no grace period after booking", () => {
+    // Booked 5 days out on Standard, cancelled an hour later: already past the 7-day deadline.
+    const confirmed = new Date(CHECK_IN_AT.getTime() - 5 * DAY);
+    const s = snapshot("standard", confirmed);
+    const at = new Date(confirmed.getTime() + HOUR);
+    expect(calculateRefund(s, FIVE_NIGHTS, { kind: "guest_cancellation", at }).refund.total).toBe(15);
   });
 });
 
-describe("calculateRefund — early departure", () => {
+describe("calculateRefund — early departure (one rule for every tier)", () => {
   const TEN_NIGHTS = nightsFrom(ARRIVAL, 10);
   const afterNight = (n: number) => ({ kind: "early_departure" as const, lastNightStayed: TEN_NIGHTS[n - 1].date });
 
-  test("Limited, leaves after night 2 of 10: night 10 and the tax for nights 3–10 come back", () => {
-    const result = calculateRefund(snapshot("limited"), TEN_NIGHTS, afterNight(2));
-    expect(result.refund).toEqual({ accommodation: 100, touristTax: 24, total: 124 });
-    expect(result.rule).toBe("early_departure");
-  });
-
-  test("Flex: the first unused night is kept, the rest refunded", () => {
-    expect(calculateRefund(snapshot("flex"), TEN_NIGHTS, afterNight(2)).refund.accommodation).toBe(700);
-  });
-
-  test("Standard: the first unused night is kept, half the rest refunded", () => {
-    expect(calculateRefund(snapshot("standard"), TEN_NIGHTS, afterNight(2)).refund.accommodation).toBe(350);
-  });
-
-  test("Non-refundable: no nights back, but the tourist tax for unused nights is", () => {
-    expect(calculateRefund(snapshot("non_refundable"), TEN_NIGHTS, afterNight(2)).refund).toEqual({
-      accommodation: 0,
-      touristTax: 24,
-      total: 24,
+  for (const tier of ["flex", "standard", "non_refundable"] as const) {
+    test(`${tier}: leaves after night 2 of 10 — night 10 and the tax for nights 3–10 come back`, () => {
+      const result = calculateRefund(snapshot(tier), TEN_NIGHTS, afterNight(2));
+      expect(result.refund).toEqual({ accommodation: 100, touristTax: 24, total: 124 });
+      expect(result.rule).toBe("early_departure");
     });
-  });
+  }
 
-  test("lists the nights refunded and their share", () => {
-    const result = calculateRefund(snapshot("standard"), nightsFrom(ARRIVAL, 4), {
+  test("seven or fewer unused nights: only their tourist tax comes back", () => {
+    const result = calculateRefund(snapshot("flex"), nightsFrom(ARRIVAL, 4), {
       kind: "early_departure",
       lastNightStayed: "2026-11-10",
     });
+    expect(result.refund).toEqual({ accommodation: 0, touristTax: 9, total: 9 });
     expect(result.nightsRefunded).toEqual([
       { date: "2026-11-11", share: 0 },
-      { date: "2026-11-12", share: 0.5 },
-      { date: "2026-11-13", share: 0.5 },
+      { date: "2026-11-12", share: 0 },
+      { date: "2026-11-13", share: 0 },
     ]);
   });
 });
 
-describe("calculateRefund — rounding in the guest's favour", () => {
-  const nights = (prices: number[]): NightValue[] =>
-    prices.map((price, i) => ({ date: `2026-11-1${i}`, price, touristTax: 0 }));
-
-  test("an exact half stays exact", () => {
-    const result = calculateRefund(snapshot("standard"), nights([33.33, 33.33, 33.33]), cancelAt(DAY));
-    expect(result.refund.accommodation).toBe(33.33);
-  });
-
-  test("a half cent rounds up", () => {
-    const result = calculateRefund(snapshot("standard"), nights([33.33, 33.33, 33.34]), cancelAt(DAY));
-    expect(result.refund.accommodation).toBe(33.34);
-    expect(result.retained.accommodation).toBe(66.66);
+describe("calculateRefund — money in whole cents", () => {
+  test("no float drift on odd prices", () => {
+    const nights = nightsFrom(ARRIVAL, 10, 33.33, 0);
+    const result = calculateRefund(snapshot("flex"), nights, { kind: "early_departure", lastNightStayed: nights[0].date });
+    expect(result.refund.accommodation).toBe(66.66);
+    expect(result.retained.accommodation).toBe(266.64);
   });
 });
 
@@ -383,12 +316,12 @@ describe("freeCancellationUntil", () => {
 
   test("booking today, a refundable rate still has its free window", () => {
     expect(
-      freeCancellationUntil({ ...stay, tier: "limited", now: new Date("2026-10-01T10:00:00Z") })?.toISOString(),
-    ).toBe("2026-10-27T14:00:00.000Z");
+      freeCancellationUntil({ ...stay, tier: "standard", now: new Date("2026-10-01T10:00:00Z") })?.toISOString(),
+    ).toBe("2026-11-03T14:00:00.000Z");
   });
 
   test("once the window has passed there is no free cancellation for these dates", () => {
-    expect(freeCancellationUntil({ ...stay, tier: "limited", now: new Date("2026-11-05T10:00:00Z") })).toBeNull();
+    expect(freeCancellationUntil({ ...stay, tier: "standard", now: new Date("2026-11-05T10:00:00Z") })).toBeNull();
   });
 
   test("Non-refundable never has one", () => {
@@ -398,7 +331,7 @@ describe("freeCancellationUntil", () => {
 
 describe("reservationPolicy", () => {
   const input = {
-    propertyTier: "limited" as const,
+    propertyTier: "standard" as const,
     isRefundable: true,
     timeZone: "Europe/Amsterdam",
     checkInTime: "15:00:00",
@@ -419,7 +352,7 @@ describe("reservationPolicy", () => {
 
   test("snapshots the property tier for a refundable rate", () => {
     const { snapshot } = reservationPolicy(input);
-    expect(snapshot.tier).toBe("limited");
+    expect(snapshot.tier).toBe("standard");
     expect(snapshot.checkInAt.toISOString()).toBe(CHECK_IN_AT.toISOString());
   });
 

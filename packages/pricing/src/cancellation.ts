@@ -1,7 +1,12 @@
 /**
- * Cancellation tiers and refunds — Host Agreement Annex B (draft v1.3, 30 Oct 2026),
- * with one change decided on 2026-10-30: a no-show gets nothing back, tourist
- * tax included, on every tier.
+ * Cancellation tiers and refunds — Host Agreement Annex B (draft v1.3, rev. 2,
+ * 30 Oct 2026), with two calls Wouter made the same day: the tier is set once
+ * per property (Non-refundable is a type of rate), and a no-show gets nothing
+ * back on any tier, tourist tax included.
+ *
+ * Rev. 2 in short: free cancellation until a deadline (Flex 24h, Standard 7
+ * days before check-in), nothing back on the room price after it; one
+ * early-departure rule for every tier (the next 7 unused nights are kept).
  *
  * This is the only place a refund amount is worked out. It reads a policy
  * snapshot taken when the room was booked, never the property's current tier,
@@ -14,10 +19,10 @@
 
 import { touristTaxByNight, type TouristTaxRule } from "./tourist-tax";
 
-export const POLICY_VERSION = "annex-b-2026-10-30";
+export const POLICY_VERSION = "annex-b-2026-10-30-rev2";
 
 /** What a property picks. Non-refundable is a type of rate, not a property setting. */
-export type PropertyCancellationTier = "flex" | "standard" | "limited";
+export type PropertyCancellationTier = "flex" | "standard";
 /** What a booked room carries. */
 export type CancellationTier = PropertyCancellationTier | "non_refundable";
 
@@ -32,11 +37,8 @@ export interface PolicySnapshot {
   tier: CancellationTier;
   confirmedAt: Date;
   checkInAt: Date;
-  /** Full refund until here (24h after booking, if check-in is 7+ days away). */
-  graceUntil: Date | null;
+  /** The cancellation deadline: free cancellation up to and including this instant. Null = Non-refundable. */
   fullRefundUntil: Date | null;
-  /** Limited only: 50% refund until here. */
-  partialRefundUntil: Date | null;
   policyVersion: string;
 }
 
@@ -47,9 +49,7 @@ export type RefundEvent =
   | { kind: "host_cancellation" | "property_unable" | "travel_restriction" };
 
 export type RefundRule =
-  | "grace_period"
   | "full_refund_window"
-  | "partial_refund_window"
   | "no_refund_window"
   | "early_departure"
   | "no_show"
@@ -137,23 +137,14 @@ export function buildPolicySnapshot(i: {
 
   const fullRefundUntil =
     i.tier === "flex" ? before(DAY)
-    : i.tier === "standard" ? before(5 * DAY)
-    : i.tier === "limited" ? before(14 * DAY)
+    : i.tier === "standard" ? before(7 * DAY)
     : null;
-
-  let graceUntil: Date | null = null;
-  if (i.tier !== "non_refundable") {
-    const end = Math.min(i.confirmedAt.getTime() + DAY, checkIn - 7 * DAY);
-    if (end >= i.confirmedAt.getTime()) graceUntil = new Date(end);
-  }
 
   return {
     tier: i.tier,
     confirmedAt: i.confirmedAt,
     checkInAt,
-    graceUntil,
     fullRefundUntil,
-    partialRefundUntil: i.tier === "limited" ? before(7 * DAY) : null,
     policyVersion: POLICY_VERSION,
   };
 }
@@ -165,46 +156,8 @@ const toEuros = (cents: number) => cents / 100;
 /** Round a refund up to the cent; the epsilon keeps float noise from adding one. */
 const ceilCents = (cents: number) => Math.max(0, Math.ceil(cents - 1e-6));
 
-/**
- * Shares of the night price refunded on a guest cancellation, by position in
- * the stay. `null` = everything (a full refund window).
- */
-function cancellationShares(s: PolicySnapshot, count: number, at: number): { rule: RefundRule; shares: number[] } {
-  const all = (share: number) => Array.from({ length: count }, () => share);
-  const firstKept = (rest: number) => all(rest).map((share, i) => (i === 0 ? 0 : share));
-
-  if (s.graceUntil && at <= s.graceUntil.getTime()) return { rule: "grace_period", shares: all(1) };
-  if (s.fullRefundUntil && at <= s.fullRefundUntil.getTime()) return { rule: "full_refund_window", shares: all(1) };
-
-  switch (s.tier) {
-    case "flex":
-      return { rule: "partial_refund_window", shares: firstKept(1) };
-    case "standard":
-      return { rule: "partial_refund_window", shares: firstKept(0.5) };
-    case "limited":
-      return s.partialRefundUntil && at <= s.partialRefundUntil.getTime()
-        ? { rule: "partial_refund_window", shares: all(0.5) }
-        : { rule: "no_refund_window", shares: all(0) };
-    case "non_refundable":
-      return { rule: "no_refund_window", shares: all(0) };
-  }
-}
-
-/** Shares of each unused night's price refunded on an early departure. */
-function earlyDepartureShares(tier: CancellationTier, count: number): number[] {
-  return Array.from({ length: count }, (_, i) => {
-    switch (tier) {
-      case "flex":
-        return i === 0 ? 0 : 1;
-      case "standard":
-        return i === 0 ? 0 : 0.5;
-      case "limited":
-        return i < 7 ? 0 : 1;
-      case "non_refundable":
-        return 0;
-    }
-  });
-}
+/** Annex B B.5.2: whatever the tier, the next 7 unused nights are kept, any after that refunded. */
+const EARLY_DEPARTURE_KEPT_NIGHTS = 7;
 
 function amounts(accommodationCents: number, touristTaxCents: number): Amounts {
   return {
@@ -239,8 +192,10 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
       refundTax = false;
       break;
     case "guest_cancellation": {
+      const free = s.fullRefundUntil !== null && e.at.getTime() <= s.fullRefundUntil.getTime();
+      rule = free ? "full_refund_window" : "no_refund_window";
       covered = nights;
-      ({ rule, shares } = cancellationShares(s, nights.length, e.at.getTime()));
+      shares = nights.map(() => (free ? 1 : 0));
       // Nobody stayed, so no tourist tax is owed for any night.
       refundTax = true;
       break;
@@ -248,7 +203,7 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
     case "early_departure":
       rule = "early_departure";
       covered = nights.filter((n) => n.date > e.lastNightStayed);
-      shares = earlyDepartureShares(s.tier, covered.length);
+      shares = covered.map((_, idx) => (idx < EARLY_DEPARTURE_KEPT_NIGHTS ? 0 : 1));
       refundTax = true;
       break;
   }
@@ -256,8 +211,6 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
   const exactAccommodation = covered.reduce((sum, n, i) => sum + shares[i] * toCents(n.price), 0);
   const accommodationCents = Math.min(ceilCents(exactAccommodation), paidAccommodation);
   const taxCents = refundTax ? covered.reduce((sum, n) => sum + toCents(n.touristTax), 0) : 0;
-
-  if (rule === "partial_refund_window" && accommodationCents === 0) rule = "no_refund_window";
 
   return {
     rule,
@@ -336,8 +289,7 @@ export function allowedActions(i: {
 /**
  * For a stay being browsed or booked right now: until when it could still be
  * cancelled for free, or null when it can't (Non-refundable, or the free
- * window for these dates has already passed). The 24h grace period is left
- * out on purpose: "free cancellation" on a listing means the tier's window.
+ * window for these dates has already passed).
  */
 export function freeCancellationUntil(i: {
   tier: CancellationTier;

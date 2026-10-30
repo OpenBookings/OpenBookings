@@ -89,15 +89,12 @@ export async function confirmBookingPolicy(
     await db.query(
       `UPDATE reservations
        SET cancellation_tier = $1::reservation_cancellation_tier, check_in_at = $2,
-           grace_until = $3, full_refund_until = $4, partial_refund_until = $5,
-           nights = $6::jsonb, policy_version = $7, tourist_tax_amount = $8
-       WHERE id = $9`,
+           full_refund_until = $3, nights = $4::jsonb, policy_version = $5, tourist_tax_amount = $6
+       WHERE id = $7`,
       [
         snapshot.tier,
         snapshot.checkInAt,
-        snapshot.graceUntil,
         snapshot.fullRefundUntil,
-        snapshot.partialRefundUntil,
         JSON.stringify(nights),
         snapshot.policyVersion,
         touristTax,

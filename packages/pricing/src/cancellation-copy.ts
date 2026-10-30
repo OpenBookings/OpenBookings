@@ -7,33 +7,17 @@ import type { CancellationTier, PolicySnapshot } from "./cancellation";
 export const TIER_LABELS: Record<CancellationTier, string> = {
   flex: "Flex",
   standard: "Standard",
-  limited: "Limited",
   non_refundable: "Non-refundable",
 };
 
 export const TIER_SUMMARIES: Record<CancellationTier, string> = {
-  flex: "Free cancellation until 24 hours before check-in. After that, the first night is charged.",
-  standard:
-    "Free cancellation until 5 days before check-in. After that, the first night and half of the other nights are charged.",
-  limited: "Free cancellation until 14 days before check-in, 50% refund until 7 days before. After that, no refund.",
+  flex: "Free cancellation until 24 hours before check-in. After that, the room price isn't refunded.",
+  standard: "Free cancellation until 7 days before check-in. After that, the room price isn't refunded.",
   non_refundable: "No refund if you cancel. Cheaper than the refundable rate.",
 };
 
-const AFTER_DEADLINE: Record<CancellationTier, string> = {
-  flex: "After that, the first night is charged and the other nights are refunded.",
-  standard: "After that, the first night and half of the other nights are charged.",
-  limited: "After that, no refund.",
-  non_refundable: "This rate is non-refundable.",
-};
-
-/** The same rule when no earlier deadline is left to say "after that" to. */
-const NOW_APPLIES: Record<CancellationTier, string> = {
-  flex: "If you cancel, the first night is charged and the other nights are refunded.",
-  standard: "If you cancel, the first night and half of the other nights are charged.",
-  limited: "If you cancel, there is no refund.",
-  non_refundable: "This rate is non-refundable.",
-};
-
+export const EARLY_DEPARTURE_LINE =
+  "If you leave early, the next 7 nights are charged and any nights after that are refunded.";
 export const TOURIST_TAX_LINE = "Tourist tax is refunded for nights you don't stay.";
 export const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
 
@@ -65,17 +49,17 @@ export function formatDeadline(d: Date, timeZone: string): string {
  * already passed at `now` are left out.
  */
 export function describePolicy(s: PolicySnapshot, timeZone: string, now: Date): string[] {
-  const at = (d: Date) => formatDeadline(d, timeZone);
-  const future = (d: Date | null): d is Date => d !== null && d.getTime() > now.getTime();
   const lines: string[] = [];
-
-  if (future(s.graceUntil) && (!s.fullRefundUntil || s.graceUntil > s.fullRefundUntil)) {
-    lines.push(`Full refund if you cancel by ${at(s.graceUntil)}.`);
+  if (s.tier === "non_refundable") {
+    lines.push("This rate is non-refundable.");
+  } else if (s.fullRefundUntil && s.fullRefundUntil.getTime() > now.getTime()) {
+    lines.push(
+      `Free cancellation until ${formatDeadline(s.fullRefundUntil, timeZone)}.`,
+      "After that, the room price isn't refunded.",
+    );
+  } else {
+    lines.push("If you cancel now, the room price isn't refunded.");
   }
-  if (future(s.fullRefundUntil)) lines.push(`Free cancellation until ${at(s.fullRefundUntil)}.`);
-  if (s.tier === "limited" && future(s.partialRefundUntil)) {
-    lines.push(`50% refund if you cancel by ${at(s.partialRefundUntil)}.`);
-  }
-  lines.push(lines.length > 0 ? AFTER_DEADLINE[s.tier] : NOW_APPLIES[s.tier], TOURIST_TAX_LINE, NO_SHOW_LINE);
+  lines.push(EARLY_DEPARTURE_LINE, TOURIST_TAX_LINE, NO_SHOW_LINE);
   return lines;
 }

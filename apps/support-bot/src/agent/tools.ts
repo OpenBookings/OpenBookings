@@ -181,7 +181,7 @@ export const TOOLS = {
   },
   get_cancellation_policy: {
     description:
-      "Get the cancellation policy that applies to one of this guest's bookings, per room: the tier (Flex / Standard / Limited / Non-refundable), its rule, the exact deadlines for that booking in the property's local time, and the no-show rule (a no-show gets nothing back).",
+      "Get the cancellation policy that applies to one of this guest's bookings, per room: the tier (Flex / Standard / Non-refundable), its rule, the exact deadlines for that booking in the property's local time, and the no-show rule (a no-show gets nothing back).",
     schema: getCancellationPolicyArgs,
     execute: async (args: z.infer<typeof getCancellationPolicyArgs>, ctx: ToolContext) => {
       const guestEmail = identifiedGuest(ctx);

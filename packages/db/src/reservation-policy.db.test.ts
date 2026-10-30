@@ -31,7 +31,7 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
   }
 
   test("snapshots the tier, the deadlines and each night, and confirms the booking", async () => {
-    const ids = await seedProperty(db, { tier: "limited" });
+    const ids = await seedProperty(db, { tier: "standard" });
     await touristTax(ids.propertyId);
     const { bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: "2031-11-10", nights: 3 });
 
@@ -39,20 +39,20 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
 
     const res = (
       await db.query(
-        `SELECT cancellation_tier, check_in_at, partial_refund_until, nights, policy_version,
+        `SELECT cancellation_tier, check_in_at, full_refund_until, nights, policy_version,
                 tourist_tax_amount::float8 AS tourist_tax_amount
          FROM reservations WHERE id = $1`,
         [reservationIds[0]],
       )
     ).rows[0];
-    expect(res.cancellation_tier).toBe("limited");
+    expect(res.cancellation_tier).toBe("standard");
     expect(res.check_in_at.toISOString()).toBe("2031-11-10T14:00:00.000Z");
-    expect(res.partial_refund_until.toISOString()).toBe("2031-11-03T14:00:00.000Z");
+    expect(res.full_refund_until.toISOString()).toBe("2031-11-03T14:00:00.000Z");
     expect(res.nights).toHaveLength(3);
     expect(res.nights.reduce((sum: number, n: { touristTax: number }) => sum + n.touristTax, 0)).toBe(
       res.tourist_tax_amount,
     );
-    expect(res.policy_version).toBe("annex-b-2026-10-30");
+    expect(res.policy_version).toBe("annex-b-2026-10-30-rev2");
 
     const booking = (await db.query(`SELECT status, confirmed_at FROM bookings WHERE id = $1`, [bookingId])).rows[0];
     expect(booking.status).toBe("confirmed");
@@ -60,7 +60,7 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
   });
 
   test("a later tier change never alters a booking that already has its snapshot", async () => {
-    const ids = await seedProperty(db, { tier: "limited" });
+    const ids = await seedProperty(db, { tier: "standard" });
     const { bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: "2031-11-10", nights: 3 });
     await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date("2031-10-01T10:00:00Z") });
 
@@ -70,8 +70,8 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
     const res = (
       await db.query(`SELECT cancellation_tier, full_refund_until FROM reservations WHERE id = $1`, [reservationIds[0]])
     ).rows[0];
-    expect(res.cancellation_tier).toBe("limited");
-    expect(res.full_refund_until.toISOString()).toBe("2031-10-27T14:00:00.000Z");
+    expect(res.cancellation_tier).toBe("standard");
+    expect(res.full_refund_until.toISOString()).toBe("2031-11-03T14:00:00.000Z");
   });
 
   test("a non-refundable rate is snapshotted as Non-refundable", async () => {

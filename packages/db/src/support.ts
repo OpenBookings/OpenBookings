@@ -25,9 +25,7 @@ export type SupportReservationRoom = {
 export type SupportRoomPolicy = {
   cancellation_tier: CancellationTier;
   check_in_at: string | null;
-  grace_until: string | null;
   full_refund_until: string | null;
-  partial_refund_until: string | null;
   cancelled_at: string | null;
 };
 
@@ -38,9 +36,7 @@ export const ROOM_POLICY_JSON = `
     CASE WHEN rp.is_refundable THEN p.cancellation_tier::text ELSE 'non_refundable' END
   ),
   'check_in_at', r.check_in_at,
-  'grace_until', r.grace_until,
   'full_refund_until', r.full_refund_until,
-  'partial_refund_until', r.partial_refund_until,
   'cancelled_at', r.cancelled_at`;
 
 export type SupportReservation = {

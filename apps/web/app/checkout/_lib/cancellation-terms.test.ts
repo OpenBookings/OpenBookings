@@ -26,8 +26,8 @@ describe("checkoutCancellationTerms", () => {
     expect(terms.requiresNonRefundableConsent).toBe(true);
   });
 
-  test("a booking made inside 24 hours of the stay starts in the partial window", () => {
+  test("a booking made inside 24 hours of the stay is past the free-cancellation deadline", () => {
     const terms = checkoutCancellationTerms({ ...stay, isRefundable: true, now: new Date("2026-11-10T08:00:00Z") });
-    expect(terms.policyLines[0]).toBe("If you cancel, the first night is charged and the other nights are refunded.");
+    expect(terms.policyLines[0]).toBe("If you cancel now, the room price isn't refunded.");
   });
 });

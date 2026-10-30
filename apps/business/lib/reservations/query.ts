@@ -33,9 +33,7 @@ export const HOST_RESERVATIONS_SQL = `
         'room_name', rm.name,
         'cancellation_tier', r.cancellation_tier,
         'check_in_at', r.check_in_at,
-        'grace_until', r.grace_until,
         'full_refund_until', r.full_refund_until,
-        'partial_refund_until', r.partial_refund_until,
         'nights', r.nights,
         'cancelled_at', r.cancelled_at
       ) ORDER BY r.created_at, r.id)

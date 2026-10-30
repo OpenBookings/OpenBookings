@@ -29,7 +29,7 @@ export async function applyPendingMigrations(db: Client): Promise<void> {
 /** A property with one room and one rate plan, in `Europe/Amsterdam`, check-in 15:00. */
 export async function seedProperty(
   db: Client,
-  opts: { tier?: "flex" | "standard" | "limited"; isRefundable?: boolean } = {},
+  opts: { tier?: "flex" | "standard"; isRefundable?: boolean } = {},
 ): Promise<{ propertyId: string; roomId: string; ratePlanId: string }> {
   const one = async (sql: string, values: unknown[]) => (await db.query(sql, values)).rows[0] as { id: string };
   const property = await one(

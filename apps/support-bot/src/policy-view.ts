@@ -12,9 +12,7 @@ export type RoomPolicyFields = {
   /** The snapshot taken at booking; for a booking still pending, what it would get now. */
   cancellation_tier: CancellationTier;
   check_in_at: string | null;
-  grace_until: string | null;
   full_refund_until: string | null;
-  partial_refund_until: string | null;
   cancelled_at: string | null;
 };
 
@@ -33,9 +31,7 @@ export function policyView(room: RoomPolicyFields, timeZone: string, confirmedAt
           tier: room.cancellation_tier,
           confirmedAt: date(confirmedAt) ?? checkInAt,
           checkInAt,
-          graceUntil: date(room.grace_until),
           fullRefundUntil: date(room.full_refund_until),
-          partialRefundUntil: date(room.partial_refund_until),
           policyVersion: POLICY_VERSION,
         },
         timeZone,

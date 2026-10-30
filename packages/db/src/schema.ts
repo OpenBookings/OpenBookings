@@ -42,12 +42,11 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "checked_in",
 ]);
 /** A property's base cancellation tier (0027, Annex B). Non-refundable is a rate type, not a tier here. */
-export const cancellationTierEnum = pgEnum("cancellation_tier", ["flex", "standard", "limited"]);
+export const cancellationTierEnum = pgEnum("cancellation_tier", ["flex", "standard"]);
 /** The tier a reserved room was booked under (0027). Unlike a property, a room can be Non-refundable. */
 export const reservationCancellationTierEnum = pgEnum("reservation_cancellation_tier", [
   "flex",
   "standard",
-  "limited",
   "non_refundable",
 ]);
 export const refundReasonEnum = pgEnum("refund_reason", [
@@ -600,7 +599,7 @@ export const bookings = pgTable(
     cancellationReason: text("cancellation_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     noShowReportedAt: timestamp("no_show_reported_at", { withTimezone: true }),
-    /** Booking Time in Annex B (0027): the grace period counts from here, not from `createdAt`. */
+    /** Booking Time (0027): when the booking was confirmed (paid), not when the intent was created. */
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     /** Last night actually stayed when the guest left early (0027). */
     departedEarlyOn: date("departed_early_on"),
@@ -643,9 +642,8 @@ export const reservations = pgTable(
     // Refund logic reads only these, never the current property tier.
     cancellationTier: reservationCancellationTierEnum("cancellation_tier"),
     checkInAt: timestamp("check_in_at", { withTimezone: true }),
-    graceUntil: timestamp("grace_until", { withTimezone: true }),
+    /** The cancellation deadline: free cancellation up to here. NULL = Non-refundable. */
     fullRefundUntil: timestamp("full_refund_until", { withTimezone: true }),
-    partialRefundUntil: timestamp("partial_refund_until", { withTimezone: true }),
     /** NightValue[] — `{ date, price, touristTax }` per night, major units (0027). */
     nights: jsonb("nights").notNull().default(sql`'[]'::jsonb`),
     /** Which wording of Annex B the guest agreed to (0027). */

@@ -3,12 +3,14 @@
 -- Apply BY HAND (psql or the Neon SQL editor), BEFORE deploying the code that
 -- reads it. Idempotent.
 --
--- The property picks one base tier (Flex, Standard or Limited) for all its
+-- Annex B rev. 2: the property picks one base tier (Flex: free cancellation
+-- until 24h before check-in; Standard: until 7 days before) for all its
 -- refundable rates. A rate plan with `is_refundable = false` is Non-refundable,
 -- a separate type of rate rather than a fourth property setting.
 --
 -- Every reserved room stores a snapshot of the policy it was booked under:
--- the tier, the exact deadlines, and each night's price and tourist tax. Refund
+-- the tier, the exact cancellation deadline, and each night's price and
+-- tourist tax. Refund
 -- logic only ever reads the snapshot, so a later change to the property's tier
 -- never alters a booking that already exists. Rooms cancel individually, so
 -- `cancelled_at` sits on the reservation; the booking is cancelled once every
@@ -23,11 +25,11 @@
 
 -- Postgres has no `CREATE TYPE IF NOT EXISTS`; catch the duplicate instead.
 DO $$ BEGIN
-  CREATE TYPE "cancellation_tier" AS ENUM ('flex', 'standard', 'limited');
+  CREATE TYPE "cancellation_tier" AS ENUM ('flex', 'standard');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "reservation_cancellation_tier" AS ENUM ('flex', 'standard', 'limited', 'non_refundable');
+  CREATE TYPE "reservation_cancellation_tier" AS ENUM ('flex', 'standard', 'non_refundable');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
@@ -43,8 +45,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TYPE "booking_status" ADD VALUE IF NOT EXISTS 'checked_in';
 
--- The property's base tier. Standard is the closest match to the old
--- "free cancellation until 7 days before" promise.
+-- The property's base tier. Standard is exactly the old "free cancellation
+-- until 7 days before" promise.
 ALTER TABLE "properties"
   ADD COLUMN IF NOT EXISTS "cancellation_tier" "cancellation_tier" DEFAULT 'standard' NOT NULL;
 
@@ -52,8 +54,8 @@ ALTER TABLE "properties"
 ALTER TABLE "rate_plans" DROP COLUMN IF EXISTS "cancellation_policy";
 ALTER TABLE "property_content" DROP COLUMN IF EXISTS "free_cancellation_days";
 
--- Booking Time in Annex B: the grace period counts from confirmation, not
--- from when the pending intent was created.
+-- Booking Time: when the booking was confirmed (paid), not when the pending
+-- checkout intent was created.
 ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "confirmed_at" timestamp with time zone;
 -- The last night actually stayed, when the guest left early.
 ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "departed_early_on" date;
@@ -62,9 +64,8 @@ ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "departed_early_on" date;
 -- reservations, which have no snapshot yet.
 ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "cancellation_tier" "reservation_cancellation_tier";
 ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "check_in_at" timestamp with time zone;
-ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "grace_until" timestamp with time zone;
+-- The cancellation deadline: free cancellation up to here. NULL = Non-refundable.
 ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "full_refund_until" timestamp with time zone;
-ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "partial_refund_until" timestamp with time zone;
 -- [{ "date": "2026-11-03", "price": 100, "touristTax": 3 }], one per night, major units.
 ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "nights" jsonb DEFAULT '[]'::jsonb NOT NULL;
 ALTER TABLE "reservations" ADD COLUMN IF NOT EXISTS "policy_version" text;

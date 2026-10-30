@@ -83,7 +83,7 @@ export const policiesSchema = z
     checkOutTime: z.string().regex(TIME, TIME_MESSAGE),
     reception24h: checkbox,
     // Annex B base tier for every refundable rate. Non-refundable is chosen per rate.
-    cancellationTier: z.enum(["flex", "standard", "limited"], { error: "Pick a cancellation policy." }),
+    cancellationTier: z.enum(["flex", "standard"], { error: "Pick a cancellation policy." }),
     childrenWelcome: checkbox,
     minCheckInAge: z.coerce
       .number({ error: "Enter a minimum age." })

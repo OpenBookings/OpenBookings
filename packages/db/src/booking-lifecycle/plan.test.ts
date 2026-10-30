@@ -71,8 +71,8 @@ describe("planCancellation", () => {
 
   test("the guest's tier decides; a host cancellation refunds everything", () => {
     const late = new Date(CHECK_IN_AT.getTime() - 3 * DAY);
-    const guest = planCancellation({ rooms: [room("a", "limited")], reservationIds: null, actor: "guest", now: late });
-    const host = planCancellation({ rooms: [room("a", "limited")], reservationIds: null, actor: "host", now: late });
+    const guest = planCancellation({ rooms: [room("a", "standard")], reservationIds: null, actor: "guest", now: late });
+    const host = planCancellation({ rooms: [room("a", "standard")], reservationIds: null, actor: "host", now: late });
     expect(guest.ok && guest.totalCents).toBe(900);
     expect(host.ok && host.totalCents).toBe(30_900);
     expect(host.ok && host.rooms[0].reason).toBe("host_cancellation");
@@ -85,9 +85,10 @@ describe("planCancellation", () => {
 });
 
 describe("planEarlyDeparture", () => {
-  test("refunds each active room by its tier from the night after the last one stayed", () => {
+  test("refunds each active room from the night after the last one stayed: the next 7 nights are kept", () => {
     const plan = planEarlyDeparture({ rooms: [room("a", "flex")], lastNightStayed: "2026-11-10" });
-    expect(plan.ok && plan.rooms[0].result.refund).toEqual({ accommodation: 100, touristTax: 6, total: 106 });
+    // Two unused nights, both within the 7 kept: only their tourist tax comes back.
+    expect(plan.ok && plan.rooms[0].result.refund).toEqual({ accommodation: 0, touristTax: 6, total: 6 });
     expect(plan.ok && plan.rooms[0].reason).toBe("early_departure");
   });
 

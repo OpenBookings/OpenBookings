@@ -90,9 +90,7 @@ type ReservationRow = {
   id: string;
   cancellation_tier: CancellationTier | null;
   check_in_at: Date | null;
-  grace_until: Date | null;
   full_refund_until: Date | null;
-  partial_refund_until: Date | null;
   policy_version: string | null;
   nights: NightValue[];
   cancelled_at: Date | null;
@@ -129,8 +127,8 @@ export async function loadBookingState(
   if (!booking) return null;
 
   const { rows } = await db.query(
-    `SELECT res.id, res.cancellation_tier, res.check_in_at, res.grace_until, res.full_refund_until,
-            res.partial_refund_until, res.policy_version, res.nights, res.cancelled_at,
+    `SELECT res.id, res.cancellation_tier, res.check_in_at, res.full_refund_until,
+            res.policy_version, res.nights, res.cancelled_at,
             COALESCE((SELECT SUM(rf.amount) FROM refunds rf
                       WHERE rf.reservation_id = res.id AND rf.status <> 'failed'), 0)::float8 AS refunded
      FROM reservations res WHERE res.booking_id = $1
@@ -153,9 +151,7 @@ export async function loadBookingState(
           tier: r.cancellation_tier as CancellationTier,
           confirmedAt: booking.confirmed_at ?? (r.check_in_at as Date),
           checkInAt: r.check_in_at as Date,
-          graceUntil: r.grace_until,
           fullRefundUntil: r.full_refund_until,
-          partialRefundUntil: r.partial_refund_until,
           policyVersion: r.policy_version ?? "",
         },
         nights: r.nights,

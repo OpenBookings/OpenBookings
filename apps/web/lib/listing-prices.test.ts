@@ -61,8 +61,8 @@ describe("withCancellationTerms", () => {
   });
 
   test("a refundable rate carries the property's tier", () => {
-    const [r] = withCancellationTerms([room({ rate_plans: [plan("flex", 100, true)] })], "limited");
-    expect(r.rate_plans[0].cancellation_tier).toBe("limited");
+    const [r] = withCancellationTerms([room({ rate_plans: [plan("flex", 100, true)] })], "flex");
+    expect(r.rate_plans[0].cancellation_tier).toBe("flex");
   });
 
   test("a non-refundable rate at least 10% cheaper is shown, with what it saves", () => {

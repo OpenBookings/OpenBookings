@@ -111,22 +111,21 @@ describe("policiesSchema", () => {
   });
 
   test("accepts each of the three base cancellation tiers", () => {
-    for (const tier of ["flex", "standard", "limited"] as const) {
+    for (const tier of ["flex", "standard"] as const) {
       const r = policiesSchema.safeParse({ ...valid, cancellationTier: tier });
       expect(r.data!.cancellationTier).toBe(tier);
     }
   });
 
   test("rejects a tier that isn't in Annex B, or non-refundable as a property tier", () => {
-    for (const tier of ["strict", "non_refundable"]) {
+    for (const tier of ["strict", "limited", "non_refundable"]) {
       const r = policiesSchema.safeParse({ ...valid, cancellationTier: tier });
       expect(r.success).toBe(false);
     }
   });
 
   test("requires a cancellation tier", () => {
-    const { cancellationTier: _, ...rest } = valid;
-    const r = policiesSchema.safeParse(rest);
+    const r = policiesSchema.safeParse({ ...valid, cancellationTier: undefined });
     expect(r.success).toBe(false);
     expect(r.error!.flatten().fieldErrors.cancellationTier?.[0]).toBe("Pick a cancellation policy.");
   });

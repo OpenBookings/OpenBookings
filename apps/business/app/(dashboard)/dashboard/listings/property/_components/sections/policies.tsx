@@ -32,7 +32,7 @@ const METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
   applepay: "Apple Pay",
 };
 
-const BASE_TIERS: PropertyCancellationTier[] = ["flex", "standard", "limited"];
+const BASE_TIERS: PropertyCancellationTier[] = ["flex", "standard"];
 
 /** Pre-filled for a host with no fine print yet. Every line is editable. */
 const DEFAULT_FINE_PRINT = [
@@ -187,7 +187,7 @@ function PoliciesFields({
         rate to a room.
       </p>
       <Field data-invalid={!!state.errors?.cancellationTier}>
-        <div role="radiogroup" aria-label="Cancellation policy" className="grid gap-3 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="Cancellation policy" className="grid gap-3 sm:grid-cols-2">
           {BASE_TIERS.map((tier) => (
             <label
               key={tier}

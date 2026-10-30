@@ -34,9 +34,7 @@ export type HostReservationRow = {
     room_name: string;
     cancellation_tier: CancellationTier | null;
     check_in_at: string | null;
-    grace_until: string | null;
     full_refund_until: string | null;
-    partial_refund_until: string | null;
     nights: NightValue[];
     cancelled_at: string | null;
   }[];
@@ -89,9 +87,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
               tier,
               confirmedAt: date(row.confirmed_at) ?? checkInAt,
               checkInAt,
-              graceUntil: date(r.grace_until),
               fullRefundUntil: date(r.full_refund_until),
-              partialRefundUntil: date(r.partial_refund_until),
               policyVersion: POLICY_VERSION,
             },
             row.timezone,

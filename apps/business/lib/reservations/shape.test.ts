@@ -6,9 +6,7 @@ const room = (id: string, extra: Partial<HostReservationRow["rooms"][number]> = 
   room_name: "Deluxe",
   cancellation_tier: "flex",
   check_in_at: "2031-11-10T14:00:00+00:00",
-  grace_until: null,
   full_refund_until: "2031-11-09T14:00:00+00:00",
-  partial_refund_until: null,
   nights: [
     { date: "2031-11-10", price: 100, touristTax: 3 },
     { date: "2031-11-11", price: 100, touristTax: 3 },
