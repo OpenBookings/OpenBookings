@@ -117,3 +117,21 @@ describe("planGoodwill", () => {
     expect(planGoodwill({ paid: 618, refunded: 0, amount: 0 })).toEqual({ ok: false, error: "nothing_to_refund" });
   });
 });
+
+describe("never refunds more than is left on the whole booking", () => {
+  test("goodwill already paid (stored against no room) shrinks a later host cancellation", () => {
+    // One room, €309 paid; €250 goodwill already refunded at booking level.
+    const plan = planCancellation({ rooms: [room("a")], reservationIds: null, actor: "host", now: TEN_DAYS_BEFORE, bookingLeft: 59 });
+    expect(plan.ok && plan.totalCents).toBe(5_900);
+  });
+
+  test("the booking cap is shared across rooms, in order", () => {
+    const plan = planCancellation({ rooms: [room("a"), room("b")], reservationIds: null, actor: "host", now: TEN_DAYS_BEFORE, bookingLeft: 400 });
+    expect(plan.ok && plan.rooms.map((r) => r.refund.total)).toEqual([309, 91]);
+  });
+
+  test("an early departure is capped the same way", () => {
+    const plan = planEarlyDeparture({ rooms: [room("a")], lastNightStayed: "2026-11-10", bookingLeft: 2 });
+    expect(plan.ok && plan.totalCents).toBe(200);
+  });
+});

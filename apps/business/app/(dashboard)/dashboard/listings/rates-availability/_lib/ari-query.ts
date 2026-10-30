@@ -161,7 +161,8 @@ booked AS (
   JOIN dates d ON d.d >= b.check_in_date
               AND d.d < LEAST(b.check_out_date, COALESCE(b.departed_early_on + 1, b.check_out_date))
   -- Rooms cancel one by one (0027): a cancelled room holds nothing.
-  WHERE b.status IN ('confirmed', 'checked_in', 'completed')
+  -- As text: see HOLDING_STATUSES in rooms/_lib/mutations.ts.
+  WHERE b.status::text IN ('confirmed', 'checked_in', 'completed')
     AND res.cancelled_at IS NULL
   GROUP BY res.room_id, d.d
 )

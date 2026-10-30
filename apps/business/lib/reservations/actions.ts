@@ -14,7 +14,8 @@ import {
   type LifecycleDeps,
   type LifecycleResult,
 } from "@openbookings/db/booking-lifecycle";
-import { refundPayment } from "@openbookings/stripe";
+import * as Sentry from "@sentry/nextjs";
+import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
 
 /**
@@ -25,7 +26,14 @@ import { getServerSession } from "@/lib/auth";
  */
 
 const RESERVATIONS = "/dashboard/bookings/reservations";
-const deps: LifecycleDeps = { refund: refundPayment };
+const deps: LifecycleDeps = {
+  refund: refundPayment,
+  isDefiniteFailure: isDefiniteRefundFailure,
+  findRefund: findRefundForRow,
+  // A refund that didn't go through is money a guest is owed: make it loud.
+  onRefundProblem: ({ error, ...context }) =>
+    Sentry.captureException(error, { tags: { area: "refunds" }, extra: context }),
+};
 
 async function hostFor(bookingId: string) {
   const session = await getServerSession();

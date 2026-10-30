@@ -155,4 +155,50 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(retried.ok && retried.refunds[0].status).toBe("succeeded");
     expect(calls[1].idempotencyKey).toBe(calls[0].idempotencyKey);
   });
+
+  test("goodwill first, then a host cancellation: never more than was paid in total", async () => {
+    await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 500 });
+    await cancelRooms(deps(), { bookingId, actor: host, reservationIds: null });
+    const total = await one<{ total: number }>(
+      `SELECT SUM(amount)::float8 AS total FROM refunds WHERE booking_id = $1`,
+      [bookingId],
+    );
+    expect(total.total).toBe(618);
+  });
+
+  test("a timeout leaves the refund pending and audited; a retry finds it on Stripe instead of paying again", async () => {
+    refund = async (i) => {
+      calls.push(i);
+      throw new Error("socket hang up");
+    };
+    const problems: unknown[] = [];
+    const uncertain = { ...deps(), isDefiniteFailure: () => false, onRefundProblem: (p: unknown) => problems.push(p) };
+    const result = await cancelRooms(uncertain, { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(result.ok && result.refunds[0].status).toBe("pending");
+    expect(problems).toHaveLength(1);
+    const audit = await one<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'refund.uncertain' AND detail->>'bookingId' = $1`,
+      [bookingId],
+    );
+    expect(audit.n).toBe(1);
+
+    const retried = await retryRefunds(
+      { ...deps(), findRefund: async () => ({ id: "re_already" }) },
+      { bookingId },
+    );
+    expect(retried.ok && retried.refunds[0].status).toBe("succeeded");
+    expect(calls).toHaveLength(1);
+    expect(
+      (await one<{ stripe_refund_id: string }>(`SELECT stripe_refund_id FROM refunds WHERE reservation_id = $1`, [reservationIds[0]]))
+        .stripe_refund_id,
+    ).toBe("re_already");
+  });
+
+  test("a guest can't cancel once check-in time has passed", async () => {
+    const afterCheckIn = new Date(CHECK_IN_AT + 3_600_000);
+    expect(await cancelRooms(deps(afterCheckIn), { bookingId, actor: guest, reservationIds: null })).toEqual({
+      ok: false,
+      error: "not_allowed",
+    });
+  });
 });

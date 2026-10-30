@@ -23,6 +23,7 @@ const row = (extra: Partial<GuestBookingRow> = {}): GuestBookingRow => ({
   property_name: "Terme di Saturnia",
   city: "Saturnia",
   timezone: "Europe/Rome",
+  check_in_time: "15:00",
   check_in_until: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
   refunded: 0,
@@ -49,5 +50,9 @@ describe("toGuestBooking", () => {
 
   test("once the stay is over there is nothing to cancel", () => {
     expect(toGuestBooking(row(), new Date("2031-11-13T10:00:00Z")).canCancel).toBe(false);
+  });
+
+  test("after check-in time the guest can no longer cancel here", () => {
+    expect(toGuestBooking(row(), new Date("2031-11-10T15:00:00Z")).canCancel).toBe(false);
   });
 });

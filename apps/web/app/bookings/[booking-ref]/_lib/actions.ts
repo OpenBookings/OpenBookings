@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { queryOne } from '@openbookings/db';
 import { cancelRooms, previewRefund, type LifecycleResult } from '@openbookings/db/booking-lifecycle';
-import { refundPayment } from '@openbookings/stripe';
+import * as Sentry from '@sentry/nextjs';
+import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +41,13 @@ export async function guestCancelRooms(bookingId: string, reservationIds: string
   const userId = await owner(bookingId);
   if (!userId) return { ok: false, error: 'not_found' };
   const result = await cancelRooms(
-    { refund: refundPayment },
+    {
+      refund: refundPayment,
+      isDefiniteFailure: isDefiniteRefundFailure,
+      findRefund: findRefundForRow,
+      onRefundProblem: ({ error, ...context }) =>
+        Sentry.captureException(error, { tags: { area: 'refunds' }, extra: context }),
+    },
     { bookingId, actor: { kind: 'guest', userId }, reservationIds },
   );
   revalidatePath(`/bookings/${bookingId}`);

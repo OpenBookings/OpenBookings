@@ -55,7 +55,21 @@ export type LifecycleDeps = {
   now?: () => Date;
   /** Defaults to the shared pool. Tests pass a client inside their own transaction. */
   db?: LifecycleDb;
+  /**
+   * Whether an error from `refund` means Stripe refused it (no money moved).
+   * Anything else might have gone through: the row stays `pending` and is
+   * checked with `findRefund` before it is ever sent again. Defaults to
+   * "always refused", which is what a fake in a test means.
+   */
+  isDefiniteFailure?: (error: unknown) => boolean;
+  /** Looks on Stripe for a refund already made for one of our rows (by `metadata.refundId`). */
+  findRefund?: (i: { paymentIntentId: string; stripeAccountId: string; refundRowId: string }) => Promise<{ id: string } | null>;
+  /** Told about every refund that didn't go through, so someone can act on it (Sentry, an alert). */
+  onRefundProblem?: (i: { bookingId: string; refundId: string; status: "failed" | "pending"; error: unknown }) => void;
 };
+
+/** Stripe forgets idempotency keys after about a day; a retry key changes per window, after a lookup. */
+const RETRY_KEY_WINDOW_MS = 20 * 3_600_000;
 
 export type Actor = { kind: "guest" | "host"; userId: string };
 
@@ -82,8 +96,10 @@ type BookingRow = {
   departed_early_on: string | null;
   stripe_payment_intent_id: string | null;
   timezone: string;
+  check_in_time: string | null;
   check_in_until: string | null;
   stripe_account_id: string | null;
+  organization_id: string | null;
 };
 
 type ReservationRow = {
@@ -102,23 +118,32 @@ export type BookingState = {
   rooms: RoomState[];
   /** What may happen now. Empty for a booking without a policy snapshot (still pending). */
   actions: BookingAction[];
-  /** Refunded on the whole booking so far, euros (rows that did not fail). */
+  /**
+   * Refund rows on the whole booking so far, euros — failed and pending ones
+   * included, until they are reconciled, so a cap never assumes money that
+   * may already have left.
+   */
   refunded: number;
 };
 
-/** Read a booking with its rooms and what may happen to it at `now`. `lock` = FOR UPDATE. */
+/**
+ * Read a booking with its rooms and what `actor` may do to it at `now`.
+ * `lock` = FOR UPDATE.
+ */
 export async function loadBookingState(
   db: Queryable,
   bookingId: string,
   now: Date,
   lock = false,
+  actor: Actor["kind"] = "host",
 ): Promise<BookingState | null> {
   if (!/^[0-9a-f-]{36}$/i.test(bookingId)) return null;
   const { rows: bookings } = await db.query(
     `SELECT b.id, b.status, b.user_id, b.check_in_date::text AS check_in_date,
             b.check_out_date::text AS check_out_date, b.confirmed_at,
             b.departed_early_on::text AS departed_early_on, b.stripe_payment_intent_id,
-            p.timezone, to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.stripe_account_id
+            p.timezone, to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
+            to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.stripe_account_id, p.organization_id
      FROM bookings b JOIN properties p ON p.id = b.hotel_id
      WHERE b.id = $1 ${lock ? "FOR UPDATE OF b" : ""}`,
     [bookingId],
@@ -129,8 +154,7 @@ export async function loadBookingState(
   const { rows } = await db.query(
     `SELECT res.id, res.cancellation_tier, res.check_in_at, res.full_refund_until,
             res.policy_version, res.nights, res.cancelled_at,
-            COALESCE((SELECT SUM(rf.amount) FROM refunds rf
-                      WHERE rf.reservation_id = res.id AND rf.status <> 'failed'), 0)::float8 AS refunded
+            COALESCE((SELECT SUM(rf.amount) FROM refunds rf WHERE rf.reservation_id = res.id), 0)::float8 AS refunded
      FROM reservations res WHERE res.booking_id = $1
      ORDER BY res.created_at, res.id`,
     [bookingId],
@@ -138,8 +162,7 @@ export async function loadBookingState(
   const reservations = rows as ReservationRow[];
 
   const { rows: totals } = await db.query(
-    `SELECT COALESCE(SUM(amount), 0)::float8 AS refunded FROM refunds
-     WHERE booking_id = $1 AND status <> 'failed'`,
+    `SELECT COALESCE(SUM(amount), 0)::float8 AS refunded FROM refunds WHERE booking_id = $1`,
     [bookingId],
   );
 
@@ -166,12 +189,14 @@ export async function loadBookingState(
         checkInAt: rooms[0].snapshot.checkInAt,
         checkInClosesAt: checkInClosesAt({
           arrivalDate: booking.check_in_date,
+          checkInTime: booking.check_in_time,
           checkInUntil: booking.check_in_until,
           timeZone: booking.timezone,
         }),
         checkOutDate: booking.check_out_date,
         timeZone: booking.timezone,
         now,
+        actor,
       })
     : []
   ).filter((a) => !(a === "record_early_departure" && booking.departed_early_on));
@@ -220,34 +245,78 @@ async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, pla
 }
 
 /**
- * Send each refund row to Stripe with its own idempotency key and record the
- * outcome. Rows stay `pending` when the booking has no payment to refund
- * (a seeded booking), so nothing pretends money moved.
+ * Send each refund row to Stripe and record the outcome.
+ *
+ * - No payment on the booking (a seeded one): the row stays `pending`, so
+ *   nothing pretends money moved.
+ * - Stripe refused it: `failed`, audited, reported.
+ * - Anything else (timeout, dropped connection): it may have gone through, so
+ *   the row stays `pending`, audited, reported. It is looked up on Stripe
+ *   before it is ever sent again (`retry`).
+ * - A status update never overwrites a row that already succeeded.
  */
-async function sendRefunds(deps: LifecycleDeps, db: Queryable, booking: BookingRow, rows: RefundRow[]) {
+async function sendRefunds(
+  deps: LifecycleDeps,
+  db: Queryable,
+  booking: BookingRow,
+  rows: RefundRow[],
+  retry = false,
+) {
+  const now = deps.now?.() ?? new Date();
   const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
   for (const row of rows) {
-    if (!booking.stripe_payment_intent_id || !booking.stripe_account_id) {
+    const pi = booking.stripe_payment_intent_id;
+    const account = booking.stripe_account_id;
+    if (!pi || !account) {
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
       continue;
     }
     try {
-      const refund = await deps.refund({
-        paymentIntentId: booking.stripe_payment_intent_id,
-        stripeAccountId: booking.stripe_account_id,
-        amountCents: Math.round(row.amount * 100),
-        idempotencyKey: row.key,
-        metadata: { bookingId: booking.id, refundId: row.id },
-      });
-      await db.query(`UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2`, [refund.id, row.id]);
+      const existing =
+        retry && deps.findRefund
+          ? await deps.findRefund({ paymentIntentId: pi, stripeAccountId: account, refundRowId: row.id })
+          : null;
+      const refund =
+        existing ??
+        (await deps.refund({
+          paymentIntentId: pi,
+          stripeAccountId: account,
+          amountCents: Math.round(row.amount * 100),
+          // After a lookup found nothing, a fresh key per window is safe; without
+          // a lookup, only the original key is.
+          idempotencyKey:
+            retry && deps.findRefund ? `${row.key}:r${Math.floor(now.getTime() / RETRY_KEY_WINDOW_MS)}` : row.key,
+          metadata: { bookingId: booking.id, refundId: row.id },
+        }));
+      await db.query(
+        `UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2 AND status <> 'succeeded'`,
+        [refund.id, row.id],
+      );
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "succeeded" });
     } catch (error) {
-      console.error("[refund] Stripe refund failed", { refundId: row.id, error });
-      await db.query(`UPDATE refunds SET status = 'failed' WHERE id = $1`, [row.id]);
-      results.push({ reservationId: row.reservationId, amount: row.amount, status: "failed" });
+      const status = (deps.isDefiniteFailure ?? (() => true))(error) ? "failed" : "pending";
+      await db.query(`UPDATE refunds SET status = $1::payment_status WHERE id = $2 AND status <> 'succeeded'`, [
+        status,
+        row.id,
+      ]);
+      await db.query(
+        `INSERT INTO audit_log (action, organization_id, detail) VALUES ($1, $2, $3::jsonb)`,
+        [
+          status === "failed" ? "refund.failed" : "refund.uncertain",
+          booking.organization_id,
+          JSON.stringify({ bookingId: booking.id, refundId: row.id, amount: row.amount, error: String(error) }),
+        ],
+      );
+      deps.onRefundProblem?.({ bookingId: booking.id, refundId: row.id, status, error });
+      results.push({ reservationId: row.reservationId, amount: row.amount, status });
     }
   }
   return results;
+}
+
+/** What the guest paid for every room on the booking, euros. */
+function bookingPaid(state: BookingState): number {
+  return state.rooms.reduce((sum, r) => sum + Math.round(roomPaid(r) * 100), 0) / 100;
 }
 
 function context(deps: LifecycleDeps) {
@@ -262,18 +331,23 @@ export async function previewRefund(
   deps: Omit<LifecycleDeps, "refund"> = {},
 ): Promise<{ perRoom: { reservationId: string; result: RefundResult; refund: PlannedRefund["refund"] }[]; total: number } | null> {
   const { db, now } = context({ ...deps, refund: async () => ({ id: "", status: "" }) });
-  const state = await loadBookingState(db, i.bookingId, now);
-  if (!state || state.rooms.length === 0) return null;
-
   const event = i.event ?? { kind: "guest_cancellation", at: now };
+  const actor = event.kind === "guest_cancellation" ? "guest" : "host";
+  const state = await loadBookingState(db, i.bookingId, now, false, actor);
+  if (!state || state.rooms.length === 0) return null;
+  // Previewing what a guest can't do would promise a refund the cancel then refuses.
+  if (actor === "guest" && !state.actions.includes("cancel")) return null;
+
+  const bookingLeft = bookingPaid(state) - state.refunded;
   const plan =
     event.kind === "early_departure"
-      ? planEarlyDeparture({ rooms: state.rooms, lastNightStayed: event.lastNightStayed })
+      ? planEarlyDeparture({ rooms: state.rooms, lastNightStayed: event.lastNightStayed, bookingLeft })
       : planCancellation({
           rooms: state.rooms,
           reservationIds: i.reservationIds,
-          actor: event.kind === "guest_cancellation" ? "guest" : "host",
+          actor,
           now: event.kind === "guest_cancellation" ? event.at : now,
+          bookingLeft,
         });
   if (!plan.ok) return null;
   return {
@@ -289,11 +363,17 @@ export async function cancelRooms(
 ): Promise<LifecycleResult> {
   const { db, now } = context(deps);
   const done = await db.transaction(async (tx) => {
-    const state = await loadBookingState(tx, i.bookingId, now, true);
+    const state = await loadBookingState(tx, i.bookingId, now, true, i.actor.kind);
     if (!state) return { ok: false as const, error: "not_found" as const };
     if (!state.actions.includes("cancel")) return { ok: false as const, error: "not_allowed" as const };
 
-    const plan = planCancellation({ rooms: state.rooms, reservationIds: i.reservationIds, actor: i.actor.kind, now });
+    const plan = planCancellation({
+      rooms: state.rooms,
+      reservationIds: i.reservationIds,
+      actor: i.actor.kind,
+      now,
+      bookingLeft: bookingPaid(state) - state.refunded,
+    });
     if (!plan.ok) return plan;
 
     await tx.query(`UPDATE reservations SET cancelled_at = $1 WHERE id = ANY($2::uuid[])`, [
@@ -356,7 +436,11 @@ export async function recordEarlyDeparture(
     if (!state) return { ok: false as const, error: "not_found" as const };
     if (!state.actions.includes("record_early_departure")) return { ok: false as const, error: "not_allowed" as const };
 
-    const plan = planEarlyDeparture({ rooms: state.rooms, lastNightStayed: i.lastNightStayed });
+    const plan = planEarlyDeparture({
+      rooms: state.rooms,
+      lastNightStayed: i.lastNightStayed,
+      bookingLeft: bookingPaid(state) - state.refunded,
+    });
     if (!plan.ok) return plan;
 
     await tx.query(
@@ -382,8 +466,7 @@ export async function issueGoodwillRefund(
     if (!state) return { ok: false as const, error: "not_found" as const };
     if (!state.actions.includes("goodwill_refund")) return { ok: false as const, error: "not_allowed" as const };
 
-    const paid = state.rooms.reduce((sum, r) => sum + Math.round(roomPaid(r) * 100), 0) / 100;
-    const plan = planGoodwill({ paid, refunded: state.refunded, amount: i.amount });
+    const plan = planGoodwill({ paid: bookingPaid(state), refunded: state.refunded, amount: i.amount });
     if (!plan.ok) return plan;
 
     const { rows: count } = await tx.query(
@@ -404,7 +487,11 @@ export async function issueGoodwillRefund(
   return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
 }
 
-/** Send refunds that failed, or never reached Stripe, again — with their original keys. */
+/**
+ * Send refunds that failed, or whose outcome is unknown, again. Each is first
+ * looked up on Stripe (when `findRefund` is given), so one that did go through
+ * is recorded rather than paid twice.
+ */
 export async function retryRefunds(deps: LifecycleDeps, i: { bookingId: string }): Promise<LifecycleResult> {
   const { db, now } = context(deps);
   const state = await loadBookingState(db, i.bookingId, now);
@@ -415,5 +502,5 @@ export async function retryRefunds(deps: LifecycleDeps, i: { bookingId: string }
     [i.bookingId],
   );
   if (rows.length === 0) return { ok: false, error: "nothing_to_refund" };
-  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[]) };
+  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[], true) };
 }

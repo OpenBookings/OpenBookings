@@ -244,15 +244,25 @@ export type BookingAction =
  * arrival day, or midnight after it when the property states no cut-off.
  * A guest who hasn't arrived by then can be marked a no-show.
  */
-export function checkInClosesAt(i: { arrivalDate: string; checkInUntil: string | null; timeZone: string }): Date {
-  if (i.checkInUntil) return localTimeToUtc(i.arrivalDate, i.checkInUntil, i.timeZone);
+export function checkInClosesAt(i: {
+  arrivalDate: string;
+  checkInUntil: string | null;
+  timeZone: string;
+  /** The property's check-in time. A cut-off at or before it (e.g. 01:00) is the next day. */
+  checkInTime?: string | null;
+}): Date {
   const next = new Date(Date.parse(`${i.arrivalDate}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
-  return localTimeToUtc(next, "00:00", i.timeZone);
+  if (!i.checkInUntil) return localTimeToUtc(next, "00:00", i.timeZone);
+  const hhmm = (t: string) => t.slice(0, 5);
+  const afterMidnight = i.checkInTime != null && hhmm(i.checkInUntil) <= hhmm(i.checkInTime);
+  return localTimeToUtc(afterMidnight ? next : i.arrivalDate, i.checkInUntil, i.timeZone);
 }
 
 /**
  * The actions a host or guest may take on a booking right now, in display
- * order. Who may take which one is the caller's business.
+ * order. A guest may only cancel, and only before check-in time: after that a
+ * guest who hasn't arrived is a no-show (nothing back), and one who has is
+ * staying. A host keeps the wider set.
  */
 export function allowedActions(i: {
   status: BookingStatus;
@@ -261,7 +271,11 @@ export function allowedActions(i: {
   checkOutDate: string;
   timeZone: string;
   now: Date;
+  actor?: "guest" | "host";
 }): BookingAction[] {
+  if (i.actor === "guest") {
+    return i.status === "confirmed" && i.now.getTime() < i.checkInAt.getTime() ? ["cancel"] : [];
+  }
   const now = i.now.getTime();
   const checkIn = i.checkInAt.getTime();
   const stayOver = now >= localTimeToUtc(i.checkOutDate, "00:00", i.timeZone).getTime();
@@ -280,6 +294,9 @@ export function allowedActions(i: {
       actions.push("goodwill_refund");
       break;
     case "completed":
+    // A late cancellation or a no-show is exactly when a host may want to be generous.
+    case "cancelled":
+    case "no_show":
       actions.push("goodwill_refund");
       break;
   }

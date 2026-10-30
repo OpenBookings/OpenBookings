@@ -18,6 +18,7 @@ export type GuestBookingRow = {
   property_name: string;
   city: string | null;
   timezone: string;
+  check_in_time: string | null;
   check_in_until: string | null;
   confirmed_at: string | null;
   /** Refunded so far (rows that did not fail), euros. */
@@ -93,12 +94,14 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
       checkInAt: new Date(row.rooms[0].check_in_at as string),
       checkInClosesAt: checkInClosesAt({
         arrivalDate: row.check_in_date,
+        checkInTime: row.check_in_time,
         checkInUntil: row.check_in_until,
         timeZone: row.timezone,
       }),
       checkOutDate: row.check_out_date,
       timeZone: row.timezone,
       now,
+      actor: 'guest',
     }).includes('cancel');
 
   return {

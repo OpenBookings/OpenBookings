@@ -24,6 +24,7 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   guests: 2,
   total_amount: 206,
   timezone: "Europe/Amsterdam",
+  check_in_time: "15:00",
   check_in_until: "22:00",
   departed_early_on: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
@@ -61,5 +62,15 @@ describe("toHostReservation", () => {
 
   test("a refund that hasn't gone through is flagged", () => {
     expect(toHostReservation(row({ unsettled_refunds: 1 }), NOW).refundIssue).toBe(true);
+  });
+
+  test("a cut-off after midnight keeps the no-show button away until it passes", () => {
+    const r = row({ check_in_until: "01:00" });
+    expect(toHostReservation(r, new Date("2031-11-10T22:30:00Z")).actions).not.toContain("mark_no_show");
+    expect(toHostReservation(r, new Date("2031-11-11T00:30:00Z")).actions).toContain("mark_no_show");
+  });
+
+  test("goodwill is still possible on a no-show", () => {
+    expect(toHostReservation(row({ status: "no_show" }), new Date("2031-11-12T10:00:00Z")).actions).toEqual(["goodwill_refund"]);
   });
 });

@@ -42,8 +42,8 @@ export function roomPaid(room: Pick<RoomState, "nights">): number {
   return room.nights.reduce((sum, n) => sum + cents(n.price) + cents(n.touristTax), 0) / 100;
 }
 
-function capped(room: RoomState, reason: RefundReason, result: RefundResult): PlannedRefund {
-  const left = Math.max(0, cents(roomPaid(room)) - cents(room.refunded));
+function capped(room: RoomState, reason: RefundReason, result: RefundResult, bookingLeftCents: number): PlannedRefund {
+  const left = Math.max(0, Math.min(cents(roomPaid(room)) - cents(room.refunded), bookingLeftCents));
   const total = Math.min(cents(result.refund.total), left);
   // Tourist tax first: it is never the host's money to keep.
   const touristTax = Math.min(cents(result.refund.touristTax), total);
@@ -58,6 +58,23 @@ function capped(room: RoomState, reason: RefundReason, result: RefundResult): Pl
 const sumCents = (rooms: PlannedRefund[]) => rooms.reduce((sum, r) => sum + cents(r.refund.total), 0);
 
 /**
+ * Cap each room at what is left on it AND, room by room, at what is left on
+ * the whole booking: goodwill refunds belong to no room, so a per-room cap
+ * alone would let goodwill-then-cancel refund more than was paid.
+ */
+function cappedAll(
+  items: { room: RoomState; reason: RefundReason; result: RefundResult }[],
+  bookingLeft: number | undefined,
+): PlannedRefund[] {
+  let left = bookingLeft === undefined ? Number.POSITIVE_INFINITY : Math.max(0, cents(bookingLeft));
+  return items.map(({ room, reason, result }) => {
+    const planned = capped(room, reason, result, left);
+    left -= cents(planned.refund.total);
+    return planned;
+  });
+}
+
+/**
  * Cancel some rooms (`reservationIds`) or every room still active (`null`).
  * A guest gets their tier; a host cancelling gets the guest everything back
  * (Annex B B.5.4).
@@ -67,6 +84,8 @@ export function planCancellation(i: {
   reservationIds: string[] | null;
   actor: "guest" | "host";
   now: Date;
+  /** What is left unrefunded on the whole booking, euros. */
+  bookingLeft?: number;
 }): Planned<{ rooms: PlannedRefund[]; cancelsBooking: boolean; totalCents: number }> {
   const ids = i.reservationIds ?? i.rooms.filter((r) => !r.cancelledAt).map((r) => r.reservationId);
   const chosen = ids.map((id) => i.rooms.find((r) => r.reservationId === id));
@@ -75,16 +94,17 @@ export function planCancellation(i: {
   if (active.length === 0) return { ok: false, error: "already_cancelled" };
 
   const reason: RefundReason = i.actor === "host" ? "host_cancellation" : "guest_cancellation";
-  const rooms = active.map((room) =>
-    capped(
+  const rooms = cappedAll(
+    active.map((room) => ({
       room,
       reason,
-      calculateRefund(
+      result: calculateRefund(
         room.snapshot,
         room.nights,
         reason === "host_cancellation" ? { kind: "host_cancellation" } : { kind: "guest_cancellation", at: i.now },
       ),
-    ),
+    })),
+    i.bookingLeft,
   );
   const stillActive = i.rooms.filter((r) => !r.cancelledAt && !active.includes(r));
   return { ok: true, rooms, cancelsBooking: stillActive.length === 0, totalCents: sumCents(rooms) };
@@ -97,17 +117,21 @@ export function planCancellation(i: {
 export function planEarlyDeparture(i: {
   rooms: RoomState[];
   lastNightStayed: string;
+  /** What is left unrefunded on the whole booking, euros. */
+  bookingLeft?: number;
 }): Planned<{ rooms: PlannedRefund[]; totalCents: number }> {
   const active = i.rooms.filter((r) => !r.cancelledAt);
   const stayNights = active[0]?.nights.map((n) => n.date) ?? [];
   const index = stayNights.indexOf(i.lastNightStayed);
   if (index < 0 || index >= stayNights.length - 1) return { ok: false, error: "not_allowed" };
 
-  const rooms = active.map((room) =>
-    capped(room, "early_departure", calculateRefund(room.snapshot, room.nights, {
-      kind: "early_departure",
-      lastNightStayed: i.lastNightStayed,
+  const rooms = cappedAll(
+    active.map((room) => ({
+      room,
+      reason: "early_departure" as const,
+      result: calculateRefund(room.snapshot, room.nights, { kind: "early_departure", lastNightStayed: i.lastNightStayed }),
     })),
+    i.bookingLeft,
   );
   return { ok: true, rooms, totalCents: sumCents(rooms) };
 }

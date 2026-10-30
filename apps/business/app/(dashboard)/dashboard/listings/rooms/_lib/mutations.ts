@@ -78,6 +78,9 @@ export class NotFoundError extends Error {
  * checkout, and archiving or shrinking a room underneath them is the failure
  * this guard exists for.
  */
+// Compared as text: 'checked_in' is added by 0027, and Postgres refuses a new
+// enum value (even as a literal) in the transaction that added it, which is
+// how the DB-backed tests apply pending migrations.
 const HOLDING_STATUSES = `('pending', 'confirmed', 'checked_in', 'completed')`;
 const PROPERTY_TODAY = `(now() AT TIME ZONE p.timezone)::date`;
 
@@ -143,7 +146,7 @@ async function futureRoomBookings(roomId: string, deps: Pick<MutationDeps, "quer
      JOIN rooms r      ON r.id = res.room_id
      JOIN properties p ON p.id = r.property_id
      WHERE res.room_id = $1
-       AND b.status IN ${HOLDING_STATUSES}
+       AND b.status::text IN ${HOLDING_STATUSES}
        AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}`,
     [roomId],
@@ -307,7 +310,7 @@ async function peakFutureUnits(roomId: string, deps: Pick<MutationDeps, "queryOn
        INTERVAL '1 day'
      ) AS d
      WHERE res.room_id = $1
-       AND b.status IN ${HOLDING_STATUSES}
+       AND b.status::text IN ${HOLDING_STATUSES}
        AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}
      GROUP BY d
@@ -721,7 +724,7 @@ export async function archiveRate(
      JOIN rooms r      ON r.id = res.room_id
      JOIN properties p ON p.id = r.property_id
      WHERE res.rate_plan_id = $1
-       AND b.status IN ${HOLDING_STATUSES}
+       AND b.status::text IN ${HOLDING_STATUSES}
        AND res.cancelled_at IS NULL
        AND b.check_out_date > ${PROPERTY_TODAY}`,
     [plan.id],

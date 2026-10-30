@@ -22,6 +22,7 @@ export type HostReservationRow = {
   guests: number;
   total_amount: number;
   timezone: string;
+  check_in_time: string | null;
   check_in_until: string | null;
   departed_early_on: string | null;
   confirmed_at: string | null;
@@ -106,6 +107,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
         checkInAt: new Date(row.rooms[0].check_in_at as string),
         checkInClosesAt: checkInClosesAt({
           arrivalDate: row.check_in_date,
+          checkInTime: row.check_in_time,
           checkInUntil: row.check_in_until,
           timeZone: row.timezone,
         }),

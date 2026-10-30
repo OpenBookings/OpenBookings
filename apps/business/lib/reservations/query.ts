@@ -20,6 +20,7 @@ export const HOST_RESERVATIONS_SQL = `
     COALESCE((SELECT SUM(r.adults + r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS guests,
     b.total_amount::float8 AS total_amount,
     p.timezone,
+    to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     b.departed_early_on::text AS departed_early_on,
     b.confirmed_at,

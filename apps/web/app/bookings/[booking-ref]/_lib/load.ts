@@ -18,6 +18,7 @@ export const GUEST_BOOKING_SQL = `
     p.name AS property_name,
     p.city,
     p.timezone,
+    to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     b.confirmed_at,
     COALESCE((SELECT SUM(rf.amount) FROM refunds rf

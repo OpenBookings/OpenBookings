@@ -304,7 +304,7 @@ describe("allowedActions", () => {
     expect(allowedActions({ ...base, status: "completed", now: at("2026-11-16T08:00:00Z") })).toEqual(["goodwill_refund"]);
   });
 
-  for (const status of ["pending", "cancelled", "no_show"] as const) {
+  for (const status of ["pending"] as const) {
     test(`${status}: nothing`, () => {
       expect(allowedActions({ ...base, status, now: at("2026-11-08T12:00:00Z") })).toEqual([]);
     });
@@ -366,5 +366,38 @@ describe("reservationPolicy", () => {
       { date: "2026-11-11", price: 100, touristTax: 6 },
       { date: "2026-11-12", price: 100, touristTax: 6 },
     ]);
+  });
+});
+
+describe("review fixes", () => {
+  const base = {
+    checkInAt: CHECK_IN_AT,
+    checkInClosesAt: new Date("2026-11-10T23:00:00Z"),
+    checkOutDate: "2026-11-15",
+    timeZone: "Europe/Amsterdam",
+  };
+
+  test("a guest can only cancel before check-in time; a host still can later", () => {
+    const afterCheckIn = new Date("2026-11-10T16:00:00Z");
+    expect(allowedActions({ ...base, status: "confirmed", now: afterCheckIn, actor: "guest" })).toEqual([]);
+    expect(allowedActions({ ...base, status: "confirmed", now: afterCheckIn, actor: "host" })).toContain("cancel");
+    expect(allowedActions({ ...base, status: "confirmed", now: new Date("2026-11-08T12:00:00Z"), actor: "guest" })).toEqual([
+      "cancel",
+    ]);
+  });
+
+  test("goodwill stays possible after a cancellation or a no-show", () => {
+    const later = new Date("2026-11-12T10:00:00Z");
+    expect(allowedActions({ ...base, status: "cancelled", now: later })).toEqual(["goodwill_refund"]);
+    expect(allowedActions({ ...base, status: "no_show", now: later })).toEqual(["goodwill_refund"]);
+  });
+
+  test("a cut-off after midnight closes the arrival window the next day", () => {
+    expect(
+      checkInClosesAt({ arrivalDate: "2026-11-10", checkInTime: "15:00", checkInUntil: "01:00", timeZone: "Europe/Amsterdam" }).toISOString(),
+    ).toBe("2026-11-11T00:00:00.000Z");
+    expect(
+      checkInClosesAt({ arrivalDate: "2026-11-10", checkInTime: "15:00", checkInUntil: "22:00", timeZone: "Europe/Amsterdam" }).toISOString(),
+    ).toBe("2026-11-10T21:00:00.000Z");
   });
 });
