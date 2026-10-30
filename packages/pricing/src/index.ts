@@ -4,3 +4,4 @@
  * shown to a host is the same computation a guest is quoted.
  */
 export * from "./calculator";
+export * from "./tourist-tax";

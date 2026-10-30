@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { cached, propertyPageKey } from "@openbookings/cache";
 import { getDb, sql } from "@openbookings/db";
+import type { TouristTaxRule } from "@openbookings/pricing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import { buildHeroQuery, type HotelPageData } from "./hotel-page-query";
 import { getDemoHotelPage, isDemoMode } from "./demo-data";
@@ -24,6 +25,12 @@ export interface PropertyPagePayload {
   hotel: HotelPageData;
   amenities: RawAmenity[];
   rooms: DbRoom[];
+  /**
+   * Raw rules, not prices: the page works out the all-in price when it
+   * renders (see withAllInPrices). Optional because entries cached before
+   * tourist tax existed do not have it.
+   */
+  touristTaxRules?: TouristTaxRule[];
 }
 
 /**
@@ -89,6 +96,7 @@ function buildPropertyPageQuery(slug: string) {
         'bed_type', r.bed_type,
         'size_sqm', r.size_sqm::text,
         'max_adults', r.max_adults,
+        'base_occupancy', r.base_occupancy,
         'images', COALESCE(
           (SELECT json_agg(ri.url ORDER BY ri.sort_order ASC, ri.created_at ASC)
            FROM room_images ri WHERE ri.room_id = r.id),
@@ -116,7 +124,17 @@ function buildPropertyPageQuery(slug: string) {
       ) ORDER BY r.name), '[]'::json)
       FROM rooms r
       WHERE r.property_id = hero.id AND r.is_active = true
-    ) AS page_rooms
+    ) AS page_rooms,
+    (
+      SELECT COALESCE(json_agg(json_build_object(
+        'effectiveFrom', t.effective_from::text,
+        'charges', t.charges,
+        'childrenExempt', t.children_exempt,
+        'maxNights', t.max_nights
+      ) ORDER BY t.effective_from), '[]'::json)
+      FROM tourist_tax_rules t
+      WHERE t.property_id = hero.id
+    ) AS page_tourist_tax_rules
   FROM hero
 `;
 }
@@ -124,6 +142,7 @@ function buildPropertyPageQuery(slug: string) {
 type PropertyPageRow = HotelPageData & {
   page_amenities: RawAmenity[];
   page_rooms: DbRoom[];
+  page_tourist_tax_rules: TouristTaxRule[];
 };
 
 /** One round trip, so one connection; see buildPropertyPageQuery. */
@@ -135,8 +154,13 @@ async function loadFromDb(slug: string): Promise<PropertyPagePayload | null> {
   // useless — it would be cached.
   if (!row) return null;
 
-  const { page_amenities, page_rooms, ...hotel } = row;
-  return { hotel, amenities: page_amenities, rooms: page_rooms };
+  const { page_amenities, page_rooms, page_tourist_tax_rules, ...hotel } = row;
+  return {
+    hotel,
+    amenities: page_amenities,
+    rooms: page_rooms,
+    touristTaxRules: page_tourist_tax_rules,
+  };
 }
 
 /**

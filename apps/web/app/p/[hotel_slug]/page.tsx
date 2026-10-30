@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getHotelPage } from "@/lib/hotel-page-data";
+import { withAllInPrices } from "@/lib/listing-prices";
 import type { DbAmenityCategory } from "./_components/constants";
 
 import { NavWrapper }       from "./_components/NavWrapper";
@@ -23,7 +24,13 @@ export default async function HotelPage({
   const page = await getHotelPage(slug);
   if (!page) notFound();
 
-  const { hotel, amenities: rawAmenities, rooms } = page;
+  const { hotel, amenities: rawAmenities } = page;
+  // All-in per night, tourist tax included, priced for today.
+  const rooms = withAllInPrices(
+    page.rooms,
+    page.touristTaxRules ?? [],
+    new Date().toISOString().slice(0, 10),
+  );
 
   const gallery = hotel.gallery_images ?? [];
 

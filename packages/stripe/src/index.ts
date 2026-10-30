@@ -10,6 +10,6 @@ export {
   type BookingCheckoutInput,
   type BookingCheckoutLine,
 } from './payments/checkout';
-export { applicationFeeCents, commissionRefundDue } from './payments/fees';
+export { applicationFeeCents, bookingSplitCents, commissionRefundDue } from './payments/fees';
 export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
 export { constructWebhookEvent, type StripeEvent } from './webhooks';

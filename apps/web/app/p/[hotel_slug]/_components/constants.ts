@@ -24,6 +24,11 @@ export type DbRatePlan = {
   is_refundable: boolean;
   cancellation_policy: string | null;
   meal_plan: string | null;
+  /**
+   * What the guest pays for one night, all-in: `bar` plus tourist tax. Set at
+   * render time by withAllInPrices; absent on demo data.
+   */
+  price_per_night?: number;
 };
 
 export type DbRoom = {
@@ -34,6 +39,8 @@ export type DbRoom = {
   bed_type: string | null;
   size_sqm: number | null;
   max_occupancy: number | null;
+  /** Guests the base rate is for. The listing's all-in price is quoted at this. */
+  base_occupancy?: number;
   images: string[];
   rate_plans: DbRatePlan[];
   tags: string[];

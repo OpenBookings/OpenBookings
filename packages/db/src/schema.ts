@@ -17,6 +17,7 @@ import {
   text,
   time,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
@@ -114,6 +115,34 @@ export const properties = pgTable(
   (table) => [
     index("idx_hotels_is_active").on(table.isActive),
     index("idx_hotels_owner_user_id").on(table.ownerUserId),
+  ],
+);
+
+/**
+ * Tourist tax rules (0026). Added on top of the room price; never
+ * commissioned. A rule applies from `effectiveFrom` until the next one starts,
+ * and is not edited once it has started. `charges` holds TouristTaxCharge[]
+ * from @openbookings/pricing; empty = no tourist tax from this date.
+ */
+export const touristTaxRules = pgTable(
+  "tourist_tax_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    effectiveFrom: date("effective_from").notNull(),
+    charges: jsonb("charges").notNull().default(sql`'[]'::jsonb`),
+    childrenExempt: boolean("children_exempt").notNull().default(false),
+    maxNights: integer("max_nights"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Better Auth user id of whoever added it. */
+    createdBy: text("created_by"),
+  },
+  (table) => [
+    unique("tourist_tax_rules_property_date").on(table.propertyId, table.effectiveFrom),
+    check("tourist_tax_rules_charges_array", sql`jsonb_typeof(${table.charges}) = 'array'`),
+    check("tourist_tax_rules_max_nights", sql`${table.maxNights} IS NULL OR ${table.maxNights} > 0`),
   ],
 );
 
@@ -581,6 +610,10 @@ export const reservations = pgTable(
     totalNights: integer("total_nights").notNull(),
     pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+    /** Tourist tax owed, fixed at booking time (0026). Not part of `totalAmount`. */
+    touristTaxAmount: numeric("tourist_tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** The TouristTaxLine[] breakdown shown at booking time (0026). */
+    touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

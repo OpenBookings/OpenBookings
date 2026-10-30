@@ -70,6 +70,16 @@ function RoomNav({ activeIndex, count, onNavigate }: { activeIndex: number; coun
   );
 }
 
+/**
+ * The all-in price for one night (tourist tax included, see withAllInPrices),
+ * falling back to the host's rate where it was not worked out. Whole euros
+ * stay whole; anything else shows its cents.
+ */
+function nightly(plan: DbRatePlan): string {
+  const price = plan.price_per_night ?? plan.bar;
+  return Number.isInteger(price) ? String(price) : price.toFixed(2);
+}
+
 // ── Room sidebar ──────────────────────────────────────────────────────────────
 // Renders as a floating overlay panel in "images" mode and as a fixed left
 // sidebar in "rates" mode. The wrapper adapts; the content is identical.
@@ -125,7 +135,7 @@ function RoomSidebar({ room, activeIndex, viewMode, liked, onToggleLike, onViewR
           <div>
             <p className="text-xs text-white/35">From</p>
             <div className="flex items-baseline gap-1.5">
-              <span className="font-serif text-3xl text-white">€{room.rate_plans[0]?.bar ?? "—"}</span>
+              <span className="font-serif text-3xl text-white">€{room.rate_plans[0] ? nightly(room.rate_plans[0]) : "—"}</span>
               <span className="text-sm text-white/35">/ night</span>
             </div>
           </div>
@@ -422,8 +432,10 @@ function RateCard({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: { ra
       <div className="border-t border-white/8 pt-3.5 flex items-end justify-between">
         <div>
           <div className="flex items-baseline gap-0.5">
-            <span className="font-serif text-2xl text-white">€{rate.bar}</span>
-            <span className="text-sm text-white/40">,-</span>
+            <span className="font-serif text-2xl text-white">€{nightly(rate)}</span>
+            {Number.isInteger(rate.price_per_night ?? rate.bar) && (
+              <span className="text-sm text-white/40">,-</span>
+            )}
           </div>
           {/* Only claimed once the host has confirmed, on record, that their
               rates include tax. Until then the property cannot be booked. */}

@@ -8,6 +8,7 @@ import { getServerSession } from "@/lib/auth";
 import { purgePropertyPageBySlug } from "@/lib/purge-property-page";
 import { canPublish } from "./completion";
 import { loadEditorData } from "./query";
+import * as touristTax from "./tourist-tax-mutations";
 import {
   identitySchema,
   legalSchema,
@@ -352,4 +353,31 @@ export async function setPublished(
 
   await revalidateBoth(propertyId);
   return { ok: true };
+}
+
+/**
+ * Tourist tax rules. Unlike the form sections these save on their own, one
+ * rule at a time: a rule is a dated record rather than a field to overwrite.
+ * The rules themselves live in tourist-tax-mutations.ts.
+ */
+export async function addTouristTaxRule(
+  propertyId: string,
+  rule: unknown,
+): Promise<touristTax.Result<{ ruleId: string }>> {
+  const session = await getServerSession();
+  if (!session) throw new Error("Unauthenticated");
+  const result = await touristTax.addTouristTaxRule(session, propertyId, rule);
+  if (result.ok) await revalidateBoth(propertyId);
+  return result;
+}
+
+export async function deleteTouristTaxRule(
+  propertyId: string,
+  ruleId: string,
+): Promise<touristTax.Result> {
+  const session = await getServerSession();
+  if (!session) throw new Error("Unauthenticated");
+  const result = await touristTax.deleteTouristTaxRule(session, propertyId, ruleId);
+  if (result.ok) await revalidateBoth(propertyId);
+  return result;
 }

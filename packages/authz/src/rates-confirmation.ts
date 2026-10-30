@@ -5,9 +5,10 @@ import { RATES_TAX_INCLUSIVE_DOC_ID } from "./rates-doc";
 /**
  * Inclusive-rates confirmation.
  *
- * OpenBookings shows the price a host enters as the full price the guest
- * pays, and adds no tax on top. That is only honest if the host has said, on
- * record, that their rates include tax. The record is one `org_consent` row
+ * OpenBookings shows the price a host enters, plus the tourist tax worked out
+ * from the property's own rules, as the full price the guest pays. That is
+ * only honest if the host has said, on record, that their rates include VAT
+ * and every other mandatory fee. The record is one `org_consent` row
  * per organisation under this document id; these predicates are the single
  * place that reads it, for the price-writing actions and for guest checkout.
  *
