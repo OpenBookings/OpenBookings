@@ -14,7 +14,7 @@ const rate = (over: Partial<RatePlanRecord> = {}): RatePlanRecord => ({
   otherInclusion: null,
   minAdvanceDays: 0,
   maxAdvanceDays: null,
-  cancellationText: null,
+  refundable: true,
   active: true,
   priced: true,
   sortOrder: 0,
@@ -31,7 +31,7 @@ const photo = (n: number, alt: string | null = `Photo ${n}`) => ({
 /** A room with every section complete; tests knock out one thing at a time. */
 function complete(): RoomEditorData {
   return {
-    property: { id: "prop-1", name: "Hotel" },
+    property: { id: "prop-1", name: "Hotel", cancellationTier: "standard" },
     room: {
       id: "room-1",
       propertyId: "prop-1",

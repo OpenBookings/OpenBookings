@@ -154,7 +154,7 @@ export async function savePolicies(
     checkInUntil: String(formData.get("checkInUntil") ?? ""),
     checkOutTime: String(formData.get("checkOutTime") ?? ""),
     reception24h: formData.get("reception24h"),
-    freeCancellationDays: String(formData.get("freeCancellationDays") ?? ""),
+    cancellationTier: String(formData.get("cancellationTier") ?? ""),
     childrenWelcome: formData.get("childrenWelcome"),
     minCheckInAge: String(formData.get("minCheckInAge") ?? ""),
     cotPolicy: formData.get("cotPolicy") ? String(formData.get("cotPolicy")) : null,
@@ -174,26 +174,26 @@ export async function savePolicies(
   await query(
     `UPDATE properties
      SET check_in_time = $1::time, check_in_until = $2::time,
-         check_out_time = $3::time, updated_at = NOW()
-     WHERE id = $4`,
-    [d.checkInTime, d.checkInUntil, d.checkOutTime, propertyId],
+         check_out_time = $3::time, cancellation_tier = $4::cancellation_tier,
+         updated_at = NOW()
+     WHERE id = $5`,
+    [d.checkInTime, d.checkInUntil, d.checkOutTime, d.cancellationTier, propertyId],
   );
 
   await ensureContentRow(propertyId);
   await query(
     `UPDATE property_content
-     SET reception_24h = $1, free_cancellation_days = $2,
+     SET reception_24h = $1,
          -- Not a host choice: every payment goes through the platform, so a
          -- booking is always paid up front. Written on every save so a row
          -- predating 0021 cannot keep saying otherwise.
          prepayment_required = true,
-         children_welcome = $3, min_check_in_age = $4, cot_policy = $5::cot_policy,
-         cot_fee = $6, extra_bed_fee = $7, pets_allowed = $8,
-         payment_methods = $9::text[], fine_print = $10::text[], updated_at = NOW()
-     WHERE property_id = $11`,
+         children_welcome = $2, min_check_in_age = $3, cot_policy = $4::cot_policy,
+         cot_fee = $5, extra_bed_fee = $6, pets_allowed = $7,
+         payment_methods = $8::text[], fine_print = $9::text[], updated_at = NOW()
+     WHERE property_id = $10`,
     [
       d.reception24h,
-      d.freeCancellationDays,
       d.childrenWelcome,
       d.minCheckInAge,
       d.cotPolicy,

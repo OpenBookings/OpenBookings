@@ -11,7 +11,7 @@ const rate = (over: Record<string, unknown> = {}) => ({
   otherInclusion: "",
   minAdvanceDays: "0",
   maxAdvanceDays: "none",
-  cancellationText: "",
+  refundable: "true",
   active: undefined,
   ...over,
 });
@@ -36,16 +36,15 @@ describe("rateSchema", () => {
     expect(d.active).toBe(false);
   });
 
-  test("cancellation is optional: blank is stored as no policy", () => {
-    expect(rateSchema.parse(rate()).cancellationText).toBeNull();
-    expect(rateSchema.parse(rate({ cancellationText: "   " })).cancellationText).toBeNull();
+  test("a rate is refundable or non-refundable", () => {
+    expect(rateSchema.parse(rate()).refundable).toBe(true);
+    expect(rateSchema.parse(rate({ refundable: "false" })).refundable).toBe(false);
   });
 
-  test("cancellation is free text, checked for length only", () => {
-    const text = "Free until 2 days before.\nAfter that: 100% (no refund) — sorry!";
-    expect(rateSchema.parse(rate({ cancellationText: text })).cancellationText).toBe(text);
-    expect(rateSchema.parse(rate({ cancellationText: "x".repeat(500) })).cancellationText).toHaveLength(500);
-    expect(rateSchema.safeParse(rate({ cancellationText: "x".repeat(501) })).success).toBe(false);
+  test("the refund type must be chosen", () => {
+    const r = rateSchema.safeParse(rate({ refundable: "" }));
+    expect(r.success).toBe(false);
+    expect(r.error!.flatten().fieldErrors.refundable?.[0]).toBe("Choose refundable or non-refundable.");
   });
 
   test("the name is 2 to 60 characters", () => {

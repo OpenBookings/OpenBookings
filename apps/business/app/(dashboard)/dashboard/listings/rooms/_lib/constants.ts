@@ -149,5 +149,4 @@ export const LIMITS = {
   rateName: { min: 2, max: 60 },
   rateDescription: { max: 200 },
   otherInclusion: { max: 120 },
-  cancellation: { max: 500 },
 } as const;

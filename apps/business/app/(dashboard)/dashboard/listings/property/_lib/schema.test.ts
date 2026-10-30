@@ -71,7 +71,7 @@ describe("policiesSchema", () => {
     checkInUntil: "23:00",
     checkOutTime: "11:00",
     reception24h: "on",
-    freeCancellationDays: "7",
+    cancellationTier: "standard",
     childrenWelcome: "on",
     minCheckInAge: "18",
     cotPolicy: "free",
@@ -110,15 +110,25 @@ describe("policiesSchema", () => {
     expect(r.success).toBe(false);
   });
 
-  test("keeps a blank cancellation window as null, not zero", () => {
-    const r = policiesSchema.safeParse({ ...valid, freeCancellationDays: "" });
-    expect(r.success).toBe(true);
-    expect(r.data!.freeCancellationDays).toBeNull();
+  test("accepts each of the three base cancellation tiers", () => {
+    for (const tier of ["flex", "standard", "limited"] as const) {
+      const r = policiesSchema.safeParse({ ...valid, cancellationTier: tier });
+      expect(r.data!.cancellationTier).toBe(tier);
+    }
   });
 
-  test("keeps a zero cancellation window as zero", () => {
-    const r = policiesSchema.safeParse({ ...valid, freeCancellationDays: "0" });
-    expect(r.data!.freeCancellationDays).toBe(0);
+  test("rejects a tier that isn't in Annex B, or non-refundable as a property tier", () => {
+    for (const tier of ["strict", "non_refundable"]) {
+      const r = policiesSchema.safeParse({ ...valid, cancellationTier: tier });
+      expect(r.success).toBe(false);
+    }
+  });
+
+  test("requires a cancellation tier", () => {
+    const { cancellationTier: _, ...rest } = valid;
+    const r = policiesSchema.safeParse(rest);
+    expect(r.success).toBe(false);
+    expect(r.error!.flatten().fieldErrors.cancellationTier?.[0]).toBe("Pick a cancellation policy.");
   });
 
   test("rejects a 12-hour time", () => {

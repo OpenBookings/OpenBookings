@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { FileClockIcon, ShieldCheckIcon } from "lucide-react";
+import { ShieldCheckIcon } from "lucide-react";
+import { TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
 import {
   Field,
   FieldContent,
@@ -30,6 +31,8 @@ const METHOD_LABELS: Record<(typeof PAYMENT_METHODS)[number], string> = {
   wero: "Wero",
   applepay: "Apple Pay",
 };
+
+const BASE_TIERS: PropertyCancellationTier[] = ["flex", "standard", "limited"];
 
 /** Pre-filled for a host with no fine print yet. Every line is editable. */
 const DEFAULT_FINE_PRINT = [
@@ -178,29 +181,40 @@ function PoliciesFields({
       <FieldSeparator />
       <SectionHeading>Cancellation</SectionHeading>
 
-      {/*
-        Cancellation is moving to a full policy. Until it lands the stored
-        window is posted back unchanged, so saving this section never quietly
-        rewrites what guests were promised.
-      */}
-      <input type="hidden" name="freeCancellationDays" value={content.freeCancellationDays ?? ""} />
-      <div className="flex items-start gap-3 rounded-lg border border-dashed bg-muted/30 p-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background ring-1 ring-border">
-          <FileClockIcon className="size-4 text-muted-foreground" />
+      <p className="text-muted-foreground text-sm">
+        One policy for all your refundable rates. Guests see the exact deadlines for their dates
+        before they book. To offer a cheaper rate without free cancellation, add a non-refundable
+        rate to a room.
+      </p>
+      <Field data-invalid={!!state.errors?.cancellationTier}>
+        <div role="radiogroup" aria-label="Cancellation policy" className="grid gap-3 sm:grid-cols-3">
+          {BASE_TIERS.map((tier) => (
+            <label
+              key={tier}
+              className="flex cursor-pointer flex-col gap-1.5 rounded-lg border p-4 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <input
+                  type="radio"
+                  name="cancellationTier"
+                  value={tier}
+                  defaultChecked={property.cancellationTier === tier}
+                  disabled={pending}
+                  onChange={markDirty}
+                  className="accent-primary"
+                />
+                {TIER_LABELS[tier]}
+              </span>
+              <span className="text-muted-foreground">{TIER_SUMMARIES[tier]}</span>
+            </label>
+          ))}
         </div>
-        <div className="flex flex-col gap-1">
-          <p className="font-medium text-sm">
-            Cancellation policy{" "}
-            <span className="ml-1 rounded-full bg-muted px-2 py-0.5 font-normal text-muted-foreground text-xs">
-              Coming soon
-            </span>
-          </p>
-          <p className="text-muted-foreground text-sm">
-            You will soon set your cancellation terms as one complete policy — deadlines, fees
-            and refunds together. Nothing to fill in here yet.
-          </p>
-        </div>
-      </div>
+        <FieldDescription>
+          Changes apply to new bookings only. Existing bookings keep the policy they were booked
+          with.
+        </FieldDescription>
+        {state.errors?.cancellationTier && <FieldError>{state.errors.cancellationTier[0]}</FieldError>}
+      </Field>
 
       {/* ── Children & beds ─────────────────────────────────────────────── */}
       <FieldSeparator />

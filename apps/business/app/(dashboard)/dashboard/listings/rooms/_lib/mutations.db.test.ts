@@ -307,7 +307,7 @@ describeWithDb("Rooms editor against Postgres", () => {
 
   // ── Rate create, edit, duplicate ────────────────────────────────────
 
-  test("a new rate is unpriced, non-refundable, inactive and last", async () => {
+  test("a new rate is unpriced, inactive and last, with the refund type chosen", async () => {
     const state = await m.saveRate(
       session(owner),
       form({
@@ -319,7 +319,7 @@ describeWithDb("Rooms editor against Postgres", () => {
         extras: ["spa_access"],
         minAdvanceDays: "3",
         maxAdvanceDays: "180",
-        cancellationText: "Free until 3 days before arrival.",
+        refundable: "true",
       }),
       deps,
     );
@@ -331,7 +331,7 @@ describeWithDb("Rooms editor against Postgres", () => {
     );
     expect(row).toMatchObject({
       bar: "0",
-      is_refundable: false,
+      is_refundable: true,
       is_active: false,
       currency: "EUR",
       includes_breakfast: true,
@@ -340,23 +340,72 @@ describeWithDb("Rooms editor against Postgres", () => {
       extras: ["spa_access"],
       min_advance_booking: 3,
       max_advance_booking: 180,
-      cancellation_policy: "Free until 3 days before arrival.",
       sort_order: 1,
     });
   });
 
-  test("editing a rate never touches its price or refund flag, and blank policy is stored as none", async () => {
+  test("editing a rate never touches its price", async () => {
     const state = await m.saveRate(
       session(owner),
-      form({ roomId, ratePlanId: pricedRate, name: "Standard", active: "on", cancellationText: "  " }),
+      form({ roomId, ratePlanId: pricedRate, name: "Standard", active: "on", refundable: "true" }),
       deps,
     );
     expect(state.success).toBe(true);
-    const row = await one<{ bar: string; is_refundable: boolean; cancellation_policy: string | null }>(
-      `SELECT bar, is_refundable, cancellation_policy FROM rate_plans WHERE id = $1`,
+    const row = await one<{ bar: string; is_refundable: boolean }>(
+      `SELECT bar, is_refundable FROM rate_plans WHERE id = $1`,
       [pricedRate],
     );
-    expect(row).toEqual({ bar: "12000", is_refundable: true, cancellation_policy: null });
+    expect(row).toEqual({ bar: "12000", is_refundable: true });
+  });
+
+  // ── Non-refundable rates (Annex B B.4) ──────────────────────────────
+
+  async function nonRefundableRate(bar: number, active: boolean) {
+    return (await one<{ id: string }>(
+      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active)
+       VALUES ($1, 'Saver', $2, false, $3)
+       RETURNING id`,
+      [roomId, bar, active],
+    ))!.id;
+  }
+
+  test("a non-refundable rate can't go on sale without a refundable rate beside it", async () => {
+    await db.query(`UPDATE rate_plans SET is_active = false WHERE id = $1`, [pricedRate]);
+    const nr = await nonRefundableRate(9000, false);
+    expect(await m.setRateActive(session(owner), nr, true, deps)).toMatchObject({
+      ok: false,
+      code: "non_refundable",
+    });
+  });
+
+  test("10% below the refundable rate goes on sale; 5% below doesn't", async () => {
+    const tenPercent = await nonRefundableRate(10800, false);
+    expect((await m.setRateActive(session(owner), tenPercent, true, deps)).ok).toBe(true);
+
+    const fivePercent = await nonRefundableRate(11400, false);
+    expect((await m.setRateActive(session(owner), fivePercent, true, deps)).ok).toBe(false);
+  });
+
+  test("switching a rate to non-refundable in the Sheet checks the rule", async () => {
+    const state = await m.saveRate(
+      session(owner),
+      form({ roomId, ratePlanId: pricedRate, name: "Standard", active: "on", refundable: "false" }),
+      deps,
+    );
+    expect(state.success).toBe(false);
+    expect(state.errors?.refundable?.[0]).toContain("at least 10% more");
+  });
+
+  test("the refundable rate a non-refundable one depends on can't be archived or switched off", async () => {
+    await nonRefundableRate(10000, true);
+    expect(await m.archiveRate(session(owner), pricedRate, deps)).toMatchObject({
+      ok: false,
+      code: "non_refundable",
+    });
+    expect(await m.setRateActive(session(owner), pricedRate, false, deps)).toMatchObject({
+      ok: false,
+      code: "non_refundable",
+    });
   });
 
   test("duplicate copies the terms and base rate, inactive, with (copy)", async () => {

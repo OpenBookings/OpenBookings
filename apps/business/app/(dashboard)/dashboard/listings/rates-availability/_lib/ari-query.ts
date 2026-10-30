@@ -85,7 +85,6 @@ interface RateQueryRow {
   /** bigint column — see `toNumber`. */
   bar: string;
   is_refundable: boolean;
-  cancellation_policy: string | null;
   plan_min_stay: number;
   plan_max_stay: number | null;
   base_occupancy: number;
@@ -231,7 +230,7 @@ WITH dates AS (
 -- ones are not.
 scope_plans AS (
   SELECT
-    rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable, rp.cancellation_policy,
+    rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay,
     (r.is_active AND rp.is_active) AS on_sale,
     r.id AS room_id, r.name AS room_name, r.base_occupancy
@@ -250,7 +249,6 @@ SELECT
   sp.currency,
   sp.bar,
   sp.is_refundable,
-  sp.cancellation_policy,
   sp.min_stay                      AS plan_min_stay,
   sp.max_stay                      AS plan_max_stay,
   sp.base_occupancy,
@@ -705,7 +703,6 @@ export async function loadAriGrid(
         bar: toNumber(head.bar),
         onSale: head.on_sale,
         isRefundable: head.is_refundable,
-        cancellationPolicy: head.cancellation_policy,
         minStay: head.plan_min_stay,
         maxStay: head.plan_max_stay,
         modifiers,

@@ -797,15 +797,11 @@ function RatePlanRowView({
 /**
  * The muted line under a rate plan's name.
  *
- * Its cancellation terms where they are short enough to read at a glance, and
- * its stay rules otherwise. Both bear on which plan to reprice, and neither is
- * visible from the numbers.
+ * Its stay rules, which bear on which plan to reprice and aren't visible from
+ * the numbers. Refundable or not is the tag beside the name.
  */
 function planCaption(plan: RatePlanRow): string {
   const parts: string[] = [];
-  if (plan.cancellationPolicy && plan.cancellationPolicy.length <= 40) {
-    parts.push(plan.cancellationPolicy);
-  }
   if (plan.minStay > 1) parts.push(`min ${plan.minStay} nights`);
   if (plan.maxStay !== null) parts.push(`max ${plan.maxStay} nights`);
   if (parts.length === 0 && plan.hasStayDiscount) {

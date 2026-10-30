@@ -220,7 +220,6 @@ describe("openPlanSummary", () => {
     bar: 100,
     onSale,
     isRefundable: true,
-    cancellationPolicy: null,
     minStay: 1,
     maxStay: null,
     modifiers: [],

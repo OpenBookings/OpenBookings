@@ -14,6 +14,7 @@ import { bedLabel, catalogLabelsFor, copyName } from "./derive";
 import { loadRoomEditor } from "./query";
 import { amenitiesSchema, identitySchema, rateSchema, spaceSchema } from "./schema";
 import type { RoomEditorData } from "./types";
+import { refundableGuardError, type GuardRate } from "./refundable-guard";
 
 /**
  * Every write the Rooms editor makes, minus the Next.js plumbing.
@@ -60,7 +61,7 @@ export const defaultDeps: MutationDeps = {
 
 export type Result<Extra = object> =
   | ({ ok: true } & Extra)
-  | { ok: false; error: string; code?: "future_bookings" | "last_active_rate" };
+  | { ok: false; error: string; code?: "future_bookings" | "last_active_rate" | "non_refundable" };
 
 /** Thrown, not returned, from the form actions — the same as the Property editor's authorize(). */
 export class NotFoundError extends Error {
@@ -432,6 +433,8 @@ interface PlanRow {
   id: string;
   room_id: string;
   is_active: boolean;
+  is_refundable: boolean;
+  bar: number;
   priced: boolean;
   room_published: boolean;
 }
@@ -441,7 +444,8 @@ async function requirePlan(session: SessionLike, ratePlanId: string, deps: Mutat
     return null;
   }
   return deps.queryOne<PlanRow>(
-    `SELECT rp.id, rp.room_id, rp.is_active, (rp.bar > 0) AS priced, r.is_active AS room_published
+    `SELECT rp.id, rp.room_id, rp.is_active, rp.is_refundable, rp.bar::float8 AS bar,
+            (rp.bar > 0) AS priced, r.is_active AS room_published
      FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id
      WHERE rp.id = $1 AND rp.archived_at IS NULL AND r.archived_at IS NULL`,
     [ratePlanId],
@@ -458,6 +462,16 @@ async function otherActiveRates(plan: PlanRow, deps: Pick<MutationDeps, "queryOn
   return row?.n ?? 0;
 }
 
+/** The room's rates as the refundable guard sees them. */
+async function roomRates(roomId: string, deps: Pick<MutationDeps, "query">): Promise<GuardRate[]> {
+  const rows = await deps.query<{ id: string; is_active: boolean; is_refundable: boolean; bar: number }>(
+    `SELECT id, is_active, is_refundable, bar::float8 AS bar FROM rate_plans
+     WHERE room_id = $1 AND archived_at IS NULL`,
+    [roomId],
+  );
+  return rows.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, bar: r.bar }));
+}
+
 const UNPRICED_MESSAGE =
   "This rate has no price yet. Set its base rate in R&A, then switch it on.";
 const LAST_ACTIVE_MESSAGE =
@@ -469,11 +483,23 @@ const LAST_ACTIVE_MESSAGE =
  * search reads `bar` as the nightly price, so an unpriced rate would sell at
  * zero), and a published room never loses its last active rate.
  */
-async function statusChangeError(plan: PlanRow, active: boolean, deps: MutationDeps) {
+async function statusChangeError(
+  plan: PlanRow,
+  active: boolean,
+  deps: MutationDeps,
+  refundable: boolean = plan.is_refundable,
+) {
   if (active && !plan.priced) return { code: undefined, error: UNPRICED_MESSAGE };
   if (!active && plan.is_active && plan.room_published && (await otherActiveRates(plan, deps)) === 0) {
     return { code: "last_active_rate" as const, error: LAST_ACTIVE_MESSAGE };
   }
+  const refusal = refundableGuardError(await roomRates(plan.room_id, deps), {
+    id: plan.id,
+    isActive: active,
+    isRefundable: refundable,
+    bar: plan.bar,
+  });
+  if (refusal) return { code: "non_refundable" as const, error: refusal };
   return null;
 }
 
@@ -489,7 +515,7 @@ export type RateValues = {
   otherInclusion: string;
   minAdvanceDays: string;
   maxAdvanceDays: string;
-  cancellationText: string;
+  refundable: string;
   active: boolean;
 };
 
@@ -498,9 +524,8 @@ export type RateValues = {
  * stay length or availability is written here — R&A owns those.
  *
  * A new rate is written with `bar = 0` (unpriced, so it cannot be activated
- * until R&A prices it) and `is_refundable = false`: checkout and search still
- * derive a free-cancellation promise from that flag, and the host has not
- * made one. Editing never touches either.
+ * until R&A prices it). The host picks refundable (the property's tier) or
+ * Non-refundable here; Annex B B.4 is checked on every save.
  */
 export async function saveRate(
   session: SessionLike,
@@ -517,7 +542,7 @@ export async function saveRate(
     otherInclusion: str(formData, "otherInclusion"),
     minAdvanceDays: str(formData, "minAdvanceDays") || "0",
     maxAdvanceDays: str(formData, "maxAdvanceDays") || "none",
-    cancellationText: str(formData, "cancellationText"),
+    refundable: str(formData, "refundable"),
     active: formData.get("active"),
   };
   const ratePlanId = str(formData, "ratePlanId");
@@ -551,8 +576,20 @@ export async function saveRate(
     return { values, errors: { active: [UNPRICED_MESSAGE] }, success: false };
   }
   if (plan && d.active !== plan.is_active) {
-    const refusal = await statusChangeError(plan, d.active, deps);
-    if (refusal) return { values, errors: { active: [refusal.error] }, success: false };
+    const refusal = await statusChangeError(plan, d.active, deps, d.refundable);
+    if (refusal) {
+      const field = refusal.code === "non_refundable" ? "refundable" : "active";
+      return { values, errors: { [field]: [refusal.error] }, success: false };
+    }
+  }
+  if (plan) {
+    const refusal = refundableGuardError(await roomRates(plan.room_id, deps), {
+      id: plan.id,
+      isActive: d.active,
+      isRefundable: d.refundable,
+      bar: plan.bar,
+    });
+    if (refusal) return { values, errors: { refundable: [refusal] }, success: false };
   }
 
   const terms = [
@@ -565,7 +602,7 @@ export async function saveRate(
     d.otherInclusion,
     d.minAdvanceDays,
     d.maxAdvanceDays,
-    d.cancellationText,
+    d.refundable,
     d.active,
   ];
 
@@ -574,7 +611,7 @@ export async function saveRate(
       `UPDATE rate_plans
        SET name = $1, description = $2, includes_breakfast = $3, includes_lunch = $4,
            includes_dinner = $5, extras = $6::text[], other_inclusion = $7,
-           min_advance_booking = $8, max_advance_booking = $9, cancellation_policy = $10,
+           min_advance_booking = $8, max_advance_booking = $9, is_refundable = $10,
            is_active = $11, updated_at = NOW()
        WHERE id = $12`,
       [...terms, plan.id],
@@ -584,7 +621,7 @@ export async function saveRate(
       `INSERT INTO rate_plans
          (room_id, name, description, includes_breakfast, includes_lunch, includes_dinner,
           extras, other_inclusion, min_advance_booking, max_advance_booking,
-          cancellation_policy, is_active, bar, currency, is_refundable, sort_order)
+          is_refundable, is_active, bar, currency, sort_order)
        SELECT $12, $1, $2, $3, $4, $5, $6::text[], $7, $8, $9, $10, $11,
               0,
               -- The property's currency, as its other rates state it.
@@ -592,7 +629,6 @@ export async function saveRate(
                         JOIN rooms r ON r.id = rp.room_id
                         WHERE r.property_id = (SELECT property_id FROM rooms WHERE id = $12)
                         ORDER BY rp.created_at LIMIT 1), 'EUR'),
-              false,
               (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM rate_plans WHERE room_id = $12)`,
       [...terms, roomId],
     );
@@ -640,11 +676,11 @@ export async function duplicateRate(
   const row = await deps.queryOne<{ id: string; name: string }>(
     `INSERT INTO rate_plans
        (room_id, name, description, includes_breakfast, includes_lunch, includes_dinner,
-        extras, other_inclusion, min_advance_booking, max_advance_booking, cancellation_policy,
+        extras, other_inclusion, min_advance_booking, max_advance_booking,
         bar, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
         is_active, sort_order)
      SELECT room_id, $2, description, includes_breakfast, includes_lunch, includes_dinner,
-            extras, other_inclusion, min_advance_booking, max_advance_booking, cancellation_policy,
+            extras, other_inclusion, min_advance_booking, max_advance_booking,
             bar, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
             false,
             (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM rate_plans WHERE room_id = src.room_id)

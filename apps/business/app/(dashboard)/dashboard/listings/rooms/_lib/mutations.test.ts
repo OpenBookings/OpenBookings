@@ -88,7 +88,7 @@ const spaceForm = () =>
 const amenitiesForm = () =>
   form({ roomId: ROOM, amenityKeys: ["wifi"], featuredAmenityKeys: ["wifi"] });
 const rateForm = (ratePlanId = "") =>
-  form({ ratePlanId, roomId: ROOM, name: "Bed & Breakfast", minAdvanceDays: "0", maxAdvanceDays: "none" });
+  form({ ratePlanId, roomId: ROOM, name: "Bed & Breakfast", minAdvanceDays: "0", maxAdvanceDays: "none", refundable: "true" });
 
 describe("a host who does not own the property", () => {
   const stranger = session(STRANGER);

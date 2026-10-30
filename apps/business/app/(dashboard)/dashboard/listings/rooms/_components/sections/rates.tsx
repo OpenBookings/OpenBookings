@@ -39,7 +39,8 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { archiveRate, duplicateRate, setRateActive } from "../../_lib/actions";
-import { cancellationPreview, conditionsSummary, includesSummary } from "../../_lib/derive";
+import { TIER_LABELS } from "@openbookings/pricing";
+import { conditionsSummary, includesSummary } from "../../_lib/derive";
 import type { RatePlanRecord } from "../../_lib/types";
 import { RateSheet } from "../rate-sheet";
 import type { RoomSectionProps } from "./props";
@@ -167,7 +168,9 @@ export function RatesSection({ data }: RoomSectionProps) {
                 </TableRow>
               ) : (
                 rates.map((rate) => {
-                  const policy = cancellationPreview(rate.cancellationText);
+                  const policy = rate.refundable
+                    ? TIER_LABELS[data.property.cancellationTier]
+                    : TIER_LABELS.non_refundable;
                   // Switching on needs a price; switching off is always offered
                   // and the server explains if it is refused.
                   const lockedOff = !rate.active && !rate.priced;
@@ -194,13 +197,14 @@ export function RatesSection({ data }: RoomSectionProps) {
                             No price yet
                           </Badge>
                         )}
+
                       </TableCell>
                       <TableCell className="max-w-48 truncate text-sm">{includesSummary(rate)}</TableCell>
                       <TableCell className="text-sm">
                         {conditionsSummary(rate.minAdvanceDays, rate.maxAdvanceDays)}
                       </TableCell>
                       <TableCell className="max-w-56 truncate text-sm">
-                        {policy ?? <span className="text-muted-foreground">Not set</span>}
+                        {policy}
                       </TableCell>
                       <TableCell>
                         {lockedOff ? (
@@ -253,6 +257,7 @@ export function RatesSection({ data }: RoomSectionProps) {
         roomId={room.id}
         roomName={room.name}
         pricingHref={pricingHref}
+        propertyTier={data.property.cancellationTier}
         onClose={() => setRateParam(null)}
       />
 

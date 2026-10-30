@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from "@openbookings/pricing";
 import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
 import { RATE_EXTRA_KEYS, type RateExtraKey } from "./constants";
 import { amenitiesFromLegacy, bedsFromLegacyLabel, normaliseBeds } from "./derive";
@@ -122,6 +123,7 @@ interface RoomRow {
   id: string;
   property_id: string;
   property_name: string;
+  cancellation_tier: PropertyCancellationTier;
   name: string;
   description: string | null;
   size_sqm: string | null;
@@ -155,7 +157,7 @@ interface RateRow {
   other_inclusion: string | null;
   min_advance_booking: number | null;
   max_advance_booking: number | null;
-  cancellation_policy: string | null;
+  is_refundable: boolean;
   is_active: boolean;
   priced: boolean;
   sort_order: number;
@@ -176,7 +178,7 @@ export function toRateRecord(r: RateRow): RatePlanRecord {
     otherInclusion: r.other_inclusion,
     minAdvanceDays: r.min_advance_booking ?? 0,
     maxAdvanceDays: r.max_advance_booking,
-    cancellationText: r.cancellation_policy,
+    refundable: r.is_refundable,
     active: r.is_active,
     priced: r.priced,
     sortOrder: r.sort_order,
@@ -188,7 +190,7 @@ export const RATE_COLUMNS = `
   rp.id, rp.room_id, rp.name, rp.description,
   rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner,
   rp.extras, rp.other_inclusion, rp.min_advance_booking, rp.max_advance_booking,
-  rp.cancellation_policy, rp.is_active, (rp.bar > 0) AS priced, rp.sort_order`;
+  rp.is_refundable, rp.is_active, (rp.bar > 0) AS priced, rp.sort_order`;
 
 /**
  * Two queries, for the same reason the Property editor uses two: the second
@@ -207,7 +209,7 @@ export async function loadRoomEditor(
 
   const room = await host.queryOne<RoomRow>(
     `SELECT
-       r.id, r.property_id, p.name AS property_name,
+       r.id, r.property_id, p.name AS property_name, p.cancellation_tier,
        r.name, r.description, r.size_sqm, r.bed_config, r.bed_type,
        r.max_adults, r.max_children, r.total_units,
        r.amenity_keys, r.featured_amenity_keys, r.sort_order,
@@ -248,7 +250,7 @@ export async function loadRoomEditor(
       : { amenityKeys: room.amenity_keys, featuredAmenityKeys: room.featured_amenity_keys };
 
   return {
-    property: { id: room.property_id, name: room.property_name },
+    property: { id: room.property_id, name: room.property_name, cancellationTier: room.cancellation_tier },
     room: {
       id: room.id,
       propertyId: room.property_id,

@@ -76,7 +76,6 @@ interface PlanSpec {
   refundable: boolean;
   minStay?: number;
   maxStay?: number;
-  policy?: string;
   modifiers?: Modifier[];
 }
 
@@ -163,14 +162,12 @@ const ROOM_SPECS: RoomSpec[] = [
         name: "Refundable",
         bar: 89,
         refundable: true,
-        policy: "Free cancellation up to 24 hours before check-in.",
         modifiers: [weekendFlat],
       },
       {
         name: "Non-refundable",
         bar: 76,
         refundable: false,
-        policy: "No refund after booking.",
         modifiers: [weekendFlat, threeNightDiscount],
       },
       {
@@ -198,7 +195,6 @@ const ROOM_SPECS: RoomSpec[] = [
         name: "Refundable",
         bar: 129,
         refundable: true,
-        policy: "Free cancellation up to 48 hours before check-in.",
         modifiers: [weekendUplift, earlyBird],
       },
       {
@@ -263,7 +259,6 @@ const ROOM_SPECS: RoomSpec[] = [
         name: "Refundable",
         bar: 219,
         refundable: true,
-        policy: "Free cancellation up to 7 days before check-in.",
         modifiers: [weekendUplift, weekStayDiscount],
       },
       {
@@ -304,7 +299,6 @@ const ROOM_SPECS: RoomSpec[] = [
         name: "Refundable",
         bar: 649,
         refundable: true,
-        policy: "Free cancellation up to 14 days before check-in.",
         minStay: 2,
         modifiers: [weekendUplift, weekStayDiscount, earlyBird],
       },
@@ -513,7 +507,6 @@ export function buildMockAriGrid(
         bar: planSpec.bar,
         onSale: true,
         isRefundable: planSpec.refundable,
-        cancellationPolicy: planSpec.policy ?? null,
         minStay: planMinStay,
         maxStay: planSpec.maxStay ?? null,
         modifiers,
