@@ -4,6 +4,7 @@ import type { AgentProfile } from "../agent/loop";
 import { buildToolSchemas, escalateArgs, runTool, type ToolDefinition } from "../agent/tools";
 import { HOST_SYSTEM_PROMPT } from "./prompt";
 import { findHostBooking, listHostBookings, type HostBooking } from "./queries";
+import { policyView } from "../policy-view";
 
 /**
  * Tool registry for host tickets. Same authorization model as the guest
@@ -53,8 +54,7 @@ function bookingView(b: HostBooking) {
     rooms: b.rooms.map((room) => ({
       room: room.room_name,
       rate_plan: room.rate_plan_name,
-      refundable: room.is_refundable,
-      cancellation_policy: room.cancellation_policy,
+      cancellation: policyView(room, b.timezone, b.confirmed_at, new Date()),
       adults: room.adults,
       children: room.children,
       nights: room.total_nights,

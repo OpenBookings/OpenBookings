@@ -172,12 +172,6 @@ export function conditionsSummary(minAdvanceDays: number, maxAdvanceDays: number
   return "None";
 }
 
-/** First line of the policy, for the table. The Sheet and the guest see it whole. */
-export function cancellationPreview(text: string | null): string | null {
-  const first = text?.trim().split(/\r?\n/)[0]?.trim();
-  return first ? first : null;
-}
-
 /** "Bed & Breakfast" → "Bed & Breakfast (copy)", kept inside the name limit. */
 export function copyName(name: string, max: number): string {
   const suffix = " (copy)";

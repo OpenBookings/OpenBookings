@@ -3,7 +3,6 @@ import {
   amenitiesFromLegacy,
   bedLabel,
   bedsFromLegacyLabel,
-  cancellationPreview,
   catalogLabelsFor,
   conditionsSummary,
   copyName,
@@ -127,19 +126,6 @@ describe("conditionsSummary", () => {
     [7, 365, "Book 7–365 days ahead"],
   ] as const)("min %p, max %p", (min, max, expected) => {
     expect(conditionsSummary(min, max)).toBe(expected);
-  });
-});
-
-describe("cancellationPreview", () => {
-  test("is the first non-empty line", () => {
-    expect(cancellationPreview("Free until 48 hours before.\nAfter that, one night.")).toBe(
-      "Free until 48 hours before.",
-    );
-  });
-
-  test("blank is no policy", () => {
-    expect(cancellationPreview(null)).toBeNull();
-    expect(cancellationPreview("  \n ")).toBeNull();
   });
 });
 

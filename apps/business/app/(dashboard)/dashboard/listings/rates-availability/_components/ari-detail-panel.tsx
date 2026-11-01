@@ -394,7 +394,6 @@ function RateDetail({
             Minimum stay {first.minStay} night
             {first.minStay === 1 ? "" : "s"}
             {first.maxStay !== null && `, maximum ${first.maxStay} nights`}.
-            {plan.cancellationPolicy ? ` ${plan.cancellationPolicy}` : ""}
           </p>
         </Section>
 

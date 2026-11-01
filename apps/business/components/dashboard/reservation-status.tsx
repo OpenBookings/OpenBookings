@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { MockReservationStatus } from "@/components/dashboard/mock-reservations";
+import type { ReservationStatus as MockReservationStatus } from "@/components/dashboard/reservation-types";
 
 // Status hues follow the guest lifecycle: indigo (brand) = booked, green =
 // on the property, amber = needs a decision, neutral = done.
@@ -23,6 +23,14 @@ const statusConfig: Record<
   checked_out: {
     label: "Checked out",
     className: "bg-muted text-muted-foreground",
+  },
+  cancelled: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground line-through",
+  },
+  no_show: {
+    label: "No-show",
+    className: "bg-(--red-3) text-(--red-11)",
   },
 };
 

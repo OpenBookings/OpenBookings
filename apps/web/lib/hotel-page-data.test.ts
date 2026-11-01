@@ -31,7 +31,7 @@ const fixture: PropertyPagePayload = {
     cta_body: null,
     fine_print: null,
     reception_24h: null,
-    free_cancellation_days: null,
+    cancellation_tier: "standard",
     prepayment_required: null,
     children_welcome: null,
     min_check_in_age: null,

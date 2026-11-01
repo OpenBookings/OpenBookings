@@ -14,6 +14,7 @@
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
+    "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",
     "@upstash/qstash": "2.12.1",

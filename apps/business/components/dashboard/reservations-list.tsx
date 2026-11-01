@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ReservationsTable } from "@/components/dashboard/reservations-table";
 import type {
-  MockReservation,
+  ReservationSummary as MockReservation,
   ReservationBuckets,
-} from "@/components/dashboard/mock-reservations";
+} from "@/components/dashboard/reservation-types";
 
 const BUCKETS = [
   {

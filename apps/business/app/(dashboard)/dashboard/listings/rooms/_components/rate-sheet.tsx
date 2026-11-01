@@ -36,6 +36,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
 import { saveRate } from "../_lib/actions";
 import {
   LIMITS,
@@ -54,6 +55,8 @@ interface RateSheetProps {
   roomId: string;
   roomName: string;
   pricingHref: string;
+  /** The property's base cancellation tier, which a refundable rate follows. */
+  propertyTier: PropertyCancellationTier;
   onClose: () => void;
 }
 
@@ -142,7 +145,8 @@ function initialValues(rate: RatePlanRecord | null, roomId: string): RateValues 
     otherInclusion: rate?.otherInclusion ?? "",
     minAdvanceDays: String(rate?.minAdvanceDays ?? 0),
     maxAdvanceDays: rate?.maxAdvanceDays == null ? "none" : String(rate.maxAdvanceDays),
-    cancellationText: rate?.cancellationText ?? "",
+    // A new rate starts refundable: Non-refundable is the deliberate exception.
+    refundable: String(rate?.refundable ?? true),
     // New rates start inactive: they have no price until R&A sets one.
     active: rate?.active ?? false,
   };
@@ -153,6 +157,7 @@ function RateForm({
   roomId,
   roomName,
   pricingHref,
+  propertyTier,
   onDirtyChange,
   onSaved,
   onCancel,
@@ -177,7 +182,7 @@ function RateForm({
   const [maxAdvance, setMaxAdvance] = React.useState(v.maxAdvanceDays);
   const [active, setActive] = React.useState(v.active);
   const [descriptionLength, setDescriptionLength] = React.useState(v.description.length);
-  const [policyLength, setPolicyLength] = React.useState(v.cancellationText.length);
+  const [refundable, setRefundable] = React.useState(v.refundable);
 
   const isNew = rate === null;
   const canActivate = !isNew && rate.priced;
@@ -424,35 +429,40 @@ function RateForm({
         <Separator />
 
         <Section title="Cancellation">
-          <Field data-invalid={!!err("cancellationText")}>
-            <FieldLabel htmlFor="rate-cancellation">Cancellation policy</FieldLabel>
-            <InputGroup>
-              <InputGroupTextarea
-                id="rate-cancellation"
-                name="cancellationText"
-                data-field="cancellationText"
-                defaultValue={v.cancellationText}
-                disabled={pending}
-                aria-invalid={!!err("cancellationText")}
-                rows={5}
-                className="min-h-28 resize-none"
-                onChange={(e) => setPolicyLength(e.target.value.length)}
-              />
-              <InputGroupAddon align="block-end">
-                <InputGroupText
-                  className={cn(
-                    "tabular-nums",
-                    policyLength > LIMITS.cancellation.max && "text-destructive",
-                  )}
+          <Field data-invalid={!!err("refundable")}>
+            <FieldLabel>Cancellation</FieldLabel>
+            <div role="radiogroup" aria-label="Cancellation" className="grid gap-2">
+              {(
+                [
+                  ["true", `Refundable — follows your property's policy (${TIER_LABELS[propertyTier]})`, TIER_SUMMARIES[propertyTier]],
+                  ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Must be at least 10% cheaper than a refundable rate on this room.`],
+                ] as const
+              ).map(([value, label, summary]) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
                 >
-                  {policyLength}/{LIMITS.cancellation.max}
-                </InputGroupText>
-              </InputGroupAddon>
-            </InputGroup>
-            <FieldDescription>
-              Describe what happens when a guest cancels. Shown to guests with this rate.
-            </FieldDescription>
-            {err("cancellationText") && <FieldError>{err("cancellationText")}</FieldError>}
+                  <input
+                    type="radio"
+                    name="refundable"
+                    value={value}
+                    data-field="refundable"
+                    checked={refundable === value}
+                    disabled={pending}
+                    onChange={() => {
+                      setRefundable(value);
+                      markDirty();
+                    }}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="font-medium">{label}</span>
+                    <span className="text-muted-foreground">{summary}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {err("refundable") && <FieldError>{err("refundable")}</FieldError>}
           </Field>
         </Section>
 

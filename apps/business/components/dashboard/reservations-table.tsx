@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ReservationStatusBadge } from "@/components/dashboard/reservation-status";
-import type { MockReservation } from "@/components/dashboard/mock-reservations";
+import type { ReservationSummary as MockReservation } from "@/components/dashboard/reservation-types";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -68,7 +68,7 @@ export function ReservationsTable({
                 className={onSelect ? "cursor-pointer" : undefined}
                 onClick={onSelect ? () => onSelect(reservation) : undefined}
               >
-                <TableCell className="font-medium">{reservation.id}</TableCell>
+                <TableCell className="font-medium">{reservation.reference}</TableCell>
                 <TableCell>{reservation.guestName}</TableCell>
                 <TableCell>{reservation.roomName}</TableCell>
                 <TableCell>

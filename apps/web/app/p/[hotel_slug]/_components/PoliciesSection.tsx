@@ -2,13 +2,21 @@ import { cdnImageUrl } from "@openbookings/images";
 import {
   LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog,
 } from "lucide-react";
+import { TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import { BusinessDetailsButton } from "./BusinessDetailsButton";
 
 /** Fees are stored in whole euros (`optionalMoney` in the editor's schema). */
 const money = (v: string | null) => (v === null ? null : `€${Number(v)}`);
 
-export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
+export function PoliciesSection({
+  hotel,
+  hasNonRefundable,
+}: {
+  hotel: HotelPageData;
+  /** Some rates on the page are Non-refundable. */
+  hasNonRefundable: boolean;
+}) {
   // Formatting lives here rather than in the editor so every property phrases
   // these the same way, and so the wording survives a future translation pass.
   const arrival = [
@@ -23,15 +31,17 @@ export function PoliciesSection({ hotel }: { hotel: HotelPageData }) {
       : []),
   ];
 
-  const freeCancellation = hotel.free_cancellation_days !== null && hotel.free_cancellation_days > 0;
+  // Entries cached before 0027 have no tier; Standard is what 0027 defaults to.
+  const tier = hotel.cancellation_tier ?? "standard";
   const cancellation = [
     {
       Icon: XCircle,
-      title: freeCancellation ? "Free Cancellation" : "Cancellation",
-      body: freeCancellation
-        ? `Cancel up to ${hotel.free_cancellation_days} days before arrival at no charge.`
-        : "This rate is non-refundable once confirmed.",
+      title: `Cancellation · ${TIER_LABELS[tier]}`,
+      body: `${TIER_SUMMARIES[tier]} If you don't show up, nothing is refunded. Exact dates are shown at checkout.`,
     },
+    ...(hasNonRefundable
+      ? [{ Icon: XCircle, title: "Non-refundable rates", body: "Some rates are non-refundable and cheaper." }]
+      : []),
     ...(hotel.prepayment_required
       ? [{ Icon: CreditCard, title: "Prepayment", body: "Required to secure your booking." }]
       : []),

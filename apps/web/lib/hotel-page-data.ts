@@ -109,7 +109,6 @@ function buildPropertyPageQuery(slug: string) {
             'bar', rp.bar,
             'currency', rp.currency,
             'is_refundable', rp.is_refundable,
-            'cancellation_policy', rp.cancellation_policy,
             'meal_plan', 'Breakfast included'
           ) ORDER BY rp.bar ASC)
           FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true),

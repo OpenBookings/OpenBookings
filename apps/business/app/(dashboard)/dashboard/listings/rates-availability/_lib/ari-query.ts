@@ -85,7 +85,6 @@ interface RateQueryRow {
   /** bigint column — see `toNumber`. */
   bar: string;
   is_refundable: boolean;
-  cancellation_policy: string | null;
   plan_min_stay: number;
   plan_max_stay: number | null;
   base_occupancy: number;
@@ -158,8 +157,13 @@ booked AS (
   FROM reservations res
   JOIN bookings b ON b.id = res.booking_id
   JOIN scope_rooms sr ON sr.id = res.room_id
-  JOIN dates d ON d.d >= b.check_in_date AND d.d < b.check_out_date
-  WHERE b.status IN ('confirmed', 'completed')
+  -- A guest who left early frees the nights after the last one they stayed.
+  JOIN dates d ON d.d >= b.check_in_date
+              AND d.d < LEAST(b.check_out_date, COALESCE(b.departed_early_on + 1, b.check_out_date))
+  -- Rooms cancel one by one (0027): a cancelled room holds nothing.
+  -- As text: see HOLDING_STATUSES in rooms/_lib/mutations.ts.
+  WHERE b.status::text IN ('confirmed', 'checked_in', 'completed')
+    AND res.cancelled_at IS NULL
   GROUP BY res.room_id, d.d
 )
 SELECT
@@ -231,7 +235,7 @@ WITH dates AS (
 -- ones are not.
 scope_plans AS (
   SELECT
-    rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable, rp.cancellation_policy,
+    rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay,
     (r.is_active AND rp.is_active) AS on_sale,
     r.id AS room_id, r.name AS room_name, r.base_occupancy
@@ -250,7 +254,6 @@ SELECT
   sp.currency,
   sp.bar,
   sp.is_refundable,
-  sp.cancellation_policy,
   sp.min_stay                      AS plan_min_stay,
   sp.max_stay                      AS plan_max_stay,
   sp.base_occupancy,
@@ -705,7 +708,6 @@ export async function loadAriGrid(
         bar: toNumber(head.bar),
         onSale: head.on_sale,
         isRefundable: head.is_refundable,
-        cancellationPolicy: head.cancellation_policy,
         minStay: head.plan_min_stay,
         maxStay: head.plan_max_stay,
         modifiers,

@@ -49,9 +49,8 @@ const RULES: Record<SectionId, Rule[]> = {
   policies: [
     ["Check-in time", (d) => !isBlank(d.property.checkInTime)],
     ["Check-out time", (d) => !isBlank(d.property.checkOutTime)],
-    // No cancellation rule: the editor no longer asks for it (it is moving to a
-    // full cancellation policy), and a host cannot be held to a field they
-    // have no way to fill in.
+    // No cancellation check: every property has a tier (0027 defaults it to
+    // Standard), so there is nothing a host can leave missing.
     // minCheckInAge of 0 is not a real policy; the save path rejects it with
     // .min(1). Reject 0 here for consistency.
     ["Minimum check-in age", (d) => d.content.minCheckInAge !== null && d.content.minCheckInAge >= 1],

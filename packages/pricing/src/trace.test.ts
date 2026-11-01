@@ -221,7 +221,6 @@ describe("search results carry the same build-up", () => {
     rate_plan_name: "Flexible",
     currency: "EUR",
     is_refundable: true,
-    cancellation_policy: "",
     min_stay: 1,
     max_stay: null,
     nights: nightsFrom(["2026-07-03", "2026-07-04"], 100),

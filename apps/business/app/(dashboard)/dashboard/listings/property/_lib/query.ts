@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from "@openbookings/pricing";
 import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
 import { query as dbQuery } from "@openbookings/db";
 import type {
@@ -47,6 +48,7 @@ interface PropertyRow {
   check_in_until: string | null;
   check_out_time: string;
   is_active: boolean;
+  cancellation_tier: PropertyCancellationTier;
   overview_headline: string | null;
   overview_description: string | null;
   location_about: string | null;
@@ -54,7 +56,6 @@ interface PropertyRow {
   cta_body: string | null;
   fine_print: string[] | null;
   reception_24h: boolean | null;
-  free_cancellation_days: number | null;
   prepayment_required: boolean | null;
   children_welcome: boolean | null;
   min_check_in_age: number | null;
@@ -102,10 +103,10 @@ export async function loadEditorData(
        to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
        to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
        to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
-       p.is_active,
+       p.is_active, p.cancellation_tier,
        c.overview_headline, c.overview_description, c.location_about,
        c.cta_headline, c.cta_body, c.fine_print,
-       c.reception_24h, c.free_cancellation_days, c.prepayment_required,
+       c.reception_24h, c.prepayment_required,
        c.children_welcome, c.min_check_in_age,
        c.cot_policy, c.cot_fee, c.extra_bed_fee, c.pets_allowed, c.payment_methods,
        c.legal_company_name, c.contact_email, c.contact_phone,
@@ -165,6 +166,7 @@ export async function loadEditorData(
     checkInUntil: property.check_in_until,
     checkOutTime: property.check_out_time,
     isActive: property.is_active,
+    cancellationTier: property.cancellation_tier,
   };
 
   // A property with no property_content row yet reads as "everything empty",
@@ -178,7 +180,6 @@ export async function loadEditorData(
     ctaBody: property.cta_body,
     finePrint: property.fine_print ?? [],
     reception24h: property.reception_24h ?? false,
-    freeCancellationDays: property.free_cancellation_days,
     prepaymentRequired: property.prepayment_required ?? true,
     childrenWelcome: property.children_welcome ?? true,
     minCheckInAge: property.min_check_in_age,

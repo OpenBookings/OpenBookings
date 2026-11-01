@@ -1,3 +1,4 @@
+import type { CancellationTier } from "@openbookings/pricing";
 import { query } from "./index";
 
 /**
@@ -9,14 +10,34 @@ import { query } from "./index";
 export type SupportReservationRoom = {
   room_name: string;
   rate_plan_name: string;
-  is_refundable: boolean;
-  cancellation_policy: string | null;
+} & SupportRoomPolicy & {
   adults: number;
   children: number;
   total_nights: number;
   price_per_night: number;
   total_amount: number;
 };
+
+/**
+ * A room's cancellation terms: the policy snapshot taken at booking (0027),
+ * or, while the booking is still pending, the tier it would get now.
+ */
+export type SupportRoomPolicy = {
+  cancellation_tier: CancellationTier;
+  check_in_at: string | null;
+  full_refund_until: string | null;
+  cancelled_at: string | null;
+};
+
+/** The json_build_object pairs for SupportRoomPolicy. Needs `r` (reservations), `rp` and `p`. */
+export const ROOM_POLICY_JSON = `
+  'cancellation_tier', COALESCE(
+    r.cancellation_tier::text,
+    CASE WHEN rp.is_refundable THEN p.cancellation_tier::text ELSE 'non_refundable' END
+  ),
+  'check_in_at', r.check_in_at,
+  'full_refund_until', r.full_refund_until,
+  'cancelled_at', r.cancelled_at`;
 
 export type SupportReservation = {
   booking_id: string;
@@ -40,6 +61,9 @@ export type SupportReservation = {
   property_country: string;
   check_in_time: string;
   check_out_time: string;
+  /** The property's zone, for stating deadlines in local time. */
+  timezone: string;
+  confirmed_at: string | null;
   rooms: SupportReservationRoom[];
 };
 
@@ -64,13 +88,14 @@ const RESERVATION_SELECT = `
     p.country AS property_country,
     p.check_in_time::text AS check_in_time,
     p.check_out_time::text AS check_out_time,
+    p.timezone,
+    b.confirmed_at::text AS confirmed_at,
     COALESCE(
       (
         SELECT json_agg(json_build_object(
           'room_name', rm.name,
           'rate_plan_name', rp.name,
-          'is_refundable', rp.is_refundable,
-          'cancellation_policy', rp.cancellation_policy,
+          ${ROOM_POLICY_JSON},
           'adults', r.adults,
           'children', r.children,
           'total_nights', r.total_nights,

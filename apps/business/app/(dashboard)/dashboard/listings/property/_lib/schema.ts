@@ -82,19 +82,8 @@ export const policiesSchema = z
     checkInUntil: optionalTime,
     checkOutTime: z.string().regex(TIME, TIME_MESSAGE),
     reception24h: checkbox,
-    // No longer asked in the editor: cancellation is moving to a full policy.
-    // The editor posts the stored value back unchanged, and blank stays NULL
-    // rather than coercing to 0, which would claim "no free cancellation".
-    freeCancellationDays: z
-      .union([
-        z.literal(""),
-        z.coerce
-          .number({ error: "Enter a number of days." })
-          .int("Enter a whole number of days.")
-          .min(0, "A cancellation window cannot be negative.")
-          .max(365, "Enter a window of a year or less."),
-      ])
-      .transform((v) => (v === "" ? null : v)),
+    // Annex B base tier for every refundable rate. Non-refundable is chosen per rate.
+    cancellationTier: z.enum(["flex", "standard"], { error: "Pick a cancellation policy." }),
     childrenWelcome: checkbox,
     minCheckInAge: z.coerce
       .number({ error: "Enter a minimum age." })

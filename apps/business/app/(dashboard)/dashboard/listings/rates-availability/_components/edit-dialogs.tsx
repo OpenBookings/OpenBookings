@@ -522,7 +522,6 @@ function AddRatePlanDialog({
   const [name, setName] = React.useState("");
   const [bar, setBar] = React.useState("");
   const [refundable, setRefundable] = React.useState(true);
-  const [policy, setPolicy] = React.useState("");
   const [minStay, setMinStay] = React.useState("1");
   const maxStay = useNullableNumber();
   const { pending, error, run } = useAction(onDone);
@@ -538,7 +537,6 @@ function AddRatePlanDialog({
             bar: Number(bar) || 0,
             currency,
             isRefundable: refundable,
-            cancellationPolicy: policy.trim() === "" ? null : policy.trim(),
             minStay: Number(minStay) || 1,
             maxStay: maxStay.parsed,
           }),
@@ -627,17 +625,9 @@ function AddRatePlanDialog({
             checked={refundable}
             onCheckedChange={(v) => setRefundable(v === true)}
           />
-          <Label htmlFor="ari-plan-refundable">Refundable</Label>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="ari-plan-policy">Cancellation policy</Label>
-          <Input
-            id="ari-plan-policy"
-            value={policy}
-            onChange={(e) => setPolicy(e.target.value)}
-            placeholder="Optional"
-          />
+          <Label htmlFor="ari-plan-refundable">
+            Refundable (follows your property&apos;s cancellation policy)
+          </Label>
         </div>
 
         <FormError message={error} />

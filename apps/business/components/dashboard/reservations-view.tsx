@@ -9,9 +9,9 @@ import { ReservationsList } from "@/components/dashboard/reservations-list";
 import { ReservationStatusBadge } from "@/components/dashboard/reservation-status";
 import {
   ReservationDetailBody,
-  ReservationDetailSkeleton,
   ReservationQuickActions,
 } from "@/components/dashboard/reservation-detail-panel";
+import { HostBookingActions } from "@/components/dashboard/host-booking-actions";
 import {
   Drawer,
   DrawerClose,
@@ -21,11 +21,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import {
-  mockReservations,
-  type MockReservation,
-  type ReservationBuckets,
-} from "@/components/dashboard/mock-reservations";
+import type { ReservationBuckets, ReservationSummary } from "@/components/dashboard/reservation-types";
+import type { HostReservation } from "@/lib/reservations/shape";
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -43,16 +40,13 @@ function useIsDesktop() {
   );
 }
 
-// Simulated fetch over mock data; swap for the real API call later.
-function fetchReservation(id: string): Promise<MockReservation | null> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockReservations.find((r) => r.id === id) ?? null);
-    }, 600);
-  });
-}
-
-export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
+export function ReservationsView({
+  reservations,
+  buckets,
+}: {
+  reservations: HostReservation[];
+  buckets: ReservationBuckets<HostReservation>;
+}) {
   const isDesktop = useIsDesktop();
   const router = useRouter();
   const pathname = usePathname();
@@ -61,24 +55,9 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
   // Selection lives in the URL: /dashboard/bookings/reservations?id=RES-1041
   const selectedId = searchParams.get("id");
 
-  const [fetched, setFetched] = React.useState<{
-    id: string;
-    reservation: MockReservation | null;
-  } | null>(null);
-  const detail = fetched?.id === selectedId ? fetched.reservation : null;
-  const loading = selectedId !== null && fetched?.id !== selectedId;
-
-  React.useEffect(() => {
-    if (selectedId === null) return;
-    let cancelled = false;
-    fetchReservation(selectedId).then((reservation) => {
-      if (cancelled) return;
-      setFetched({ id: selectedId, reservation });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
+  // Loaded with the page and refreshed after every action (router.refresh).
+  const detail = selectedId === null ? null : (reservations.find((r) => r.id === selectedId) ?? null);
+  const loading = false;
 
   const select = (id: string | null) => {
     const params = new URLSearchParams(searchParams);
@@ -93,7 +72,7 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
     });
   };
 
-  const handleSelect = (reservation: MockReservation) => {
+  const handleSelect = (reservation: ReservationSummary) => {
     select(selectedId === reservation.id ? null : reservation.id);
   };
 
@@ -140,7 +119,7 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
             ) : (
               <div className="flex items-center gap-2">
                 <DrawerTitle className="text-sm">
-                  {detail ? detail.id : selectedId}
+                  {detail ? detail.reference : "Reservation"}
                 </DrawerTitle>
                 {detail && <ReservationStatusBadge status={detail.status} />}
               </div>
@@ -160,9 +139,7 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
             </DrawerClose>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto p-5">
-            {loading ? (
-              <ReservationDetailSkeleton />
-            ) : !detail ? (
+            {!detail ? (
               <p className="text-muted-foreground py-8 text-center text-sm">
                 Reservation not found.
               </p>
@@ -171,7 +148,8 @@ export function ReservationsView({ buckets }: { buckets: ReservationBuckets }) {
             )}
           </div>
           {!loading && detail && (
-            <DrawerFooter className="border-t">
+            <DrawerFooter className="gap-3 border-t">
+              <HostBookingActions reservation={detail} />
               <ReservationQuickActions reservationId={detail.id} />
             </DrawerFooter>
           )}

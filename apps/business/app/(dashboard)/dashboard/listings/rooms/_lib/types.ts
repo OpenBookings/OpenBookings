@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from "@openbookings/pricing";
 import type { BedConfig, RateExtraKey } from "./constants";
 
 /** The five sections the room editor's rail lists, in the order a host fills them in. */
@@ -59,7 +60,8 @@ export interface RatePlanRecord {
   minAdvanceDays: number;
   /** Days ahead. null = no limit. */
   maxAdvanceDays: number | null;
-  cancellationText: string | null;
+  /** true = follows the property's cancellation tier; false = Non-refundable. */
+  refundable: boolean;
   active: boolean;
   /**
    * Whether R&A has set a base rate (`bar > 0`). The editor shows no price, but
@@ -75,7 +77,7 @@ export interface RoomEditorData {
   room: RoomRecord;
   photos: RoomPhotoRecord[];
   rates: RatePlanRecord[];
-  property: { id: string; name: string };
+  property: { id: string; name: string; cancellationTier: PropertyCancellationTier };
 }
 
 /** One row of the Rooms index. */

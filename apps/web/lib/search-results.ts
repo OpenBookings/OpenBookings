@@ -14,6 +14,11 @@ export interface HotelSearchApiResult {
   room_description: string;
   currency: string;
   is_refundable: boolean;
+  /**
+   * ISO instant until which this stay can still be cancelled for free; null
+   * when it can't. Absent on searches without dates.
+   */
+  free_cancellation_until?: string | null;
   total_price: number;
   nights: { date: string }[];
 }
@@ -49,7 +54,9 @@ export function mapSearchResult(result: HotelSearchApiResult): StayPosterData {
     slug: result.hotel_slug,
     location: `${result.city}, ${result.country}`,
     distanceKm: Number.isFinite(result.distance_m) ? (result.distance_m as number) / 1000 : null,
-    refundable: result.is_refundable,
+    // "Free cancellation" only while the free window for these dates is open.
+    refundable:
+      result.free_cancellation_until !== undefined ? result.free_cancellation_until !== null : result.is_refundable,
     // Host highlights aren't modelled yet.
     highlights: [],
     // Tint and focal point come from the cover pipeline, which doesn't exist yet.

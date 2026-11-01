@@ -4,7 +4,7 @@ import type { ToolContext } from "./tools";
 
 // Dynamic, like the other suites: the db doubles above must be registered
 // before tools.ts binds its imports.
-const { classifyPolicyTier, executeTool, mistralToolSchemas, TOOLS } = await import("./tools");
+const { executeTool, mistralToolSchemas, TOOLS } = await import("./tools");
 
 const GUEST: ToolContext = { guestEmail: "guest@example.com" };
 const ANONYMOUS: ToolContext = { guestEmail: null };
@@ -146,15 +146,12 @@ describe("executeTool validation", () => {
   });
 });
 
-describe("classifyPolicyTier", () => {
-  it("prefers an explicit tier word in the policy text", () => {
-    expect(classifyPolicyTier(true, "Moderate: free cancellation until 5 days before")).toBe("Moderate");
-    expect(classifyPolicyTier(false, "Limited — 50% back until 14 days before")).toBe("Limited");
-  });
-
-  it("falls back to refundability", () => {
-    expect(classifyPolicyTier(true, null)).toBe("Flexible");
-    expect(classifyPolicyTier(false, null)).toBe("Firm");
-    expect(classifyPolicyTier(true, "Non-refundable rate")).toBe("Firm");
+describe("get_cancellation_policy", () => {
+  it("states the Annex B tier and the no-show rule for each room", async () => {
+    const result = await executeTool("get_cancellation_policy", { booking_reference: OWN_REF }, GUEST);
+    expect(result.ok).toBe(true);
+    const policy = (result as { ok: true; result: { policies: Record<string, unknown>[] } }).result.policies[0];
+    expect(policy.tier).toBe("Standard");
+    expect(policy.no_show).toBe("If you don't show up, nothing is refunded.");
   });
 });

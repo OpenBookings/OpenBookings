@@ -5,7 +5,7 @@ import { getDemoSearchResults } from "./demo-data";
 const base: HotelSearchApiResult = {
   hotel_id: "h1", hotel_name: "Hotel Lago", hotel_slug: "hotel-lago", city: "Como", country: "IT",
   hero_image_url: "https://x/a.jpg", room_name: "Lake View Double", room_description: "",
-  currency: "EUR", is_refundable: true, total_price: 422, nights: [{ date: "2026-11-10" }, { date: "2026-11-11" }],
+  currency: "EUR", is_refundable: true, free_cancellation_until: "2026-11-09T14:00:00.000Z", total_price: 422, nights: [{ date: "2026-11-10" }, { date: "2026-11-11" }],
 };
 
 describe("nightsBetween", () => {
@@ -18,6 +18,10 @@ describe("nightsBetween", () => {
 });
 
 describe("mapSearchResult", () => {
+  test("free cancellation is shown while the window for these dates is open", () =>
+    expect(mapSearchResult(base).refundable).toBe(true));
+  test("a refundable rate whose free window has passed is not free cancellation", () =>
+    expect(mapSearchResult({ ...base, free_cancellation_until: null }).refundable).toBe(false));
   test("maps a priced result", () =>
     expect(mapSearchResult({ ...base, distance_m: 812 })).toEqual({
       id: "h1", name: "Hotel Lago", slug: "hotel-lago", location: "Como, IT", distanceKm: 0.812,

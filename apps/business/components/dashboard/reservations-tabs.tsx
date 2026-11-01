@@ -4,9 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReservationsTable } from "@/components/dashboard/reservations-table";
 import type {
-  MockReservation,
+  ReservationSummary as MockReservation,
   ReservationBuckets,
-} from "@/components/dashboard/mock-reservations";
+} from "@/components/dashboard/reservation-types";
 
 export function ReservationsTabs({
   buckets,

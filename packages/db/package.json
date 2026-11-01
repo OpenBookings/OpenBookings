@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./booking-lifecycle": "./src/booking-lifecycle/index.ts"
   },
   "scripts": {
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
@@ -12,14 +13,17 @@
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
     "db:setup:ci": "bun scripts/apply-schema-ci.ts",
     "db:studio": "bun --env-file=../../.env.local drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
+    "@openbookings/pricing": "workspace:*",
     "drizzle-orm": "1.0.0-rc.4",
     "pg": "^8.23.1"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
+    "@types/bun": "^1.3.14",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "1.0.0-rc.4",
     "typescript": "^5.9.3"

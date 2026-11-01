@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, Users, Minus, Plus, Heart,
 } from "lucide-react";
 import type { DbRoom, DbRatePlan } from "./constants";
+import { TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
 
 const slideVariants = {
   enter:  (d: number) => ({ x: d > 0 ? "100%" : "-100%", opacity: 0 }),
@@ -395,7 +396,8 @@ function RoomsCarousel({ rooms, activeIndex, onNavigate, liked, onToggleLike, on
 // ── Rate card ─────────────────────────────────────────────────────────────────
 
 function RateCard({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: { rate: DbRatePlan; maxOccupancy: number | null; qty: number; onQtyChange: (v: number) => void; ratesConfirmed: boolean }) {
-  const cancellationText = rate.cancellation_policy ?? (rate.is_refundable ? "Free cancellation" : "Non-refundable");
+  const tier = rate.cancellation_tier ?? (rate.is_refundable ? "standard" : "non_refundable");
+  const cancellationText = rate.is_refundable ? `Free cancellation · ${TIER_LABELS[tier]}` : "Non-refundable";
 
   return (
     <div className="bg-black/28 backdrop-blur-2xl rounded-2xl border border-white/12 p-5 flex flex-col gap-3.5">
@@ -424,8 +426,14 @@ function RateCard({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: { ra
       )}
 
       {/* Cancellation */}
-      <p className={`text-[11px] text-center leading-snug mt-auto ${rate.is_refundable ? "text-emerald-400/70" : "text-red-400/70"}`}>
+      <p
+        title={TIER_SUMMARIES[tier]}
+        className={`text-[11px] text-center leading-snug mt-auto ${rate.is_refundable ? "text-emerald-400/70" : "text-red-400/70"}`}
+      >
         {cancellationText}
+        {rate.saving_vs_refundable !== undefined && rate.saving_vs_refundable > 0 && (
+          <span className="block text-white/50">Save €{rate.saving_vs_refundable} vs. refundable</span>
+        )}
       </p>
 
       {/* Price + stepper */}

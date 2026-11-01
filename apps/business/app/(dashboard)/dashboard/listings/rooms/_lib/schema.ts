@@ -142,11 +142,10 @@ export const rateSchema = z.object({
     .string()
     .transform((v) => (v === "none" || v === "" ? null : Number(v)))
     .refine((v) => (MAX_ADVANCE_OPTIONS as readonly (number | null)[]).includes(v), "Pick an option."),
-  // Plain text, length only. Nothing calculates refunds from it.
-  cancellationText: optionalText(
-    LIMITS.cancellation.max,
-    `Keep the policy under ${LIMITS.cancellation.max} characters.`,
-  ),
+  // true = follows the property's cancellation tier; false = Non-refundable (Annex B).
+  refundable: z
+    .enum(["true", "false"], { error: "Choose refundable or non-refundable." })
+    .transform((v) => v === "true"),
   active: checkbox,
 });
 

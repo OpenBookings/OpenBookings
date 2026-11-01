@@ -24,6 +24,8 @@ import {
 } from '@openbookings/pricing';
 import { buildBookingLines, stayCents, type BookingLine } from './booking-lines';
 import { applicationFeeCents } from '@openbookings/stripe';
+import type { PropertyCancellationTier } from '@openbookings/pricing';
+import { checkoutCancellationTerms, type CheckoutCancellationTerms } from './cancellation-terms';
 
 /** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
 const CHECKOUT_BOOKING_ID = 'b0000000-0000-4000-8000-000000000001';
@@ -71,9 +73,8 @@ export type StaySummary = {
   platformFeeCents: number;
   currency: string;
 
-  /** Refundable plans get a real date; the sentence itself comes from the plan. */
-  cancellationPolicy: string;
-  freeCancellationUntil: Date | null;
+  /** Tier, exact deadlines and whether the guest must confirm Non-refundable. */
+  cancellation: CheckoutCancellationTerms;
 
   stripeAccountId: string;
   /**
@@ -90,8 +91,6 @@ export type StaySummary = {
 export type BookingSummary = StaySummary;
 
 const HOLD_MINUTES = 30;
-/** Refundable plans in this schema all cancel free until this many days out. */
-const FREE_CANCELLATION_DAYS = 7;
 const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
 
 type BookingRow = {
@@ -105,6 +104,8 @@ type BookingRow = {
   country: string | null;
   check_in_time: string | null;
   check_out_time: string | null;
+  timezone: string;
+  cancellation_tier: PropertyCancellationTier;
   rates_confirmed: boolean;
   commission_rate: string;
   reservation_id: string;
@@ -121,7 +122,6 @@ type BookingRow = {
   price_per_night: string;
   rate_plan_name: string;
   is_refundable: boolean;
-  cancellation_policy: string | null;
   hero_image_url: string | null;
   logo_url: string | null;
   room_image_url: string | null;
@@ -150,6 +150,8 @@ const BOOKING_QUERY = `
     p.country,
     p.check_in_time,
     p.check_out_time,
+    p.timezone,
+    p.cancellation_tier,
     exists (
       select 1 from org_consent oc
       where oc.organization_id = p.organization_id and oc.doc_id = $2
@@ -179,7 +181,6 @@ const BOOKING_QUERY = `
     res.price_per_night,
     rp.name             as rate_plan_name,
     rp.is_refundable,
-    rp.cancellation_policy,
     hero.url            as hero_image_url,
     logo.url            as logo_url,
     room_img.url        as room_image_url
@@ -335,10 +336,6 @@ export async function getBookingSummary(): Promise<StaySummary> {
     touristTax: touristTax.lines,
   });
 
-  const freeCancellationUntil = row.is_refundable
-    ? new Date(checkIn.getTime() - FREE_CANCELLATION_DAYS * MS_PER_NIGHT)
-    : null;
-
   return {
     intentId: row.booking_id,
     reservationId: row.reservation_id,
@@ -373,12 +370,14 @@ export async function getBookingSummary(): Promise<StaySummary> {
     platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, row.commission_rate) : 0,
     currency: row.currency.toLowerCase(),
 
-    cancellationPolicy:
-      row.cancellation_policy ??
-      (row.is_refundable
-        ? 'This reservation can be cancelled free of charge.'
-        : 'This reservation is non-refundable.'),
-    freeCancellationUntil,
+    cancellation: checkoutCancellationTerms({
+      propertyTier: row.cancellation_tier,
+      isRefundable: row.is_refundable,
+      timeZone: row.timezone,
+      checkInTime: row.check_in_time,
+      arrivalDate: row.check_in_date,
+      now: new Date(),
+    }),
 
     // The host's own connected account: the booking is charged on it. The env
     // fallback exists for the seeded demo property in development only — in
@@ -447,11 +446,6 @@ export function formatWeekdayMonth(date: Date): string {
   const weekday = dateParts(date, { weekday: 'short' });
   const month = dateParts(date, { month: 'short' });
   return `${weekday}, ${month}`;
-}
-
-/** "Wed, 14 Oct" — the long form, for the cancellation deadline. */
-export function formatShortDate(date: Date): string {
-  return dateParts(date, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 /** "2 adults · 1 child" — only naming what is actually there. */

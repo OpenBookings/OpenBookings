@@ -352,7 +352,11 @@ function CheckoutSession({
       <Shell heroImageUrl={props.heroImageUrl}>
         <TripSummary {...props} />
         <PaymentCardBoundary onRestart={retry}>
-          <PaymentCard expiresAt={resolved.expiresAt} onRestart={retry} />
+          <PaymentCard
+            expiresAt={resolved.expiresAt}
+            onRestart={retry}
+            requiresNonRefundableConsent={props.requiresNonRefundableConsent}
+          />
         </PaymentCardBoundary>
       </Shell>
     </CheckoutFormProvider>

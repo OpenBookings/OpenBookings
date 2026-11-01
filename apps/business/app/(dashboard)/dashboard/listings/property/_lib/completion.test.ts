@@ -25,6 +25,7 @@ function complete(): PropertyEditorData {
       checkInUntil: "23:00",
       checkOutTime: "11:00",
       isActive: false,
+      cancellationTier: "standard",
     },
     content: {
       overviewHeadline: "Where stillness meets the sea",
@@ -34,7 +35,6 @@ function complete(): PropertyEditorData {
       ctaBody: "Reserve your stay and let us take care of the rest.",
       finePrint: ["A security deposit is required on arrival."],
       reception24h: true,
-      freeCancellationDays: 7,
       prepaymentRequired: true,
       childrenWelcome: true,
       minCheckInAge: 18,
@@ -153,12 +153,6 @@ describe("sectionStatus — overview", () => {
 describe("sectionStatus — policies", () => {
   test("is complete for the fixture", () => {
     expect(sectionStatus("policies", complete()).complete).toBe(true);
-  });
-
-  test("does not require a cancellation window while it awaits a full policy", () => {
-    const d = complete();
-    d.content.freeCancellationDays = null;
-    expect(sectionStatus("policies", d).complete).toBe(true);
   });
 
   test("requires at least one payment method", () => {

@@ -1,3 +1,4 @@
+import type { PropertyCancellationTier } from "@openbookings/pricing";
 import type { TouristTaxRule } from "@openbookings/pricing";
 
 /** The groups the editor's nav rail lists, in the order the guest sees them. */
@@ -47,6 +48,8 @@ export interface PropertyRecord {
   checkInUntil: string | null;
   checkOutTime: string;
   isActive: boolean;
+  /** Annex B base tier (0027). Changes apply to new bookings only. */
+  cancellationTier: PropertyCancellationTier;
 }
 
 /** All of `property_content`. Money fields are whole currency units. */
@@ -58,7 +61,6 @@ export interface PropertyContentRecord {
   ctaBody: string | null;
   finePrint: string[];
   reception24h: boolean;
-  freeCancellationDays: number | null;
   prepaymentRequired: boolean;
   childrenWelcome: boolean;
   minCheckInAge: number | null;

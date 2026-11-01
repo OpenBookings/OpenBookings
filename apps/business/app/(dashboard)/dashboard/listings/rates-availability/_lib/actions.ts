@@ -22,6 +22,7 @@ import {
 import { VERSION_SQL } from "./ari-query";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
+import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
 
 /**
  * Bulk mutations behind the ARI toolbar modals. Every one of them writes a
@@ -285,7 +286,6 @@ const ratePlanSchema = z
     bar: z.number().int().min(0),
     currency: z.string().length(3),
     isRefundable: z.boolean(),
-    cancellationPolicy: z.string().max(2000).nullable(),
     minStay: z.number().int().min(1),
     maxStay: z.number().int().min(1).nullable(),
   })
@@ -313,10 +313,25 @@ export async function createRatePlan(
     return { ok: false, error: RATES_CONFIRMATION_MESSAGE, code: RATES_CONFIRMATION_REQUIRED };
   }
 
+  // Annex B B.4: a new plan goes on sale at once, so a Non-refundable one
+  // needs a refundable plan on the room that costs at least 10% more.
+  if (!data.isRefundable) {
+    const siblings = await query<{ id: string; is_active: boolean; is_refundable: boolean; bar: number }>(
+      `SELECT id, is_active, is_refundable, bar::float8 AS bar FROM rate_plans
+       WHERE room_id = $1 AND archived_at IS NULL`,
+      [data.roomId],
+    );
+    const refusal = refundableGuardError(
+      siblings.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, bar: r.bar })),
+      { id: "new", isActive: true, isRefundable: false, bar: data.bar },
+    );
+    if (refusal) return failed(refusal);
+  }
+
   const rows = await query<{ id: string }>(
     `INSERT INTO rate_plans
-       (room_id, name, bar, currency, is_refundable, cancellation_policy, min_stay, max_stay)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (room_id, name, bar, currency, is_refundable, min_stay, max_stay)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
       data.roomId,
@@ -324,7 +339,6 @@ export async function createRatePlan(
       data.bar,
       data.currency.toUpperCase(),
       data.isRefundable,
-      data.cancellationPolicy,
       data.minStay,
       data.maxStay,
     ],

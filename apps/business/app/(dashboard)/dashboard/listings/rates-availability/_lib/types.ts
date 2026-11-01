@@ -195,7 +195,6 @@ export interface RatePlanRow {
    */
   onSale: boolean;
   isRefundable: boolean;
-  cancellationPolicy: string | null;
   minStay: number;
   maxStay: number | null;
   /** All active modifiers on the plan — the detail panel lists them in order. */
