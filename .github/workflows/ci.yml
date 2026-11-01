@@ -63,6 +63,24 @@ jobs:
           branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
+      # The branch step returns once the branch exists, not once its compute
+      # has booted. Booting takes anywhere from 1 to 9 seconds, and a test's
+      # first connect waits on it, which can outrun bun's 5-second hook limit.
+      # So wait here until the database answers.
+      - name: Wait for the database to accept connections
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if PGCONNECT_TIMEOUT=10 psql "$DATABASE_URL" -XAtqc 'select 1' >/dev/null 2>&1; then
+              echo "Database ready after $attempt attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::The database branch did not accept connections within about a minute."
+          exit 1
+
       # The direct endpoint, not the pooled one: the pooler rewrites and
       # batches statements, and these tests drive explicit transactions.
       - name: Run tests
