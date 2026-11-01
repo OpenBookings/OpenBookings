@@ -62,6 +62,18 @@
   --results-background: oklch(0.12 0.004 285.8);
   --poster-skeleton: oklch(0.17 0.005 285.8);
   --poster-tint-fallback: #0c0b0d;
+
+  /*
+   * "Light through glass" spectrum, the same stops as apps/business
+   * (DESIGN_SYSTEM.md §3.5). Pastel on purpose: refracted light, never paint.
+   * Keep the two apps' values identical.
+   */
+  --spectrum-coral: oklch(80% 0.1 35);
+  --spectrum-amber: oklch(86% 0.1 75);
+  --spectrum-lemon: oklch(91% 0.1 105);
+  --spectrum-mint: oklch(85% 0.11 160);
+  --spectrum-sky: oklch(80% 0.09 235);
+  --spectrum-lilac: oklch(77% 0.1 305);
 }
 
 @theme inline {
@@ -486,4 +498,43 @@
     padding: 0.9rem 2rem;
     font-size: 1rem;
   }
+}
+
+/*
+ * A 1px border that runs through the spectrum, each stop washed toward white,
+ * so it reads as light catching the edge of the glass rather than a rainbow.
+ * Shown while [data-active="true"]; it fades in and out. Used on selected
+ * rate rows (RoomsCarousel.tsx). The element keeps its own 1px border, which
+ * this covers.
+ */
+.spectrum-border {
+  position: relative;
+}
+
+.spectrum-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    color-mix(in oklch, var(--spectrum-coral) 55%, white),
+    color-mix(in oklch, var(--spectrum-amber) 55%, white),
+    color-mix(in oklch, var(--spectrum-lemon) 55%, white),
+    color-mix(in oklch, var(--spectrum-mint) 55%, white),
+    color-mix(in oklch, var(--spectrum-sky) 55%, white),
+    color-mix(in oklch, var(--spectrum-lilac) 55%, white)
+  );
+  /* Keep only the padding ring: the border, not the fill. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+.spectrum-border[data-active="true"]::before {
+  opacity: 0.85;
 }
