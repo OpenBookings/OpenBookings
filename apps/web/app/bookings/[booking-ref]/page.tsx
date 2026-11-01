@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
 import { AuthFormFields, AuthFormPhaseProvider } from '@/components/auth/AuthFormFields';
 import { CancelDialog } from './_components/CancelDialog';
+import { MessagePropertyButton } from './_components/MessagePropertyButton';
 import { loadGuestBooking } from './_lib/load';
 
 export const metadata: Metadata = { title: 'Your booking' };
@@ -52,6 +53,9 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
             {booking.city ? `${booking.city} · ` : ''}
             {fmtDay(booking.checkInDate)} – {fmtDay(booking.checkOutDate)}
           </p>
+          <div className="mt-2">
+            <MessagePropertyButton bookingId={booking.id} />
+          </div>
         </header>
 
         <section className="flex flex-col gap-4">

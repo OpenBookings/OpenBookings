@@ -42,13 +42,22 @@ describe("factory plugin surface", () => {
     expect("setRole" in guest.api).toBe(false);
   });
 
-  test("passkey and two-factor endpoints exist only on the host instance", () => {
+  test("both instances mount passkeys; two-factor exists only on the host instance", () => {
     const guest = createGuestAuth(base);
     const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
     expect("generatePasskeyRegistrationOptions" in host.api).toBe(true);
     expect("verifyTOTP" in host.api).toBe(true);
-    expect("generatePasskeyRegistrationOptions" in guest.api).toBe(false);
+    expect("generatePasskeyRegistrationOptions" in guest.api).toBe(true);
     expect("verifyTOTP" in guest.api).toBe(false);
+  });
+
+  test("guests can change their email and delete their account", () => {
+    const guest = createGuestAuth(base);
+    expect("changeEmail" in guest.api).toBe(true);
+    expect("deleteUser" in guest.api).toBe(true);
+    expect(guest.options.user?.changeEmail?.enabled).toBe(true);
+    expect(guest.options.user?.deleteUser?.enabled).toBe(true);
+    expect(typeof guest.options.user?.deleteUser?.sendDeleteAccountVerification).toBe("function");
   });
 
   // Asserted on the route table rather than through `guest.handler`: since
