@@ -154,7 +154,7 @@ Shared brand tokens, currently business-only, move to the foundation:
 --ob-sidebar:     oklch(10.5% 0.008 262)
 ```
 
-**Accent is blue.** `.impeccable.md` §Aesthetic Direction: *"Accent color is blue (already established)"*, realised as `--accent-9` / `--ob-brand`. Teal `#00C8A8` is not part of the foundation (see D6). The `--spectrum-*` / `--mk-*` tokens are **not** foundation either. They are the business marketing voice (§3.5), defined only in `apps/business/app/globals.css`. If `apps/web` wants the same voice, promote them deliberately rather than copying them.
+**Accent is blue.** `.impeccable.md` §Aesthetic Direction: *"Accent color is blue (already established)"*, realised as `--accent-9` / `--ob-brand`. Teal `#00C8A8` is not part of the foundation (see D6). The `--spectrum-*` / `--mk-*` tokens are **not** foundation either. They are the business marketing voice (§3.5), defined in `apps/business/app/globals.css`. `apps/web` carries the six `--spectrum-*` stops too, with identical values, for one use only: the selected rate row edge (see the table in §3.5). Add more web uses deliberately, not by copying.
 
 ### 2.2 Type scale
 
@@ -376,6 +376,7 @@ The spectrum is pastel on purpose: L 77–91%, C ≈ 0.1. Do not raise the chrom
 | Our bar in the calculator | `.spectrum-glow-bar` in `CostCalculator.tsx` | only the OpenBookings bar: same 6px pill as the others but white, with a soft blurred spectrum glow around it (35%); competitor bars stay `bg-white/15` |
 | Closing card edge | `.spectrum-hairline` in `FinalCTA.tsx` | 1px line along the top edge, fading out at both ends |
 | Small accents | status dots, ↑ arrows, founder-note numbers, FAQ link underlines, `::selection` | single spectrum colour each, per the token roles above |
+| Selected rate row (`apps/web`) | `.spectrum-border` in `apps/web/app/globals.css`, set by `data-active` in `RoomsCarousel.tsx` | 1px edge through all six stops, each mixed 45% toward white, at 85% opacity; fades in over 300ms; only on rows the guest has picked |
 
 **Rules**
 
