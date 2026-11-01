@@ -70,6 +70,24 @@ export function ReservationDetailBody({
     <div className="flex flex-col gap-8">
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
+        {reservation.guestPhone ? (
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-muted-foreground text-sm">Phone</span>
+            <a href={`tel:${reservation.guestPhone.replace(/[^\d+]/g, "")}`} className="text-right text-sm font-medium underline-offset-2 hover:underline">
+              {reservation.guestPhone}
+            </a>
+          </div>
+        ) : null}
+        {reservation.guestAddress ? (
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-muted-foreground text-sm">Address</span>
+            <address className="text-right text-sm font-medium not-italic">
+              {reservation.guestAddress.map((line) => (
+                <span key={line} className="block">{line}</span>
+              ))}
+            </address>
+          </div>
+        ) : null}
         <DetailField
           label="Party size"
           value={`${reservation.guests} ${reservation.guests === 1 ? "guest" : "guests"}`}

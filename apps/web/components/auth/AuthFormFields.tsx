@@ -8,11 +8,12 @@ import {
     useState,
 } from "react";
 import posthog from "posthog-js";
-import { Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
+import { isPasskeyPromptCancelled } from "@/lib/passkey-errors";
 
 export type AuthFormCardPhase = "idle" | "sending" | "email_sent" | "social";
 
@@ -88,6 +89,7 @@ export function AuthFormFields({
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [appleLoading, setAppleLoading] = useState(false);
+    const [passkeyLoading, setPasskeyLoading] = useState(false);
     const [magicLinkError, setMagicLinkError] = useState<string | null>(
         initialError ?? null,
     );
@@ -186,6 +188,35 @@ export function AuthFormFields({
             posthog.capture("sign_in_failed", { provider: "apple", error_code: code });
             setSocialState({ provider: "apple", failed: true });
             setAppleLoading(false);
+        }
+    };
+
+    const handlePasskeyClick = async () => {
+        setMagicLinkError(null);
+        setSentEmail(null);
+        posthog.capture("sign_in_passkey_clicked");
+        if (typeof window === "undefined" || !window.PublicKeyCredential) {
+            setMagicLinkError("This browser can't use passkeys. Use an email link instead.");
+            return;
+        }
+        setPasskeyLoading(true);
+        try {
+            const result = await authClient.signIn.passkey();
+            if (result?.error) {
+                // Closing the browser's prompt is not a failure worth a message.
+                if (!isPasskeyPromptCancelled(result.error)) {
+                    posthog.capture("sign_in_failed", { provider: "passkey", error_code: "code" in result.error ? result.error.code : result.error.status });
+                    setMagicLinkError("That passkey didn't work. Try again, or use an email link.");
+                }
+                return;
+            }
+            onSignInSuccess?.();
+            // A full load, so every server component sees the new session.
+            window.location.assign(callbackURL);
+        } catch {
+            setMagicLinkError("That passkey didn't work. Try again, or use an email link.");
+        } finally {
+            setPasskeyLoading(false);
         }
     };
 
@@ -323,6 +354,18 @@ export function AuthFormFields({
                         className="w-6 h-6"
                         draggable="false"
                     />
+                </Button>
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 flex items-center justify-center p-2 h-12 min-w-13"
+                    style={{ minWidth: "3.25rem" }}
+                    aria-label="Sign in with a passkey"
+                    title="Sign in with a passkey"
+                    disabled={passkeyLoading}
+                    onClick={handlePasskeyClick}
+                >
+                    {passkeyLoading ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <KeyRound className="size-5" aria-hidden />}
                 </Button>
             </div>
         </>
