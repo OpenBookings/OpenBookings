@@ -1,7 +1,16 @@
 import { createGuestAuth } from "@openbookings/auth/guest";
 import { sessionForApp } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
+import { query } from "@openbookings/db";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
+import {
+  deleteAccountConfirmation,
+  emailChangeConfirmation,
+  newEmailVerification,
+  passkeyAdded,
+  sendAccountMail,
+} from "@/lib/mailing/account-mail";
+import { anonymizeGuestData, assertCanDeleteAccount, todayInEurope } from "@/lib/account/deletion";
 import { cache } from "react";
 import { headers } from "next/headers";
 
@@ -22,6 +31,18 @@ export const auth = createGuestAuth({
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   appleClientId: process.env.APPLE_CLIENT_ID,
   appleClientSecret: process.env.APPLE_CLIENT_SECRET,
+  sendChangeEmailConfirmation: ({ email, newEmail, url }) =>
+    sendAccountMail(email, emailChangeConfirmation(newEmail, url)),
+  sendVerificationEmail: ({ email, url }) => sendAccountMail(email, newEmailVerification(url)),
+  sendDeleteAccountVerification: ({ email, url }) => sendAccountMail(email, deleteAccountConfirmation(url)),
+  beforeDeleteUser: async (userId) => {
+    // Checked again here, at the moment the emailed link is opened: a stay
+    // booked after the request must still block it.
+    await assertCanDeleteAccount(userId, query, todayInEurope());
+    await anonymizeGuestData(userId, query);
+  },
+  onPasskeyAdded: ({ email, name }) =>
+    sendAccountMail(email, passkeyAdded(name ?? "A new passkey", `${env.AUTH_BASE_URL}/account/security`)),
 });
 
 /**

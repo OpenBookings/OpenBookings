@@ -1,6 +1,75 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Class-driven like apps/business (DESIGN_SYSTEM.md §2.8): <html> is always .dark. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Console surface (DESIGN_SYSTEM.md §3.3) — the guest account area. The scale and
+ * semantic values are apps/business's (Twenty / Radix dark), so the account
+ * pages look like the host app's. Scoped to `.console` so the Glass pages and
+ * checkout keep their own tokens. Radix portals render outside the wrapper:
+ * give their content the class too (see app/account/_components).
+ */
+:root {
+  --accent-3: color(display-p3 0.105 0.141 0.275); /* #182449 */
+  --accent-7: color(display-p3 0.245 0.309 0.575); /* #3A4F97 */
+  --accent-9: color(display-p3 0.276 0.384 0.837); /* #3E63DD */
+  --accent-11: color(display-p3 0.63 0.69 1); /* #9EB1FF */
+  --green-3: #132d21;
+  --green-11: #3dd68c;
+  --amber-3: #302008;
+  --amber-11: #ffca16;
+  --red-3: color(display-p3 0.211 0.081 0.099); /* #3B1219 */
+  --red-5: color(display-p3 0.348 0.11 0.142); /* #611623 */
+  --red-9: color(display-p3 0.83 0.329 0.324); /* #E5484D */
+  --red-11: #ff9592;
+}
+
+.console {
+  --gray-1: color(display-p3 0.09 0.09 0.09); /* #171717 */
+  --gray-2: color(display-p3 0.106 0.106 0.106); /* #1B1B1B */
+  --gray-4: color(display-p3 0.114 0.114 0.114); /* #1D1D1D */
+  --gray-5: color(display-p3 0.133 0.133 0.133); /* #222222 */
+  --gray-6: color(display-p3 0.282 0.282 0.282); /* #484848 */
+  --gray-11: color(display-p3 0.702 0.702 0.702); /* #B3B3B3 */
+  --gray-12: color(display-p3 0.922 0.922 0.922); /* #EBEBEB */
+  --gray-a2: color(display-p3 1 1 1 / 0.059);
+
+  --background: var(--gray-1);
+  --foreground: var(--gray-12);
+  --card: var(--gray-2);
+  --card-foreground: var(--gray-12);
+  --popover: var(--gray-2);
+  --popover-foreground: var(--gray-12);
+  --primary: var(--accent-9);
+  --primary-foreground: #ffffff;
+  --secondary: var(--gray-5);
+  --secondary-foreground: var(--gray-12);
+  --muted: var(--gray-4);
+  --muted-foreground: var(--gray-11);
+  --accent: var(--gray-a2);
+  --accent-foreground: var(--gray-12);
+  --destructive: var(--red-9);
+  --destructive-foreground: #ffffff;
+  --border: var(--gray-5);
+  --input: var(--gray-6);
+  --ring: var(--accent-7);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+/* apps/web sets no default border colour (Tailwind v4 falls back to
+   currentColor); the Console surface uses apps/business's. In the base layer,
+   so any border utility still wins. */
+@layer base {
+  .console,
+  .console * {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+}
+
 :root {
   --background: oklch(0.1405 0.0044 285.8238);
   --foreground: oklch(0.9848 0 0);

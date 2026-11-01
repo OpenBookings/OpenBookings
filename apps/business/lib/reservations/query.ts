@@ -17,6 +17,13 @@ export const HOST_RESERVATIONS_SQL = `
     b.check_in_date::text AS check_in_date,
     b.check_out_date::text AS check_out_date,
     u.name AS guest_name,
+    -- Contact details the guest chose to share (0028). Hosts see them for
+    -- their own bookings only: this whole query is scoped to their properties.
+    gp.phone AS guest_phone,
+    CASE WHEN gp.address_line1 IS NOT NULL THEN json_build_object(
+      'line1', gp.address_line1, 'line2', gp.address_line2,
+      'postal_code', gp.postal_code, 'city', gp.city, 'country', gp.country
+    ) END AS guest_address,
     COALESCE((SELECT SUM(r.adults + r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS guests,
     b.total_amount::float8 AS total_amount,
     p.timezone,
@@ -44,6 +51,7 @@ export const HOST_RESERVATIONS_SQL = `
   FROM bookings b
   JOIN properties p ON p.id = b.hotel_id
   LEFT JOIN "user" u ON u.id = b.user_id
+  LEFT JOIN guest_profile gp ON gp.user_id = b.user_id
   WHERE ${propertyReadAccessSql("$1")}
     AND b.status <> 'pending'
     AND b.check_out_date >= CURRENT_DATE - ${PAST_DAYS}

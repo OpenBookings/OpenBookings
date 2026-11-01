@@ -939,3 +939,21 @@ export const consentLog = pgTable(
     check("consent_log_app_check", sql`${table.app} IN ('web', 'business')`),
   ],
 );
+
+/**
+ * Optional contact details a guest adds on their account page (0028). Shared
+ * with the host of each of the guest's bookings. `user_id` is a Better Auth
+ * user id, FK to `"user"` with ON DELETE CASCADE.
+ *
+ * Mirrors packages/db/drizzle/0028_guest_profile.sql; keep the two in sync.
+ */
+export const guestProfile = pgTable("guest_profile", {
+  userId: text("user_id").primaryKey(),
+  phone: varchar("phone", { length: 32 }),
+  addressLine1: varchar("address_line1", { length: 200 }),
+  addressLine2: varchar("address_line2", { length: 200 }),
+  postalCode: varchar("postal_code", { length: 20 }),
+  city: varchar("city", { length: 100 }),
+  country: char("country", { length: 2 }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

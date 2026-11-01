@@ -21,6 +21,8 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   check_in_date: "2031-11-10",
   check_out_date: "2031-11-12",
   guest_name: "Emma de Vries",
+  guest_phone: null,
+  guest_address: null,
   guests: 2,
   total_amount: 206,
   timezone: "Europe/Amsterdam",
@@ -37,6 +39,21 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
 const NOW = new Date("2031-11-01T10:00:00Z");
 
 describe("toHostReservation", () => {
+  test("contact details the guest shared reach the host; none means null", () => {
+    const shared = toHostReservation(
+      row({
+        guest_phone: "+31 6 1234 5678",
+        guest_address: { line1: "Oudegracht 1", line2: null, postal_code: "3511 AA", city: "Utrecht", country: "NL" },
+      }),
+      NOW,
+    );
+    expect(shared.guestPhone).toBe("+31 6 1234 5678");
+    expect(shared.guestAddress).toEqual(["Oudegracht 1", "3511 AA Utrecht", "Netherlands"]);
+    const none = toHostReservation(row(), NOW);
+    expect(none.guestPhone).toBeNull();
+    expect(none.guestAddress).toBeNull();
+  });
+
   test("a confirmed booking ahead: its rooms, policy and what the host can do", () => {
     const r = toHostReservation(row(), NOW);
     expect(r.reference).toBe("B0000000");

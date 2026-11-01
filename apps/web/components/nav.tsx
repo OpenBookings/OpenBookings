@@ -1,11 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import posthog from "posthog-js";
 import { authClient } from "@/lib/auth-client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
+import { AccountMenu } from "@/components/account/AccountMenu";
 
 interface NavProps {
   authError: string | null;
@@ -13,44 +11,8 @@ interface NavProps {
 }
 
 export function Nav({ authError, onDismissAuthError }: NavProps) {
-  const router = useRouter();
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [cookiesEnabled, setCookiesEnabled] = useState<boolean | null>(null);
-  const profileMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
-
-  useEffect(() => {
-    const detectCookies = () => setCookiesEnabled(navigator.cookieEnabled);
-    detectCookies();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (profileMenuCloseTimeoutRef.current) {
-        clearTimeout(profileMenuCloseTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const openProfileMenu = () => {
-    if (profileMenuCloseTimeoutRef.current) {
-      clearTimeout(profileMenuCloseTimeoutRef.current);
-      profileMenuCloseTimeoutRef.current = null;
-    }
-    setProfileMenuOpen(true);
-  };
-
-  const closeProfileMenuWithDelay = () => {
-    if (profileMenuCloseTimeoutRef.current) {
-      clearTimeout(profileMenuCloseTimeoutRef.current);
-    }
-    profileMenuCloseTimeoutRef.current = setTimeout(() => {
-      setProfileMenuOpen(false);
-      profileMenuCloseTimeoutRef.current = null;
-    }, 220);
-  };
 
   return (
     <>
@@ -94,68 +56,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
         )}
         <div className="flex flex-row items-center gap-2 sm:gap-3">
           {sessionPending ? null : user ? (
-            <div
-              className="relative flex items-center"
-              onMouseEnter={openProfileMenu}
-              onMouseLeave={closeProfileMenuWithDelay}
-            >
-              <button
-                type="button"
-                onClick={() => setProfileMenuOpen((prev) => !prev)}
-                className="rounded-full"
-                aria-haspopup="menu"
-                aria-expanded={profileMenuOpen}
-                aria-label="Open profile menu"
-              >
-                <img
-                  src="/profile_avatar.png"
-                  alt="User Profile"
-                  className="h-6 sm:h-10 md:h-14 rounded-full object-cover border border-white/20 shadow"
-                  draggable="false"
-                  style={{
-                    userSelect: "none",
-                    WebkitUserSelect: "none",
-                    MozUserSelect: "none",
-                    msUserSelect: "none",
-                  }}
-                />
-              </button>
-              {profileMenuOpen && (
-                <div
-                  className="absolute right-0 top-full mt-2 z-30 min-w-64 rounded-xl border border-white/15 bg-black/90 backdrop-blur-sm p-3 shadow-xl select-none"
-                  role="menu"
-                >
-                  <div className="text-[11px] uppercase tracking-wide text-white/50">
-                    Signed in as
-                  </div>
-                  <div className="mt-1 break-all text-sm text-white/90">{user.email}</div>
-                  <div className="mt-3 text-[11px] uppercase tracking-wide text-white/50">
-                    Cookies
-                  </div>
-                  <div className="mt-1 text-sm text-white/90">
-                    {cookiesEnabled === null
-                      ? "Checking..."
-                      : cookiesEnabled
-                        ? "Enabled"
-                        : "Disabled"}
-                  </div>
-                  <button
-                    type="button"
-                    className="mt-4 w-full rounded-lg border border-white/20 px-3 py-2 text-left text-sm font-medium text-white/90 hover:bg-white/10 transition-colors"
-                    role="menuitem"
-                    onClick={async () => {
-                      posthog.capture("sign_out");
-                      posthog.reset();
-                      await authClient.signOut();
-                      setProfileMenuOpen(false);
-                      router.replace("/");
-                    }}
-                  >
-                    Log out
-                  </button>
-                </div>
-              )}
-            </div>
+            <AccountMenu user={user} variant="glass" />
           ) : (
             <CS_AuthForm />
           )}

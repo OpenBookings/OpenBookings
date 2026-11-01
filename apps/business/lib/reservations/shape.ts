@@ -12,6 +12,19 @@ import {
 import { roomPaid } from "@openbookings/db/booking-lifecycle";
 import type { ReservationStatus, ReservationSummary } from "@/components/dashboard/reservation-types";
 
+const regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
+
+function addressLines(address: HostReservationRow["guest_address"]): string[] | null {
+  if (!address) return null;
+  const country = address.country.trim();
+  return [
+    address.line1,
+    address.line2,
+    `${address.postal_code} ${address.city}`,
+    regionNames.of(country) ?? country,
+  ].filter((line): line is string => !!line);
+}
+
 /** One row of the host reservations query (query.ts). Timestamps arrive as ISO text. */
 export type HostReservationRow = {
   booking_id: string;
@@ -19,6 +32,15 @@ export type HostReservationRow = {
   check_in_date: string;
   check_out_date: string;
   guest_name: string | null;
+  /** Shared by the guest on their account page (guest_profile, 0028); null when not given. */
+  guest_phone: string | null;
+  guest_address: {
+    line1: string;
+    line2: string | null;
+    postal_code: string;
+    city: string;
+    country: string;
+  } | null;
   guests: number;
   total_amount: number;
   timezone: string;
@@ -54,6 +76,10 @@ export type HostReservationRoom = {
 };
 
 export type HostReservation = ReservationSummary & {
+  /** The guest's phone number, if they shared one. */
+  guestPhone: string | null;
+  /** The guest's address as display lines, if they shared one. */
+  guestAddress: string[] | null;
   timezone: string;
   refundedAmount: number;
   refundIssue: boolean;
@@ -122,6 +148,8 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     id: row.booking_id,
     reference: row.booking_id.slice(0, 8).toUpperCase(),
     guestName: row.guest_name ?? "Guest",
+    guestPhone: row.guest_phone,
+    guestAddress: addressLines(row.guest_address),
     roomName: names.join(" + "),
     checkInDate: row.check_in_date,
     checkOutDate: row.check_out_date,
