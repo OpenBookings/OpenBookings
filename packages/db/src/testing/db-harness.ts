@@ -16,8 +16,16 @@ if (!connectionString && process.env.CI) {
 
 export const describeWithDb = connectionString ? describe : describe.skip;
 
-/** Migrations this branch reads that may not be on the CI database yet. Idempotent. */
-const PENDING = ["0023_rooms_editor.sql", "0026_tourist_tax.sql", "0027_cancellation_tiers.sql"];
+/**
+ * Migrations this branch reads that may not be on the CI database yet. Idempotent.
+ * Remove an entry once that migration is on the dev database.
+ *
+ * Each file replays inside every test's transaction, and even a no-op
+ * `ALTER TABLE ... IF NOT EXISTS` holds an exclusive table lock until the
+ * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
+ * branch, so a long list here makes them queue behind each other's locks.
+ */
+const PENDING: string[] = [];
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 
 export async function applyPendingMigrations(db: Client): Promise<void> {

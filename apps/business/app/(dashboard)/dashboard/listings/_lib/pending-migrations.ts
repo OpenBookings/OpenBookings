@@ -14,8 +14,13 @@ import { fileURLToPath } from "node:url";
  * way.
  *
  * Remove an entry once that migration is on the dev database.
+ *
+ * Each file replays inside every test's transaction, and even a no-op
+ * `ALTER TABLE ... IF NOT EXISTS` holds an exclusive table lock until the
+ * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
+ * branch, so a long list here makes them queue behind each other's locks.
  */
-const PENDING = ["0023_rooms_editor.sql", "0026_tourist_tax.sql", "0027_cancellation_tiers.sql"];
+const PENDING: string[] = [];
 
 const DRIZZLE_DIR = new URL("../../../../../../../packages/db/drizzle/", import.meta.url);
 

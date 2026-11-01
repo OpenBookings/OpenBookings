@@ -3,8 +3,6 @@
  * (a throwaway Neon branch); skipped locally without DATABASE_URL.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { confirmBookingPolicy } from "@openbookings/db";
 import type { GuestBookingRow } from "./shape";
@@ -15,9 +13,6 @@ if (!connectionString && process.env.CI) {
   throw new Error("DATABASE_URL is not set but CI is. The Verify job must provide a database for this suite.");
 }
 const describeWithDb = connectionString ? describe : describe.skip;
-const MIGRATIONS = ["0023_rooms_editor.sql", "0026_tourist_tax.sql", "0027_cancellation_tiers.sql"].map((f) =>
-  readFileSync(fileURLToPath(new URL(`../../../../../../packages/db/drizzle/${f}`, import.meta.url)), "utf8"),
-);
 
 describeWithDb("loadGuestBooking against Postgres", () => {
   let db: Client;
@@ -35,7 +30,6 @@ describeWithDb("loadGuestBooking against Postgres", () => {
   });
   beforeEach(async () => {
     await db.query("BEGIN");
-    for (const sql of MIGRATIONS) await db.query(sql);
     await db.query(
       `INSERT INTO "user" (id, name, email, "emailVerified", account_type)
        VALUES ($1, 'Test Guest', $2, true, 'private'::account_type)`,
