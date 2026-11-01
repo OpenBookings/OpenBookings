@@ -55,6 +55,20 @@ export async function seedProperty(
   return { propertyId: property.id, roomId: room.id, ratePlanId: rate.id };
 }
 
+/**
+ * A guest account. `bookings.user_id` references `"user"(id)` on the real
+ * database, so every booking needs one.
+ */
+export async function seedGuest(db: Client): Promise<string> {
+  const id = `test-guest-${crypto.randomUUID()}`;
+  await db.query(
+    `INSERT INTO "user" (id, name, email, "emailVerified", account_type)
+     VALUES ($1, 'Test Guest', $2, true, 'private'::account_type)`,
+    [id, `${id}@example.test`],
+  );
+  return id;
+}
+
 /** A booking in `pending` with `rooms` reservations of `nights` nights at €100. */
 export async function seedBooking(
   db: Client,
@@ -62,6 +76,7 @@ export async function seedBooking(
   opts: { checkIn: string; nights: number; rooms?: number; userId?: string },
 ): Promise<{ bookingId: string; reservationIds: string[] }> {
   const rooms = opts.rooms ?? 1;
+  const userId = opts.userId ?? (await seedGuest(db));
   const checkOut = new Date(Date.parse(`${opts.checkIn}T00:00:00Z`) + opts.nights * 86_400_000)
     .toISOString()
     .slice(0, 10);
@@ -69,7 +84,7 @@ export async function seedBooking(
     await db.query(
       `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount, stripe_payment_intent_id)
        VALUES ($1, $2, $3, $4, 'pending', $5, 'pi_test') RETURNING id`,
-      [ids.propertyId, opts.userId ?? `test-guest-${crypto.randomUUID()}`, opts.checkIn, checkOut, 100 * opts.nights * rooms],
+      [ids.propertyId, userId, opts.checkIn, checkOut, 100 * opts.nights * rooms],
     )
   ).rows[0] as { id: string };
   const reservationIds: string[] = [];

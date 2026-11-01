@@ -36,6 +36,11 @@ describeWithDb("loadGuestBooking against Postgres", () => {
   beforeEach(async () => {
     await db.query("BEGIN");
     for (const sql of MIGRATIONS) await db.query(sql);
+    await db.query(
+      `INSERT INTO "user" (id, name, email, "emailVerified", account_type)
+       VALUES ($1, 'Test Guest', $2, true, 'private'::account_type)`,
+      [guest, `${guest}@example.test`],
+    );
     const property = await one(
       `INSERT INTO properties (name, slug, address_line_1, city, country, timezone, location, check_in_time, check_out_time, is_active)
        VALUES ('Test Property', $1, '1 Test Street', 'Amsterdam', 'NL', 'Europe/Amsterdam',
