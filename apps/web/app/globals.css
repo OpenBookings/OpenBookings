@@ -59,6 +59,28 @@
   color-scheme: dark;
 }
 
+/*
+ * Console components over the Glass backdrop (the account area): the same
+ * semantic tokens, made translucent, and cards pick up the blur. Radix portals
+ * carry only `.console`, so menus and dialogs stay opaque and readable.
+ */
+.console.glass {
+  --background: transparent;
+  --card: rgb(0 0 0 / 0.4);
+  --muted: rgb(255 255 255 / 0.06);
+  --secondary: rgb(255 255 255 / 0.08);
+  --accent: rgb(255 255 255 / 0.08);
+  --border: rgb(255 255 255 / 0.12);
+  --input: rgb(255 255 255 / 0.2);
+  --muted-foreground: rgb(255 255 255 / 0.62);
+}
+
+.console.glass [data-slot="card"] {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 1rem;
+}
+
 /* apps/web sets no default border colour (Tailwind v4 falls back to
    currentColor); the Console surface uses apps/business's. In the base layer,
    so any border utility still wins. */

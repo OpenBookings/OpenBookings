@@ -12,7 +12,7 @@ import {
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SlidersHorizontal } from "lucide-react";
-import Image from "next/image";
+import { GlassBackdrop } from "@/components/GlassBackdrop";
 import type { Backdrop } from "@openbookings/images";
 import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
 import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
@@ -154,25 +154,7 @@ function SearchPageInner({ backdrop }: { backdrop: Backdrop | null }) {
 
   return (
     <div className="min-h-screen px-4 py-20 pb-[100px] font-sans sm:px-6">
-      {/* Background layer */}
-      <div className="fixed inset-0 bg-black">
-        {backdrop && (
-          // Deliberately low resolution: it sits under a blur and a 70% black
-          // layer, so a quarter-width, low-quality image is indistinguishable.
-          <Image
-            src={backdrop.url}
-            alt=""
-            fill
-            sizes="25vw"
-            quality={40}
-            className="object-cover object-center"
-          />
-        )}
-        <div
-          className="absolute inset-0 backdrop-blur-md"
-          style={{ background: "rgba(0,0,0,0.7)" }}
-        />
-      </div>
+      <GlassBackdrop backdrop={backdrop} />
 
       <div className="flex flex-col">
         <Nav authError={authError} onDismissAuthError={() => setAuthError(null)} />

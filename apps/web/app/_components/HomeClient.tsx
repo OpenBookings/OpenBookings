@@ -4,7 +4,7 @@ import { useState, useEffect, startTransition, use } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import Image from "next/image";
-import type { Backdrop } from "@openbookings/images";
+import { isTransformable, type Backdrop } from "@openbookings/images";
 
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Nav } from "@/components/nav";
@@ -73,6 +73,7 @@ export function HomeClient({ backdrop }: { backdrop: Backdrop | null }) {
               fill
               sizes="100vw"
               preload
+              unoptimized={!isTransformable(backdrop.url)}
               className="object-cover object-center"
             />
           )}

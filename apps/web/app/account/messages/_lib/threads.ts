@@ -5,6 +5,9 @@ export type GuestThreadItem = {
   updated_at: string;
   booking_id: string | null;
   property_name: string;
+  property_city: string;
+  /** The property's local date, YYYY-MM-DD; the stay countdown counts from it. */
+  property_today: string;
   property_image: string | null;
   check_in_date: string | null;
   check_out_date: string | null;
@@ -25,6 +28,8 @@ export const GUEST_THREADS_SQL = `
     t.updated_at,
     t.booking_id,
     p.name AS property_name,
+    p.city AS property_city,
+    (now() AT TIME ZONE p.timezone)::date::text AS property_today,
     (
       SELECT pi.url FROM property_images pi
       WHERE pi.property_id = p.id

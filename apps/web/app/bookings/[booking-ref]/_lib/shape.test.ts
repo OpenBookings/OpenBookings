@@ -24,6 +24,7 @@ const row = (extra: Partial<GuestBookingRow> = {}): GuestBookingRow => ({
   city: "Saturnia",
   timezone: "Europe/Rome",
   check_in_time: "15:00",
+  check_out_time: "11:00",
   check_in_until: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
   refunded: 0,
@@ -40,8 +41,15 @@ describe("toGuestBooking", () => {
     expect(b.canCancel).toBe(true);
     expect(b.rooms).toHaveLength(2);
     expect(b.rooms[0]).toMatchObject({ tierLabel: "Flex", paid: 376, cancelledAt: null });
-    expect(b.rooms[0].policyLines).toContain("If you don't show up, nothing is refunded.");
+    expect(b.timeline.steps[0].label).toBe("Booked");
+    expect(b.rooms[0].cancelHint).toBe("Full refund until Sun 9 Nov, 15:00.");
+    expect(b.cancelHint).toBe("Full refund until Sun 9 Nov, 15:00.");
     expect(b.totalPaid).toBe(752);
+  });
+
+  test("past the deadline, cancelling keeps the room price", () => {
+    const b = toGuestBooking(row(), new Date("2031-11-09T15:00:00Z"));
+    expect(b.cancelHint).toBe("The room price isn't refunded. Tourist tax is.");
   });
 
   test("a cancelled booking can't be cancelled again", () => {

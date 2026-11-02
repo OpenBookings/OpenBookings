@@ -1,23 +1,26 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
 import { AccountMenu } from "@/components/account/AccountMenu";
 
 interface NavProps {
-  authError: string | null;
-  onDismissAuthError: () => void;
+  authError?: string | null;
+  onDismissAuthError?: () => void;
 }
 
-export function Nav({ authError, onDismissAuthError }: NavProps) {
+/** The Glass top corners: logo (home link) left, account menu or sign-in right. */
+export function Nav({ authError = null, onDismissAuthError }: NavProps) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const user = session?.user ?? null;
 
   return (
     <>
       {/* Logo in top left corner */}
-      <div
+      <Link
+        href="/"
         className="fixed top-0 left-0 p-4 sm:p-6 md:p-8 z-20 flex flex-row items-center gap-2 select-none"
         style={{
           userSelect: "none",
@@ -41,7 +44,7 @@ export function Nav({ authError, onDismissAuthError }: NavProps) {
             msUserSelect: "none",
           }}
         />
-      </div>
+      </Link>
 
       {/* Profile in top right corner */}
       <div className="fixed top-0 right-0 p-4 sm:p-6 md:p-8 z-20 flex flex-col items-end justify-center gap-2">

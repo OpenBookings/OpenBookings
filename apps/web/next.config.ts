@@ -33,7 +33,7 @@ const ContentSecurityPolicy = `
   style-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com;
   img-src 'self' data: blob: https://cdn.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.openbookings.co ${STRIPE_IMG_SRC};
   font-src 'self';
-  connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC}${localDevSrc};
+  connect-src 'self' https://*.algolia.net https://*.i.posthog.com https://*.openbookings.co https://internal-j.posthog.com https://*.posthog.com https://*.maptiler.com ${STRIPE_CONNECT_SRC}${localDevSrc} wss://ob-durableobjects.w-vanderwal.workers.dev;
   worker-src 'self' blob:;
   frame-src 'self' https://*.posthog.com ${STRIPE_FRAME_SRC} ${TURNSTILE_SRC};
   frame-ancestors 'none';

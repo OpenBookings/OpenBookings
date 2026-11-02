@@ -10,11 +10,11 @@ import { PendingButton } from "./pending-button";
  * helper, an optional action, and a card of rows.
  */
 
-export function PageHeader({ title, description }: { title: string; description: string }) {
+export function PageHeader({ title, description }: { title: string; description?: string }) {
   return (
     <header>
       <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] sm:text-[28px]">{title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      {description ? <p className="mt-2 text-sm text-muted-foreground">{description}</p> : null}
     </header>
   );
 }

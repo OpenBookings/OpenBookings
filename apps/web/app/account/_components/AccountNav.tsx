@@ -21,7 +21,7 @@ export function AccountNav() {
 
   return (
     <nav aria-label="Account" className="-mx-4 lg:mx-0 lg:w-56 lg:shrink-0">
-      <ul className="flex gap-1 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:sticky lg:top-24 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
+      <ul className="flex gap-1 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:sticky lg:top-36 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
         {ACCOUNT_SECTIONS.map((section) => {
           const current = active?.id === section.id;
           return (

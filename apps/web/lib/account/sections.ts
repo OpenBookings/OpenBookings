@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Heart,
   LifeBuoy,
   LockKeyhole,
   MessageSquare,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 
 export type AccountSection = {
-  id: "bookings" | "messages" | "personal" | "security" | "privacy" | "help";
+  id: "bookings" | "messages" | "likes" | "personal" | "security" | "privacy" | "help";
   title: string;
   href: string;
   icon: LucideIcon;
@@ -19,6 +20,7 @@ export type AccountSection = {
 export const ACCOUNT_SECTIONS: readonly AccountSection[] = [
   { id: "bookings", title: "Bookings", href: "/account/bookings", icon: CalendarDays },
   { id: "messages", title: "Messages", href: "/account/messages", icon: MessageSquare },
+  { id: "likes", title: "Likes", href: "/account/likes", icon: Heart },
   { id: "personal", title: "Personal details", href: "/account/personal-details", icon: UserRound },
   { id: "security", title: "Sign-in & security", href: "/account/security", icon: ShieldCheck },
   { id: "privacy", title: "Privacy & data", href: "/account/privacy", icon: LockKeyhole },

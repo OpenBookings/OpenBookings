@@ -957,3 +957,22 @@ export const guestProfile = pgTable("guest_profile", {
   country: char("country", { length: 2 }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Rooms a guest has liked with the heart on a listing (0029). Private to the
+ * guest: shown on account → Likes, never to hosts. `user_id` is a Better Auth
+ * user id, FK to `"user"` with ON DELETE CASCADE, as is `room_id` to rooms.
+ *
+ * Mirrors packages/db/drizzle/0029_guest_room_likes.sql; keep the two in sync.
+ */
+export const guestRoomLikes = pgTable(
+  "guest_room_likes",
+  {
+    userId: text("user_id").notNull(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.roomId] })],
+);

@@ -16,6 +16,7 @@ describe("buildGuestExport", () => {
       sessions: [],
       bookings: [],
       conversations: [],
+      likedRooms: [],
       consentRecords: [],
     });
   });

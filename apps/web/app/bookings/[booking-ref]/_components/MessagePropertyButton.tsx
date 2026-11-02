@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import posthog from 'posthog-js';
-import { MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { GLASS_ICON_BUTTON, Hint } from './hint';
 
 /**
  * Opens (or reuses — the endpoint is idempotent per booking) the conversation
@@ -35,16 +36,24 @@ export function MessagePropertyButton({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Button type="button" variant="outline" className="self-start" disabled={pending} onClick={open}>
-        <MessageSquare aria-hidden />
-        {pending ? 'Opening…' : 'Message the property'}
-      </Button>
+    <>
+      <Hint label="Message the property" text="Questions about your stay or arrival?">
+        <Button
+          type="button"
+          variant="ghost"
+          aria-label="Message the property"
+          className={GLASS_ICON_BUTTON}
+          disabled={pending}
+          onClick={open}
+        >
+          {pending ? <Loader2 aria-hidden className="animate-spin" /> : <MessageSquare aria-hidden />}
+        </Button>
+      </Hint>
       {error ? (
-        <p role="alert" className="text-sm text-red-300">
+        <p role="alert" className="w-full basis-full text-sm text-red-300">
           {error}
         </p>
       ) : null}
-    </div>
+    </>
   );
 }
