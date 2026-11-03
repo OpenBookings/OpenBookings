@@ -160,16 +160,16 @@ describe("role guide", () => {
     const owner = roleAbilities("owner");
     expect(owner.cannot).toEqual([]);
     expect(owner.can.length).toBe(ABILITIES.length);
-    expect(roleAbilities("frontdesk").cannot).toContain("Give goodwill refunds");
-    expect(roleAbilities("admin").cannot).toEqual(["Close the organisation's account"]);
+    expect(roleAbilities("frontdesk").cannot).toContain("Refund booking");
+    expect(roleAbilities("admin").cannot).toEqual(["Close account"]);
   });
 
-  test("every role that sees bookings can open guest contact details", () => {
-    for (const role of ROLE_ORDER) expect(roleAbilities(role).can).toContain("Open guest contact details");
+  test("every role that sees bookings can view the guest's phone and address", () => {
+    for (const role of ROLE_ORDER) expect(roleAbilities(role).can).toContain("View guest phone and address");
   });
 
-  test("only owners and general managers change payout settings", () => {
-    const allowed = ROLE_ORDER.filter((role) => roleAbilities(role).can.includes("Change payout settings"));
+  test("only owners and general managers change payout details", () => {
+    const allowed = ROLE_ORDER.filter((role) => roleAbilities(role).can.includes("Change payout details"));
     expect(allowed).toEqual(["owner", "admin"]);
   });
 

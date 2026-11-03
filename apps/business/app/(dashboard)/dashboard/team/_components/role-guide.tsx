@@ -1,14 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Check, Minus } from "lucide-react";
+import { Check, Info, Minus, Slash } from "lucide-react";
 import { isPropertyScoped, type HostRole } from "@openbookings/authz/permissions";
 import { ABILITIES, ABILITY_GROUPS, ROLE_INFO, ROLE_ORDER, roleHas } from "@openbookings/authz/role-guide";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-const scopeLabel = (role: HostRole) => (isPropertyScoped(role) ? "Chosen properties" : "All properties");
 const isRole = (role: string | null | undefined): role is HostRole => !!role && role in ROLE_INFO;
+
+const PROPERTIES_HELP =
+  "A tick means the role covers every property. An orange slash means it only covers the properties you pick for each person.";
 
 /**
  * What each role can and can't do, as one table to compare them. The ticks
@@ -26,19 +29,42 @@ export function RoleGuide({
 }) {
   const yours = isRole(currentRole) ? currentRole : null;
   return (
-    <section aria-labelledby="roles-heading" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="roles-heading" className={inTab ? "sr-only" : "text-lg font-medium"}>
-          Roles
-        </h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Pick the role that matches the job. An owner already has everything a general manager has, so one
-          person running the hotel needs only the owner role.
-        </p>
-      </div>
-      <RoleMatrix yours={yours} />
-      <RolePicker yours={yours} />
-    </section>
+    <TooltipProvider delayDuration={150}>
+      <section aria-labelledby="roles-heading" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 id="roles-heading" className={inTab ? "sr-only" : "text-lg font-medium"}>
+            Roles
+          </h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Pick the role that matches the job. An owner already has everything a general manager has, so one
+            person running the hotel needs only the owner role.
+          </p>
+        </div>
+        <RoleMatrix yours={yours} />
+        <RolePicker yours={yours} />
+      </section>
+    </TooltipProvider>
+  );
+}
+
+/** "All properties", with what the tick and the slash mean. */
+function PropertiesLabel() {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      All properties
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="What the tick and slash mean"
+            className="rounded-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <Info className="size-3.5" aria-hidden />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64">{PROPERTIES_HELP}</TooltipContent>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -61,17 +87,16 @@ function RoleMatrix({ yours }: { yours: HostRole | null }) {
                   </Badge>
                 ) : null}
                 <span className="block">{ROLE_INFO[role].label}</span>
-                <span className="block text-xs font-normal text-muted-foreground">{scopeLabel(role)}</span>
               </th>
             ))}
           </tr>
-          <tr className="border-b align-top text-xs text-muted-foreground">
+          <tr className="border-b">
             <th scope="row" className="px-4 py-2.5 text-left font-normal">
-              Who it&apos;s for
+              <PropertiesLabel />
             </th>
             {ROLE_ORDER.map((role) => (
-              <td key={role} className={cn(cell(role), "text-left leading-snug")}>
-                {ROLE_INFO[role].short}
+              <td key={role} className={cell(role)}>
+                <Coverage all={!isPropertyScoped(role)} />
               </td>
             ))}
           </tr>
@@ -121,9 +146,25 @@ function Allowed({ yes }: { yes: boolean }) {
   );
 }
 
+/** A tick for every property, an orange slash for only the chosen ones. */
+function Coverage({ all, className }: { all: boolean; className?: string }) {
+  return all ? (
+    <>
+      <Check className={cn("mx-auto size-4 text-(--green-11)", className)} aria-hidden />
+      <span className="sr-only">All properties</span>
+    </>
+  ) : (
+    <>
+      <Slash className={cn("mx-auto size-4 text-(--amber-11)", className)} aria-hidden />
+      <span className="sr-only">Only chosen properties</span>
+    </>
+  );
+}
+
 function RolePicker({ yours }: { yours: HostRole | null }) {
   const [role, setRole] = React.useState<HostRole>(yours ?? ROLE_ORDER[0]);
   const info = ROLE_INFO[role];
+  const all = !isPropertyScoped(role);
   return (
     <div className="flex flex-col gap-4 md:hidden">
       <div role="group" aria-label="Pick a role to see what it can do" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
@@ -149,10 +190,12 @@ function RolePicker({ yours }: { yours: HostRole | null }) {
           <h3 className="font-medium">{info.label}</h3>
           {role === yours ? <Badge variant="secondary">Your role</Badge> : null}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {scopeLabel(role)} · {info.summary}
-        </p>
+        <p className="text-sm text-muted-foreground">{info.summary}</p>
       </div>
+      <p className="flex items-center gap-2 text-sm">
+        <Coverage all={all} className="mx-0 shrink-0" />
+        <span aria-hidden>{all ? "All properties" : "Only the properties you pick"}</span>
+      </p>
       {ABILITY_GROUPS.map((group) => (
         <div key={group} className="flex flex-col gap-1.5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</h4>
