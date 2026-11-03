@@ -10,6 +10,7 @@ import {
   createAuthPool,
   magicLinkOptions,
   microsoftUserFromProfile,
+  sessionVerificationStamp,
   sharedSessionOptions,
   stampMicrosoftTenantId,
   userAdditionalFields,
@@ -280,8 +281,9 @@ export function createHostAuth(config: HostAuthConfig) {
         create: {
           before: async (session) => {
             const result = await baseHooks.session.create.before(session);
-            // Signing in IS a verification: the step-up clock starts now.
-            return { data: { ...result.data, lastVerifiedAt: new Date() } };
+            // Signing in IS a verification: the step-up clock starts now,
+            // except for impersonation sessions (see sessionVerificationStamp).
+            return { data: sessionVerificationStamp(result.data) };
           },
           after: async (session, ctx) => {
             try {
@@ -419,6 +421,11 @@ export function createHostAuth(config: HostAuthConfig) {
         } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
+    // The stock impersonation route takes no reason and writes no audit_log
+    // row. It stays callable server-side (auth.api.impersonateUser, which is
+    // what impersonateWithAudit uses) but is not reachable over HTTP through
+    // the /api/auth catch-all.
+    disabledPaths: ["/admin/impersonate-user"],
   });
 }
 

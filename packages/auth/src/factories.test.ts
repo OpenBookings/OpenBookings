@@ -108,3 +108,23 @@ describe("host social providers", () => {
     expect(mapped?.emailVerified).toBeUndefined();
   });
 });
+
+describe("host admin plugin exposure", () => {
+  const host = () => createHostAuth({ ...base, cookiePrefix: "ob-host" });
+
+  test("the stock impersonation route is not reachable over HTTP", async () => {
+    const res = await host().handler(
+      new Request(`${base.baseURL}/api/auth/admin/impersonate-user`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base.baseURL },
+        body: JSON.stringify({ userId: "someone" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("it is still callable server-side, which is how impersonateWithAudit uses it", () => {
+    expect(typeof host().api.impersonateUser).toBe("function");
+    expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user"]);
+  });
+});

@@ -606,9 +606,32 @@ export function stepUpRequiredForRequest(
       }
       return true;
     }
-    default:
+    // Staff endpoints (ban, set-role, set-user-password, remove-user, ...).
+    // An admin's cookie alone must not be enough. The one exception is
+    // leaving an impersonation: that session is the target's, which has no
+    // step-up of its own (see sessionVerificationStamp), and ending it only
+    // gives power back.
+    case "/admin/stop-impersonating":
       return false;
+    default:
+      return path.startsWith("/admin/");
   }
+}
+
+/**
+ * What a new session's `lastVerifiedAt` starts as. Signing in is a
+ * verification, so a normal session starts the step-up clock now.
+ *
+ * An impersonation session (admin plugin: `impersonatedBy` set) is NOT a
+ * sign-in by the user it acts as. Stamping it would hand staff a session that
+ * passes the target's step-up gates — payout changes, member removal — with
+ * no passkey or code from the target. It starts unverified instead.
+ */
+export function sessionVerificationStamp(
+  session: { impersonatedBy?: unknown } & Record<string, unknown>,
+  now: Date = new Date(),
+): Record<string, unknown> {
+  return session.impersonatedBy ? session : { ...session, lastVerifiedAt: now };
 }
 
 export function magicLinkOptions(config: BaseAuthConfig) {

@@ -10,6 +10,7 @@ import {
   microsoftEmailFromProfile,
   microsoftUserFromProfile,
   portalForAccountType,
+  sessionVerificationStamp,
   sessionCookieNames,
   sessionForApp,
   stampMicrosoftTenantId,
@@ -549,5 +550,45 @@ describe("factor step-up", () => {
     for (const path of ["/passkey/verify-authentication", "/two-factor/verify-totp", "/two-factor/verify-backup-code", "/passkey/generate-authenticate-options"]) {
       expect(stepUpRequiredForRequest(path, {})).toBe(false);
     }
+  });
+});
+
+describe("stepUpRequiredForRequest — admin plugin endpoints", () => {
+  test("every /admin/* endpoint needs a fresh step-up", () => {
+    for (const path of [
+      "/admin/impersonate-user",
+      "/admin/set-role",
+      "/admin/ban-user",
+      "/admin/set-user-password",
+      "/admin/remove-user",
+      "/admin/create-user",
+      "/admin/revoke-user-sessions",
+      "/admin/list-users",
+    ]) {
+      expect(stepUpRequiredForRequest(path, {})).toBe(true);
+    }
+  });
+
+  test("leaving an impersonation is not gated (that session has no step-up of its own)", () => {
+    expect(stepUpRequiredForRequest("/admin/stop-impersonating", {})).toBe(false);
+  });
+
+  test("does not catch lookalike paths", () => {
+    expect(stepUpRequiredForRequest("/administrator", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
+  });
+});
+
+describe("sessionVerificationStamp", () => {
+  const now = new Date("2026-01-01T00:00:00Z");
+
+  test("a normal sign-in starts the step-up clock", () => {
+    expect(sessionVerificationStamp({ userId: "u1" }, now)).toEqual({ userId: "u1", lastVerifiedAt: now });
+  });
+
+  test("an impersonation session does not inherit a fresh step-up", () => {
+    const stamped = sessionVerificationStamp({ userId: "host", impersonatedBy: "staff" }, now);
+    expect(stamped.lastVerifiedAt).toBeUndefined();
+    expect(stamped.impersonatedBy).toBe("staff");
   });
 });
