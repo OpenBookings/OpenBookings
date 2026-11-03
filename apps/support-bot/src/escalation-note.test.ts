@@ -69,3 +69,22 @@ describe("escalationNote", () => {
     expect(note.length).toBeLessThan(1200);
   });
 });
+
+describe("plain — backslashes and equivalence with the old multi-step escape", () => {
+  it("escapes a backslash exactly once and never lets one neutralise a following escape", () => {
+    expect(plain("a\\b")).toBe("a\\\\b");
+    // "\@" must not become "\\@" where the @ is live again: backslash and @ each get one escape.
+    expect(plain("\\@x")).toBe("\\\\\\@x");
+    expect(plain("\\[click](x)")).toBe("\\\\\\[click\\]\\(x\\)");
+  });
+
+  it("breaks links and mentions the same way as before, keeping the case of www", () => {
+    expect(plain("see https://evil.example now")).toBe("see https:\\/\\/evil.example now");
+    expect(plain("WWW.Evil.example and www.x")).toBe("WWW\\.Evil.example and www\\.x");
+    expect(plain("mail a@b.co")).toBe("mail a\\@b.co");
+  });
+
+  it("leaves ordinary words, digits and dots alone", () => {
+    expect(plain("Booking 1234 on 2026.11.03, ok")).toBe("Booking 1234 on 2026.11.03, ok");
+  });
+});

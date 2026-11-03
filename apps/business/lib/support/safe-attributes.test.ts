@@ -16,6 +16,7 @@ describe("safeReplayUrl", () => {
       "https://posthog.com@evil.example/x",
       "https://user:pw@eu.posthog.com/x",
       "http://eu.posthog.com/x",
+      // eslint-disable-next-line no-script-url -- deliberate: hostile input the validator must reject
       "javascript:alert(1)",
       "https://eu.posthog.com:8443/x",
       "https://eu.posthog.com/" + "x".repeat(500),

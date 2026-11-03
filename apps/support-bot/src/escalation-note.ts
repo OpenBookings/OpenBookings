@@ -31,11 +31,14 @@ export function plain(value: unknown, max = FIELD_MAX): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, max);
-  return text
-    .replace(/[\\`*_{}[\]()<>#+!|~&-]/g, (c) => `\\${c}`)
-    .replace(/:\/\//g, ":\\/\\/")
-    .replace(/\bwww\./gi, "www\\.")
-    .replace(/@/g, "\\@");
+  // One pass, one escape rule. Everything that needs a backslash in front gets
+  // exactly one, and the backslash itself is in the set, so no input can end up
+  // with an unescaped one or be escaped twice.
+  return text.replace(/[\\`*_{}[\]()<>#+!|~&@-]|:\/\/|\bwww\./gi, (m) => {
+    if (m === "://") return ":\\/\\/";
+    if (m.length === 4) return `${m.slice(0, 3)}\\.`; // www.  (case kept)
+    return `\\${m}`;
+  });
 }
 
 /** Inline code that cannot be closed early: no backticks, no line breaks inside. */
