@@ -101,7 +101,7 @@ describe("buildTimeline", () => {
     expect(t.steps[1].tone).toBe("cancelled");
     expect(details(t)).toEqual([]);
     expect(t.trip.countdown).toBeNull();
-    expect(t.headline.sentence).toContain("376,00 is refunded to your card.");
+    expect(t.headline.sentence).toContain("€376.00 is refunded to your card.");
   });
 
   test("a stay longer than 7 nights keeps only the next 7 on leaving early", () => {

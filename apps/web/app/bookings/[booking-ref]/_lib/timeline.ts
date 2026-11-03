@@ -197,7 +197,7 @@ export function buildTimeline(row: GuestBookingRow, now: Date): Timeline {
         eyebrow: 'Cancelled',
         sentence:
           refunded > 0
-            ? `${new Intl.NumberFormat('en-NL', { style: 'currency', currency: 'EUR' }).format(refunded)} is refunded to your card.`
+            ? `${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(refunded)} is refunded to your card.`
             : 'Nothing was refunded for this booking.',
       };
     }
