@@ -51,11 +51,9 @@ async function ensureContentRow(propertyId: string) {
  * The public listing page is server-rendered from these same rows, so a save
  * that only revalidates the dashboard leaves guests looking at stale content.
  *
- * Note which of the two calls below actually does that. `revalidatePath` only
- * reaches routes in *this* app, and `/p/<slug>` belongs to apps/web in a
- * different container — that call has never had any effect on what a guest
- * sees. The purge is what crosses the app boundary, through the one keyspace
- * both apps share.
+ * `revalidatePath` only reaches routes in *this* app, and `/p/<slug>` belongs
+ * to apps/web in a different container. The purge is what crosses the app
+ * boundary: Redis, then the guest app's page cache, then Cloudflare.
  */
 async function revalidateBoth(propertyId: string) {
   const row = await queryOne<{ slug: string }>(
@@ -64,7 +62,6 @@ async function revalidateBoth(propertyId: string) {
   );
   revalidatePath("/dashboard/listings/property");
   if (row) {
-    revalidatePath(`/p/${row.slug}`);
     await purgePropertyPageBySlug(row.slug);
   }
 }

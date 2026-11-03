@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { propertyPageKey, purge } from "@openbookings/cache";
 import { queryOne } from "@openbookings/db";
+import { refreshPublicPropertyPage } from "./refresh-public-page";
 
 export type PurgeTarget = { propertyId: string } | { roomId: string };
 
@@ -16,7 +17,9 @@ const report = (error: unknown, phase: string) =>
   Sentry.captureException(error, { tags: { area: "cache", surface: "property-page", phase } });
 
 /**
- * Drop the public listing page's cached copy.
+ * Drop every cached copy of the public listing page: the data in Redis, the
+ * guest app's rendered page, and Cloudflare's copy, in that order (each one
+ * is rebuilt from the one before it).
  *
  * Separate from the resolving version below because `revalidateBoth` in the
  * property actions has already looked the slug up for its own reasons, and a
@@ -26,6 +29,7 @@ export async function purgePropertyPageBySlug(slug: string): Promise<void> {
   await purge([propertyPageKey(slug)], {
     onError: (error, ctx) => report(error, ctx.phase),
   });
+  await refreshPublicPropertyPage(slug, { onError: report });
 }
 
 /**

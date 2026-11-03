@@ -103,6 +103,12 @@ export function getRedis(): RedisLike | null {
     // production and strings from any fake. Owning the parsing keeps the two
     // identical and keeps the stored format something we chose.
     automaticDeserialization: false,
+    // The SDK defaults to `cache: "no-store"`. Next.js reads that as "this page
+    // is per-request" and renders every page that touches the cache
+    // dynamically, which makes the property page uncacheable. "default" is
+    // what fetch does with no option at all: Next.js still does not store the
+    // response, but the page can be served from its own cache (ISR).
+    cache: "default",
   });
 
   // Adapted rather than cast: the adapter is where a signature change in the
