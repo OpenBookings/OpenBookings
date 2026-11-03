@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { recordProcessedEvent } from '@openbookings/db'
+import { isVerifiedGuestIdentity } from './chatwoot/identity'
 import { verifyChatwootSignature } from './chatwoot/signature'
 import { assertRequiredEnv, env } from './env'
 import { processConversation } from './process'
@@ -113,8 +114,20 @@ app.post('/webhooks/chatwoot', async (c) => {
     payload.conversation?.meta?.sender?.email?.trim().toLowerCase() ||
     null
 
+  // An email is only a claim unless Chatwoot verified it (see identity.ts).
+  // Unverified, the tools can still answer about a booking the visitor names by
+  // its reference, but will not list bookings by email.
+  const guestEmailVerified =
+    !isHostTicket &&
+    isVerifiedGuestIdentity({
+      guestEmail,
+      inboxId,
+      contactIdentifier: payload.sender?.identifier ?? payload.conversation?.meta?.sender?.identifier,
+      verifiedInboxIds: env.verifiedGuestInboxIds,
+    })
+
   const eventId = `message_created:${payload.id}`
-  trace('webhook', 'received', { eventId, conversationId, identified: guestEmail !== null })
+  trace('webhook', 'received', { eventId, conversationId, identified: guestEmail !== null, verified: guestEmailVerified })
   const firstDelivery = await recordProcessedEvent(eventId)
   if (!firstDelivery) {
     trace('webhook', 'duplicate delivery, dropping', { eventId })
@@ -129,6 +142,7 @@ app.post('/webhooks/chatwoot', async (c) => {
     messageId: payload.id,
     content: payload.content,
     guestEmail,
+    guestEmailVerified,
     ...(isHostTicket
       ? {
           audience: 'host' as const,

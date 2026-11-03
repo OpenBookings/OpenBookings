@@ -64,6 +64,7 @@ beforeEach(() => {
   enqueued.length = 0;
   enqueuedTasks.length = 0;
   delete process.env.CHATWOOT_BUSINESS_INBOX_ID;
+  delete process.env.CHATWOOT_VERIFIED_INBOX_IDS;
   delete process.env.SUPPORT_CHAT_ENABLED;
   delete process.env.SUPPORT_ASSISTANT_ENABLED;
 });
@@ -81,6 +82,7 @@ describe("POST /webhooks/chatwoot", () => {
         messageId: 4242,
         content: "What time is check-in?",
         guestEmail: "guest@example.com",
+        guestEmailVerified: false,
       },
     ]);
   });
@@ -104,6 +106,42 @@ describe("POST /webhooks/chatwoot", () => {
 
     await post(messageBody({ id: 4243, sender: { email: null } }));
     expect(enqueued[1]?.guestEmail).toBeNull();
+  });
+
+  describe("guest identity verification", () => {
+    const withIdentifier = (inbox_id: number, identifier: string | null = "user-123") =>
+      messageBody({ sender: { email: "guest@example.com", identifier }, conversation: { id: 77, inbox_id } });
+
+    it("an email is unverified by default: no inbox is trusted until configured", async () => {
+      await post(withIdentifier(5));
+      expect(enqueued[0]?.guestEmailVerified).toBe(false);
+    });
+
+    it("verified only in a configured inbox AND with a signed-in contact identifier", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5, 9";
+      await post(withIdentifier(5));
+      await post(messageBody({ id: 4243, sender: { email: "guest@example.com", identifier: "user-123" }, conversation: { id: 77, inbox_id: 9 } }));
+      expect(enqueued.map((e) => e.guestEmailVerified)).toEqual([true, true]);
+    });
+
+    it("a visitor-typed email in a verified inbox (no identifier) is still unverified", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(withIdentifier(5, null));
+      await post(messageBody({ id: 4244, sender: { email: "guest@example.com", identifier: "  " }, conversation: { id: 77, inbox_id: 5 } }));
+      expect(enqueued.map((e) => e.guestEmailVerified)).toEqual([false, false]);
+    });
+
+    it("an identifier in an inbox that is not verified does not count", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(withIdentifier(6));
+      expect(enqueued[0]?.guestEmailVerified).toBe(false);
+    });
+
+    it("no email, nothing to verify", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(messageBody({ sender: { email: null, identifier: "user-123" }, conversation: { id: 77, inbox_id: 5 } }));
+      expect(enqueued[0]?.guestEmailVerified).toBe(false);
+    });
   });
 
   it("does not enqueue a second task for a duplicate delivery", async () => {

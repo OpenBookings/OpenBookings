@@ -157,7 +157,7 @@ export async function processConversation(
         : await runAgentLoop({
             turns,
             chat: deps.chat ?? mistralChat(GUEST_AGENT),
-            toolContext: { guestEmail },
+            toolContext: { guestEmail, guestEmailVerified: guestEmail !== null && payload.guestEmailVerified === true },
             onToolResult,
           });
   } finally {

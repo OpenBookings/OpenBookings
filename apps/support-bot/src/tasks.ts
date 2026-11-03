@@ -25,6 +25,12 @@ export type ProcessConversationPayload = {
    * tools.
    */
   guestEmail: string | null;
+  /**
+   * Whether `guestEmail` came from an inbox that enforces Chatwoot identity
+   * validation (chatwoot/identity.ts). Absent means false: a task queued
+   * before this field existed is treated as unverified.
+   */
+  guestEmailVerified?: boolean;
   /** Who wrote: a guest (default, guest inboxes) or a host (Business support inbox). */
   audience?: "guest" | "host";
   /**

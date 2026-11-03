@@ -27,6 +27,17 @@ function scriptedChat(responses: ChatResponse[]) {
   return chat;
 }
 
+/** Like scriptedChat, but keeps every message list the model was shown. */
+function recordingChat(responses: ChatResponse[]) {
+  const seen: unknown[][] = [];
+  const inner = scriptedChat(responses);
+  const chat: ChatFn = async (messages) => {
+    seen.push(structuredClone(messages) as unknown[]);
+    return inner(messages);
+  };
+  return { chat, seen };
+}
+
 function toolCall(name: string, args: unknown, id = "c1") {
   return { id, function: { name, arguments: JSON.stringify(args) } };
 }
@@ -87,6 +98,39 @@ describe("unauthorized booking lookup", () => {
 
     expect(everythingWritten()).not.toContain("Test Villa");
     expect(everythingWritten()).not.toContain("32500");
+  });
+
+  const LIST_ALL = (guestEmailVerified?: boolean, id = 9010) => ({
+    eventId: `message_created:${id}`,
+    conversationId: 77,
+    messageId: id,
+    content: "List all my bookings please",
+    guestEmail: VICTIM_EMAIL,
+    ...(guestEmailVerified === undefined ? {} : { guestEmailVerified }),
+  });
+  const script = () => [
+    { content: null, toolCalls: [toolCall("get_reservation", {})] },
+    { content: "ok" },
+  ];
+
+  it("does not list bookings for an unverified contact who merely claims the victim's email", async () => {
+    // No guestEmailVerified: the email came from a pre-chat form or an unsigned
+    // email header. Claiming the victim's address must not enumerate their stays.
+    for (const [i, flag] of [undefined, false].entries()) {
+      const { chat, seen } = recordingChat(script());
+      await processConversation(LIST_ALL(flag, 9010 + i), { chat });
+      const shownToModel = JSON.stringify(seen.at(-1));
+      expect(shownToModel).not.toContain(VICTIM_REF);
+      expect(shownToModel).not.toContain("Test Villa");
+      expect(shownToModel).toContain("booking reference");
+      expect(everythingWritten()).not.toContain(VICTIM_REF);
+    }
+  });
+
+  it("lists the same bookings once Chatwoot has verified the email", async () => {
+    const { chat, seen } = recordingChat(script());
+    await processConversation(LIST_ALL(true, 9020), { chat });
+    expect(JSON.stringify(seen.at(-1))).toContain(VICTIM_REF);
   });
 
   it("discloses nothing when the contact is anonymous, even about a real booking", async () => {
