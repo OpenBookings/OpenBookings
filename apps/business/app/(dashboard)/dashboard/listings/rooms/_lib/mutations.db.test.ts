@@ -45,6 +45,7 @@ describeWithDb("Rooms editor against Postgres", () => {
   let owner: string;
   let stranger: string;
   let orgAdmin: string;
+  let ownerMemberId: string;
   let guest: string;
   let propertyId: string;
   let roomId: string;
@@ -119,6 +120,15 @@ describeWithDb("Rooms editor against Postgres", () => {
       `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
        VALUES ($1, $2, $3, 'admin', NOW())`,
       [`test-member-${crypto.randomUUID()}`, orgId, orgAdmin],
+    );
+    // The founder is an owner member of the organisation, as every real founder
+    // is. owner_user_id alone no longer grants access once a property has an
+    // organisation, so without this row the property would belong to nobody.
+    ownerMemberId = `test-member-${crypto.randomUUID()}`;
+    await db.query(
+      `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
+       VALUES ($1, $2, $3, 'owner', NOW())`,
+      [ownerMemberId, orgId, owner],
     );
 
     propertyId = (await one<{ id: string }>(
@@ -208,6 +218,25 @@ describeWithDb("Rooms editor against Postgres", () => {
     expect((await one<{ name: string }>(`SELECT name FROM rooms WHERE id = $1`, [roomId]))!.name).toBe(
       "Deluxe King",
     );
+  });
+
+  test("an org admin who is not the legacy owner sees the property in the dashboard loaders", async () => {
+    // These used to filter on owner_user_id, so only the founder saw anything.
+    expect((await loadRoomsIndex(session(orgAdmin), propertyId, hostDb(session(orgAdmin))))?.property.id).toBe(propertyId);
+    expect((await loadRoomEditor(session(orgAdmin), roomId, hostDb(session(orgAdmin))))?.room.id).toBe(roomId);
+  });
+
+  test("a founder removed from the organisation keeps nothing, though owner_user_id still names them", async () => {
+    await db.query(`DELETE FROM member WHERE id = $1`, [ownerMemberId]);
+    expect((await one<{ owner_user_id: string }>(`SELECT owner_user_id FROM properties WHERE id = $1`, [propertyId]))!.owner_user_id).toBe(owner);
+
+    await expect(
+      m.saveRoomIdentity(session(owner), form({ roomId, name: "Still mine", description: "x".repeat(50) }), deps),
+    ).rejects.toBeInstanceOf(m.NotFoundError);
+    expect((await m.setRateActive(session(owner), pricedRate, false, deps)).ok).toBe(false);
+    expect(await loadRoomEditor(session(owner), roomId, hostDb(session(owner)))).toBeNull();
+    expect(await loadRoomsIndex(session(owner), propertyId, hostDb(session(owner)))).toBeNull();
+    expect((await one<{ name: string }>(`SELECT name FROM rooms WHERE id = $1`, [roomId]))!.name).toBe("Deluxe King");
   });
 
   test("the loaders return nothing for another host's room", async () => {
