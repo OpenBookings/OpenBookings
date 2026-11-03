@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { roles, PROPERTY_SCOPED_ROLES, roleAllows, rolesWith } from "./permissions";
 import { memberHasPropertyAccess, userCan } from "./index";
-import { ABILITIES, ROLE_INFO, ROLE_ORDER, assignableRoles, roleAbilities } from "./role-guide";
+import { ABILITIES, ABILITY_GROUPS, ROLE_INFO, ROLE_ORDER, assignableRoles, roleAbilities } from "./role-guide";
 
 describe("role grants", () => {
   test("owner may delete the org; admin may not", () => {
@@ -162,6 +162,19 @@ describe("role guide", () => {
     expect(owner.can.length).toBe(ABILITIES.length);
     expect(roleAbilities("frontdesk").cannot).toContain("Give goodwill refunds");
     expect(roleAbilities("admin").cannot).toEqual(["Close the organisation's account"]);
+  });
+
+  test("every role that sees bookings can open guest contact details", () => {
+    for (const role of ROLE_ORDER) expect(roleAbilities(role).can).toContain("Open guest contact details");
+  });
+
+  test("only owners and general managers change payout settings", () => {
+    const allowed = ROLE_ORDER.filter((role) => roleAbilities(role).can.includes("Change payout settings"));
+    expect(allowed).toEqual(["owner", "admin"]);
+  });
+
+  test("every ability belongs to a listed group", () => {
+    for (const ability of ABILITIES) expect(ABILITY_GROUPS).toContain(ability.group);
   });
 
   test("only owners hand out the owner role", () => {
