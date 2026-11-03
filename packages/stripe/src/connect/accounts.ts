@@ -6,7 +6,16 @@ export type ConnectHost = {
   legalCompanyName: string;
   /** ISO 3166-1 alpha-2, from the host's own address. */
   country: string;
+  /**
+   * The OpenBookings user creating the account, recorded on it as metadata so
+   * the account can later be shown to belong to whoever claims it. Without
+   * this, an `acct_` id in `host_onboarding.step_data` is just a string.
+   */
+  userId?: string;
 };
+
+/** Stripe metadata key holding the creating user's id. */
+export const CONNECT_OWNER_METADATA_KEY = 'openbookings_user_id';
 
 /**
  * A connected account with its own full Stripe Dashboard.
@@ -46,6 +55,7 @@ export function buildConnectAccountParams(host: ConnectHost): Stripe.AccountCrea
       transfers: { requested: true },
     },
     business_profile: { name: host.legalCompanyName },
+    ...(host.userId ? { metadata: { [CONNECT_OWNER_METADATA_KEY]: host.userId } } : {}),
   };
 }
 

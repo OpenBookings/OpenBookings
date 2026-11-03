@@ -98,6 +98,11 @@ export function resolveCallbackPath(raw: unknown, fallback: string): string {
   try {
     const url = new URL(path, base)
     if (url.origin !== base) return fallback
+    // The parser removes dot-segments, so "/.//evil.example" (or "/%2e//x",
+    // "/a/..//x") passes the raw-string check above and comes out as
+    // "//evil.example": a protocol-relative URL that a redirect() would send
+    // to another host. Judge what we are about to emit, not what we were given.
+    if (url.pathname.startsWith("//") || url.pathname.startsWith("/\\")) return fallback
     return `${url.pathname}${url.search}${url.hash}`
   } catch {
     return fallback

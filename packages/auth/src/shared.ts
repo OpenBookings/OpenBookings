@@ -357,93 +357,6 @@ export const accountLinkingOptions = {
   },
 } as const;
 
-/**
- * Email-shaped, matched in linear time.
- *
- * The obvious spelling of this is `/^[^@\s]+@[^@\s]+\.[^@\s]+$/`, which
- * backtracks quadratically: `[^@\s]` includes `.`, so for a domain with many
- * dots and a trailing character the last group cannot match, the engine
- * retries every dot as the separator. Measured at 1.5s for a 64KB input.
- *
- * Excluding `.` from the label class removes the ambiguity — each label is
- * bounded by a literal `.`, so there is exactly one way to split the domain
- * and there is nothing to backtrack over. Side effect, and an intentional
- * one: consecutive dots (`a@b..c`) no longer match, which is correct — that
- * is not a valid domain.
- */
-const EMAIL_SHAPE = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/;
-
-/**
- * Upper bound on anything we are willing to run EMAIL_SHAPE over. RFC 5321
- * caps a path at 256 octets and an address at 254; 320 is the permissive
- * reading (64 local + 1 + 255 domain) and is well past anything Entra will
- * mint — its UPN limit is 113. Nothing legitimate is rejected by this.
- *
- * Belt and braces alongside the linear regex above: the claim values reaching
- * this helper are Microsoft-issued, so neither guard is load-bearing today,
- * but both stop a future caller pointing it at a user-controlled string from
- * quietly turning it into a CPU sink.
- */
-const MAX_EMAIL_LENGTH = 320;
-
-/**
- * Best-effort payload decode of a JWT.
- *
- * No signature check here, and none upstream either: better-auth reads the
- * Microsoft id token with jose's `decodeJwt` (unverified) in its getUserInfo
- * path, not `jwtVerify`. What makes the claims trustworthy is that the token
- * came back from Microsoft's token endpoint over TLS during the
- * authorization-code exchange, which OIDC 3.1.3.7 accepts in place of local
- * validation — NOT a local signature check.
- *
- * The distinction matters if this is ever pointed at a token from anywhere
- * else (a client-supplied id_token, a cached copy, another provider). Such a
- * token would need real verification first; this function does not provide
- * it.
- */
-export function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  const part = token.split(".")[1];
-  if (!part) return null;
-  try {
-    return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Microsoft does not reliably put the user's address in the `email` claim —
- * for some work/school tenants only `preferred_username` or `upn` carries
- * it. Fall back to those only when they are email-shaped (a UPN can be a
- * phone number or a non-routable alias, and a non-routable address would
- * break magic-link recovery and the one-email-one-account invariant).
- */
-export function microsoftEmailFromProfile(profile: {
-  email?: string;
-  preferred_username?: string;
-  upn?: string;
-}): string | undefined {
-  for (const candidate of [profile.email, profile.preferred_username, profile.upn]) {
-    if (!candidate || candidate.length > MAX_EMAIL_LENGTH) continue;
-    if (EMAIL_SHAPE.test(candidate)) return candidate;
-  }
-  return undefined;
-}
-
-/**
- * account.create.before hook: persist the Entra tenant id (`tid` claim) on
- * the account row. Needed later for org auto-join; decoding here is safe
- * because the id token's signature was verified during the code exchange.
- */
-export function stampMicrosoftTenantId(
-  account: { providerId: string; idToken?: string | null } & Record<string, unknown>,
-) {
-  if (account.providerId !== "microsoft" || !account.idToken) return;
-  const tid = decodeJwtPayload(account.idToken)?.tid;
-  if (typeof tid !== "string") return;
-  return { data: { ...account, tenant_id: tid } };
-}
-
 /** `user.additionalFields` both instances share. Never client-settable. */
 export const userAdditionalFields = {
   account_type: {
@@ -565,9 +478,32 @@ export function stepUpRequiredForRequest(
       }
       return true;
     }
-    default:
+    // Staff endpoints (ban, set-role, set-user-password, remove-user, ...).
+    // An admin's cookie alone must not be enough. The one exception is
+    // leaving an impersonation: that session is the target's, which has no
+    // step-up of its own (see sessionVerificationStamp), and ending it only
+    // gives power back.
+    case "/admin/stop-impersonating":
       return false;
+    default:
+      return path.startsWith("/admin/");
   }
+}
+
+/**
+ * What a new session's `lastVerifiedAt` starts as. Signing in is a
+ * verification, so a normal session starts the step-up clock now.
+ *
+ * An impersonation session (admin plugin: `impersonatedBy` set) is NOT a
+ * sign-in by the user it acts as. Stamping it would hand staff a session that
+ * passes the target's step-up gates — payout changes, member removal — with
+ * no passkey or code from the target. It starts unverified instead.
+ */
+export function sessionVerificationStamp(
+  session: { impersonatedBy?: unknown } & Record<string, unknown>,
+  now: Date = new Date(),
+): Record<string, unknown> {
+  return session.impersonatedBy ? session : { ...session, lastVerifiedAt: now };
 }
 
 export function magicLinkOptions(config: BaseAuthConfig) {

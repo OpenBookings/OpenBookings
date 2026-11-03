@@ -26,6 +26,14 @@ import { policyView } from "../policy-view";
 export type ToolContext = {
   /** Chatwoot contact email, lowercased; null when the contact has none on file. */
   guestEmail: string | null;
+  /**
+   * Whether that email was verified by Chatwoot identity validation (see
+   * chatwoot/identity.ts). Required, not optional, so a call site that forgets
+   * it fails to compile instead of defaulting to trusted. When false the email
+   * is only a claim: it can confirm that a booking the guest names by reference
+   * is theirs, but it must never be used to enumerate bookings.
+   */
+  guestEmailVerified: boolean;
 };
 
 /**
@@ -45,6 +53,17 @@ const NO_MATCHING_BOOKING = {
 const NO_VERIFIED_GUEST = {
   found: false,
   note: "This conversation has no verified guest account attached, so booking data cannot be looked up. Call escalate_to_human so an agent can verify the guest's identity.",
+} as const;
+
+/**
+ * Listing by email alone is refused when the email is unverified: anyone can
+ * type another guest's address into a chat box. A booking reference is a UUID
+ * only the booker and their confirmation email know, so naming one is the
+ * second factor.
+ */
+const NEEDS_BOOKING_REFERENCE = {
+  found: false,
+  note: "This conversation's email address is not verified, so bookings cannot be listed from it. Ask the guest for the booking reference from their confirmation email and look it up with booking_reference, or call escalate_to_human so an agent can verify them.",
 } as const;
 
 /**
@@ -156,6 +175,10 @@ export const TOOLS = {
       if (args.booking_reference) {
         const r = await findOwnedReservation(args.booking_reference, guestEmail);
         return r ? reservationView(r) : NO_MATCHING_BOOKING;
+      }
+      if (!ctx.guestEmailVerified) {
+        trace("tools", "refused to list bookings by unverified email");
+        return NEEDS_BOOKING_REFERENCE;
       }
       const rows = await findReservationsByGuestEmail(guestEmail);
       return rows.length > 0

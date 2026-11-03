@@ -1,3 +1,4 @@
+import { propertyReadAccessSql } from "@openbookings/authz";
 import { addDays } from "./period";
 import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "./readiness";
 import type { IsoDate } from "./types";
@@ -61,7 +62,7 @@ export function createReadinessLoader(deps: ReadinessDeps) {
               COALESCE(p.stripe_account_id, o.step_data->>'stripe_account_id') AS stripe_account_id
          FROM properties p
          LEFT JOIN host_onboarding o ON o.user_id = p.owner_user_id
-        WHERE p.owner_user_id = $1
+        WHERE ${propertyReadAccessSql("$1")}
         ORDER BY p.created_at
         LIMIT 1`,
       [userId],

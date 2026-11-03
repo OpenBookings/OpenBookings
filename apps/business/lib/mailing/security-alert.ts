@@ -1,4 +1,4 @@
-import { getEmailClient, loadTemplate } from "@openbookings/mailing"
+import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing"
 import type { SecurityAlert, SignInLocation } from "@openbookings/auth/host"
 import { describeDevice } from "@/lib/device"
 
@@ -8,14 +8,6 @@ const SECURITY_URL = "https://business.openbookings.co/account/security"
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif"
 const MONO = "'Nimbus Mono PS','Courier New',monospace"
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-}
 
 const countryNames = new Intl.DisplayNames(["en"], { type: "region" })
 
@@ -94,11 +86,17 @@ export function renderSecurityAlert(
     detailRow("Time", time),
   ].filter((row): row is string => row !== null)
 
-  const html = loadTemplate("security-alert", {
-    preheader: escapeHtml([device, location].filter(Boolean).join(" · ")),
-    detailRows: rows.join(divider),
-    securityUrl: SECURITY_URL,
-  })
+  // detailRows is markup built above (each cell already escaped); everything
+  // else is plain text that loadTemplate escapes itself.
+  const html = loadTemplate(
+    "security-alert",
+    {
+      preheader: [device, location].filter(Boolean).join(" · "),
+      detailRows: rows.join(divider),
+      securityUrl: SECURITY_URL,
+    },
+    { htmlSlots: ["detailRows"] },
+  )
 
   const subject = location
     ? `New sign-in from ${device} in ${location}`

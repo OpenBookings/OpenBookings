@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildConnectAccountParams } from "./accounts";
+import { CONNECT_OWNER_METADATA_KEY, buildConnectAccountParams } from "./accounts";
 
 const host = { email: "owner@example.com", legalCompanyName: "Acme Hotels BV", country: "be" };
 
@@ -35,5 +35,17 @@ describe("buildConnectAccountParams", () => {
       card_payments: { requested: true },
       transfers: { requested: true },
     });
+  });
+});
+
+describe("owner binding", () => {
+  test("stamps the creating user on the account", () => {
+    expect(buildConnectAccountParams({ ...host, userId: "user-1" }).metadata).toEqual({
+      [CONNECT_OWNER_METADATA_KEY]: "user-1",
+    });
+  });
+
+  test("sends no metadata when there is no user to bind", () => {
+    expect(buildConnectAccountParams(host).metadata).toBeUndefined();
   });
 });

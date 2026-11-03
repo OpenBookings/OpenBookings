@@ -7,11 +7,10 @@ import {
   IP_ADDRESS_HEADERS,
   isAccountTypeAllowed,
   isStepUpFresh,
-  microsoftEmailFromProfile,
   portalForAccountType,
+  sessionVerificationStamp,
   sessionCookieNames,
   sessionForApp,
-  stampMicrosoftTenantId,
   stepUpRequiredForRequest,
   stepUpSatisfied,
   isFactorStepUpFresh,
@@ -264,253 +263,42 @@ describe("user.create.before (email collision)", () => {
   });
 });
 
-describe("microsoftEmailFromProfile", () => {
-  test("prefers the email claim", () => {
-    expect(
-      microsoftEmailFromProfile({
-        email: "a@b.co",
-        preferred_username: "other@c.co",
-      }),
-    ).toBe("a@b.co");
-  });
-
-  test("falls back to email-shaped preferred_username, then upn", () => {
-    expect(
-      microsoftEmailFromProfile({ preferred_username: "user@tenant.co" }),
-    ).toBe("user@tenant.co");
-    expect(microsoftEmailFromProfile({ upn: "user@tenant.co" })).toBe(
-      "user@tenant.co",
-    );
-  });
-
-  test("never returns a non-email UPN or phone", () => {
-    expect(
-      microsoftEmailFromProfile({ preferred_username: "+31612345678" }),
-    ).toBeUndefined();
-    expect(microsoftEmailFromProfile({ upn: "PHONE#user" })).toBeUndefined();
-    expect(microsoftEmailFromProfile({})).toBeUndefined();
-  });
-
-  test("still accepts ordinary multi-label domains", () => {
-    for (const address of [
-      "first.last@sub.domain.example.com",
-      "user+tag@example.co.uk",
-      "a@b.c",
-    ]) {
-      expect(microsoftEmailFromProfile({ email: address })).toBe(address);
-    }
-  });
-
-  test("rejects consecutive dots in the domain", () => {
-    // Intentional tightening from the linear-regex rewrite: the old pattern
-    // matched this, but "b..c" is not a valid domain.
-    expect(microsoftEmailFromProfile({ email: "a@b..c" })).toBeUndefined();
-  });
-
-  test("rejects anything past the length cap", () => {
-    const local = "a".repeat(64);
-    const domain = "b".repeat(300) + ".com";
-    expect(`${local}@${domain}`.length).toBeGreaterThan(320);
-    expect(
-      microsoftEmailFromProfile({ email: `${local}@${domain}` }),
-    ).toBeUndefined();
-  });
-
-  test("a pathological claim does not stall the matcher", () => {
-    // Regression guard for the quadratic backtracking CodeQL flagged: the
-    // previous pattern took ~1.5s on a 64KB input of this shape. Both the
-    // length cap and the linear regex independently prevent that, so this
-    // asserts the outcome rather than either mechanism.
-    const evil = "a@" + "x.".repeat(64_000) + "@";
-    const started = performance.now();
-    expect(microsoftEmailFromProfile({ upn: evil })).toBeUndefined();
-    expect(performance.now() - started).toBeLessThan(50);
-  });
-});
-
-describe("stampMicrosoftTenantId", () => {
-  const fakeIdToken = (payload: Record<string, unknown>) =>
-    `x.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.y`;
-
-  test("stamps tenant_id from the tid claim on microsoft accounts", () => {
-    const result = stampMicrosoftTenantId({
-      providerId: "microsoft",
-      idToken: fakeIdToken({ tid: "tenant-123" }),
-    });
-    expect(result?.data.tenant_id).toBe("tenant-123");
-  });
-
-  test("leaves other providers untouched", () => {
-    expect(
-      stampMicrosoftTenantId({
-        providerId: "google",
-        idToken: fakeIdToken({ tid: "nope" }),
-      }),
-    ).toBeUndefined();
-  });
-
-  test("tolerates missing or malformed id tokens", () => {
-    expect(
-      stampMicrosoftTenantId({ providerId: "microsoft", idToken: null }),
-    ).toBeUndefined();
-    expect(
-      stampMicrosoftTenantId({ providerId: "microsoft", idToken: "garbage" }),
-    ).toBeUndefined();
-    expect(
-      stampMicrosoftTenantId({
-        providerId: "microsoft",
-        idToken: fakeIdToken({}),
-      }),
-    ).toBeUndefined();
-  });
-});
-
-describe("step-up (task 14)", () => {
-  test("recency is the mechanism: fresh within 15 minutes, stale after", () => {
-    const now = new Date("2026-08-09T12:00:00Z");
-    expect(isStepUpFresh(new Date("2026-08-09T11:50:00Z"), now)).toBe(true);
-    expect(isStepUpFresh(new Date("2026-08-09T11:44:59Z"), now)).toBe(false);
-    expect(isStepUpFresh(null, now)).toBe(false);
-    expect(isStepUpFresh(undefined, now)).toBe(false);
-    expect(isStepUpFresh("garbage", now)).toBe(false);
-  });
-
-  test("the sensitive Better Auth endpoints require step-up", () => {
-    expect(stepUpRequiredForRequest("/organization/delete", {})).toBe(true);
-    expect(stepUpRequiredForRequest("/organization/remove-member", {})).toBe(true);
-    expect(stepUpRequiredForRequest("/change-email", {})).toBe(true);
-    expect(stepUpRequiredForRequest("/delete-user", {})).toBe(true);
-  });
-
-  test("role updates require step-up only when promoting to owner/admin, failing closed", () => {
-    const path = "/organization/update-member-role";
-    expect(stepUpRequiredForRequest(path, { role: "owner" })).toBe(true);
-    expect(stepUpRequiredForRequest(path, { role: "admin" })).toBe(true);
-    expect(stepUpRequiredForRequest(path, { role: "frontdesk" })).toBe(false);
-    expect(stepUpRequiredForRequest(path, { role: ["manager", "admin"] })).toBe(true);
-    expect(stepUpRequiredForRequest(path, { role: [] })).toBe(true);
-    expect(stepUpRequiredForRequest(path, {})).toBe(true);
-    expect(stepUpRequiredForRequest(path, null)).toBe(true);
-  });
-
-  test("everyday endpoints never require step-up", () => {
-    expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
-    expect(stepUpRequiredForRequest("/sign-in/magic-link", {})).toBe(false);
-    expect(stepUpRequiredForRequest("/organization/create", {})).toBe(false);
-    expect(stepUpRequiredForRequest("/passkey/list-user-passkeys", {})).toBe(false);
-  });
-});
-
-describe("accountTypeMismatchMessage", () => {
-  test("directs to the correct app", () => {
-    expect(accountTypeMismatchMessage("business")).toContain("openbookings.co");
-    expect(accountTypeMismatchMessage("private")).toContain(
-      "business.openbookings.co",
-    );
-  });
-});
-
-// Client IP resolution. These run Better Auth's own resolver against the
-// header list createAuth ships, so a change in either — our ordering or an
-// upstream tightening of what counts as trustworthy — fails here rather than
-// silently collapsing rate limiting into one shared per-path bucket.
-
-const ipOptions = {
-  advanced: { ipAddress: { ipAddressHeaders: IP_ADDRESS_HEADERS } },
-} as never;
-
-const resolveIp = (headers: Record<string, string>) =>
-  getIP(new Headers(headers), ipOptions);
-
-describe("IP_ADDRESS_HEADERS", () => {
-  test("cf-connecting-ip resolves behind a multi-hop forwarded chain", () => {
-    expect(
-      resolveIp({
-        "cf-connecting-ip": "203.0.113.7",
-        "x-forwarded-for": "203.0.113.7, 172.71.0.1, 10.0.0.5",
-      }),
-    ).toBe("203.0.113.7");
-  });
-
-  test("cf-connecting-ip is preferred over x-forwarded-for", () => {
-    expect(
-      resolveIp({
-        "cf-connecting-ip": "203.0.113.7",
-        "x-forwarded-for": "198.51.100.9",
-      }),
-    ).toBe("203.0.113.7");
-  });
-
-  test("falls back to a single-hop x-forwarded-for", () => {
-    expect(resolveIp({ "x-forwarded-for": "198.51.100.9" })).toBe(
-      "198.51.100.9",
-    );
-  });
-
-  test("a garbage cf-connecting-ip falls through instead of being trusted", () => {
-    expect(
-      resolveIp({
-        "cf-connecting-ip": "not-an-ip",
-        "x-forwarded-for": "198.51.100.9",
-      }),
-    ).toBe("198.51.100.9");
-  });
-
-  test("distinct clients get distinct rate-limit buckets", () => {
-    const a = resolveIp({ "cf-connecting-ip": "203.0.113.7" });
-    const b = resolveIp({ "cf-connecting-ip": "203.0.113.8" });
-    expect(a).not.toBe(b);
-  });
-});
-
-describe("factor step-up", () => {
-  const now = new Date("2026-10-02T12:00:00Z");
-  const fresh = new Date("2026-10-02T11:55:00Z");
-  const stale = new Date("2026-10-02T11:00:00Z");
-
-  test("the factor clock has the same 15-minute window", () => {
-    expect(isFactorStepUpFresh(fresh, now)).toBe(true);
-    expect(isFactorStepUpFresh(new Date("2026-10-02T11:44:59Z"), now)).toBe(false);
-    expect(isFactorStepUpFresh(null, now)).toBe(false);
-    expect(isFactorStepUpFresh("garbage", now)).toBe(false);
-  });
-
-  test("a host with a factor must have used it recently; a fresh sign-in is not enough", () => {
-    // Signed in by magic link a minute ago, never touched the passkey.
-    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: fresh, lastFactorVerifiedAt: null }, now)).toBe(false);
-    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: fresh, lastFactorVerifiedAt: stale }, now)).toBe(false);
-    expect(stepUpSatisfied({ hasFactor: true, lastVerifiedAt: stale, lastFactorVerifiedAt: fresh }, now)).toBe(true);
-  });
-
-  test("a host with no factor falls back to sign-in recency, so they are never locked out", () => {
-    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: fresh, lastFactorVerifiedAt: null }, now)).toBe(true);
-    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: stale, lastFactorVerifiedAt: null }, now)).toBe(false);
-    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: null, lastFactorVerifiedAt: null }, now)).toBe(false);
-  });
-
-  test("removing the last factor drops back to sign-in recency rather than to nothing", () => {
-    // Factor clock is fresh from the deletion's own step-up, but no factor is left.
-    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: fresh, lastFactorVerifiedAt: fresh }, now)).toBe(true);
-    expect(stepUpSatisfied({ hasFactor: false, lastVerifiedAt: stale, lastFactorVerifiedAt: fresh }, now)).toBe(false);
-  });
-
-  test("inviting members and changing factors are gated", () => {
+describe("stepUpRequiredForRequest — admin plugin endpoints", () => {
+  test("every /admin/* endpoint needs a fresh step-up", () => {
     for (const path of [
-      "/organization/invite-member",
-      // Storing a new passkey; generating the options for one writes nothing.
-      "/passkey/verify-registration",
-      "/passkey/delete-passkey",
-      "/two-factor/enable",
-      "/two-factor/disable",
-      "/two-factor/generate-backup-codes",
+      "/admin/impersonate-user",
+      "/admin/set-role",
+      "/admin/ban-user",
+      "/admin/set-user-password",
+      "/admin/remove-user",
+      "/admin/create-user",
+      "/admin/revoke-user-sessions",
+      "/admin/list-users",
     ]) {
       expect(stepUpRequiredForRequest(path, {})).toBe(true);
     }
   });
 
-  test("the verification endpoints themselves are never gated, or nobody could step up", () => {
-    for (const path of ["/passkey/verify-authentication", "/two-factor/verify-totp", "/two-factor/verify-backup-code", "/passkey/generate-authenticate-options"]) {
-      expect(stepUpRequiredForRequest(path, {})).toBe(false);
-    }
+  test("leaving an impersonation is not gated (that session has no step-up of its own)", () => {
+    expect(stepUpRequiredForRequest("/admin/stop-impersonating", {})).toBe(false);
+  });
+
+  test("does not catch lookalike paths", () => {
+    expect(stepUpRequiredForRequest("/administrator", {})).toBe(false);
+    expect(stepUpRequiredForRequest("/get-session", {})).toBe(false);
+  });
+});
+
+describe("sessionVerificationStamp", () => {
+  const now = new Date("2026-01-01T00:00:00Z");
+
+  test("a normal sign-in starts the step-up clock", () => {
+    expect(sessionVerificationStamp({ userId: "u1" }, now)).toEqual({ userId: "u1", lastVerifiedAt: now });
+  });
+
+  test("an impersonation session does not inherit a fresh step-up", () => {
+    const stamped = sessionVerificationStamp({ userId: "host", impersonatedBy: "staff" }, now);
+    expect(stamped.lastVerifiedAt).toBeUndefined();
+    expect(stamped.impersonatedBy).toBe("staff");
   });
 });

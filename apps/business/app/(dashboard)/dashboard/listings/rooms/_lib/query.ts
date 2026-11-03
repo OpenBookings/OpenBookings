@@ -1,5 +1,5 @@
 import type { PropertyCancellationTier } from "@openbookings/pricing";
-import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import { RATE_EXTRA_KEYS, type RateExtraKey } from "./constants";
 import { amenitiesFromLegacy, bedsFromLegacyLabel, normaliseBeds } from "./derive";
 import type {
@@ -66,7 +66,7 @@ export async function loadRoomsIndex(
   // owns it, otherwise their first.
   const property = await host.queryOne<{ id: string; name: string }>(
     `SELECT p.id, p.name FROM properties p
-     WHERE p.owner_user_id = $1
+     WHERE ${propertyReadAccessSql("$1")}
        AND ($2::uuid IS NULL OR p.id = $2::uuid)
      ORDER BY p.name
      LIMIT 1`,
@@ -86,7 +86,7 @@ export async function loadRoomsIndex(
         WHERE rp.room_id = r.id AND rp.is_active AND rp.archived_at IS NULL) AS active_rates
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE p.owner_user_id = $1
+     WHERE ${propertyReadAccessSql("$1")}
        AND p.id = $2
        AND r.archived_at IS NULL
      ORDER BY r.sort_order, r.name`,
@@ -216,7 +216,7 @@ export async function loadRoomEditor(
        r.is_active, r.archived_at
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE p.owner_user_id = $1 AND r.id = $2::uuid AND r.archived_at IS NULL`,
+     WHERE ${propertyReadAccessSql("$1")} AND r.id = $2::uuid AND r.archived_at IS NULL`,
     [roomId],
   );
   if (!room) return null;
@@ -235,7 +235,7 @@ export async function loadRoomEditor(
         WHERE ra.room_id = r.id) AS legacy_amenities
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE p.owner_user_id = $1 AND r.id = $2::uuid`,
+     WHERE ${propertyReadAccessSql("$1")} AND r.id = $2::uuid`,
     [room.id],
   );
 

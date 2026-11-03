@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { slugCandidates, toSlug } from "./slug";
+import { isValidSlug, slugCandidates, toSlug } from "./slug";
 
 describe("toSlug", () => {
   test("lowercases and hyphenates", () => {
@@ -68,5 +68,20 @@ describe("slugCandidates", () => {
   test("is bounded so a pathological collision cannot loop forever", () => {
     expect(slugCandidates("x").length).toBe(20);
     expect(slugCandidates("x", 5).length).toBe(5);
+  });
+});
+
+describe("isValidSlug", () => {
+  test("accepts what toSlug and slugCandidates produce", () => {
+    for (const name of ["Grand Hotel", "Hôtel Crémieux", "O'Brien's Inn", "Ærøskøbing Kro", "漢字 only"]) {
+      expect(isValidSlug(toSlug(name))).toBe(true);
+      for (const candidate of slugCandidates(toSlug(name)).slice(0, 5)) expect(isValidSlug(candidate)).toBe(true);
+    }
+  });
+
+  test("rejects anything that could change a URL", () => {
+    for (const bad of ["", "../x", "a/b", "a?b", "a#b", "a b", "A", "a_b", "-a", "a-", "a--b", "a.b", "a%2fb", "x".repeat(256), null, 5]) {
+      expect(isValidSlug(bad)).toBe(false);
+    }
   });
 });

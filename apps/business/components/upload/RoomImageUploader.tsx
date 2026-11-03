@@ -40,6 +40,8 @@ function createUppy(roomId: string) {
         body: JSON.stringify({
           fileName: file.name ?? "upload",
           contentType: file.type ?? "image/jpeg",
+          // Signed into the URL: the PUT must be exactly this long.
+          size: file.size,
         }),
       });
       if (!res.ok) throw new Error("Failed to get upload URL");

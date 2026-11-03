@@ -9,9 +9,8 @@ import {
   advancedConfig,
   createAuthPool,
   magicLinkOptions,
-  microsoftEmailFromProfile,
+  sessionVerificationStamp,
   sharedSessionOptions,
-  stampMicrosoftTenantId,
   userAdditionalFields,
   type BaseAuthConfig,
 } from "./shared";
@@ -19,6 +18,7 @@ import { locationFromHeaders, type SignInLocation } from "./location";
 import { createStepUpHooks } from "./step-up-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import { refuseLastPasskeyRemoval } from "./last-passkey";
+import { reassignPropertiesFromFormerOwner } from "./owner-sync";
 
 export type { SignInLocation } from "./location";
 
@@ -38,8 +38,6 @@ export type SecurityAlert = {
 export type HostAuthConfig = BaseAuthConfig & {
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
   /**
    * Sign-in from a device with no prior sign-in on record notifies all org
    * owners (task 17). Optional so tests and tooling can construct the
@@ -259,19 +257,7 @@ export function createHostAuth(config: HostAuthConfig) {
         },
       },
     },
-    account: {
-      ...accountLinkingOptions,
-      additionalFields: {
-        // Entra tenant id from the Microsoft id token's `tid` claim,
-        // stamped by the account.create.before hook. Used for org auto-join
-        // later.
-        tenant_id: {
-          type: "string",
-          required: false,
-          input: false,
-        },
-      },
-    },
+    account: accountLinkingOptions,
     advanced: advancedConfig(config.cookiePrefix, secureCookies),
     databaseHooks: {
       ...baseHooks,
@@ -279,8 +265,9 @@ export function createHostAuth(config: HostAuthConfig) {
         create: {
           before: async (session) => {
             const result = await baseHooks.session.create.before(session);
-            // Signing in IS a verification: the step-up clock starts now.
-            return { data: { ...result.data, lastVerifiedAt: new Date() } };
+            // Signing in IS a verification: the step-up clock starts now,
+            // except for impersonation sessions (see sessionVerificationStamp).
+            return { data: sessionVerificationStamp(result.data) };
           },
           after: async (session, ctx) => {
             try {
@@ -293,11 +280,6 @@ export function createHostAuth(config: HostAuthConfig) {
               console.error("[auth] new-device alert failed:", err);
             }
           },
-        },
-      },
-      account: {
-        create: {
-          before: async (account) => stampMicrosoftTenantId(account),
         },
       },
     },
@@ -329,13 +311,24 @@ export function createHostAuth(config: HostAuthConfig) {
         ac,
         roles,
         creatorRole: "owner",
+        // Organizations are created by completeOnboarding (SQL, with the Host
+        // Agreement and Stripe account behind them), never by a host calling
+        // /organization/create. Left on, any signed-in host could mint
+        // unlimited empty orgs, each a place to open support tickets from and
+        // a way to confuse the "which org is mine" lookups that fall back to
+        // a user's only membership.
+        allowUserToCreateOrganization: false,
         organizationHooks: {
           beforeRemoveMember: async ({ member, organization: org }) => {
             if (member.role === "owner") {
               await assertNotLastOwner(org.id, member.id);
             }
           },
-          afterRemoveMember: async ({ user }) => {
+          afterRemoveMember: async ({ user, organization: org }) => {
+            await reassignPropertiesFromFormerOwner(pool, {
+              organizationId: org.id,
+              userId: user.id,
+            });
             await revokeUserSessions(user.id);
           },
           beforeUpdateMemberRole: async ({ member, newRole, organization: org }) => {
@@ -343,7 +336,11 @@ export function createHostAuth(config: HostAuthConfig) {
               await assertNotLastOwner(org.id, member.id);
             }
           },
-          afterUpdateMemberRole: async ({ user }) => {
+          afterUpdateMemberRole: async ({ user, organization: org }) => {
+            await reassignPropertiesFromFormerOwner(pool, {
+              organizationId: org.id,
+              userId: user.id,
+            });
             await revokeUserSessions(user.id);
           },
         },
@@ -379,35 +376,19 @@ export function createHostAuth(config: HostAuthConfig) {
           google: {
             clientId: config.googleClientId,
             clientSecret: config.googleClientSecret,
+            // Google reports a trustworthy email_verified; no session
+            // without it.
+            requireEmailVerification: true,
           },
         }
         : {}),
-      ...(config.microsoftClientId && config.microsoftClientSecret
-        ? {
-          microsoft: {
-            clientId: config.microsoftClientId,
-            clientSecret: config.microsoftClientSecret,
-            tenantId: 'common',
-            authority: "https://login.microsoftonline.com",
-            prompt: "select_account",
-            // Minimal scopes: our multi-tenant Entra app requests only what
-            // sign-in needs, so tenant admins reviewing consent see no Graph
-            // access. disableProfilePhoto skips the Graph /me/photos call
-            // that would otherwise need User.Read.
-            disableDefaultScope: true,
-            scope: ["openid", "profile", "email"],
-            disableProfilePhoto: true,
-            mapProfileToUser: (profile: {
-              email?: string;
-              preferred_username?: string;
-              upn?: string;
-            }) => ({
-              email: microsoftEmailFromProfile(profile),
-            }),
-          },
-        } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
+    // The stock impersonation route takes no reason and writes no audit_log
+    // row. It stays callable server-side (auth.api.impersonateUser, which is
+    // what impersonateWithAudit uses) but is not reachable over HTTP through
+    // the /api/auth catch-all.
+    disabledPaths: ["/admin/impersonate-user"],
   });
 }
 

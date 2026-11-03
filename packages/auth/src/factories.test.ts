@@ -72,3 +72,56 @@ describe("factory plugin surface", () => {
     expect(guest.filter((path) => /^\/(organization|admin)\//.test(path))).toEqual([]);
   });
 });
+
+describe("host social providers", () => {
+  const withProviders = () =>
+    createHostAuth({
+      ...base,
+      cookiePrefix: "ob-host",
+      googleClientId: "g-id",
+      googleClientSecret: "g-secret",
+    });
+
+  test("google requires a verified email before issuing a session", () => {
+    const providers = withProviders().options.socialProviders as Record<
+      string,
+      { requireEmailVerification?: boolean }
+    >;
+    expect(providers.google?.requireEmailVerification).toBe(true);
+  });
+
+  test("google is the only social provider on the host portal", () => {
+    expect(Object.keys(withProviders().options.socialProviders ?? {})).toEqual(["google"]);
+  });
+});
+
+describe("host admin plugin exposure", () => {
+  const host = () => createHostAuth({ ...base, cookiePrefix: "ob-host" });
+
+  test("the stock impersonation route is not reachable over HTTP", async () => {
+    const res = await host().handler(
+      new Request(`${base.baseURL}/api/auth/admin/impersonate-user`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base.baseURL },
+        body: JSON.stringify({ userId: "someone" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("it is still callable server-side, which is how impersonateWithAudit uses it", () => {
+    expect(typeof host().api.impersonateUser).toBe("function");
+    expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user"]);
+  });
+});
+
+describe("host organization plugin", () => {
+  test("hosts cannot create organizations through the plugin endpoint", () => {
+    const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
+    const org = host.options.plugins?.find((p) => p.id === "organization") as
+      | { options?: { allowUserToCreateOrganization?: unknown } }
+      | undefined;
+    expect(org).toBeDefined();
+    expect(org?.options?.allowUserToCreateOrganization).toBe(false);
+  });
+});

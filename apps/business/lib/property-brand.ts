@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 
 /**
  * The identity the dashboard chrome wears: whose property this is, and the
@@ -58,7 +58,7 @@ export const loadPropertyBrand = cache(
          FROM properties p
          LEFT JOIN property_images i
            ON i.property_id = p.id AND i."group" = 'logo'
-        WHERE p.owner_user_id = $1
+        WHERE ${propertyReadAccessSql("$1")}
         ORDER BY p.name
         LIMIT 1`,
     );

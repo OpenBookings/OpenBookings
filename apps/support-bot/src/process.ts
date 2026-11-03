@@ -22,6 +22,7 @@ import {
   type ChatFn,
   type ToolCallLogEntry,
 } from "./agent/loop";
+import { escalationNote } from "./escalation-note";
 import { hostTicketNote } from "./host/prompt";
 import { HOST_AGENT } from "./host/tools";
 import type { ProcessConversationPayload } from "./tasks";
@@ -32,25 +33,6 @@ const CONTEXT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** How many prior turns to feed the model. */
 const MAX_CONTEXT_TURNS = 20;
-
-function escalationNote(reason: string, toolLog: ToolCallLogEntry[]): string {
-  const lines = [
-    "**Support bot escalation**",
-    "",
-    `**Reason:** ${reason}`,
-  ];
-  if (toolLog.length > 0) {
-    lines.push("", "**What the bot already looked up:**");
-    for (const entry of toolLog) {
-      lines.push(
-        `- \`${entry.name}\` ${JSON.stringify(entry.args)} → ${JSON.stringify(entry.result).slice(0, 500)}`,
-      );
-    }
-  } else {
-    lines.push("", "No lookups were performed before escalating.");
-  }
-  return lines.join("\n");
-}
 
 /**
  * Map Chatwoot history to model turns: public incoming ↔ user, public
@@ -157,7 +139,7 @@ export async function processConversation(
         : await runAgentLoop({
             turns,
             chat: deps.chat ?? mistralChat(GUEST_AGENT),
-            toolContext: { guestEmail },
+            toolContext: { guestEmail, guestEmailVerified: guestEmail !== null && payload.guestEmailVerified === true },
             onToolResult,
           });
   } finally {

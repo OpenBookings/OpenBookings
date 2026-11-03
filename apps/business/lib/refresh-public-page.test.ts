@@ -54,4 +54,14 @@ describe("refreshPublicPropertyPage", () => {
     expect(calls).toHaveLength(2);
     expect(phases).toEqual(["revalidate", "cdn-purge"]);
   });
+
+  test("a malformed slug is never interpolated into a revalidate path or CDN URL", async () => {
+    for (const slug of ["../admin", "a/b", "x?y=1", "x#y", "https://evil.example", "UPPER", "a b", "-lead", "trail-", "a--b", ""]) {
+      const { fetch, calls } = recordingFetch();
+      const errors: unknown[] = [];
+      await refreshPublicPropertyPage(slug, { env: FULL_ENV, fetch, onError: (e) => errors.push(e) });
+      expect(calls).toEqual([]);
+      expect(errors).toHaveLength(1);
+    }
+  });
 });

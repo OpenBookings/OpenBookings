@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  PROPERTY_EDIT_ACCESS_SQL,
   propertyReadAccessSql,
   getHostScopedDb,
   getThreadForParticipant,
@@ -46,6 +47,14 @@ const threads: ThreadRow[] = [
 ];
 
 const fakeQueryOne = async <T>(text: string, values: unknown[] = []): Promise<T | null> => {
+  // First: the thread query mentions `FROM properties` in its access check.
+  if (text.includes("FROM message_threads")) {
+    const [threadId, userId] = values as [string, string];
+    const thread = threads.find(
+      (t) => t.id === threadId && (t.host_id === userId || t.guest_id === userId),
+    );
+    return (thread ?? null) as T | null;
+  }
   if (text.includes("FROM properties")) {
     const [propertyId, userId] = values as [string, string];
     const hit = properties.find((p) => p.id === propertyId && p.owner === userId);
@@ -63,13 +72,6 @@ const fakeQueryOne = async <T>(text: string, values: unknown[] = []): Promise<T 
     const room = rooms.find((r) => r.id === roomId);
     const owner = properties.find((p) => p.id === room?.propertyId)?.owner;
     return (room && owner === userId ? { ok: true } : null) as T | null;
-  }
-  if (text.includes("FROM message_threads")) {
-    const [threadId, userId] = values as [string, string];
-    const thread = threads.find(
-      (t) => t.id === threadId && (t.host_id === userId || t.guest_id === userId),
-    );
-    return (thread ?? null) as T | null;
   }
   throw new Error(`unexpected query: ${text}`);
 };
@@ -214,5 +216,43 @@ describe("propertyReadAccessSql", () => {
 
   test("refuses anything but a bind parameter", () => {
     expect(() => propertyReadAccessSql("'x' OR 1=1")).toThrow("Not a bind parameter");
+  });
+});
+
+describe("legacy owner_user_id", () => {
+  // Regression: owner_user_id is stamped at onboarding and never cleared, so a
+  // standalone `p.owner_user_id = $n` branch let a removed or demoted founder
+  // keep edit, cancel and refund rights. It may only count for pre-org rows.
+  const standalone = /(?<!organization_id IS NULL AND )p\.owner_user_id = \$\d+/;
+
+  test("edit predicate only trusts owner_user_id when the property has no org", () => {
+    expect(PROPERTY_EDIT_ACCESS_SQL).toContain("(p.organization_id IS NULL AND p.owner_user_id = $2)");
+    expect(PROPERTY_EDIT_ACCESS_SQL.replace("(p.organization_id IS NULL AND p.owner_user_id = $2)", "")).not.toMatch(
+      standalone,
+    );
+  });
+
+  test("read predicate only trusts owner_user_id when the property has no org", () => {
+    const sql = propertyReadAccessSql("$1");
+    expect(sql).toContain("(p.organization_id IS NULL AND p.owner_user_id = $1)");
+    expect(sql.replace("(p.organization_id IS NULL AND p.owner_user_id = $1)", "")).not.toMatch(standalone);
+  });
+});
+
+describe("getThreadForParticipant — the host side needs current access", () => {
+  test("the query ties the host to current read access on the thread's property", async () => {
+    let sql = "";
+    await getThreadForParticipant(sessionFor("host-a"), "thread-1", {
+      queryOne: async <T>(text: string) => {
+        sql = text;
+        return null as T | null;
+      },
+    });
+    // guest_id alone is enough for the guest...
+    expect(sql).toMatch(/t\.guest_id = \$2\s+OR \(t\.host_id = \$2 AND EXISTS/);
+    // ...but a host must still be able to read the property (org membership, or
+    // legacy ownership of an org-less row), not merely be the stamped host_id.
+    expect(sql).toContain("p.id = t.property_id");
+    expect(sql).toContain(propertyReadAccessSql("$2"));
   });
 });

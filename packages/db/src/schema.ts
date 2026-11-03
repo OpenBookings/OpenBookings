@@ -687,6 +687,11 @@ export const refunds = pgTable(
       "refunds_amount_sum",
       sql`${table.amount} = ${table.accommodationAmount} + ${table.touristTaxAmount} AND ${table.amount} >= 0`,
     ),
+    // NaN satisfies the check above; see drizzle/0030_refunds_reject_nan.sql.
+    check(
+      "refunds_amounts_finite",
+      sql`${table.amount} <> 'NaN'::numeric AND ${table.accommodationAmount} <> 'NaN'::numeric AND ${table.touristTaxAmount} <> 'NaN'::numeric`,
+    ),
   ],
 );
 

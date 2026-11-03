@@ -1,3 +1,4 @@
+import { isValidSlug } from "./slug";
 const TIMEOUT_MS = 3000;
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 
@@ -55,6 +56,10 @@ export async function refreshPublicPropertyPage(slug: string, deps: RefreshDeps 
   const doFetch = deps.fetch ?? fetch;
   const onError = deps.onError ?? (() => {});
   if (!env.webUrl) return;
+  if (!isValidSlug(slug)) {
+    onError(new Error("refusing to refresh a page for a malformed slug"), "revalidate");
+    return;
+  }
 
   const origin = env.webUrl.replace(/\/+$/, "");
   const path = `/p/${slug}`;

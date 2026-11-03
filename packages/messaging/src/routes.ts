@@ -1,8 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import { query, queryOne } from "@openbookings/db";
 import { getThreadForParticipant, type SessionLike, type ThreadRow } from "@openbookings/authz";
+import { bearerAuthorized } from "./cron-auth";
 import { detectCircumvention } from "./circumvention";
 import { deliverMessageToRecipient, mintRealtimeToken } from "./realtime";
+import { REDACTED_MESSAGE_BODY } from "./redaction";
 import { CIRCUMVENTION_WARNING, MAX_BODY_LENGTH, type MessageRow } from "./types";
 
 /**
@@ -36,25 +37,6 @@ const DEFAULT_RETENTION_DAYS = 365;
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
-}
-
-/**
- * Bearer check for the cron endpoints.
- *
- * `===` on strings short-circuits at the first differing byte, so how long the
- * comparison takes leaks how many leading bytes of the secret the caller got
- * right — recoverable one byte at a time by an attacker who can time enough
- * requests. `timingSafeEqual` always reads both buffers to the end. It throws
- * rather than returning false when the lengths differ, so length is checked
- * separately; that leaks only the secret's length, which is not the part worth
- * protecting.
- */
-function bearerAuthorized(req: Request, secret: string | undefined): boolean {
-  if (!secret) return false;
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const presented = Buffer.from(req.headers.get("authorization") ?? "");
-  if (presented.length !== expected.length) return false;
-  return timingSafeEqual(presented, expected);
 }
 
 export function createMessagingRoutes(config: MessagingRoutesConfig) {
@@ -287,8 +269,10 @@ export function createMessagingRoutes(config: MessagingRoutesConfig) {
    * older than the window get their messages anonymized: sender_id is NULL'd
    * (see migration 0004) and body replaced with a placeholder. flagged_reason
    * and all message_threads metadata are left intact for audit purposes.
-   * Idempotent: only touches rows that aren't already anonymized
-   * (sender_id IS NOT NULL), so re-running is safe.
+   * Idempotent: only touches rows whose body is not already the placeholder,
+   * so re-running is safe. Not keyed on sender_id: a deleted guest's messages
+   * have sender_id NULL from the moment of deletion, and keying on it would
+   * skip them (and their text) forever.
    */
   async function runRetention(req: Request): Promise<Response> {
     if (!bearerAuthorized(req, process.env.CRON_SECRET)) {
@@ -299,13 +283,13 @@ export function createMessagingRoutes(config: MessagingRoutesConfig) {
 
     const anonymized = await query<{ id: string }>(
       `UPDATE messages m
-       SET sender_id = NULL, body = '[message removed — retention period expired]'
+       SET sender_id = NULL, body = $2::text
        FROM message_threads t
        WHERE m.thread_id = t.id
-         AND m.sender_id IS NOT NULL
+         AND m.body <> $2::text
          AND t.updated_at < now() - make_interval(days => $1)
        RETURNING m.id`,
-      [retentionDays],
+      [retentionDays, REDACTED_MESSAGE_BODY],
     );
 
     return json({ anonymizedCount: anonymized.length, retentionDays });

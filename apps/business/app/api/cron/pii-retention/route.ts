@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@openbookings/db";
+import { bearerAuthorized } from "@openbookings/messaging/cron-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,8 @@ export const dynamic = "force-dynamic";
 const RETENTION_MONTHS = Number(process.env.PII_RETENTION_MONTHS ?? 18);
 
 export async function POST(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  const header = request.headers.get("authorization");
-  if (!secret || header !== `Bearer ${secret}`) {
+  // Constant-time: `!==` would leak the secret's prefix through response timing.
+  if (!bearerAuthorized(request, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

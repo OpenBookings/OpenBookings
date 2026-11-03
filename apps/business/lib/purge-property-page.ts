@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { propertyPageKey, purge } from "@openbookings/cache";
 import { queryOne } from "@openbookings/db";
 import { refreshPublicPropertyPage } from "./refresh-public-page";
+import { isValidSlug } from "./slug";
 
 export type PurgeTarget = { propertyId: string } | { roomId: string };
 
@@ -26,6 +27,12 @@ const report = (error: unknown, phase: string) =>
  * second identical query on every save is waste.
  */
 export async function purgePropertyPageBySlug(slug: string): Promise<void> {
+  // The slug becomes a cache key, a revalidate path and a CDN URL: only the
+  // shape toSlug produces gets that far.
+  if (!isValidSlug(slug)) {
+    report(new Error("refusing to purge a malformed slug"), "purge");
+    return;
+  }
   await purge([propertyPageKey(slug)], {
     onError: (error, ctx) => report(error, ctx.phase),
   });

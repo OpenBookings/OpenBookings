@@ -6,8 +6,10 @@ import type { ToolContext } from "./tools";
 // before tools.ts binds its imports.
 const { executeTool, mistralToolSchemas, TOOLS } = await import("./tools");
 
-const GUEST: ToolContext = { guestEmail: "guest@example.com" };
-const ANONYMOUS: ToolContext = { guestEmail: null };
+const GUEST: ToolContext = { guestEmail: "guest@example.com", guestEmailVerified: true };
+/** An email the visitor merely typed: usable with a booking reference, never to list bookings. */
+const UNVERIFIED: ToolContext = { guestEmail: "guest@example.com", guestEmailVerified: false };
+const ANONYMOUS: ToolContext = { guestEmail: null, guestEmailVerified: false };
 
 const OWN_REF = "11111111-1111-1111-1111-111111111111";
 const OTHER_REF = "22222222-2222-2222-2222-222222222222";
@@ -110,6 +112,7 @@ describe("tool authorization", () => {
   it("matches the owner case-insensitively", async () => {
     const result = await executeTool("get_reservation", { booking_reference: OWN_REF }, {
       guestEmail: "guest@example.com",
+      guestEmailVerified: true,
     });
     reservations.set(OWN_REF, { bookingId: OWN_REF, guestEmail: "GUEST@Example.com" });
     const mixedCase = await executeTool("get_reservation", { booking_reference: OWN_REF }, GUEST);
@@ -153,5 +156,39 @@ describe("get_cancellation_policy", () => {
     const policy = (result as { ok: true; result: { policies: Record<string, unknown>[] } }).result.policies[0];
     expect(policy.tier).toBe("Standard");
     expect(policy.no_show).toBe("If you don't show up, nothing is refunded.");
+  });
+});
+
+describe("get_reservation with an unverified email", () => {
+  it("refuses to list bookings by email alone", async () => {
+    const result = await executeTool("get_reservation", {}, UNVERIFIED);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.result).toMatchObject({ found: false });
+    const text = JSON.stringify(result.ok && result.result);
+    expect(text).toContain("booking reference");
+    expect(text).not.toContain(OWN_REF);
+  });
+
+  it("still lists them when Chatwoot verified the email", async () => {
+    const result = await executeTool("get_reservation", {}, GUEST);
+    expect(result.ok && (result.result as { found: boolean }).found).toBe(true);
+    expect(JSON.stringify(result.ok && result.result)).toContain(OWN_REF);
+  });
+
+  it("answers about a booking named by reference when the email matches", async () => {
+    const result = await executeTool("get_reservation", { booking_reference: OWN_REF }, UNVERIFIED);
+    expect(result).toMatchObject({ ok: true, result: { booking_reference: OWN_REF } });
+  });
+
+  it("does not answer about someone else's booking by reference, verified or not", async () => {
+    const result = await executeTool("get_reservation", { booking_reference: OTHER_REF }, UNVERIFIED);
+    expect(JSON.stringify(result)).not.toContain("victim@example.com");
+    expect(result).toMatchObject({ ok: true, result: { found: false } });
+  });
+
+  it("a verified flag without an email grants nothing", async () => {
+    const result = await executeTool("get_reservation", {}, { guestEmail: null, guestEmailVerified: true });
+    expect(result.ok && (result.result as { found: boolean }).found).toBe(false);
+    expect(JSON.stringify(result.ok && result.result)).toContain("escalate_to_human");
   });
 });

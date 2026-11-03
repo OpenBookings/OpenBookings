@@ -229,7 +229,8 @@ async function insertRefund(
 async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, planned: PlannedRefund[]) {
   const out: RefundRow[] = [];
   for (const p of planned) {
-    if (p.refund.total <= 0) continue;
+    // Written so NaN is skipped too (NaN <= 0 is false).
+    if (!(p.refund.total > 0)) continue;
     out.push(
       await insertRefund(tx, bookingId, actor, {
         reservationId: p.reservationId,
@@ -460,6 +461,11 @@ export async function issueGoodwillRefund(
   i: { bookingId: string; actor: Actor; amount: number },
 ): Promise<LifecycleResult> {
   if (i.actor.kind !== "host") return { ok: false, error: "not_allowed" };
+  // Before any query: a NaN/Infinity/non-number here is a caller bug or a
+  // tampered request, never something to plan around (see planGoodwill).
+  if (typeof i.amount !== "number" || !Number.isFinite(i.amount)) {
+    throw new RangeError("Goodwill refund amount must be a finite number");
+  }
   const { db, now } = context(deps);
   const done = await db.transaction(async (tx) => {
     const state = await loadBookingState(tx, i.bookingId, now, true);

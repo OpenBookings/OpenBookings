@@ -7,6 +7,8 @@
  * @openbookings/stripe respectively — not read here.
  */
 
+import { parseInboxIds } from "./chatwoot/identity";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set`);
@@ -45,6 +47,29 @@ const SUPPORT_REQUIRED = [
   "LETTERMINT_PROJECT_TOKEN", // read by @openbookings/mailing
 ] as const;
 
+function tasksAuthDisabledFlag(): boolean {
+  return process.env.TASKS_AUTH_DISABLED?.trim() === "true";
+}
+
+/**
+ * Whether `value` is an http(s) URL on the loopback interface or a
+ * *.localhost name (RFC 6761: never resolves off the machine).
+ */
+export function isLocalBaseUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { hostname } = new URL(value);
+    return (
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function flag(name: string): boolean {
   const value = process.env[name]?.trim().toLowerCase();
   return value === "true" || value === "1";
@@ -70,10 +95,16 @@ export function assertRequiredEnv(): void {
 
   // Parse the values whose format matters now, not on the first webhook.
   if (flag("SUPPORT_CHAT_ENABLED")) void env.businessInboxId;
+  void env.verifiedGuestInboxIds;
 
   // The local-dev escape hatches disable webhook-to-task authentication
   // entirely. Refuse to boot rather than let a stray value in a production
   // revision leave /tasks/* open to anyone who can reach the service.
+  if (tasksAuthDisabledFlag() && !isLocalBaseUrl(process.env.SERVICE_BASE_URL)) {
+    throw new Error(
+      "TASKS_AUTH_DISABLED is set but SERVICE_BASE_URL is not a localhost address — refusing to start with task authentication off.",
+    );
+  }
   if (process.env.NODE_ENV === "production") {
     const unsafe = (["TASKS_AUTH_DISABLED", "TASKS_INLINE"] as const).filter(
       (name) => process.env[name]?.trim() === "true",
@@ -127,12 +158,26 @@ export const env = {
   get tasksInline() {
     return process.env.TASKS_INLINE?.trim() === "true";
   },
-  /** Local-dev escape hatch: skip signature verification on /tasks/*. Never set in production. */
+  /**
+   * Local-dev escape hatch: skip signature verification on /tasks/*.
+   *
+   * Honoured only when this service's own base URL is a loopback address (see
+   * isLocalBaseUrl) and NODE_ENV is not production. The flag alone is not
+   * enough: a deployed revision has a public SERVICE_BASE_URL, so a stray
+   * TASKS_AUTH_DISABLED=true there stays inert instead of leaving /tasks/*
+   * open, whatever NODE_ENV the platform happens to set. assertRequiredEnv
+   * goes further and refuses to boot with the flag set anywhere it would not
+   * be honoured.
+   */
   get tasksAuthDisabled() {
     // Trimmed: a stray trailing space in a .env file would otherwise make
     // this silently false, and the failure mode (auth unexpectedly ON in
     // local dev) looks like a broken queue rather than a typo.
-    return process.env.TASKS_AUTH_DISABLED?.trim() === "true";
+    return (
+      tasksAuthDisabledFlag() &&
+      process.env.NODE_ENV !== "production" &&
+      isLocalBaseUrl(process.env.SERVICE_BASE_URL)
+    );
   },
   get qstashToken() {
     return required("QSTASH_TOKEN");
@@ -169,6 +214,17 @@ export const env = {
       throw new Error(`CHATWOOT_BUSINESS_INBOX_ID must be a positive integer, got "${raw}"`);
     }
     return id;
+  },
+  /**
+   * Chatwoot inbox ids (comma-separated) where "Enforce user identity
+   * validation" (HMAC) is turned on, so a contact's email there was set by a
+   * signed call from our server and not typed by the visitor. Only those
+   * inboxes let the bot list a guest's bookings by email. Empty (the default)
+   * means no inbox is trusted: bookings can then only be reached with an
+   * explicit booking reference. See chatwoot/identity.ts.
+   */
+  get verifiedGuestInboxIds(): number[] {
+    return parseInboxIds(process.env.CHATWOOT_VERIFIED_INBOX_IDS, "CHATWOOT_VERIFIED_INBOX_IDS");
   },
   /**
    * Settings → Integrations → Webhooks → the /webhooks/business-support entry.

@@ -18,6 +18,7 @@ import {
 import { ATTACHMENT_LIMITS, attachmentProblem } from "../attachments";
 import { findCategory, SUPPORT_MESSAGE_MAX, type LinkedKind } from "../categories";
 import { mapChatwootMessage, type ChatMessage } from "../chat";
+import { safeReplayUrl, safeRoute } from "../safe-attributes";
 import { structuredOpener, ticketTitle } from "../title";
 import type { TicketWithMessages } from "../types";
 import type { InboxHours } from "../working-hours";
@@ -134,9 +135,11 @@ export async function createTicket(
     attributes.linked_id = linked.id;
   }
   if (followUpOf) attributes.follow_up_of = followUpOf;
-  if (input.route) attributes.route = input.route.slice(0, 200);
+  const route = safeRoute(input.route);
+  if (route) attributes.route = route;
   if (input.appVersion) attributes.app_version = input.appVersion.slice(0, 64);
-  if (category.attachReplay && input.replayUrl) attributes.replay_url = input.replayUrl.slice(0, 500);
+  const replayUrl = category.attachReplay ? safeReplayUrl(input.replayUrl) : null;
+  if (replayUrl) attributes.replay_url = replayUrl;
 
   // The public create stores the attributes (verified on 4.18), so no second
   // call as the agent is needed.

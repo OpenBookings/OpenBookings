@@ -1,4 +1,4 @@
-import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import {
   hasStayLengthDiscount,
   resolveNightlyRates,
@@ -148,7 +148,7 @@ scope_rooms AS (
   SELECT r.id, r.name, r.room_type, r.base_occupancy, r.total_units, r.is_active AS on_sale
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE p.owner_user_id = $1
+  WHERE ${propertyReadAccessSql("$1")}
     AND p.id = $2
     AND r.archived_at IS NULL
 ),
@@ -242,7 +242,7 @@ scope_plans AS (
   FROM rate_plans rp
   JOIN rooms r      ON r.id = rp.room_id
   JOIN properties p ON p.id = r.property_id
-  WHERE p.owner_user_id = $1
+  WHERE ${propertyReadAccessSql("$1")}
     AND p.id = $2
     AND r.archived_at IS NULL
     AND rp.archived_at IS NULL
@@ -337,7 +337,7 @@ FROM rate_modifiers m
 JOIN rate_plans rp ON rp.id = m.rate_plan_id
 JOIN rooms r       ON r.id = rp.room_id
 JOIN properties p  ON p.id = r.property_id
-WHERE p.owner_user_id = $1
+WHERE ${propertyReadAccessSql("$1")}
   AND p.id = $2
   AND m.is_active
 GROUP BY m.rate_plan_id
@@ -365,7 +365,7 @@ WITH scope_rooms AS (
   SELECT r.id
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE p.owner_user_id = $1 AND p.id = $2 AND r.archived_at IS NULL
+  WHERE ${propertyReadAccessSql("$1")} AND p.id = $2 AND r.archived_at IS NULL
 ),
 signatures AS (
   SELECT 'o' || ro.id::text || ro.price_per_night::text || ro.is_active::text
@@ -499,7 +499,7 @@ export async function loadAriGrid(
   const stayLength = Math.max(1, Math.floor(options.stayLength ?? 1));
 
   const property = await host.queryOne<PropertyRow>(
-    `SELECT id, name FROM properties WHERE owner_user_id = $1 AND id = $2`,
+    `SELECT p.id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} AND p.id = $2`,
     [propertyId],
   );
   if (!property) return null;
@@ -745,6 +745,6 @@ export async function loadHostProperties(
 ): Promise<PropertyRow[]> {
   const host = getHostScopedDb(session);
   return host.query<PropertyRow>(
-    `SELECT id, name FROM properties WHERE owner_user_id = $1 ORDER BY name`,
+    `SELECT p.id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} ORDER BY p.name`,
   );
 }

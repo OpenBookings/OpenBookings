@@ -4,6 +4,7 @@ import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
 import { sendSecurityAlert } from "@/lib/mailing/security-alert";
 import { forwardAuthEvent } from "@/lib/tirreno";
+import { hostTrustedOrigins } from "@/lib/trusted-origins";
 import { cache } from "react";
 import { headers } from "next/headers";
 
@@ -17,16 +18,9 @@ export const auth = createHostAuth({
   sendSecurityAlert,
   onAuthEvent: forwardAuthEvent,
   cookiePrefix: env.AUTH_COOKIE_PREFIX,
-  trustedOrigins: [
-    "https://appleid.apple.com",
-    "https://business.openbookings.co",
-    "https://openbookings.co",
-    "http://business.localhost:3001",
-  ],
+  trustedOrigins: hostTrustedOrigins(process.env.NODE_ENV),
   googleClientId: process.env.GOOGLE_CLIENT_ID_BUSINESS,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET_BUSINESS,
-  microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
-  microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
 });
 
 /**

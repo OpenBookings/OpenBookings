@@ -3,12 +3,13 @@
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne, withTransaction } from "@openbookings/db";
 import { headers } from "next/headers";
-import { createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
+import { CONNECT_OWNER_METADATA_KEY, createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
 import { provisionOrganizationTx } from "@/lib/provision-organization";
 import { completionPrecheck } from "@/lib/onboarding-completion";
 import { isStripeAccountReady } from "@/lib/stripe-readiness";
 import { promoteOnboardingToProperty } from "./promotion";
 import { summariseStripeAccount } from "./_lib/status";
+import { parseClientStepData } from "./_lib/step-data";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -76,11 +77,12 @@ async function getSession() {
   return session;
 }
 
-/** Persist step data and mark the step complete. */
-export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
-  const session = await getSession();
-  const userId = session.user.id;
-
+/**
+ * Write one step's data and mark it complete. Server-internal: callers pass a
+ * step and a value the server itself produced. Not exported, so it is not a
+ * server action.
+ */
+async function persistStepData(userId: string, step: DbStep, data: unknown): Promise<void> {
   await query(
     `INSERT INTO host_onboarding (user_id, completed_steps, step_data)
      VALUES ($1, ARRAY[$2::text], $3::jsonb)
@@ -94,6 +96,27 @@ export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
        step_data = host_onboarding.step_data || $3::jsonb`,
     [userId, step, JSON.stringify({ [step]: data })]
   );
+}
+
+/**
+ * Persist step data from the onboarding forms and mark the step complete.
+ *
+ * Callable straight from the browser, so `step` and `data` are untrusted: only
+ * the steps the forms save are accepted, parsed to exactly their fields (see
+ * _lib/step-data.ts for why — `step` becomes a key in the same JSON that holds
+ * the Stripe payout account and the signed legal records).
+ */
+export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
+  const session = await getSession();
+  const clean = parseClientStepData(step, data);
+  if (clean === null) throw new Error("Invalid onboarding data");
+  await persistStepData(session.user.id, step, clean);
+}
+
+/** Server-side write of legal data the server built (signatures, resets). */
+async function saveLegalData(data: LegalNBoringData): Promise<void> {
+  const session = await getSession();
+  await persistStepData(session.user.id, "legal-n-boring", data);
 }
 
 /** Load all previously saved step data for the current user. */
@@ -133,7 +156,7 @@ export async function signLegalDocument(
       : { dpa: signature }),
   };
 
-  await saveStepData("legal-n-boring", updated);
+  await saveLegalData(updated);
 }
 
 /**
@@ -153,7 +176,7 @@ export async function setInclusiveRatesConfirmation(confirmed: boolean): Promise
   const legal = { ...(existing["legal-n-boring"] ?? ({} as LegalNBoringData)) };
   delete legal.ratesInclusive;
 
-  await saveStepData("legal-n-boring", {
+  await saveLegalData({
     ...legal,
     ...(confirmed && { ratesInclusive: { signedAt: new Date().toISOString(), signerIp: ip } }),
   });
@@ -185,7 +208,7 @@ export async function resetLegalData(): Promise<void> {
     previousAttempts: [...(legal?.previousAttempts ?? []), attempt],
   };
 
-  await saveStepData("legal-n-boring", updated);
+  await saveLegalData(updated);
 }
 
 /** Create a Stripe Connect account for the host (idempotent — skips if already provisioned). */
@@ -214,6 +237,7 @@ export async function provisionStripeAccount(): Promise<string> {
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
     country: location.country,
+    userId,
   });
 
   await query(
@@ -277,7 +301,14 @@ export async function completeOnboarding(): Promise<void> {
     throw new Error("This Stripe account belongs to an organisation you are no longer part of");
   }
 
-  const account = summariseStripeAccount(await retrieveConnectAccount(stripeAccountId!));
+  const stripeAccount = await retrieveConnectAccount(stripeAccountId!);
+  // An account we created is stamped with the user it was created for. One
+  // stamped for somebody else must not become this host's payout destination,
+  // however its id got into step_data. (Accounts from before the stamp existed
+  // carry none and cannot be checked.)
+  const boundTo = stripeAccount.metadata?.[CONNECT_OWNER_METADATA_KEY];
+  if (boundTo && boundTo !== userId) throw new Error("Stripe account belongs to a different user");
+  const account = summariseStripeAccount(stripeAccount);
   if (!isStripeAccountReady(account)) throw new Error("Stripe account is not ready yet");
 
   await withTransaction(async (client) => {

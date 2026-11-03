@@ -12,7 +12,7 @@ import type { ToolContext } from "./tools";
 // without touching the database, so the loop is exercised end-to-end offline.
 
 /** An identified guest — these tests are about loop control flow, not authorization. */
-const GUEST: ToolContext = { guestEmail: "guest@example.com" };
+const GUEST: ToolContext = { guestEmail: "guest@example.com", guestEmailVerified: true };
 
 function scriptedChat(responses: ChatResponse[]): { chat: ChatFn; calls: LoopMessage[][] } {
   const calls: LoopMessage[][] = [];

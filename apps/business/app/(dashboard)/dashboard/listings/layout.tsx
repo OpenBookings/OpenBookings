@@ -1,4 +1,4 @@
-import { getHostScopedDb } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
 import { BreadcrumbLabelsProvider } from "@/components/dashboard/breadcrumb-labels";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { GetHelpButton } from "@/components/support/get-help-button";
@@ -18,7 +18,7 @@ async function loadListing(): Promise<{ id: string; name: string } | null> {
   const session = await getServerSession();
   if (!session) return null;
   return getHostScopedDb(session).queryOne<{ id: string; name: string }>(
-    `SELECT p.id::text AS id, p.name FROM properties p WHERE p.owner_user_id = $1 ORDER BY p.name LIMIT 1`,
+    `SELECT p.id::text AS id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} ORDER BY p.name LIMIT 1`,
   );
 }
 

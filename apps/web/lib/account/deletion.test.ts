@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { REDACTED_MESSAGE_BODY } from "@openbookings/messaging/redaction";
 import { anonymizeGuestData, assertCanDeleteAccount, UPCOMING_STAY_SQL } from "./deletion";
 
 type Call = { sql: string; values: unknown[] };
@@ -39,9 +40,9 @@ describe("anonymizeGuestData", () => {
   test("unlinks consent records and guest messages, and closes the guest's threads, all for this user only", async () => {
     const { run, calls } = recorder();
     await anonymizeGuestData("u1", run);
-    expect(calls.map((c) => c.values)).toEqual([["u1"], ["u1"], ["u1"]]);
+    expect(calls.map((c) => c.values)).toEqual([["u1"], ["u1", REDACTED_MESSAGE_BODY], ["u1"]]);
     expect(calls[0].sql).toContain("UPDATE consent_log SET user_id = NULL WHERE user_id = $1");
-    expect(calls[1].sql).toContain("UPDATE messages SET sender_id = NULL WHERE sender_id = $1 AND sender_role = 'guest'");
+    expect(calls[1].sql).toContain("UPDATE messages SET sender_id = NULL, body = $2 WHERE sender_id = $1 AND sender_role = 'guest'");
     expect(calls[2].sql).toContain("UPDATE message_threads SET status = 'closed'");
     expect(calls[2].sql).toContain("WHERE guest_id = $1");
   });

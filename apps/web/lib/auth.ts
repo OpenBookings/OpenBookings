@@ -25,7 +25,8 @@ export const auth = createGuestAuth({
   trustedOrigins: [
     "https://appleid.apple.com",
     "https://openbookings.co",
-    "http://web.localhost:3002",
+    // Local portal origin: development only.
+    ...(process.env.NODE_ENV === "production" ? [] : ["http://web.localhost:3002"]),
   ],
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,

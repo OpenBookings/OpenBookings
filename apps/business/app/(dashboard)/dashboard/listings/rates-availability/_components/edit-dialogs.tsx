@@ -535,7 +535,8 @@ function AddRatePlanDialog({
             roomId,
             name: name.trim(),
             bar: Number(bar) || 0,
-            currency,
+            // The server accepts EUR only; every price on the platform is in euros.
+            currency: "EUR",
             isRefundable: refundable,
             minStay: Number(minStay) || 1,
             maxStay: maxStay.parsed,

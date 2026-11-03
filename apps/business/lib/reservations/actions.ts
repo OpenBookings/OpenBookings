@@ -17,6 +17,7 @@ import {
 import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
+import { goodwillAmount } from "./goodwill-amount";
 
 /**
  * The host's booking actions. Each one re-checks, on the server, that the
@@ -70,8 +71,11 @@ export async function hostRecordEarlyDeparture(bookingId: string, lastNightStaye
   return run(bookingId, (actor) => recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed }));
 }
 
+/** `amount` is whatever the browser sent; the dialog builds it with Number(text), so junk arrives as NaN. */
 export async function hostGoodwillRefund(bookingId: string, amount: number) {
-  return run(bookingId, (actor) => issueGoodwillRefund(deps, { bookingId, actor, amount }));
+  const parsed = goodwillAmount.safeParse(amount);
+  if (!parsed.success) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
+  return run(bookingId, (actor) => issueGoodwillRefund(deps, { bookingId, actor, amount: parsed.data }));
 }
 
 export async function hostRetryRefunds(bookingId: string) {

@@ -70,6 +70,13 @@ describeWithDb("Tourist tax rules against Postgres", () => {
       `INSERT INTO organization (id, name, slug, "createdAt") VALUES ($1, 'Test Org', $1, NOW())`,
       [orgId],
     );
+    // The host is an owner member of the organisation, as every real host is:
+    // owner_user_id alone does not grant access to a property that has one.
+    await db.query(
+      `INSERT INTO member (id, "organizationId", "userId", role, "createdAt")
+       VALUES ($1, $2, $3, 'owner', NOW())`,
+      [`test-member-${crypto.randomUUID()}`, orgId, owner],
+    );
     propertyId = (await one<{ id: string }>(
       `INSERT INTO properties
          (name, slug, address_line_1, city, country, timezone, location,
