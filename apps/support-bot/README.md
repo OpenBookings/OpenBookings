@@ -87,7 +87,7 @@ REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
 CHATWOOT_VERIFIED_INBOX_IDS         # optional, e.g. "3,7": guest inboxes with "Enforce user identity validation" (HMAC) ON.
                                     # Only there is a contact's email trusted enough to list their bookings by it.
                                     # Empty (default): the bot needs an explicit booking reference everywhere.
-TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*
+TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*. Ignored (and boot fails) unless SERVICE_BASE_URL is localhost
 
 QSTASH_TOKEN
 QSTASH_CURRENT_SIGNING_KEY
