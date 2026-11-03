@@ -1,8 +1,11 @@
 import { query as dbQuery, queryOne as dbQueryOne } from "@openbookings/db";
 import {
   PROPERTY_SCOPED_ROLES,
+  roleAllows,
   roles,
+  rolesWith,
   type HostRole,
+  type Permission,
 } from "./permissions";
 
 export * from "./rates-confirmation";
@@ -11,8 +14,14 @@ export {
   ac,
   roles,
   statement,
+  HOST_ROLES,
   PROPERTY_SCOPED_ROLES,
+  isHostRole,
+  isPropertyScoped,
+  roleAllows,
+  rolesWith,
   type HostRole,
+  type Permission,
 } from "./permissions";
 
 /**
@@ -40,71 +49,106 @@ function ownerId(session: SessionLike | null | undefined): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-/**
- * Edit access to a property `p` for user `$2` (task 11). Two paths:
- *
- * - legacy direct ownership (owner_user_id), ONLY for pre-org rows
- *   (organization_id IS NULL). Once a property belongs to an org, a stale
- *   owner_user_id must never grant anything: it is set at onboarding and a
- *   removed or demoted founder would otherwise keep full edit, cancel and
- *   refund rights;
- * - org membership on the property's organization: owner/admin are
- *   org-wide; manager is property-scoped and needs a property_access row.
- *   frontdesk/finance never get edit access through this predicate — their
- *   narrower grants go through the permission statement per endpoint.
- *
- * Cross-org access fails here structurally: the member row must belong to
- * THIS property's organization_id, so a role in another org matches
- * nothing.
- */
-export const PROPERTY_EDIT_ACCESS_SQL = `(
-  (p.organization_id IS NULL AND p.owner_user_id = $2)
-  OR EXISTS (
-    SELECT 1 FROM "member" m
-    WHERE m."organizationId" = p.organization_id
-      AND m."userId" = $2
-      AND (
-        m.role IN ('owner', 'admin')
-        OR (m.role = 'manager' AND EXISTS (
-          SELECT 1 FROM property_access pa
-          WHERE pa.member_id = m.id AND pa.property_id = p.id
-        ))
-      )
-  )
-)`;
+/** `'a', 'b'` for a SQL IN list. Role names are our own constants, never input. */
+function sqlRoleList(names: readonly string[]): string {
+  return names.map((role) => `'${role}'`).join(", ");
+}
 
 /**
- * Read access to a property `p` for the user bound at `userParam` (e.g.
- * `"$1"`). Wider than PROPERTY_EDIT_ACCESS_SQL: every org role can read, and
- * the property-scoped roles (manager, frontdesk) still need a
- * property_access row. Legacy direct ownership counts only for pre-org rows
- * (organization_id IS NULL), as in PROPERTY_EDIT_ACCESS_SQL. Used where a
- * member only looks things up — the support panel's booking picker and the
- * support bot's host tools — never to authorize a write.
+ * Access to property `p` for the user bound at `userParam`, for members whose
+ * role holds `permission`. Org-wide roles pass on membership alone;
+ * property-scoped roles also need a property_access row. Legacy direct
+ * ownership (owner_user_id) counts ONLY for pre-org rows (organization_id IS
+ * NULL): once a property belongs to an org, a stale owner_user_id must never
+ * grant anything — it is set at onboarding, and a removed or demoted founder
+ * would otherwise keep full edit, cancel and refund rights.
+ *
+ * Role lists come from the grants in permissions.ts, so adding a role or a
+ * grant there is the whole change. Positive lists on both sides: an unknown
+ * role matches nothing (fails closed). Cross-org access fails structurally:
+ * the member row must belong to THIS property's organization_id.
  */
-export function propertyReadAccessSql(userParam: string): string {
+function propertyAccessSql(userParam: string, holders: readonly HostRole[]): string {
   if (!/^\$\d+$/.test(userParam)) throw new Error(`Not a bind parameter: ${userParam}`);
-  const list = (names: readonly string[]) => names.map((role) => `'${role}'`).join(", ");
-  // Positive lists on both sides, so an unknown role reads nothing (fails
-  // closed, like memberHasPropertyAccess).
-  const orgWide = (Object.keys(roles) as HostRole[]).filter(
-    (role) => !PROPERTY_SCOPED_ROLES.includes(role),
-  );
+  const orgWide = holders.filter((role) => !PROPERTY_SCOPED_ROLES.includes(role));
+  const scoped = holders.filter((role) => PROPERTY_SCOPED_ROLES.includes(role));
+  const clauses = [
+    orgWide.length ? `m.role IN (${sqlRoleList(orgWide)})` : null,
+    scoped.length
+      ? `(m.role IN (${sqlRoleList(scoped)}) AND EXISTS (
+          SELECT 1 FROM property_access pa
+          WHERE pa.member_id = m.id AND pa.property_id = p.id
+        ))`
+      : null,
+  ].filter(Boolean);
   return `(
   (p.organization_id IS NULL AND p.owner_user_id = ${userParam})
   OR EXISTS (
     SELECT 1 FROM "member" m
     WHERE m."organizationId" = p.organization_id
       AND m."userId" = ${userParam}
-      AND (
-        m.role IN (${list(orgWide)})
-        OR m.role IN (${list(PROPERTY_SCOPED_ROLES)}) AND EXISTS (
-          SELECT 1 FROM property_access pa
-          WHERE pa.member_id = m.id AND pa.property_id = p.id
-        )
-      )
+      AND (${clauses.length ? clauses.join("\n        OR ") : "FALSE"})
   )
 )`;
+}
+
+/**
+ * Edit access to a property `p` for user `$2` (task 11): members whose role
+ * may update the property (today owner and general manager org-wide, manager
+ * on their properties). Reservations, front desk and back office never get
+ * edit access through this predicate — their narrower grants go through
+ * userCan per action.
+ */
+export const PROPERTY_EDIT_ACCESS_SQL = propertyAccessSql("$2", rolesWith({ property: ["update"] }));
+
+/**
+ * Read access to a property `p` for the user bound at `userParam` (e.g.
+ * `"$1"`). Wider than PROPERTY_EDIT_ACCESS_SQL: every org role can read, and
+ * the property-scoped roles (manager, reservations, front desk) still need a
+ * property_access row. Legacy direct ownership counts only for pre-org rows
+ * (organization_id IS NULL), as in PROPERTY_EDIT_ACCESS_SQL. Used where a
+ * member only looks things up — the support panel's booking picker and the
+ * support bot's host tools — never to authorize a write.
+ */
+export function propertyReadAccessSql(userParam: string): string {
+  return propertyAccessSql(userParam, Object.keys(roles) as HostRole[]);
+}
+
+/**
+ * Whether the signed-in user may do `permission` on one property — the
+ * check for anything narrower than "edit the property", such as checking a
+ * guest in or giving a goodwill refund. One query for the member's role in
+ * the property's org and their property_access row; the decision itself is
+ * roleAllows, the same function the UI uses to hide buttons.
+ *
+ * A legacy pre-org property (organization_id IS NULL) is its owner_user_id's
+ * alone, with every grant an owner has. Fails closed on unknown ids, no
+ * membership and unknown roles.
+ */
+export async function userCan(
+  session: SessionLike | null | undefined,
+  propertyId: string,
+  permission: Permission,
+  deps: AuthzDeps = {},
+): Promise<boolean> {
+  const userId = ownerId(session);
+  if (!userId || !propertyId) return false;
+  const queryOne = deps.queryOne ?? dbQueryOne;
+  const row = await queryOne<{ legacy_owner: boolean; role: string | null; has_access: boolean }>(
+    `SELECT (p.organization_id IS NULL AND p.owner_user_id = $2) AS legacy_owner,
+            m.role,
+            EXISTS (
+              SELECT 1 FROM property_access pa
+              WHERE pa.member_id = m.id AND pa.property_id = p.id
+            ) AS has_access
+     FROM properties p
+     LEFT JOIN "member" m ON m."organizationId" = p.organization_id AND m."userId" = $2
+     WHERE p.id = $1`,
+    [propertyId, userId],
+  );
+  if (!row) return false;
+  if (row.legacy_owner === true) return roleAllows("owner", permission, true);
+  return roleAllows(row.role, permission, row.has_access === true);
 }
 
 export async function userOwnsProperty(
@@ -223,7 +267,7 @@ export async function getThreadForParticipant(
  *   );
  */
 /**
- * Property scoping for manager/frontdesk. Owner, admin, and finance are
+ * Property scoping for the property-scoped roles. Owner, admin, and finance are
  * org-wide; property-scoped roles need a property_access row. Fails closed
  * on unknown roles.
  */

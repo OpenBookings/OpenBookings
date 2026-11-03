@@ -50,6 +50,12 @@ export type HostAuthConfig = BaseAuthConfig & {
    * Tirreno. Called after the audit_log row is written; failures are
    * swallowed — risk tooling must never block a sign-in.
    */
+  /**
+   * Emails an invitation to join an organization. Optional so tests and
+   * tooling can construct the instance without a mail transport; without it
+   * an invitation is still created, and its link can be shared by hand.
+   */
+  sendInvitationEmail?: (invite: HostInvitationEmail) => Promise<void>;
   onAuthEvent?: (event: {
     action: "auth.sign-in";
     userId: string;
@@ -59,6 +65,18 @@ export type HostAuthConfig = BaseAuthConfig & {
   }) => Promise<void>;
 };
 
+
+export type HostInvitationEmail = {
+  invitationId: string;
+  email: string;
+  role: string;
+  organizationName: string;
+  inviterName: string;
+  expiresAt: Date;
+};
+
+/** How long an invitation stays open. */
+export const INVITATION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Auth instance for apps/business (host portal). Mounts the organization
@@ -318,7 +336,45 @@ export function createHostAuth(config: HostAuthConfig) {
         // a way to confuse the "which org is mine" lookups that fall back to
         // a user's only membership.
         allowUserToCreateOrganization: false,
+        invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
+        // Inviting someone already invited replaces the old invitation, so a
+        // corrected role or property list never leaves two open links.
+        cancelPendingInvitationsOnReInvite: true,
+        sendInvitationEmail: config.sendInvitationEmail
+          ? async ({ id, email, role, organization: org, inviter, invitation }) => {
+            await config.sendInvitationEmail!({
+              invitationId: id,
+              email,
+              role,
+              organizationName: org.name,
+              inviterName: inviter.user.name?.trim() || inviter.user.email,
+              expiresAt: new Date(invitation.expiresAt),
+            });
+          }
+          : undefined,
         organizationHooks: {
+          // The properties chosen at invite time become the new member's
+          // property access. One statement, so a failure leaves nothing half
+          // copied; an org-wide role simply has no rows to copy.
+          afterAcceptInvitation: async ({ invitation, member, user, organization: org }) => {
+            await pool.query(
+              `INSERT INTO property_access (member_id, property_id)
+               SELECT $1, ipa.property_id
+               FROM invitation_property_access ipa
+               JOIN properties p ON p.id = ipa.property_id AND p.organization_id = $3
+               WHERE ipa.invitation_id = $2
+               ON CONFLICT DO NOTHING`,
+              [member.id, invitation.id, org.id],
+            );
+            await pool.query(
+              `INSERT INTO audit_log (action, actor_user_id, target_user_id, organization_id, detail)
+               VALUES ('member.invitation-accepted', $1, $1, $2, $3)`,
+              [user.id, org.id, JSON.stringify({ invitationId: invitation.id, role: member.role })],
+            ).catch((error: unknown) => {
+              // The member already exists; failing here would only hide that.
+              console.error("[auth] invitation audit write failed:", error instanceof Error ? error.message : error);
+            });
+          },
           beforeRemoveMember: async ({ member, organization: org }) => {
             if (member.role === "owner") {
               await assertNotLastOwner(org.id, member.id);

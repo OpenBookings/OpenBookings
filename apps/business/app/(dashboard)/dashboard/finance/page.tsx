@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { queryOne } from "@openbookings/db";
+import { rolesWith } from "@openbookings/authz/permissions";
 import { retrieveConnectAccount } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
 import { SiteHeader } from "@/components/dashboard/site-header";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/card";
 
 type PayoutStatus =
+  | { state: "hidden" }
   | { state: "none" }
   | { state: "unavailable" }
   | { state: "ok"; payoutsEnabled: boolean; requirementsDue: number };
@@ -24,17 +26,20 @@ type PayoutStatus =
  * Stripe Dashboard, behind Stripe's login.
  */
 async function loadPayoutStatus(userId: string): Promise<PayoutStatus> {
-  const row = await queryOne<{ stripe_account_id: string | null }>(
+  // Only roles that may see payouts (owner, general manager, back office).
+  // Someone else on the team sees that payouts are not theirs to view.
+  const row = await queryOne<{ stripe_account_id: string | null; member_elsewhere: boolean }>(
     `SELECT COALESCE(
        (SELECT op.stripe_account_id
           FROM "member" m JOIN org_profile op ON op.organization_id = m."organizationId"
-         WHERE m."userId" = $1 AND op.stripe_account_id IS NOT NULL
+         WHERE m."userId" = $1 AND m.role = ANY($2::text[]) AND op.stripe_account_id IS NOT NULL
          ORDER BY m."createdAt" LIMIT 1),
        (SELECT step_data->>'stripe_account_id' FROM host_onboarding WHERE user_id = $1)
-     ) AS stripe_account_id`,
-    [userId],
+     ) AS stripe_account_id,
+     EXISTS (SELECT 1 FROM "member" m WHERE m."userId" = $1 AND m.role <> ALL($2::text[])) AS member_elsewhere`,
+    [userId, rolesWith({ payout: ["read"] })],
   );
-  if (!row?.stripe_account_id) return { state: "none" };
+  if (!row?.stripe_account_id) return row?.member_elsewhere ? { state: "hidden" } : { state: "none" };
 
   try {
     const account = await retrieveConnectAccount(row.stripe_account_id);
@@ -78,6 +83,11 @@ export default async function FinancePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 text-sm">
+                  {payouts.state === "hidden" ? (
+                    <p className="text-muted-foreground">
+                      Payouts are visible to owners, general managers and back office.
+                    </p>
+                  ) : null}
                   {payouts.state === "none" ? (
                     <p className="text-muted-foreground">No Stripe account is connected yet.</p>
                   ) : null}

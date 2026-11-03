@@ -14,7 +14,34 @@ import type { ReservationStatus, ReservationSummary } from "@/components/dashboa
 
 const regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
 
-function addressLines(address: HostReservationRow["guest_address"]): string[] | null {
+/** The guest's contact details as the guest_profile row stores them (0028). */
+export type GuestContactRow = {
+  guest_phone: string | null;
+  guest_address: {
+    line1: string;
+    line2: string | null;
+    postal_code: string;
+    city: string;
+    country: string;
+  } | null;
+};
+
+/**
+ * Contact details the guest chose to share. Not part of HostReservation on
+ * purpose: they leave the server only when a member breaks the glass on one
+ * booking (./break-glass.ts), and that is logged.
+ */
+export type GuestContact = {
+  phone: string | null;
+  /** Display lines, country spelled out. */
+  address: string[] | null;
+};
+
+export function toGuestContact(row: GuestContactRow): GuestContact {
+  return { phone: row.guest_phone, address: addressLines(row.guest_address) };
+}
+
+function addressLines(address: GuestContactRow["guest_address"]): string[] | null {
   if (!address) return null;
   const country = address.country.trim();
   return [
@@ -32,15 +59,6 @@ export type HostReservationRow = {
   check_in_date: string;
   check_out_date: string;
   guest_name: string | null;
-  /** Shared by the guest on their account page (guest_profile, 0028); null when not given. */
-  guest_phone: string | null;
-  guest_address: {
-    line1: string;
-    line2: string | null;
-    postal_code: string;
-    city: string;
-    country: string;
-  } | null;
   guests: number;
   total_amount: number;
   timezone: string;
@@ -76,16 +94,14 @@ export type HostReservationRoom = {
 };
 
 export type HostReservation = ReservationSummary & {
-  /** The guest's phone number, if they shared one. */
-  guestPhone: string | null;
-  /** The guest's address as display lines, if they shared one. */
-  guestAddress: string[] | null;
   timezone: string;
   refundedAmount: number;
   refundIssue: boolean;
   departedEarlyOn: string | null;
   rooms: HostReservationRoom[];
   actions: BookingAction[];
+  /** Whether the viewer may retry a refund that didn't go through. */
+  canRetryRefunds: boolean;
 };
 
 const DISPLAY_STATUS: Record<BookingStatus, ReservationStatus> = {
@@ -148,8 +164,6 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     id: row.booking_id,
     reference: row.booking_id.slice(0, 8).toUpperCase(),
     guestName: row.guest_name ?? "Guest",
-    guestPhone: row.guest_phone,
-    guestAddress: addressLines(row.guest_address),
     roomName: names.join(" + "),
     checkInDate: row.check_in_date,
     checkOutDate: row.check_out_date,
@@ -164,5 +178,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     departedEarlyOn: row.departed_early_on,
     rooms,
     actions,
+    // Narrowed to the viewer's role by loadHostReservations.
+    canRetryRefunds: false,
   };
 }

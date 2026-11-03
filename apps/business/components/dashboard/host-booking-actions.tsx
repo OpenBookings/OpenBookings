@@ -106,7 +106,7 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
             <Gift /> Goodwill refund
           </Button>
         )}
-        {reservation.refundIssue && (
+        {reservation.refundIssue && reservation.canRetryRefunds && (
           <Button
             size="sm"
             variant="outline"

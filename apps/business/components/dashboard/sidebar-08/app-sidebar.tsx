@@ -10,6 +10,7 @@ import {
   PencilSparkles,
   Sparkles,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
@@ -77,6 +78,11 @@ const navMain: NavItem[] = [
       { title: "Property", url: "/dashboard/listings/property" },
       { title: "Rooms", url: "/dashboard/listings/rooms" },
     ],
+  },
+  {
+    title: "Team",
+    url: "/dashboard/team",
+    icon: Users,
   },
 ];
 

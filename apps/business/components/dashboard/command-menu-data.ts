@@ -99,6 +99,12 @@ export const commandMenuGroups: CommandMenuGroup[] = [
       },
       {
         icon: "arrow-right",
+        label: "Go to Team",
+        keywords: ["people", "staff", "roles", "invite", "members"],
+        action: { type: "navigate", href: "/dashboard/team" },
+      },
+      {
+        icon: "arrow-right",
         label: "Go to Analytics",
         keywords: ["reports", "performance"],
         action: { type: "navigate", href: "/dashboard/analytics/revenue" },

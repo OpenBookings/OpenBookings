@@ -1,5 +1,6 @@
 import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import { toHostReservation, type HostReservation, type HostReservationRow } from "./shape";
+import { actionsForViewer, viewerCanRetryRefunds } from "./permissions";
 
 /** Bookings that ended more than this many days ago drop off the list. */
 const PAST_DAYS = 30;
@@ -17,15 +18,22 @@ export const HOST_RESERVATIONS_SQL = `
     b.check_in_date::text AS check_in_date,
     b.check_out_date::text AS check_out_date,
     u.name AS guest_name,
-    -- Contact details the guest chose to share (0028). Hosts see them for
-    -- their own bookings only: this whole query is scoped to their properties.
-    gp.phone AS guest_phone,
-    CASE WHEN gp.address_line1 IS NOT NULL THEN json_build_object(
-      'line1', gp.address_line1, 'line2', gp.address_line2,
-      'postal_code', gp.postal_code, 'city', gp.city, 'country', gp.country
-    ) END AS guest_address,
+    -- No guest contact details here: they are behind break-the-glass
+    -- (./break-glass.ts), fetched per booking and logged.
     COALESCE((SELECT SUM(r.adults + r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS guests,
     b.total_amount::float8 AS total_amount,
+    -- The viewer's role at this booking's property, so the list offers only
+    -- the actions they may take (the server actions re-check every one). A
+    -- pre-org property is readable only by its owner_user_id, who is its owner.
+    CASE WHEN p.organization_id IS NULL THEN 'owner' ELSE (
+      SELECT vm.role FROM "member" vm
+      WHERE vm."organizationId" = p.organization_id AND vm."userId" = $1
+    ) END AS viewer_role,
+    EXISTS (
+      SELECT 1 FROM "member" vm
+      JOIN property_access vpa ON vpa.member_id = vm.id AND vpa.property_id = p.id
+      WHERE vm."organizationId" = p.organization_id AND vm."userId" = $1
+    ) AS viewer_has_access,
     p.timezone,
     to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
@@ -51,7 +59,6 @@ export const HOST_RESERVATIONS_SQL = `
   FROM bookings b
   JOIN properties p ON p.id = b.hotel_id
   LEFT JOIN "user" u ON u.id = b.user_id
-  LEFT JOIN guest_profile gp ON gp.user_id = b.user_id
   WHERE ${propertyReadAccessSql("$1")}
     AND b.status <> 'pending'
     AND b.check_out_date >= CURRENT_DATE - ${PAST_DAYS}
@@ -63,6 +70,16 @@ export async function loadHostReservations(
   host: Pick<ReturnType<typeof getHostScopedDb>, "query"> = getHostScopedDb(session),
   now: Date = new Date(),
 ): Promise<HostReservation[]> {
-  const rows = await host.query<HostReservationRow>(HOST_RESERVATIONS_SQL);
-  return rows.map((row) => toHostReservation(row, now));
+  const rows = await host.query<HostReservationRow & { viewer_role: string | null; viewer_has_access: boolean }>(
+    HOST_RESERVATIONS_SQL,
+  );
+  return rows.map((row) => {
+    const reservation = toHostReservation(row, now);
+    const viewer = { role: row.viewer_role, hasPropertyAccess: row.viewer_has_access === true };
+    return {
+      ...reservation,
+      actions: actionsForViewer(reservation.actions, viewer),
+      canRetryRefunds: viewerCanRetryRefunds(viewer),
+    };
+  });
 }

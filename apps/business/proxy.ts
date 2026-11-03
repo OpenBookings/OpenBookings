@@ -77,5 +77,8 @@ export const config = {
     "/onboarding/:path*",
     "/account/:path*",
     "/support/:path*",
+    // Signing in before accepting an invitation; /invite sits outside the
+    // onboarding wall on purpose (a new team member has no org yet).
+    "/invite/:path*",
   ],
 };
