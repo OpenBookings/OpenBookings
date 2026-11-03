@@ -276,7 +276,9 @@ const ratePlanSchema = z
     roomId: z.string().uuid(),
     name: z.string().min(1).max(100),
     bar: z.number().int().min(0),
-    currency: z.string().length(3),
+    // EUR only: prices, commission and refunds are all computed in euros, and a
+    // plan in another currency would be charged and displayed as if it were.
+    currency: z.literal("EUR"),
     isRefundable: z.boolean(),
     minStay: z.number().int().min(1),
     maxStay: z.number().int().min(1).nullable(),

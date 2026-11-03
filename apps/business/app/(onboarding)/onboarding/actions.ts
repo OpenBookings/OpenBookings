@@ -9,6 +9,7 @@ import { completionPrecheck } from "@/lib/onboarding-completion";
 import { isStripeAccountReady } from "@/lib/stripe-readiness";
 import { promoteOnboardingToProperty } from "./promotion";
 import { summariseStripeAccount } from "./_lib/status";
+import { parseClientStepData } from "./_lib/step-data";
 
 export interface LegalSignatureRecord {
   signedAt: string;
@@ -76,11 +77,12 @@ async function getSession() {
   return session;
 }
 
-/** Persist step data and mark the step complete. */
-export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
-  const session = await getSession();
-  const userId = session.user.id;
-
+/**
+ * Write one step's data and mark it complete. Server-internal: callers pass a
+ * step and a value the server itself produced. Not exported, so it is not a
+ * server action.
+ */
+async function persistStepData(userId: string, step: DbStep, data: unknown): Promise<void> {
   await query(
     `INSERT INTO host_onboarding (user_id, completed_steps, step_data)
      VALUES ($1, ARRAY[$2::text], $3::jsonb)
@@ -94,6 +96,27 @@ export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
        step_data = host_onboarding.step_data || $3::jsonb`,
     [userId, step, JSON.stringify({ [step]: data })]
   );
+}
+
+/**
+ * Persist step data from the onboarding forms and mark the step complete.
+ *
+ * Callable straight from the browser, so `step` and `data` are untrusted: only
+ * the steps the forms save are accepted, parsed to exactly their fields (see
+ * _lib/step-data.ts for why — `step` becomes a key in the same JSON that holds
+ * the Stripe payout account and the signed legal records).
+ */
+export async function saveStepData(step: DbStep, data: unknown): Promise<void> {
+  const session = await getSession();
+  const clean = parseClientStepData(step, data);
+  if (clean === null) throw new Error("Invalid onboarding data");
+  await persistStepData(session.user.id, step, clean);
+}
+
+/** Server-side write of legal data the server built (signatures, resets). */
+async function saveLegalData(data: LegalNBoringData): Promise<void> {
+  const session = await getSession();
+  await persistStepData(session.user.id, "legal-n-boring", data);
 }
 
 /** Load all previously saved step data for the current user. */
@@ -133,7 +156,7 @@ export async function signLegalDocument(
       : { dpa: signature }),
   };
 
-  await saveStepData("legal-n-boring", updated);
+  await saveLegalData(updated);
 }
 
 /**
@@ -153,7 +176,7 @@ export async function setInclusiveRatesConfirmation(confirmed: boolean): Promise
   const legal = { ...(existing["legal-n-boring"] ?? ({} as LegalNBoringData)) };
   delete legal.ratesInclusive;
 
-  await saveStepData("legal-n-boring", {
+  await saveLegalData({
     ...legal,
     ...(confirmed && { ratesInclusive: { signedAt: new Date().toISOString(), signerIp: ip } }),
   });
@@ -185,7 +208,7 @@ export async function resetLegalData(): Promise<void> {
     previousAttempts: [...(legal?.previousAttempts ?? []), attempt],
   };
 
-  await saveStepData("legal-n-boring", updated);
+  await saveLegalData(updated);
 }
 
 /** Create a Stripe Connect account for the host (idempotent — skips if already provisioned). */

@@ -2,6 +2,22 @@
 const MAX_LENGTH = 200;
 
 /**
+ * Whether `value` is shaped like something toSlug (plus a numeric suffix) can
+ * produce: lowercase letters and digits in hyphen-separated runs. Checked
+ * before a slug is interpolated into a URL path we revalidate or ask
+ * Cloudflare to purge, so a malformed one ("../", a query string, a scheme)
+ * can never be turned into a different URL than /p/<slug>.
+ */
+export function isValidSlug(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 255 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
+  );
+}
+
+/**
  * Letters with no NFD decomposition, which would otherwise be destroyed by the
  * `[^a-z0-9]` pass rather than folded. Nordic and German property names depend
  * on these: without the map, "Ærøskøbing Kro" slugs to "-r-sk-bing-kro".
