@@ -8,6 +8,7 @@ import {
   isAccountTypeAllowed,
   isStepUpFresh,
   microsoftEmailFromProfile,
+  microsoftUserFromProfile,
   portalForAccountType,
   sessionCookieNames,
   sessionForApp,
@@ -265,29 +266,50 @@ describe("user.create.before (email collision)", () => {
 });
 
 describe("microsoftEmailFromProfile", () => {
-  test("prefers the email claim", () => {
+  const verified = { email_verified: true };
+
+  test("accepts the email claim when Microsoft asserts it is verified", () => {
+    expect(microsoftEmailFromProfile({ email: "a@b.co", ...verified })).toBe("a@b.co");
+    expect(microsoftEmailFromProfile({ email: "a@b.co", xms_edov: true })).toBe("a@b.co");
+    expect(microsoftEmailFromProfile({ email: "a@b.co", xms_edov: "1" })).toBe("a@b.co");
     expect(
-      microsoftEmailFromProfile({
-        email: "a@b.co",
-        preferred_username: "other@c.co",
-      }),
+      microsoftEmailFromProfile({ email: "a@b.co", verified_primary_email: ["a@b.co"] }),
+    ).toBe("a@b.co");
+    expect(
+      microsoftEmailFromProfile({ email: "a@b.co", verified_secondary_email: ["a@b.co"] }),
     ).toBe("a@b.co");
   });
 
-  test("falls back to email-shaped preferred_username, then upn", () => {
+  test("refuses an email nothing vouches for (self-managed tenant squatting)", () => {
+    expect(microsoftEmailFromProfile({ email: "victim@example.com" })).toBeUndefined();
     expect(
-      microsoftEmailFromProfile({ preferred_username: "user@tenant.co" }),
-    ).toBe("user@tenant.co");
-    expect(microsoftEmailFromProfile({ upn: "user@tenant.co" })).toBe(
-      "user@tenant.co",
-    );
+      microsoftEmailFromProfile({ email: "victim@example.com", email_verified: false }),
+    ).toBeUndefined();
+    expect(
+      microsoftEmailFromProfile({ email: "victim@example.com", xms_edov: false }),
+    ).toBeUndefined();
+    // Truthy but not the boolean Microsoft sends.
+    expect(
+      microsoftEmailFromProfile({ email: "victim@example.com", email_verified: "false" }),
+    ).toBeUndefined();
   });
 
-  test("never returns a non-email UPN or phone", () => {
+  test("a verified list entry for a different address does not vouch for this one", () => {
     expect(
-      microsoftEmailFromProfile({ preferred_username: "+31612345678" }),
+      microsoftEmailFromProfile({
+        email: "victim@example.com",
+        verified_primary_email: ["attacker@example.net"],
+      }),
     ).toBeUndefined();
-    expect(microsoftEmailFromProfile({ upn: "PHONE#user" })).toBeUndefined();
+  });
+
+  test("never falls back to preferred_username or upn, verified or not", () => {
+    expect(
+      microsoftEmailFromProfile({ preferred_username: "user@tenant.co", ...verified } as never),
+    ).toBeUndefined();
+    expect(
+      microsoftEmailFromProfile({ upn: "user@tenant.co", ...verified } as never),
+    ).toBeUndefined();
     expect(microsoftEmailFromProfile({})).toBeUndefined();
   });
 
@@ -297,14 +319,14 @@ describe("microsoftEmailFromProfile", () => {
       "user+tag@example.co.uk",
       "a@b.c",
     ]) {
-      expect(microsoftEmailFromProfile({ email: address })).toBe(address);
+      expect(microsoftEmailFromProfile({ email: address, ...verified })).toBe(address);
     }
   });
 
   test("rejects consecutive dots in the domain", () => {
     // Intentional tightening from the linear-regex rewrite: the old pattern
     // matched this, but "b..c" is not a valid domain.
-    expect(microsoftEmailFromProfile({ email: "a@b..c" })).toBeUndefined();
+    expect(microsoftEmailFromProfile({ email: "a@b..c", ...verified })).toBeUndefined();
   });
 
   test("rejects anything past the length cap", () => {
@@ -312,7 +334,7 @@ describe("microsoftEmailFromProfile", () => {
     const domain = "b".repeat(300) + ".com";
     expect(`${local}@${domain}`.length).toBeGreaterThan(320);
     expect(
-      microsoftEmailFromProfile({ email: `${local}@${domain}` }),
+      microsoftEmailFromProfile({ email: `${local}@${domain}`, ...verified }),
     ).toBeUndefined();
   });
 
@@ -323,8 +345,23 @@ describe("microsoftEmailFromProfile", () => {
     // asserts the outcome rather than either mechanism.
     const evil = "a@" + "x.".repeat(64_000) + "@";
     const started = performance.now();
-    expect(microsoftEmailFromProfile({ upn: evil })).toBeUndefined();
+    expect(microsoftEmailFromProfile({ email: evil, ...verified })).toBeUndefined();
     expect(performance.now() - started).toBeLessThan(50);
+  });
+});
+
+describe("microsoftUserFromProfile", () => {
+  test("verified: email plus an emailVerified that overrides Better Auth's own guess", () => {
+    expect(microsoftUserFromProfile({ email: "a@b.co", xms_edov: true })).toEqual({
+      email: "a@b.co",
+      emailVerified: true,
+    });
+  });
+
+  test("unverified: no email, so the OAuth callback aborts before creating a user", () => {
+    const mapped = microsoftUserFromProfile({ email: "victim@example.com", email_verified: false });
+    expect(mapped).toEqual({ email: undefined });
+    expect("emailVerified" in mapped).toBe(false);
   });
 });
 

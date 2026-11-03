@@ -72,3 +72,39 @@ describe("factory plugin surface", () => {
     expect(guest.filter((path) => /^\/(organization|admin)\//.test(path))).toEqual([]);
   });
 });
+
+describe("host social providers", () => {
+  const withProviders = () =>
+    createHostAuth({
+      ...base,
+      cookiePrefix: "ob-host",
+      googleClientId: "g-id",
+      googleClientSecret: "g-secret",
+      microsoftClientId: "m-id",
+      microsoftClientSecret: "m-secret",
+    });
+
+  test("both require a verified email before issuing a session", () => {
+    const providers = withProviders().options.socialProviders as Record<
+      string,
+      { requireEmailVerification?: boolean }
+    >;
+    expect(providers.microsoft?.requireEmailVerification).toBe(true);
+    expect(providers.google?.requireEmailVerification).toBe(true);
+  });
+
+  test("an unverified Microsoft profile maps to no email, so the callback aborts", () => {
+    const microsoft = (withProviders().options.socialProviders as Record<string, {
+      mapProfileToUser?: (profile: Record<string, unknown>) => Record<string, unknown>;
+    }>).microsoft;
+    // Self-managed Entra tenant asserting a victim's address, no verification claim.
+    const mapped = microsoft?.mapProfileToUser?.({
+      email: "victim@example.com",
+      email_verified: false,
+      preferred_username: "victim@example.com",
+      upn: "victim@example.com",
+    });
+    expect(mapped?.email).toBeUndefined();
+    expect(mapped?.emailVerified).toBeUndefined();
+  });
+});

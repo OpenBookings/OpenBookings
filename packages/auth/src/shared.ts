@@ -411,23 +411,64 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
   }
 }
 
-/**
- * Microsoft does not reliably put the user's address in the `email` claim —
- * for some work/school tenants only `preferred_username` or `upn` carries
- * it. Fall back to those only when they are email-shaped (a UPN can be a
- * phone number or a non-routable alias, and a non-routable address would
- * break magic-link recovery and the one-email-one-account invariant).
- */
-export function microsoftEmailFromProfile(profile: {
+/** The id-token claims `microsoftEmailFromProfile` reads. */
+export type MicrosoftEmailClaims = {
   email?: string;
-  preferred_username?: string;
-  upn?: string;
-}): string | undefined {
-  for (const candidate of [profile.email, profile.preferred_username, profile.upn]) {
-    if (!candidate || candidate.length > MAX_EMAIL_LENGTH) continue;
-    if (EMAIL_SHAPE.test(candidate)) return candidate;
+  email_verified?: unknown;
+  /** Optional claim: the email's domain is verified in the user's home tenant. */
+  xms_edov?: unknown;
+  verified_primary_email?: string[];
+  verified_secondary_email?: string[];
+};
+
+const isTrue = (value: unknown) =>
+  value === true || value === 1 || value === "1" || value === "true";
+
+/**
+ * The address to sign a Microsoft user in under, or undefined to refuse.
+ *
+ * Only the `email` claim is considered, and only when Microsoft asserts it is
+ * verified (`email_verified`, `xms_edov`, or membership of the
+ * `verified_primary_email` / `verified_secondary_email` lists). The app is a
+ * multi-tenant (`common`) Entra registration, so anyone can create a tenant
+ * and set an arbitrary, unverified `email` on a user in it. Trusting that
+ * address lets an attacker create an OpenBookings account under a victim's
+ * address; when the victim later signs in by magic link, the account becomes
+ * theirs while the attacker's Microsoft identity is still linked to it.
+ *
+ * `preferred_username` and `upn` are NOT fallbacks: they are tenant-controlled
+ * display values with no verification signal at all. A user whose token has no
+ * verified `email` signs in with a magic link instead. (Returning undefined
+ * makes Better Auth abort the callback with `email_not_found` before any user
+ * or account row is written.)
+ *
+ * Requires the Entra app registration to emit the optional `email` and
+ * `email_verified` (or `xms_edov`) ID-token claims; without them every
+ * Microsoft sign-in is refused.
+ */
+export function microsoftEmailFromProfile(
+  profile: MicrosoftEmailClaims,
+): string | undefined {
+  const email = profile.email;
+  if (!email || email.length > MAX_EMAIL_LENGTH || !EMAIL_SHAPE.test(email)) {
+    return undefined;
   }
-  return undefined;
+  const verified =
+    isTrue(profile.email_verified) ||
+    isTrue(profile.xms_edov) ||
+    Boolean(profile.verified_primary_email?.includes(email)) ||
+    Boolean(profile.verified_secondary_email?.includes(email));
+  return verified ? email : undefined;
+}
+
+/**
+ * `mapProfileToUser` for the Microsoft provider (host portal). Overrides
+ * Better Auth's own `emailVerified` so it reflects the same claims we vetted,
+ * including `xms_edov`, which its built-in check does not know about.
+ */
+export function microsoftUserFromProfile(profile: MicrosoftEmailClaims) {
+  const email = microsoftEmailFromProfile(profile);
+  return email ? { email, emailVerified: true } : { email: undefined };
 }
 
 /**

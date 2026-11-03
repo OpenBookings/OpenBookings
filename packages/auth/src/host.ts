@@ -9,7 +9,7 @@ import {
   advancedConfig,
   createAuthPool,
   magicLinkOptions,
-  microsoftEmailFromProfile,
+  microsoftUserFromProfile,
   sharedSessionOptions,
   stampMicrosoftTenantId,
   userAdditionalFields,
@@ -19,6 +19,7 @@ import { locationFromHeaders, type SignInLocation } from "./location";
 import { createStepUpHooks } from "./step-up-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import { refuseLastPasskeyRemoval } from "./last-passkey";
+import { reassignPropertiesFromFormerOwner } from "./owner-sync";
 
 export type { SignInLocation } from "./location";
 
@@ -335,7 +336,11 @@ export function createHostAuth(config: HostAuthConfig) {
               await assertNotLastOwner(org.id, member.id);
             }
           },
-          afterRemoveMember: async ({ user }) => {
+          afterRemoveMember: async ({ user, organization: org }) => {
+            await reassignPropertiesFromFormerOwner(pool, {
+              organizationId: org.id,
+              userId: user.id,
+            });
             await revokeUserSessions(user.id);
           },
           beforeUpdateMemberRole: async ({ member, newRole, organization: org }) => {
@@ -343,7 +348,11 @@ export function createHostAuth(config: HostAuthConfig) {
               await assertNotLastOwner(org.id, member.id);
             }
           },
-          afterUpdateMemberRole: async ({ user }) => {
+          afterUpdateMemberRole: async ({ user, organization: org }) => {
+            await reassignPropertiesFromFormerOwner(pool, {
+              organizationId: org.id,
+              userId: user.id,
+            });
             await revokeUserSessions(user.id);
           },
         },
@@ -379,6 +388,9 @@ export function createHostAuth(config: HostAuthConfig) {
           google: {
             clientId: config.googleClientId,
             clientSecret: config.googleClientSecret,
+            // Google reports a trustworthy email_verified; no session
+            // without it.
+            requireEmailVerification: true,
           },
         }
         : {}),
@@ -397,13 +409,12 @@ export function createHostAuth(config: HostAuthConfig) {
             disableDefaultScope: true,
             scope: ["openid", "profile", "email"],
             disableProfilePhoto: true,
-            mapProfileToUser: (profile: {
-              email?: string;
-              preferred_username?: string;
-              upn?: string;
-            }) => ({
-              email: microsoftEmailFromProfile(profile),
-            }),
+            // Refuse unverified emails outright (see microsoftEmailFromProfile):
+            // an unverified claim must not create a user or account row.
+            mapProfileToUser: microsoftUserFromProfile,
+            // Belt and braces: even if a profile slipped through unverified,
+            // no session is issued for it.
+            requireEmailVerification: true,
           },
         } : {}),
     },
