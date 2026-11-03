@@ -12,7 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { HostReservation } from "@/lib/reservations/shape";
+import type { GuestContact, HostReservation } from "@/lib/reservations/shape";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -62,27 +62,30 @@ function DetailSection({
 
 export function ReservationDetailBody({
   reservation,
+  contact,
 }: {
   reservation: HostReservation;
+  /** Null until the glass is broken: then whatever the guest shared. */
+  contact: GuestContact | null;
 }) {
   const nights = nightCount(reservation);
   return (
     <div className="flex flex-col gap-8">
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
-        {reservation.guestPhone ? (
+        {contact?.phone ? (
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-muted-foreground text-sm">Phone</span>
-            <a href={`tel:${reservation.guestPhone.replace(/[^\d+]/g, "")}`} className="text-right text-sm font-medium underline-offset-2 hover:underline">
-              {reservation.guestPhone}
+            <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`} className="text-right text-sm font-medium underline-offset-2 hover:underline">
+              {contact.phone}
             </a>
           </div>
         ) : null}
-        {reservation.guestAddress ? (
+        {contact?.address ? (
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-muted-foreground text-sm">Address</span>
             <address className="text-right text-sm font-medium not-italic">
-              {reservation.guestAddress.map((line) => (
+              {contact.address.map((line) => (
                 <span key={line} className="block">{line}</span>
               ))}
             </address>

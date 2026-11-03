@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { toHostReservation, type HostReservationRow } from "./shape";
+import { toGuestContact, toHostReservation, type HostReservationRow } from "./shape";
 
 const room = (id: string, extra: Partial<HostReservationRow["rooms"][number]> = {}): HostReservationRow["rooms"][number] => ({
   reservation_id: id,
@@ -21,8 +21,6 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   check_in_date: "2031-11-10",
   check_out_date: "2031-11-12",
   guest_name: "Emma de Vries",
-  guest_phone: null,
-  guest_address: null,
   guests: 2,
   total_amount: 206,
   timezone: "Europe/Amsterdam",
@@ -39,19 +37,10 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
 const NOW = new Date("2031-11-01T10:00:00Z");
 
 describe("toHostReservation", () => {
-  test("contact details the guest shared reach the host; none means null", () => {
-    const shared = toHostReservation(
-      row({
-        guest_phone: "+31 6 1234 5678",
-        guest_address: { line1: "Oudegracht 1", line2: null, postal_code: "3511 AA", city: "Utrecht", country: "NL" },
-      }),
-      NOW,
-    );
-    expect(shared.guestPhone).toBe("+31 6 1234 5678");
-    expect(shared.guestAddress).toEqual(["Oudegracht 1", "3511 AA Utrecht", "Netherlands"]);
-    const none = toHostReservation(row(), NOW);
-    expect(none.guestPhone).toBeNull();
-    expect(none.guestAddress).toBeNull();
+  test("the reservation itself carries no guest contact details", () => {
+    const r = toHostReservation(row(), NOW) as Record<string, unknown>;
+    expect("guestPhone" in r).toBe(false);
+    expect("guestAddress" in r).toBe(false);
   });
 
   test("a confirmed booking ahead: its rooms, policy and what the host can do", () => {
@@ -89,5 +78,17 @@ describe("toHostReservation", () => {
 
   test("goodwill is still possible on a no-show", () => {
     expect(toHostReservation(row({ status: "no_show" }), new Date("2031-11-12T10:00:00Z")).actions).toEqual(["goodwill_refund"]);
+  });
+});
+
+describe("toGuestContact", () => {
+  test("contact details the guest shared; none means null", () => {
+    expect(
+      toGuestContact({
+        guest_phone: "+31 6 1234 5678",
+        guest_address: { line1: "Oudegracht 1", line2: null, postal_code: "3511 AA", city: "Utrecht", country: "NL" },
+      }),
+    ).toEqual({ phone: "+31 6 1234 5678", address: ["Oudegracht 1", "3511 AA Utrecht", "Netherlands"] });
+    expect(toGuestContact({ guest_phone: null, guest_address: null })).toEqual({ phone: null, address: null });
   });
 });

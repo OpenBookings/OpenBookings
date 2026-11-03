@@ -12,6 +12,8 @@ import {
   ReservationQuickActions,
 } from "@/components/dashboard/reservation-detail-panel";
 import { HostBookingActions } from "@/components/dashboard/host-booking-actions";
+import { BreakTheGlass } from "@/components/dashboard/break-the-glass";
+import { breakGlass } from "@/lib/reservations/break-glass";
 import {
   Drawer,
   DrawerClose,
@@ -22,7 +24,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import type { ReservationBuckets, ReservationSummary } from "@/components/dashboard/reservation-types";
-import type { HostReservation } from "@/lib/reservations/shape";
+import type { GuestContact, HostReservation } from "@/lib/reservations/shape";
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -59,7 +61,34 @@ export function ReservationsView({
   const detail = selectedId === null ? null : (reservations.find((r) => r.id === selectedId) ?? null);
   const loading = false;
 
+  // Break the glass: the booking whose details are open, with the contact
+  // details fetched for it. Any other booking (or closing the panel) seals
+  // the glass again.
+  const [opened, setOpened] = React.useState<{ id: string; contact: GuestContact } | null>(null);
+  const [breaking, setBreaking] = React.useState(false);
+  const [glassError, setGlassError] = React.useState<{ id: string; message: string } | null>(null);
+  const sealed = !detail || opened?.id !== detail.id;
+
+  const handleBreakGlass = async () => {
+    if (!detail) return;
+    const id = detail.id;
+    setBreaking(true);
+    setGlassError(null);
+    try {
+      const result = await breakGlass(id);
+      if ("contact" in result) setOpened({ id, contact: result.contact });
+      else setGlassError({ id, message: result.error });
+    } catch {
+      setGlassError({ id, message: "Something went wrong. Please try again." });
+    } finally {
+      setBreaking(false);
+    }
+  };
+
   const select = (id: string | null) => {
+    // Every change of booking, closing included, seals the glass again.
+    setOpened(null);
+    setGlassError(null);
     const params = new URLSearchParams(searchParams);
     if (id === null) {
       params.delete("id");
@@ -144,7 +173,14 @@ export function ReservationsView({
                 Reservation not found.
               </p>
             ) : (
-              <ReservationDetailBody reservation={detail} />
+              <BreakTheGlass
+                sealed={sealed}
+                busy={breaking}
+                error={glassError?.id === detail.id ? glassError.message : null}
+                onBreak={handleBreakGlass}
+              >
+                <ReservationDetailBody reservation={detail} contact={sealed ? null : opened!.contact} />
+              </BreakTheGlass>
             )}
           </div>
           {!loading && detail && (
