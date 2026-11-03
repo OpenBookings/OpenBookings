@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SlidersHorizontal } from "lucide-react";
 import { GlassBackdrop } from "@/components/GlassBackdrop";
 import type { Backdrop } from "@openbookings/images";
+import { useBackdrop } from "@openbookings/images/react";
 import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
 import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -28,7 +29,8 @@ const PRICE_MODES: { mode: PriceMode; label: string }[] = [
   { mode: "night", label: "Per night" },
 ];
 
-function SearchPageInner({ backdrop }: { backdrop: Backdrop | null }) {
+function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
+  const backdrop = useBackdrop(backdrops);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -275,10 +277,10 @@ function SearchPageInner({ backdrop }: { backdrop: Backdrop | null }) {
   );
 }
 
-export function SearchClient({ backdrop }: { backdrop: Backdrop | null }) {
+export function SearchClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
   return (
     <Suspense>
-      <SearchPageInner backdrop={backdrop} />
+      <SearchPageInner backdrops={backdrops} />
     </Suspense>
   );
 }

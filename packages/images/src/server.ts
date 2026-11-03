@@ -3,7 +3,11 @@ import { BACKDROP_MANIFEST_URL, parseBackdropManifest, pickBackdrop, type Backdr
 const REVALIDATE_SECONDS = 3600;
 const TIMEOUT_MS = 2000;
 
-async function loadBackdrops(): Promise<Backdrop[]> {
+/**
+ * Server-only. Every backdrop in the manifest. Pages that must stay cacheable
+ * pass this to `useBackdrop`, which picks one in the browser.
+ */
+export async function getBackdrops(): Promise<Backdrop[]> {
   try {
     // `next` is Next.js's fetch extension: the manifest is cached for an hour
     // and refreshed in the background. Cast because this package does not
@@ -22,7 +26,10 @@ async function loadBackdrops(): Promise<Backdrop[]> {
  * Server-only. The backdrop for this request, from the id in the visitor's
  * cookie. When `persist` is true, render `<RememberBackdrop>` so the browser
  * stores the new pick.
+ *
+ * Reading the cookie makes the page per-visitor, so only use this on pages
+ * that are dynamic anyway. Public pages use `getBackdrops` + `useBackdrop`.
  */
 export async function getBackdrop(storedId: string | undefined): Promise<{ backdrop: Backdrop | null; persist: boolean }> {
-  return pickBackdrop(await loadBackdrops(), storedId);
+  return pickBackdrop(await getBackdrops(), storedId);
 }

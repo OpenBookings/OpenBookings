@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import Image from "next/image";
 import { isTransformable, type Backdrop } from "@openbookings/images";
+import { useBackdrop } from "@openbookings/images/react";
 
 import { SearchBarOverlay } from "@/components/search/SearchBar";
 import { Nav } from "@/components/nav";
@@ -20,7 +21,8 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   SOCIAL_ACCOUNT_ALREADY_LINKED: "This account is already linked to another user.",
 };
 
-export function HomeClient({ backdrop }: { backdrop: Backdrop | null }) {
+export function HomeClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
+  const backdrop = useBackdrop(backdrops);
   const router = useRouter();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");

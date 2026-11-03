@@ -1,15 +1,10 @@
-import { cookies } from "next/headers";
-import { BACKDROP_COOKIE } from "@openbookings/images";
-import { getBackdrop } from "@openbookings/images/server";
-import { RememberBackdrop } from "@openbookings/images/react";
+import { getBackdrops } from "@openbookings/images/server";
 import { SearchClient } from "./_components/SearchClient";
 
+// The shell is the same for every visitor (results load in the browser from
+// /api/query), so Cloudflare can cache it.
+export const revalidate = 3600;
+
 export default async function SearchPage() {
-  const { backdrop, persist } = await getBackdrop((await cookies()).get(BACKDROP_COOKIE)?.value);
-  return (
-    <>
-      <SearchClient backdrop={backdrop} />
-      {persist && backdrop ? <RememberBackdrop id={backdrop.id} /> : null}
-    </>
-  );
+  return <SearchClient backdrops={await getBackdrops()} />;
 }

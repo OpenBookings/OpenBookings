@@ -1,15 +1,10 @@
-import { cookies } from "next/headers";
-import { BACKDROP_COOKIE } from "@openbookings/images";
-import { getBackdrop } from "@openbookings/images/server";
-import { RememberBackdrop } from "@openbookings/images/react";
+import { getBackdrops } from "@openbookings/images/server";
 import { HomeClient } from "./_components/HomeClient";
 
+// Same for every visitor, so Cloudflare can cache it. Matches the backdrop
+// manifest's own refresh time.
+export const revalidate = 3600;
+
 export default async function Home() {
-  const { backdrop, persist } = await getBackdrop((await cookies()).get(BACKDROP_COOKIE)?.value);
-  return (
-    <>
-      <HomeClient backdrop={backdrop} />
-      {persist && backdrop ? <RememberBackdrop id={backdrop.id} /> : null}
-    </>
-  );
+  return <HomeClient backdrops={await getBackdrops()} />;
 }

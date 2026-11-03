@@ -118,6 +118,14 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Public pages are cached at Cloudflare, so nothing under /api may be:
+      // these answers are per-user (session, bookings, messages) or must be
+      // live (prices at checkout). A handler that sets its own Cache-Control
+      // still wins over this default.
+      {
+        source: "/api/:path*",
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      },
     ];
   },
 };
