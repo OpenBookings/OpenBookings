@@ -135,4 +135,33 @@ describe("resolveCallbackPath", () => {
   test("an encoded slash is a literal path segment, not an origin change", () => {
     expect(resolveCallbackPath("/%2f%2fevil.example", FALLBACK)).toBe("/%2f%2fevil.example")
   })
+
+  // The URL parser removes dot-segments, so each of these passes the raw
+  // "//" check and then normalises to a protocol-relative "//evil.example".
+  test("dot-segments that normalise to a protocol-relative path fall back", () => {
+    for (const raw of [
+      "/.//evil.example",
+      "/./\\/evil.example",
+      "/..//evil.example",
+      "/a/..//evil.example",
+      "/a/../..//evil.example",
+      "/%2e//evil.example",
+      "/%2E%2E//evil.example",
+      "/.%2e//evil.example",
+      "/.//evil.example?next=/x#y",
+    ]) {
+      expect(resolveCallbackPath(raw, FALLBACK)).toBe(FALLBACK)
+    }
+  })
+
+  test("dot-segments that stay on a single-slash path are still resolved", () => {
+    expect(resolveCallbackPath("/./dashboard", FALLBACK)).toBe("/dashboard")
+    expect(resolveCallbackPath("/a/../dashboard?tab=a", FALLBACK)).toBe("/dashboard?tab=a")
+  })
+
+  test("no accepted result is ever protocol-relative", () => {
+    for (const raw of ["/.//x", "/..//x", "/a/..//x", "/%2e//x", "//x", "/\\x", "/ok"]) {
+      expect(resolveCallbackPath(raw, FALLBACK).startsWith("//")).toBe(false)
+    }
+  })
 })
