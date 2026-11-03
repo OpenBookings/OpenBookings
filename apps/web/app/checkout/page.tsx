@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import { CheckoutClient } from './_components/CheckoutClient';
 import type { GateViewer } from './_components/CheckoutGate';
 import {
@@ -32,7 +31,7 @@ export const dynamic = 'force-dynamic';
  */
 async function getViewer(): Promise<GateViewer | null> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await getServerSession();
     if (!session?.user?.email) return null;
     return { email: session.user.email, name: session.user.name ?? null };
   } catch {

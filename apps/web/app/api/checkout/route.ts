@@ -1,7 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
-import { headers } from 'next/headers';
 import { createBookingCheckout } from '@openbookings/stripe';
-import { auth } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import {
   BookingNotFoundError,
   getBookingSummary,
@@ -195,9 +194,10 @@ export async function POST(request: Request) {
   // UI — the session cookie read on this side is the only thing that actually
   // decides. A request forged straight at this route skips the gate entirely
   // and still has to get past this line.
-  const authSession = await auth.api
-    .getSession({ headers: await headers() })
-    .catch(() => null);
+  // getServerSession is sessionForApp over the raw read: a host-app cookie, or
+  // a session row stamped for the other portal, must not be able to start a
+  // guest checkout.
+  const authSession = await getServerSession().catch(() => null);
   if (!authSession?.user?.email) {
     return failure('auth_required', 401);
   }

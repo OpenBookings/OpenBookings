@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsRoom } from "@openbookings/authz";
 import { purgePropertyPage } from "@/lib/purge-property-page";
@@ -24,7 +24,7 @@ async function ownedImage(session: Parameters<typeof userOwnsRoom>[0], imageId: 
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
@@ -60,7 +60,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 }
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;

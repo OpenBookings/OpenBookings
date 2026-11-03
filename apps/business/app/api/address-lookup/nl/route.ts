@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth";
 import {
   parseHouseNumber,
   parsePdokDocs,
@@ -16,7 +16,8 @@ import {
  * Signed-in hosts only, so this is not an open relay to a public API.
  */
 export async function GET(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  // sessionForApp via getServerSession: a guest-app cookie must not pass here.
+  const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
