@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { DbRoom, DbRatePlan } from "./constants";
 import { TIER_SUMMARIES } from "@openbookings/pricing";
+import { useRoomLikes } from "./use-room-likes";
 
 type ViewMode = "images" | "rates";
 
@@ -713,7 +714,7 @@ type StageProps = {
   dir: number;
   onNavigate: (i: number) => void;
   viewMode: ViewMode;
-  liked: Set<number>;
+  liked: Set<string>;
   onToggleLike: () => void;
   onViewRates: () => void;
   quantities: Record<string, number>;
@@ -812,7 +813,7 @@ function RoomsStage({
                 onImageIndex={setImageIndex}
                 viewMode={viewMode}
                 ratesOffset={ratesOffset}
-                liked={liked.has(activeIndex)}
+                liked={liked.has(room.id)}
                 onToggleLike={onToggleLike}
                 onViewRates={onViewRates}
                 quantities={quantities}
@@ -843,7 +844,7 @@ export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; rates
   const [viewMode, setViewMode] = useState<ViewMode>("images");
   const [activeIndex, setActiveIndex] = useState(0);
   const [dir, setDir] = useState(1);
-  const [liked, setLiked] = useState<Set<number>>(new Set());
+  const likes = useRoomLikes(rooms.map((r) => r.id));
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   const navigate = useCallback((i: number) => {
@@ -852,14 +853,11 @@ export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; rates
     setActiveIndex(i);
   }, [activeIndex, rooms.length]);
 
+  const { toggle } = likes;
+  const activeRoomId = rooms[activeIndex]?.id;
   const toggleLike = useCallback(() => {
-    setLiked((prev) => {
-      const s = new Set(prev);
-      if (s.has(activeIndex)) s.delete(activeIndex);
-      else s.add(activeIndex);
-      return s;
-    });
-  }, [activeIndex]);
+    if (activeRoomId) toggle(activeRoomId);
+  }, [activeRoomId, toggle]);
 
   const setQty = useCallback((id: string, val: number) => {
     if (val < 0) return;
@@ -909,13 +907,14 @@ export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; rates
           dir={dir}
           onNavigate={navigate}
           viewMode={viewMode}
-          liked={liked}
+          liked={likes.liked}
           onToggleLike={toggleLike}
           onViewRates={() => setViewMode("rates")}
           quantities={quantities}
           onQtyChange={setQty}
           ratesConfirmed={ratesConfirmed}
         />
+        {likes.signIn}
       </section>
     </MotionConfig>
   );

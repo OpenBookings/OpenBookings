@@ -13,6 +13,20 @@ import { PoliciesSection }  from "./_components/PoliciesSection";
 import { LocationSection }  from "./_components/LocationSection";
 import { FootnoteSection }  from "./_components/FootnoteSection";
 
+// The page is the same for every visitor (the nav loads the session in the
+// browser), so it is rendered once and cached, here and at Cloudflare.
+// Host edits refresh it straight away through /api/revalidate; this is the
+// backstop. Prices are "for today", so a page cached just before midnight can
+// show yesterday's rate for up to five minutes. Checkout prices live.
+export const revalidate = 300;
+
+// No slugs are rendered at build time (the build has no database). An empty
+// list still makes the route cacheable: each slug is rendered on its first
+// request and cached from then on.
+export function generateStaticParams() {
+  return [];
+}
+
 export default async function HotelPage({
   params,
 }: {

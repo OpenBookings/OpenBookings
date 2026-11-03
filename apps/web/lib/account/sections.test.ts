@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { ACCOUNT_SECTIONS, activeSection } from "./sections";
 
 describe("account sections", () => {
-  test("lists the six tabs in order", () => {
+  test("lists the seven tabs in order", () => {
     expect(ACCOUNT_SECTIONS.map((s) => s.title)).toEqual([
       "Bookings",
       "Messages",
+      "Likes",
       "Personal details",
       "Sign-in & security",
       "Privacy & data",

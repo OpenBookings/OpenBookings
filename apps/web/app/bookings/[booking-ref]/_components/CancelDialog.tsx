@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CalendarX2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { GLASS_ICON_BUTTON, Hint } from './hint';
 import { guestCancelRooms, guestPreviewCancel } from '../_lib/actions';
 
 const euros = new Intl.NumberFormat('en-NL', { style: 'currency', currency: 'EUR' });
@@ -18,10 +21,17 @@ export function CancelDialog({
   bookingId,
   reservationIds,
   label,
+  hint,
+  small = false,
 }: {
   bookingId: string;
   reservationIds: string[] | null;
+  /** The button reads "Cancel {label}". */
   label: string;
+  /** What cancelling would mean right now, shown on hover. */
+  hint?: string | null;
+  /** For a button inside a room row. */
+  small?: boolean;
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -64,7 +74,7 @@ export function CancelDialog({
 
   if (step === 'confirm' && preview) {
     return (
-      <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-sm">
+      <div className="w-full basis-full rounded-xl border border-white/15 bg-white/5 p-4 text-sm">
         <p className="font-medium text-white">
           {preview.refund > 0
             ? `You'll get ${euros.format(preview.refund)} back. The hotel keeps ${euros.format(preview.retained)}.`
@@ -82,18 +92,22 @@ export function CancelDialog({
     );
   }
 
+  const busy = step === 'loading' || step === 'cancelling';
+  const name = `Cancel ${label}`;
   return (
-    <div className="flex flex-col gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="self-start"
-        disabled={step === 'loading' || step === 'cancelling'}
-        onClick={open}
-      >
-        {step === 'loading' ? 'Working out your refund…' : step === 'cancelling' ? 'Cancelling…' : `Cancel ${label}`}
-      </Button>
-      {message && <p className="text-sm text-white/70">{message}</p>}
-    </div>
+    <>
+      <Hint label={name} text={hint}>
+        <Button
+          variant="ghost"
+          aria-label={busy ? (step === 'loading' ? 'Checking your refund' : 'Cancelling') : name}
+          className={cn(GLASS_ICON_BUTTON, small && 'size-8 rounded-lg text-white/75')}
+          disabled={busy}
+          onClick={open}
+        >
+          {busy ? <Loader2 aria-hidden className="animate-spin" /> : small ? <X aria-hidden /> : <CalendarX2 aria-hidden />}
+        </Button>
+      </Hint>
+      {message && <p className="w-full basis-full text-sm text-white/70">{message}</p>}
+    </>
   );
 }

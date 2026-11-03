@@ -20,6 +20,7 @@ export const GUEST_BOOKING_SQL = `
     p.timezone,
     to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
+    to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
     b.confirmed_at,
     COALESCE((SELECT SUM(rf.amount) FROM refunds rf
               WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::float8 AS refunded,

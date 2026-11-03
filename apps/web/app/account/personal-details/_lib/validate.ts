@@ -1,9 +1,11 @@
 /**
- * Validation for the Personal details page. Each section saves on its own,
- * so each has its own parser. Plain functions, shared by the server action
- * (the control) and nothing else: the browser's own `required`/`maxLength`
- * are a convenience.
+ * Validation for the Personal details page. The page saves everything with
+ * one button; `parseDetails` runs the per-field parsers and reports all their
+ * errors at once. Plain functions, shared by the server action (the control)
+ * and nothing else: the browser's own `required`/`maxLength` are a convenience.
  */
+
+import { joinPhone } from "./phone";
 
 export type Address = {
   line1: string;
@@ -40,16 +42,14 @@ export function parseName(form: FormData): Parsed<string, "name"> {
   return { ok: true, value: name };
 }
 
-const PHONE_SHAPE = /^\+?[0-9 ()-]{6,20}$/;
+export const PHONE_ERROR = "Check the number and the country code.";
 
+/** `phone` is the number as typed, `phoneCountry` the picked country; stored in international format. */
 export function parsePhone(form: FormData): Parsed<string | null, "phone"> {
   const phone = text(form, "phone");
   if (!phone) return { ok: true, value: null };
-  const digits = phone.replace(/\D/g, "").length;
-  if (!PHONE_SHAPE.test(phone) || digits < 6) {
-    return { ok: false, errors: { phone: "Enter a phone number with country code, like +31 6 1234 5678." } };
-  }
-  return { ok: true, value: phone };
+  const joined = joinPhone(phone, text(form, "phoneCountry").toUpperCase());
+  return joined ? { ok: true, value: joined } : { ok: false, errors: { phone: PHONE_ERROR } };
 }
 
 type AddressField = "line1" | "line2" | "postalCode" | "city" | "country";
@@ -84,4 +84,24 @@ export function parseAddress(form: FormData): Parsed<Address | null, AddressFiel
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return { ok: true, value: { ...raw, line2: raw.line2 || null } };
+}
+
+export type Details = { name: string; phone: string | null; address: Address | null };
+
+/** The whole form: valid only when every part is, with every part's errors. */
+export function parseDetails(form: FormData): Parsed<Details, "name" | "phone" | AddressField> {
+  const name = parseName(form);
+  const phone = parsePhone(form);
+  const address = parseAddress(form);
+  if (name.ok && phone.ok && address.ok) {
+    return { ok: true, value: { name: name.value, phone: phone.value, address: address.value } };
+  }
+  return {
+    ok: false,
+    errors: {
+      ...(name.ok ? {} : name.errors),
+      ...(phone.ok ? {} : phone.errors),
+      ...(address.ok ? {} : address.errors),
+    },
+  };
 }

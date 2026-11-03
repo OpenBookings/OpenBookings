@@ -1,13 +1,12 @@
 import {
   allowedActions,
   checkInClosesAt,
-  describePolicy,
-  POLICY_VERSION,
   TIER_LABELS,
   type BookingStatus,
   type CancellationTier,
   type NightValue,
 } from '@openbookings/pricing';
+import { buildTimeline, formatWhen, type Timeline } from './timeline';
 
 /** One row of the guest booking query (load.ts). Timestamps arrive as ISO text. */
 export type GuestBookingRow = {
@@ -20,6 +19,7 @@ export type GuestBookingRow = {
   timezone: string;
   check_in_time: string | null;
   check_in_until: string | null;
+  check_out_time: string;
   confirmed_at: string | null;
   /** Refunded so far (rows that did not fail), euros. */
   refunded: number;
@@ -38,7 +38,8 @@ export type GuestBookingRoom = {
   reservationId: string;
   roomName: string;
   tierLabel: string;
-  policyLines: string[];
+  /** What cancelling this room would mean right now. */
+  cancelHint: string;
   cancelledAt: string | null;
   paid: number;
 };
@@ -55,33 +56,26 @@ export type GuestBooking = {
   totalPaid: number;
   refunded: number;
   rooms: GuestBookingRoom[];
+  /** What cancelling the whole booking would mean right now. */
+  cancelHint: string;
+  timeline: Timeline;
 };
 
 const cents = (euros: number) => Math.round(euros * 100);
-const date = (v: string | null) => (v === null ? null : new Date(v));
 
 export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
   const snapshotted = row.rooms.length > 0 && row.rooms.every((r) => r.cancellation_tier && r.check_in_at);
   const rooms = row.rooms.map((r): GuestBookingRoom => {
     const tier = r.cancellation_tier ?? 'standard';
-    const checkInAt = date(r.check_in_at);
+    const freeUntil = tier === 'non_refundable' || !r.full_refund_until ? null : new Date(r.full_refund_until);
     return {
       reservationId: r.reservation_id,
       roomName: r.room_name,
       tierLabel: TIER_LABELS[tier],
-      policyLines: checkInAt
-        ? describePolicy(
-            {
-              tier,
-              confirmedAt: date(row.confirmed_at) ?? checkInAt,
-              checkInAt,
-              fullRefundUntil: date(r.full_refund_until),
-              policyVersion: POLICY_VERSION,
-            },
-            row.timezone,
-            now,
-          )
-        : [],
+      cancelHint:
+        freeUntil && freeUntil.getTime() >= now.getTime()
+          ? `Full refund until ${formatWhen(freeUntil, row.timezone)}.`
+          : "The room price isn't refunded. Tourist tax is.",
       cancelledAt: r.cancelled_at,
       paid: r.nights.reduce((sum, n) => sum + cents(n.price) + cents(n.touristTax), 0) / 100,
     };
@@ -116,5 +110,12 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
     totalPaid: rooms.reduce((sum, r) => sum + cents(r.paid), 0) / 100,
     refunded: Number(row.refunded),
     rooms,
+    cancelHint: bookingCancelHint(rooms),
+    timeline: buildTimeline(row, now),
   };
+}
+
+function bookingCancelHint(rooms: GuestBookingRoom[]): string {
+  const hints = new Set(rooms.filter((r) => !r.cancelledAt).map((r) => r.cancelHint));
+  return hints.size === 1 ? [...hints][0] : 'The refund differs per room.';
 }
