@@ -20,6 +20,7 @@ import {
   pricedRatePlanIds,
 } from "./rates-confirmation";
 import { VERSION_SQL } from "./ari-query";
+import { dateRange, isoDate, MAX_RANGE_DAYS } from "./date-range";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
 import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
@@ -39,15 +40,6 @@ const ROUTE = "/dashboard/listings/rates-availability";
 export type ActionResult =
   | { ok: true; affected: number }
   | { ok: false; error: string; code?: typeof RATES_CONFIRMATION_REQUIRED };
-
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
-
-const dateRange = z
-  .object({ startDate: isoDate, endDate: isoDate })
-  .refine((v) => v.endDate >= v.startDate, {
-    message: "End date must not be before the start date",
-    path: ["endDate"],
-  });
 
 async function requireSession() {
   const session = await getServerSession();
@@ -562,7 +554,7 @@ export async function reopenRoomType(
 // Publish — staged edits, applied as one unit
 // ─────────────────────────────────────────────
 
-const dates = z.array(isoDate).min(1).max(370);
+const dates = z.array(isoDate).min(1).max(MAX_RANGE_DAYS);
 
 /**
  * One staged edit. The grid stages per cell; each change carries the set of
