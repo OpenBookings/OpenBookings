@@ -3,6 +3,7 @@ import { query, queryOne } from "@openbookings/db";
 import { getThreadForParticipant, type SessionLike, type ThreadRow } from "@openbookings/authz";
 import { detectCircumvention } from "./circumvention";
 import { deliverMessageToRecipient, mintRealtimeToken } from "./realtime";
+import { REDACTED_MESSAGE_BODY } from "./redaction";
 import { CIRCUMVENTION_WARNING, MAX_BODY_LENGTH, type MessageRow } from "./types";
 
 /**
@@ -287,8 +288,10 @@ export function createMessagingRoutes(config: MessagingRoutesConfig) {
    * older than the window get their messages anonymized: sender_id is NULL'd
    * (see migration 0004) and body replaced with a placeholder. flagged_reason
    * and all message_threads metadata are left intact for audit purposes.
-   * Idempotent: only touches rows that aren't already anonymized
-   * (sender_id IS NOT NULL), so re-running is safe.
+   * Idempotent: only touches rows whose body is not already the placeholder,
+   * so re-running is safe. Not keyed on sender_id: a deleted guest's messages
+   * have sender_id NULL from the moment of deletion, and keying on it would
+   * skip them (and their text) forever.
    */
   async function runRetention(req: Request): Promise<Response> {
     if (!bearerAuthorized(req, process.env.CRON_SECRET)) {
@@ -299,13 +302,13 @@ export function createMessagingRoutes(config: MessagingRoutesConfig) {
 
     const anonymized = await query<{ id: string }>(
       `UPDATE messages m
-       SET sender_id = NULL, body = '[message removed — retention period expired]'
+       SET sender_id = NULL, body = $2::text
        FROM message_threads t
        WHERE m.thread_id = t.id
-         AND m.sender_id IS NOT NULL
+         AND m.body <> $2::text
          AND t.updated_at < now() - make_interval(days => $1)
        RETURNING m.id`,
-      [retentionDays],
+      [retentionDays, REDACTED_MESSAGE_BODY],
     );
 
     return json({ anonymizedCount: anonymized.length, retentionDays });
