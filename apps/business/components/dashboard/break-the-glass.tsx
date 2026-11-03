@@ -1,8 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { Check, Copy, LockKeyhole, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { GuestContact } from "@/lib/reservations/shape";
@@ -92,30 +90,24 @@ function OpenedContact({ contact, at }: { contact: GuestContact; at: Date }) {
       {contact.phone ? (
         <div className="flex items-baseline justify-between gap-4">
           <span className="text-sm text-muted-foreground">Phone</span>
-          <span className="flex items-center gap-1">
-            <a
-              href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
-              className="text-sm font-medium tabular-nums underline-offset-2 hover:underline"
-            >
-              {contact.phone}
-            </a>
-            <CopyButton value={contact.phone} label="Copy phone number" />
-          </span>
+          <a
+            href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
+            className="text-sm font-medium tabular-nums underline-offset-2 hover:underline"
+          >
+            {contact.phone}
+          </a>
         </div>
       ) : null}
       {contact.address ? (
         <div className="flex items-baseline justify-between gap-4">
           <span className="text-sm text-muted-foreground">Address</span>
-          <span className="flex items-start gap-1">
-            <address className="text-right text-sm font-medium not-italic">
-              {contact.address.map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
-            </address>
-            <CopyButton value={contact.address.join("\n")} label="Copy address" />
-          </span>
+          <address className="text-right text-sm font-medium not-italic">
+            {contact.address.map((line) => (
+              <span key={line} className="block">
+                {line}
+              </span>
+            ))}
+          </address>
         </div>
       ) : null}
       {nothingShared ? (
@@ -126,28 +118,5 @@ function OpenedContact({ contact, at }: { contact: GuestContact; at: Date }) {
         Opened by you at {timeLabel.format(at)} and logged. Hidden again when you close the panel.
       </p>
     </>
-  );
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = React.useState(false);
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      aria-label={label}
-      className="text-muted-foreground"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          toast.error("Couldn't copy. Select the text instead.");
-        }
-      }}
-    >
-      {copied ? <Check /> : <Copy />}
-    </Button>
   );
 }

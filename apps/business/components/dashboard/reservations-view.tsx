@@ -131,7 +131,7 @@ export function ReservationsView({
             "data-[vaul-drawer-direction=right]:inset-y-2",
             "data-[vaul-drawer-direction=right]:right-2",
             "data-[vaul-drawer-direction=right]:h-auto",
-            "data-[vaul-drawer-direction=right]:w-[min(600px,calc(100vw-1rem))]",
+            "data-[vaul-drawer-direction=right]:w-[min(480px,calc(100vw-1rem))]",
             "data-[vaul-drawer-direction=right]:sm:max-w-none",
             "data-[vaul-drawer-direction=right]:overflow-hidden",
             "data-[vaul-drawer-direction=right]:rounded-lg",
