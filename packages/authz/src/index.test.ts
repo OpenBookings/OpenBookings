@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  PROPERTY_EDIT_ACCESS_SQL,
   propertyReadAccessSql,
   getHostScopedDb,
   getThreadForParticipant,
@@ -214,5 +215,25 @@ describe("propertyReadAccessSql", () => {
 
   test("refuses anything but a bind parameter", () => {
     expect(() => propertyReadAccessSql("'x' OR 1=1")).toThrow("Not a bind parameter");
+  });
+});
+
+describe("legacy owner_user_id", () => {
+  // Regression: owner_user_id is stamped at onboarding and never cleared, so a
+  // standalone `p.owner_user_id = $n` branch let a removed or demoted founder
+  // keep edit, cancel and refund rights. It may only count for pre-org rows.
+  const standalone = /(?<!organization_id IS NULL AND )p\.owner_user_id = \$\d+/;
+
+  test("edit predicate only trusts owner_user_id when the property has no org", () => {
+    expect(PROPERTY_EDIT_ACCESS_SQL).toContain("(p.organization_id IS NULL AND p.owner_user_id = $2)");
+    expect(PROPERTY_EDIT_ACCESS_SQL.replace("(p.organization_id IS NULL AND p.owner_user_id = $2)", "")).not.toMatch(
+      standalone,
+    );
+  });
+
+  test("read predicate only trusts owner_user_id when the property has no org", () => {
+    const sql = propertyReadAccessSql("$1");
+    expect(sql).toContain("(p.organization_id IS NULL AND p.owner_user_id = $1)");
+    expect(sql.replace("(p.organization_id IS NULL AND p.owner_user_id = $1)", "")).not.toMatch(standalone);
   });
 });

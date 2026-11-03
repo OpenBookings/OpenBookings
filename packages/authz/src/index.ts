@@ -17,9 +17,9 @@ export {
 
 /**
  * Ownership / authorization checks. Single choke point per resource type:
- * endpoints call these, never inline their own ownership SQL. Ownership is
- * currently `properties.owner_user_id` (single host user); if this moves to
- * org-based ownership later, only this package changes — call sites don't.
+ * endpoints call these, never inline their own ownership SQL. Access comes
+ * from membership of the property's organization; `properties.owner_user_id`
+ * only counts for legacy rows that have no organization yet.
  *
  * All checks fail closed: unknown ids, NULL owners, and missing sessions are
  * all "not owned".
@@ -43,8 +43,11 @@ function ownerId(session: SessionLike | null | undefined): string | null {
 /**
  * Edit access to a property `p` for user `$2` (task 11). Two paths:
  *
- * - legacy direct ownership (owner_user_id), kept while pre-org rows and
- *   call sites migrate;
+ * - legacy direct ownership (owner_user_id), ONLY for pre-org rows
+ *   (organization_id IS NULL). Once a property belongs to an org, a stale
+ *   owner_user_id must never grant anything: it is set at onboarding and a
+ *   removed or demoted founder would otherwise keep full edit, cancel and
+ *   refund rights;
  * - org membership on the property's organization: owner/admin are
  *   org-wide; manager is property-scoped and needs a property_access row.
  *   frontdesk/finance never get edit access through this predicate — their
@@ -55,7 +58,7 @@ function ownerId(session: SessionLike | null | undefined): string | null {
  * nothing.
  */
 export const PROPERTY_EDIT_ACCESS_SQL = `(
-  p.owner_user_id = $2
+  (p.organization_id IS NULL AND p.owner_user_id = $2)
   OR EXISTS (
     SELECT 1 FROM "member" m
     WHERE m."organizationId" = p.organization_id
@@ -74,7 +77,8 @@ export const PROPERTY_EDIT_ACCESS_SQL = `(
  * Read access to a property `p` for the user bound at `userParam` (e.g.
  * `"$1"`). Wider than PROPERTY_EDIT_ACCESS_SQL: every org role can read, and
  * the property-scoped roles (manager, frontdesk) still need a
- * property_access row. Legacy direct ownership counts too. Used where a
+ * property_access row. Legacy direct ownership counts only for pre-org rows
+ * (organization_id IS NULL), as in PROPERTY_EDIT_ACCESS_SQL. Used where a
  * member only looks things up — the support panel's booking picker and the
  * support bot's host tools — never to authorize a write.
  */
@@ -87,7 +91,7 @@ export function propertyReadAccessSql(userParam: string): string {
     (role) => !PROPERTY_SCOPED_ROLES.includes(role),
   );
   return `(
-  p.owner_user_id = ${userParam}
+  (p.organization_id IS NULL AND p.owner_user_id = ${userParam})
   OR EXISTS (
     SELECT 1 FROM "member" m
     WHERE m."organizationId" = p.organization_id
