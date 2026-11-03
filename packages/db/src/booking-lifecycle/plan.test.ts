@@ -115,6 +115,19 @@ describe("planGoodwill", () => {
   test("nothing left, or nothing asked → nothing to refund", () => {
     expect(planGoodwill({ paid: 618, refunded: 618, amount: 10 })).toEqual({ ok: false, error: "nothing_to_refund" });
     expect(planGoodwill({ paid: 618, refunded: 0, amount: 0 })).toEqual({ ok: false, error: "nothing_to_refund" });
+    expect(planGoodwill({ paid: 618, refunded: 0, amount: -5 })).toEqual({ ok: false, error: "nothing_to_refund" });
+  });
+
+  // NaN <= 0 is false, so a `<= 0` guard let it through to a numeric column.
+  test("NaN and Infinity are rejected, never planned", () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(planGoodwill({ paid: 618, refunded: 0, amount })).toEqual({ ok: false, error: "invalid_amount" });
+    }
+  });
+
+  test("a NaN in the booking's own totals refunds nothing rather than NaN", () => {
+    expect(planGoodwill({ paid: Number.NaN, refunded: 0, amount: 10 })).toEqual({ ok: false, error: "nothing_to_refund" });
+    expect(planGoodwill({ paid: 618, refunded: Number.NaN, amount: 10 })).toEqual({ ok: false, error: "nothing_to_refund" });
   });
 });
 

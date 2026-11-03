@@ -36,6 +36,7 @@ const ERRORS: Record<string, string> = {
   already_cancelled: "Already cancelled.",
   not_found: "Booking not found.",
   nothing_to_refund: "There is nothing left to refund on this booking.",
+  invalid_amount: "Enter an amount greater than zero.",
 };
 const REFUND_FAILED =
   "Done, but the refund didn't go through. Use Retry refund, or contact support if it keeps failing.";

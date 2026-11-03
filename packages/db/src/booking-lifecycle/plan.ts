@@ -32,7 +32,12 @@ export type PlannedRefund = {
   refund: Amounts;
 };
 
-export type PlanError = "not_found" | "already_cancelled" | "not_allowed" | "nothing_to_refund";
+export type PlanError =
+  | "not_found"
+  | "already_cancelled"
+  | "not_allowed"
+  | "nothing_to_refund"
+  | "invalid_amount";
 type Planned<T> = ({ ok: true } & T) | { ok: false; error: PlanError };
 
 const cents = (euros: number) => Math.round(euros * 100);
@@ -136,10 +141,18 @@ export function planEarlyDeparture(i: {
   return { ok: true, rooms, totalCents: sumCents(rooms) };
 }
 
-/** A goodwill refund (Path A, the host's choice), capped at what is left unrefunded. */
+/**
+ * A goodwill refund (Path A, the host's choice), capped at what is left unrefunded.
+ *
+ * `amount` comes from the client. Every comparison here is written so NaN
+ * fails it: `NaN <= 0` is false, so a `<= 0` guard let NaN through to a
+ * `numeric` column, where it satisfies the refunds CHECK and poisons every
+ * later SUM(amount) on the booking.
+ */
 export function planGoodwill(i: { paid: number; refunded: number; amount: number }): Planned<{ amount: number }> {
+  if (!Number.isFinite(i.amount)) return { ok: false, error: "invalid_amount" };
   const left = Math.max(0, cents(i.paid) - cents(i.refunded));
   const amount = Math.min(cents(i.amount), left);
-  if (amount <= 0) return { ok: false, error: "nothing_to_refund" };
+  if (!(amount > 0)) return { ok: false, error: "nothing_to_refund" };
   return { ok: true, amount: amount / 100 };
 }
