@@ -4,6 +4,7 @@ import { freeCancellationUntil, resolveSearchResults, snapshotTier } from "@open
 import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
+import { searchBoundErrors } from "./search-bounds";
 
 /** Parse and validate URL params into HotelSearchInput */
 function parseSearchParams(
@@ -69,6 +70,8 @@ function parseSearchParams(
     children: childrenN,
     rooms: roomsN as number,
   };
+  // Shape is fine; now bound it, before anything reaches generate_series.
+  errors.push(...searchBoundErrors(input));
   return { input, errors };
 }
 
