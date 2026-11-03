@@ -189,8 +189,19 @@ export async function getThreadForParticipant(
   const userId = ownerId(session);
   if (!userId || !threadId) return null;
   const queryOne = deps.queryOne ?? dbQueryOne;
+  // The host side is checked against CURRENT access to the property, not just
+  // the host_id stamped when the thread was created: a founder who has since
+  // been removed from the organization (or demoted out of reading it) must
+  // not keep reading guest messages or replying as the host.
   const thread = await queryOne<ThreadRow>(
-    `SELECT * FROM message_threads WHERE id = $1 AND (host_id = $2 OR guest_id = $2)`,
+    `SELECT t.* FROM message_threads t
+     WHERE t.id = $1 AND (
+       t.guest_id = $2
+       OR (t.host_id = $2 AND EXISTS (
+         SELECT 1 FROM properties p
+         WHERE p.id = t.property_id AND ${propertyReadAccessSql("$2")}
+       ))
+     )`,
     [threadId, userId],
   );
   if (!thread) return null;

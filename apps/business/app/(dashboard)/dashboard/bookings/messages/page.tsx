@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getHostScopedDb } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
 import { MessagesView } from "@/components/dashboard/messages/messages-view";
 import type { ThreadListItem } from "@openbookings/messaging";
 
@@ -41,7 +41,9 @@ export default async function MessagesPage() {
        FROM messages m
        WHERE m.thread_id = t.id AND m.sender_role = 'guest' AND m.read_at IS NULL
      ) unread ON true
-     WHERE t.host_id = $1
+     -- host_id is stamped when the thread is created; a host who has since left
+     -- the organization must not keep seeing its guest conversations.
+     WHERE t.host_id = $1 AND ${propertyReadAccessSql("$1")}
      ORDER BY t.updated_at DESC`,
   );
 

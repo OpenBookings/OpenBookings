@@ -311,6 +311,13 @@ export function createHostAuth(config: HostAuthConfig) {
         ac,
         roles,
         creatorRole: "owner",
+        // Organizations are created by completeOnboarding (SQL, with the Host
+        // Agreement and Stripe account behind them), never by a host calling
+        // /organization/create. Left on, any signed-in host could mint
+        // unlimited empty orgs, each a place to open support tickets from and
+        // a way to confuse the "which org is mine" lookups that fall back to
+        // a user's only membership.
+        allowUserToCreateOrganization: false,
         organizationHooks: {
           beforeRemoveMember: async ({ member, organization: org }) => {
             if (member.role === "owner") {

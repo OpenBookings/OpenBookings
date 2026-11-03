@@ -114,3 +114,14 @@ describe("host admin plugin exposure", () => {
     expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user"]);
   });
 });
+
+describe("host organization plugin", () => {
+  test("hosts cannot create organizations through the plugin endpoint", () => {
+    const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
+    const org = host.options.plugins?.find((p) => p.id === "organization") as
+      | { options?: { allowUserToCreateOrganization?: unknown } }
+      | undefined;
+    expect(org).toBeDefined();
+    expect(org?.options?.allowUserToCreateOrganization).toBe(false);
+  });
+});
