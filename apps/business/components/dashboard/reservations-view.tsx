@@ -7,13 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReservationsList } from "@/components/dashboard/reservations-list";
 import { ReservationStatusBadge } from "@/components/dashboard/reservation-status";
-import {
-  ReservationDetailBody,
-  ReservationQuickActions,
-} from "@/components/dashboard/reservation-detail-panel";
+import { ReservationDetailBody } from "@/components/dashboard/reservation-detail-panel";
 import { HostBookingActions } from "@/components/dashboard/host-booking-actions";
-import { BreakTheGlass } from "@/components/dashboard/break-the-glass";
+import { GetHelpButton } from "@/components/support/get-help-button";
 import { breakGlass } from "@/lib/reservations/break-glass";
+import { isUuid, shortBookingRef } from "@/lib/support/references";
 import {
   Drawer,
   DrawerClose,
@@ -61,10 +59,10 @@ export function ReservationsView({
   const detail = selectedId === null ? null : (reservations.find((r) => r.id === selectedId) ?? null);
   const loading = false;
 
-  // Break the glass: the booking whose details are open, with the contact
-  // details fetched for it. Any other booking (or closing the panel) seals
-  // the glass again.
-  const [opened, setOpened] = React.useState<{ id: string; contact: GuestContact } | null>(null);
+  // Break the glass: the booking whose contact details are open, with the
+  // details fetched for it and when. Any other booking (or closing the
+  // panel) seals them again.
+  const [opened, setOpened] = React.useState<{ id: string; contact: GuestContact; at: Date } | null>(null);
   const [breaking, setBreaking] = React.useState(false);
   const [glassError, setGlassError] = React.useState<{ id: string; message: string } | null>(null);
   const sealed = !detail || opened?.id !== detail.id;
@@ -76,7 +74,7 @@ export function ReservationsView({
     setGlassError(null);
     try {
       const result = await breakGlass(id);
-      if ("contact" in result) setOpened({ id, contact: result.contact });
+      if ("contact" in result) setOpened({ id, contact: result.contact, at: new Date() });
       else setGlassError({ id, message: result.error });
     } catch {
       setGlassError({ id, message: "Something went wrong. Please try again." });
@@ -133,9 +131,8 @@ export function ReservationsView({
             "data-[vaul-drawer-direction=right]:inset-y-2",
             "data-[vaul-drawer-direction=right]:right-2",
             "data-[vaul-drawer-direction=right]:h-auto",
-            "data-[vaul-drawer-direction=right]:w-[22vw]",
-            "data-[vaul-drawer-direction=right]:min-w-80",
-            "data-[vaul-drawer-direction=right]:sm:max-w-md",
+            "data-[vaul-drawer-direction=right]:w-[min(600px,calc(100vw-1rem))]",
+            "data-[vaul-drawer-direction=right]:sm:max-w-none",
             "data-[vaul-drawer-direction=right]:overflow-hidden",
             "data-[vaul-drawer-direction=right]:rounded-lg",
             "data-[vaul-drawer-direction=right]:border",
@@ -156,37 +153,49 @@ export function ReservationsView({
             <DrawerDescription className="sr-only">
               Reservation details
             </DrawerDescription>
-            <DrawerClose asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                aria-label="Close details"
-              >
-                <X />
-              </Button>
-            </DrawerClose>
+            <div className="flex items-center gap-1">
+              {/* Links the booking (a UUID) so support sees which one. Hidden while support is off. */}
+              {detail ? (
+                <GetHelpButton
+                  category="bookings"
+                  iconOnly
+                  variant="ghost"
+                  size="icon-sm"
+                  label="Get help with this booking"
+                  linked={
+                    isUuid(detail.id)
+                      ? { type: "booking", id: detail.id, label: `Booking ${shortBookingRef(detail.id)}`, detail: "" }
+                      : null
+                  }
+                />
+              ) : null}
+              <DrawerClose asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="Close details">
+                  <X />
+                </Button>
+              </DrawerClose>
+            </div>
           </DrawerHeader>
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto p-5 lg:p-6">
             {!detail ? (
               <p className="text-muted-foreground py-8 text-center text-sm">
                 Reservation not found.
               </p>
             ) : (
-              <BreakTheGlass
-                sealed={sealed}
-                busy={breaking}
-                error={glassError?.id === detail.id ? glassError.message : null}
-                onBreak={handleBreakGlass}
-              >
-                <ReservationDetailBody reservation={detail} contact={sealed ? null : opened!.contact} />
-              </BreakTheGlass>
+              <ReservationDetailBody
+                reservation={detail}
+                seal={{
+                  opened: sealed ? null : { contact: opened!.contact, at: opened!.at },
+                  busy: breaking,
+                  error: glassError?.id === detail.id ? glassError.message : null,
+                  onBreak: handleBreakGlass,
+                }}
+              />
             )}
           </div>
           {!loading && detail && (
-            <DrawerFooter className="gap-3 border-t">
+            <DrawerFooter className="border-t px-5 py-3">
               <HostBookingActions reservation={detail} />
-              <ReservationQuickActions reservationId={detail.id} />
             </DrawerFooter>
           )}
         </DrawerContent>

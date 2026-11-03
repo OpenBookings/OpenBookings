@@ -1,73 +1,153 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink, ShieldAlert } from "lucide-react";
+import { Check, Copy, LockKeyhole, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import type { GuestContact } from "@/lib/reservations/shape";
 
 /**
- * Where "Learn more" leads. TBD: point this at the privacy explainer once it
+ * Where "Why?" leads. TBD: point this at the privacy explainer once it
  * is written.
  */
 export const BREAK_GLASS_LEARN_MORE_URL = "https://docs.openbookings.co/privacy/break-the-glass";
 
+const timeLabel = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+
 /**
- * Frosted glass over details that hold guest data. What sits underneath is
- * only a blurred stand-in: the sensitive parts are fetched from the server
- * when the glass is broken (and that is logged), never shipped beforehand.
+ * The guest's phone and address, sealed until someone asks for them. While
+ * sealed there is nothing to hide: the details are not on the page at all,
+ * only fetched from the server when the seal is broken (and that is logged).
+ * Everything else about the booking stays readable around it.
  */
-export function BreakTheGlass({
-  sealed,
+export function GuestContactSeal({
+  opened,
   busy,
   error,
   onBreak,
-  children,
 }: {
-  sealed: boolean;
+  /** The details and when they were opened, or null while sealed. */
+  opened: { contact: GuestContact; at: Date } | null;
   busy: boolean;
   error: string | null;
   onBreak: () => void;
-  children: React.ReactNode;
 }) {
-  if (!sealed) return <>{children}</>;
+  if (opened) return <OpenedContact contact={opened.contact} at={opened.at} />;
+
   return (
-    <div className="relative min-h-80">
-      {/* Out of reach while sealed: not focusable, not read out, not selectable. */}
-      <div inert aria-hidden className="pointer-events-none select-none blur-md">
-        {children}
+    <div
+      role="group"
+      aria-labelledby="guest-contact-sealed"
+      className="mt-1 grid gap-3 rounded-lg border border-dashed border-input bg-muted p-3.5 sm:grid-cols-[1fr_auto] sm:items-center"
+    >
+      <span id="guest-contact-sealed" className="sr-only">
+        Guest contact details, hidden
+      </span>
+      <div aria-hidden className="flex flex-col gap-2.5">
+        <MaskedRow label="Phone" width="w-32" />
+        <MaskedRow label="Address" width="w-44" />
       </div>
-      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/40 p-4 backdrop-blur-xl">
-        <div
-          role="group"
-          aria-labelledby="break-glass-title"
-          className="flex max-w-xs flex-col items-center gap-3 rounded-lg border bg-background/80 p-5 text-center shadow-sm"
-        >
-          <ShieldAlert className="size-6 text-muted-foreground" aria-hidden />
-          <h3 id="break-glass-title" className="font-medium">
-            Break the glass
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            In terms of privacy, please be careful with what you view, when and for what. Opening these details
-            is recorded.
-          </p>
-          <Button size="sm" onClick={onBreak} disabled={busy}>
-            {busy ? <Spinner /> : null} Break the glass
-          </Button>
-          {error ? (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          ) : null}
+      <Button variant="outline" size="sm" onClick={onBreak} disabled={busy}>
+        {busy ? <Spinner /> : <LockKeyhole />} Show contact details
+      </Button>
+      <p className="flex gap-2 border-t pt-2.5 text-xs text-muted-foreground sm:col-span-2">
+        <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
+        <span>
+          Only open these when you need to reach the guest. Each view is logged with your name.{" "}
           <a
             href={BREAK_GLASS_LEARN_MORE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            className="underline underline-offset-2 hover:text-foreground"
           >
-            Learn more <ExternalLink className="size-3" aria-hidden />
+            Why?
           </a>
-        </div>
-      </div>
+        </span>
+      </p>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive sm:col-span-2">
+          {error}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function MaskedRow({ label, width }: { label: string; width: string }) {
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <span className="w-16 text-muted-foreground">{label}</span>
+      <span
+        className={`h-2 rounded-sm ${width} bg-[repeating-linear-gradient(90deg,var(--gray-6)_0_6px,transparent_6px_9px)]`}
+      />
+    </div>
+  );
+}
+
+function OpenedContact({ contact, at }: { contact: GuestContact; at: Date }) {
+  const nothingShared = !contact.phone && !contact.address;
+  return (
+    <>
+      {contact.phone ? (
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="text-sm text-muted-foreground">Phone</span>
+          <span className="flex items-center gap-1">
+            <a
+              href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}
+              className="text-sm font-medium tabular-nums underline-offset-2 hover:underline"
+            >
+              {contact.phone}
+            </a>
+            <CopyButton value={contact.phone} label="Copy phone number" />
+          </span>
+        </div>
+      ) : null}
+      {contact.address ? (
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="text-sm text-muted-foreground">Address</span>
+          <span className="flex items-start gap-1">
+            <address className="text-right text-sm font-medium not-italic">
+              {contact.address.map((line) => (
+                <span key={line} className="block">
+                  {line}
+                </span>
+              ))}
+            </address>
+            <CopyButton value={contact.address.join("\n")} label="Copy address" />
+          </span>
+        </div>
+      ) : null}
+      {nothingShared ? (
+        <p className="text-sm text-muted-foreground">The guest didn&apos;t share a phone number or address.</p>
+      ) : null}
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span aria-hidden className="size-1.5 rounded-full bg-(--amber-11)" />
+        Opened by you at {timeLabel.format(at)} and logged. Hidden again when you close the panel.
+      </p>
+    </>
+  );
+}
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label={label}
+      className="text-muted-foreground"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          toast.error("Couldn't copy. Select the text instead.");
+        }
+      }}
+    >
+      {copied ? <Check /> : <Copy />}
+    </Button>
   );
 }

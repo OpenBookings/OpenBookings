@@ -1,18 +1,9 @@
 "use client";
 
-import { GetHelpButton } from "@/components/support/get-help-button";
-import { isUuid, shortBookingRef } from "@/lib/support/references";
-import { MessageSquare, Pencil } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import type { GuestContact, HostReservation } from "@/lib/reservations/shape";
+import type { HostReservation } from "@/lib/reservations/shape";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -60,55 +51,40 @@ function DetailSection({
   );
 }
 
+function StayFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-md border bg-muted px-3 py-2">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
 export function ReservationDetailBody({
   reservation,
-  contact,
+  seal,
 }: {
   reservation: HostReservation;
-  /** Null until the glass is broken: then whatever the guest shared. */
-  contact: GuestContact | null;
+  /** The guest's phone and address: sealed until someone opens them. */
+  seal: React.ComponentProps<typeof GuestContactSeal>;
 }) {
   const nights = nightCount(reservation);
   return (
     <div className="flex flex-col gap-8">
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
-        {contact?.phone ? (
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="text-muted-foreground text-sm">Phone</span>
-            <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`} className="text-right text-sm font-medium underline-offset-2 hover:underline">
-              {contact.phone}
-            </a>
-          </div>
-        ) : null}
-        {contact?.address ? (
-          <div className="flex items-baseline justify-between gap-4">
-            <span className="text-muted-foreground text-sm">Address</span>
-            <address className="text-right text-sm font-medium not-italic">
-              {contact.address.map((line) => (
-                <span key={line} className="block">{line}</span>
-              ))}
-            </address>
-          </div>
-        ) : null}
         <DetailField
           label="Party size"
           value={`${reservation.guests} ${reservation.guests === 1 ? "guest" : "guests"}`}
         />
+        <GuestContactSeal {...seal} />
       </DetailSection>
       <DetailSection title="Stay">
-        <DetailField
-          label="Check-in"
-          value={fullDateFormatter.format(utcDate(reservation.checkInDate))}
-        />
-        <DetailField
-          label="Check-out"
-          value={fullDateFormatter.format(utcDate(reservation.checkOutDate))}
-        />
-        <DetailField
-          label="Nights"
-          value={`${nights} ${nights === 1 ? "night" : "nights"}`}
-        />
+        <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          <StayFact label="Check-in" value={fullDateFormatter.format(utcDate(reservation.checkInDate))} />
+          <StayFact label="Check-out" value={fullDateFormatter.format(utcDate(reservation.checkOutDate))} />
+          <StayFact label="Nights" value={`${nights}`} />
+        </div>
         {reservation.departedEarlyOn && (
           <DetailField
             label="Left early after"
@@ -158,59 +134,6 @@ export function ReservationDetailBody({
         )}
       </DetailSection>
     </div>
-  );
-}
-
-function QuickAction({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label={label}
-          className={className}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-export function ReservationQuickActions({ reservationId }: { reservationId?: string }) {
-  return (
-    <TooltipProvider>
-      <div className="flex items-center gap-2">
-        {/* Links the booking (a UUID) so support sees which one. Hidden while support is off. */}
-        <GetHelpButton
-          category="bookings"
-          iconOnly
-          size="icon"
-          label="Get help with this booking"
-          linked={
-            isUuid(reservationId)
-              ? { type: "booking", id: reservationId, label: `Booking ${shortBookingRef(reservationId)}`, detail: "" }
-              : null
-          }
-        />
-        <QuickAction label="Edit details">
-          <Pencil />
-        </QuickAction>
-        <QuickAction label="Message">
-          <MessageSquare />
-        </QuickAction>
-      </div>
-    </TooltipProvider>
   );
 }
 
