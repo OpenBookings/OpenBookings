@@ -1,5 +1,5 @@
 import type { PropertyCancellationTier } from "@openbookings/pricing";
-import { getHostScopedDb, type SessionLike } from "@openbookings/authz";
+import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import { query as dbQuery } from "@openbookings/db";
 import type {
   HighlightRecord,
@@ -115,7 +115,7 @@ export async function loadEditorData(
        (now() AT TIME ZONE p.timezone)::date::text AS today
      FROM properties p
      LEFT JOIN property_content c ON c.property_id = p.id
-     WHERE p.owner_user_id = $1
+     WHERE ${propertyReadAccessSql("$1")}
        AND ($2::uuid IS NULL OR p.id = $2::uuid)
      ORDER BY p.name
      LIMIT 1`,
@@ -144,7 +144,7 @@ export async function loadEditorData(
         ) ORDER BY t.effective_from), '[]'::json)
         FROM tourist_tax_rules t WHERE t.property_id = p.id) AS tourist_tax_rules
      FROM properties p
-     WHERE p.owner_user_id = $1 AND p.id = $2::uuid`,
+     WHERE ${propertyReadAccessSql("$1")} AND p.id = $2::uuid`,
     [property.id],
   );
 
