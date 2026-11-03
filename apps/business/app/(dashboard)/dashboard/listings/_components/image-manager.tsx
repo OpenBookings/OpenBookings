@@ -114,7 +114,7 @@ export function ImageManager({
       const presign = await fetch("/api/upload/presign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, contentType: file.type }),
+        body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size }),
       });
       if (!presign.ok) throw new Error("presign failed");
       const { uploadUrl, key: storageKey } = await presign.json();

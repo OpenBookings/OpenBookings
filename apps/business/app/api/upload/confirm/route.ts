@@ -1,7 +1,9 @@
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty, userOwnsRoom } from "@openbookings/authz";
-import { publicUrl } from "@/lib/s3";
+import { getBucketName, getS3, publicUrl } from "@/lib/s3";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { uploadKeyBelongsTo, uploadedObjectProblem } from "@/lib/upload-policy";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
@@ -9,20 +11,21 @@ import { randomUUID } from "crypto";
 const IMAGE_GROUPS = new Set(["hero-image", "logo", "gallery"]);
 
 /**
- * The exact shape /api/upload/presign hands out: `uploads/<uuid><ext>` for one
- * of the three image types it will sign for.
- *
  * `key` arrives from the browser, so possession of it is not evidence that
- * this host uploaded it. Without this check the key is concatenated into a
- * public object URL and stored as an image, which lets any authenticated host
- * point a room or property of their own at any other object in the bucket —
- * including another property's photos — and lets a crafted key ("../", a query
- * string, a fragment) shape the stored URL into something other than a bucket
- * object. Ownership of the *room* or *property* is checked below; this checks
- * the *key*.
+ * this host uploaded it. Three things are checked before it is stored as an
+ * image URL (see lib/upload-policy.ts):
+ *
+ *  1. its shape: exactly what /api/upload/presign hands out, so a crafted key
+ *     ("../", a query string, a fragment) cannot shape the stored URL into
+ *     something other than a bucket object;
+ *  2. its owner: the key carries a tag for the host it was issued to. Keys are
+ *     public once an image is shown on a listing, so without this any host could
+ *     attach another host's photo to their own property;
+ *  3. the object itself, below: it exists, and its stored size and type are
+ *     what we allow.
+ *
+ * Ownership of the *room* or *property* is checked after that.
  */
-const UPLOAD_KEY_RE =
-  /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i;
 
 export async function POST(req: Request) {
   const session = await getServerSession();
@@ -39,8 +42,19 @@ export async function POST(req: Request) {
 
   const { key, roomId, propertyId, group } = body;
 
-  if (typeof key !== "string" || !UPLOAD_KEY_RE.test(key)) {
+  if (!uploadKeyBelongsTo(key, session.user.id)) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
+  }
+
+  const head = await getS3()
+    .send(new HeadObjectCommand({ Bucket: getBucketName(), Key: key }))
+    .catch(() => null);
+  if (!head) {
+    return NextResponse.json({ error: "Upload not found" }, { status: 400 });
+  }
+  const problem = uploadedObjectProblem({ contentLength: head.ContentLength, contentType: head.ContentType });
+  if (problem) {
+    return NextResponse.json({ error: problem }, { status: 400 });
   }
 
   const url = publicUrl(key);
