@@ -3,7 +3,7 @@
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne, withTransaction } from "@openbookings/db";
 import { headers } from "next/headers";
-import { createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
+import { CONNECT_OWNER_METADATA_KEY, createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
 import { provisionOrganizationTx } from "@/lib/provision-organization";
 import { completionPrecheck } from "@/lib/onboarding-completion";
 import { isStripeAccountReady } from "@/lib/stripe-readiness";
@@ -237,6 +237,7 @@ export async function provisionStripeAccount(): Promise<string> {
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
     country: location.country,
+    userId,
   });
 
   await query(
@@ -300,7 +301,14 @@ export async function completeOnboarding(): Promise<void> {
     throw new Error("This Stripe account belongs to an organisation you are no longer part of");
   }
 
-  const account = summariseStripeAccount(await retrieveConnectAccount(stripeAccountId!));
+  const stripeAccount = await retrieveConnectAccount(stripeAccountId!);
+  // An account we created is stamped with the user it was created for. One
+  // stamped for somebody else must not become this host's payout destination,
+  // however its id got into step_data. (Accounts from before the stamp existed
+  // carry none and cannot be checked.)
+  const boundTo = stripeAccount.metadata?.[CONNECT_OWNER_METADATA_KEY];
+  if (boundTo && boundTo !== userId) throw new Error("Stripe account belongs to a different user");
+  const account = summariseStripeAccount(stripeAccount);
   if (!isStripeAccountReady(account)) throw new Error("Stripe account is not ready yet");
 
   await withTransaction(async (client) => {
