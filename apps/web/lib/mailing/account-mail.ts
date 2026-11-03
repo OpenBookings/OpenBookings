@@ -1,4 +1,4 @@
-import { getEmailClient, loadTemplate } from "@openbookings/mailing";
+import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing";
 
 const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
 const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
@@ -6,18 +6,10 @@ const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FR
 /** One email about a change to the guest's own account. */
 export type AccountMail = { subject: string; html: string };
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 /**
- * Fills the shared "account-action" template. Every value is HTML: callers
- * escape what came from the guest, and URLs are escaped here.
+ * Fills the shared "account-action" template. `headline`, `body` and `footnote`
+ * are HTML written here: callers escape what came from the guest. Every other
+ * field is plain text, escaped by loadTemplate.
  */
 function compose(input: {
   subject: string;
@@ -31,11 +23,10 @@ function compose(input: {
 }): AccountMail {
   return {
     subject: input.subject,
-    html: loadTemplate("account-action", {
-      ...input,
-      subject: escapeHtml(input.subject),
-      ctaUrl: escapeHtml(input.ctaUrl),
-    }),
+    // headline, body and footnote are markup written in this file, with the
+    // user-supplied parts already escaped; every other slot is plain text and
+    // is escaped by loadTemplate.
+    html: loadTemplate("account-action", input, { htmlSlots: ["headline", "body", "footnote"] }),
   };
 }
 
