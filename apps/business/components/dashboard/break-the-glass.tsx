@@ -1,23 +1,16 @@
 "use client";
 
-import { LockKeyhole, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Hammer } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import type { GuestContact } from "@/lib/reservations/shape";
-
-/**
- * Where "Why?" leads. TBD: point this at the privacy explainer once it
- * is written.
- */
-export const BREAK_GLASS_LEARN_MORE_URL = "https://docs.openbookings.co/privacy/break-the-glass";
 
 const timeLabel = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 /**
- * The guest's phone and address, sealed until someone asks for them. While
- * sealed there is nothing to hide: the details are not on the page at all,
- * only fetched from the server when the seal is broken (and that is logged).
- * Everything else about the booking stays readable around it.
+ * The guest's phone and address behind frosted glass, until someone breaks
+ * it. What sits under the frost is a stand-in, not the guest's details:
+ * those are only fetched from the server when the glass is broken (and that
+ * is logged). Everything else about the booking stays readable around it.
  */
 export function GuestContactSeal({
   opened,
@@ -34,52 +27,41 @@ export function GuestContactSeal({
   if (opened) return <OpenedContact contact={opened.contact} at={opened.at} />;
 
   return (
-    <div
-      role="group"
-      aria-labelledby="guest-contact-sealed"
-      className="mt-1 grid gap-3 rounded-lg border border-dashed border-input bg-muted p-3.5 sm:grid-cols-[1fr_auto] sm:items-center"
-    >
-      <span id="guest-contact-sealed" className="sr-only">
-        Guest contact details, hidden
-      </span>
-      <div aria-hidden className="flex flex-col gap-2.5">
-        <MaskedRow label="Phone" width="w-32" />
-        <MaskedRow label="Address" width="w-44" />
+    <>
+      <div className="relative overflow-hidden rounded-md">
+        {/* Out of reach: not focusable, not read out, not selectable. */}
+        <div inert aria-hidden className="pointer-events-none flex flex-col gap-3 py-1 blur-[6px] select-none">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-muted-foreground">Phone</span>
+            <span className="text-sm font-medium">+00 0 00 00 00 00</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-muted-foreground">Address</span>
+            <span className="text-right text-sm font-medium">
+              <span className="block">Street name 00</span>
+              <span className="block">0000 AA City</span>
+              <span className="block">Country</span>
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onBreak}
+          disabled={busy}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-background/40 px-4 text-center transition-colors hover:bg-background/25 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-wait"
+        >
+          {busy ? <Spinner className="size-5" /> : <Hammer className="size-5" aria-hidden />}
+          <span className="text-xs text-muted-foreground">
+            Break the glass to see phone and address. Each view is logged.
+          </span>
+        </button>
       </div>
-      <Button variant="outline" size="sm" onClick={onBreak} disabled={busy}>
-        {busy ? <Spinner /> : <LockKeyhole />} Show contact details
-      </Button>
-      <p className="flex gap-2 border-t pt-2.5 text-xs text-muted-foreground sm:col-span-2">
-        <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden />
-        <span>
-          Only open these when you need to reach the guest. Each view is logged with your name.{" "}
-          <a
-            href={BREAK_GLASS_LEARN_MORE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Why?
-          </a>
-        </span>
-      </p>
       {error ? (
-        <p role="alert" className="text-xs text-destructive sm:col-span-2">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function MaskedRow({ label, width }: { label: string; width: string }) {
-  return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="w-16 text-muted-foreground">{label}</span>
-      <span
-        className={`h-2 rounded-sm ${width} bg-[repeating-linear-gradient(90deg,var(--gray-6)_0_6px,transparent_6px_9px)]`}
-      />
-    </div>
+    </>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { HostReservation } from "@/lib/reservations/shape";
@@ -121,7 +122,10 @@ function StayTicket({ reservation }: { reservation: HostReservation }) {
   );
 }
 
-/** The rooms with what each cost, then what was paid: quiet, it's the detail. */
+/**
+ * The rooms with their rate and price, then what was paid: quiet, it's the
+ * detail. When each rate's free cancellation ends is in the timeline above.
+ */
 function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
   const count = reservation.rooms.length;
   return (
@@ -131,7 +135,7 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
       </h3>
       <ul className="mt-2 divide-y border-y">
         {reservation.rooms.map((room) => (
-          <li key={room.reservationId} className="flex flex-col gap-1 py-3">
+          <li key={room.reservationId} className="py-3">
             <div className="flex items-baseline justify-between gap-4">
               <div className="min-w-0">
                 <p className={room.cancelledAt ? "text-muted-foreground text-sm line-through" : "text-sm font-medium"}>
@@ -143,13 +147,6 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
               </div>
               <span className="text-muted-foreground text-sm tabular-nums">{currencyFormatter.format(room.paid)}</span>
             </div>
-            {!room.cancelledAt && room.policyLines.length > 0 ? (
-              <ul className="text-muted-foreground flex flex-col gap-0.5 text-xs">
-                {room.policyLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : null}
           </li>
         ))}
       </ul>
@@ -191,6 +188,7 @@ export function ReservationDetailBody({
         <GuestContactSeal {...seal} />
       </DetailSection>
       <StayTicket reservation={reservation} />
+      <BookingTimeline timeline={reservation.timeline} />
       <RoomsAndPayment reservation={reservation} />
     </div>
   );
