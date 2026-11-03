@@ -70,7 +70,7 @@ no-op.
 database and offers to drop whatever the schema does not declare. The database
 contains tables this schema does not describe — `audit_log`, `property_access`,
 `property_content`, `property_highlights`, `icons`, `org_profile`,
-`org_consent`, `team`, `teamMember`, plus Better Auth's own (`user`, `session`,
+`org_consent`, `invitation_property_access`, `team`, `teamMember`, plus Better Auth's own (`user`, `session`,
 `account`, `verification`, `organization`, `member`, `invitation`, `passkey`,
 `twoFactor`) — and pushing against it will propose dropping them. Declare a
 table here before touching push, or use `db:generate` and apply the SQL by hand.

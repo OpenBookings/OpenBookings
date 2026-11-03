@@ -86,6 +86,8 @@ export type HostReservation = ReservationSummary & {
   departedEarlyOn: string | null;
   rooms: HostReservationRoom[];
   actions: BookingAction[];
+  /** Whether the viewer may retry a refund that didn't go through. */
+  canRetryRefunds: boolean;
 };
 
 const DISPLAY_STATUS: Record<BookingStatus, ReservationStatus> = {
@@ -164,5 +166,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     departedEarlyOn: row.departed_early_on,
     rooms,
     actions,
+    // Narrowed to the viewer's role by loadHostReservations.
+    canRetryRefunds: false,
   };
 }

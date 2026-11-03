@@ -211,7 +211,7 @@ describe("propertyReadAccessSql", () => {
   test("org-wide roles read everything; scoped roles need property_access; unknown roles nothing", () => {
     const sql = propertyReadAccessSql("$1");
     expect(sql).toMatch(/m\.role IN \('owner', 'admin', 'finance'\)/);
-    expect(sql).toMatch(/m\.role IN \('manager', 'frontdesk'\) AND EXISTS/);
+    expect(sql).toMatch(/m\.role IN \('manager', 'reservations', 'frontdesk'\) AND EXISTS/);
   });
 
   test("refuses anything but a bind parameter", () => {

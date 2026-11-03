@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { roles, PROPERTY_SCOPED_ROLES } from "./permissions";
-import { memberHasPropertyAccess } from "./index";
+import { roles, PROPERTY_SCOPED_ROLES, roleAllows, rolesWith } from "./permissions";
+import { memberHasPropertyAccess, userCan } from "./index";
+import { ABILITIES, ROLE_INFO, ROLE_ORDER, assignableRoles, roleAbilities } from "./role-guide";
 
 describe("role grants", () => {
   test("owner may delete the org; admin may not", () => {
@@ -23,10 +24,26 @@ describe("role grants", () => {
     expect(roles.manager.authorize({ property: ["delete"] }).success).toBe(false);
   });
 
-  test("frontdesk modifies bookings but cannot cancel or touch rates", () => {
-    expect(roles.frontdesk.authorize({ booking: ["modify"] }).success).toBe(true);
+  test("frontdesk operates bookings but cannot cancel or touch rates", () => {
+    expect(roles.frontdesk.authorize({ booking: ["operate"] }).success).toBe(true);
     expect(roles.frontdesk.authorize({ booking: ["cancel"] }).success).toBe(false);
     expect(roles.frontdesk.authorize({ rate: ["update"] }).success).toBe(false);
+  });
+
+  test("reservations operate and cancel bookings, but change no rates", () => {
+    expect(roles.reservations.authorize({ booking: ["operate", "cancel"] }).success).toBe(true);
+    expect(roles.reservations.authorize({ rate: ["update"] }).success).toBe(false);
+    expect(roles.reservations.authorize({ property: ["update"] }).success).toBe(false);
+  });
+
+  test("goodwill refunds are for owner and general manager only", () => {
+    expect(rolesWith({ booking: ["refund"] })).toEqual(["owner", "admin"]);
+  });
+
+  test("an owner holds every grant a general manager has", () => {
+    for (const [resource, actions] of Object.entries(roles.admin.statements)) {
+      expect(roles.owner.authorize({ [resource]: actions } as never).success).toBe(true);
+    }
   });
 
   test("only owner and admin manage members", () => {
@@ -34,7 +51,7 @@ describe("role grants", () => {
       expect(roles[role].authorize({ member: ["invite"] }).success).toBe(true);
       expect(roles[role].authorize({ member: ["remove"] }).success).toBe(true);
     }
-    for (const role of ["manager", "frontdesk", "finance"] as const) {
+    for (const role of ["manager", "reservations", "frontdesk", "finance"] as const) {
       expect(roles[role].authorize({ member: ["invite"] }).success).toBe(false);
     }
   });
@@ -56,7 +73,7 @@ describe("memberHasPropertyAccess", () => {
   });
 
   test("property-scoped roles require a property_access row", async () => {
-    expect(PROPERTY_SCOPED_ROLES).toEqual(["manager", "frontdesk"]);
+    expect(PROPERTY_SCOPED_ROLES).toEqual(["manager", "reservations", "frontdesk"]);
     const withRow = async () => ({ ok: true }) as never;
     const withoutRow = async () => null;
     expect(
@@ -81,5 +98,76 @@ describe("memberHasPropertyAccess", () => {
     expect(
       await memberHasPropertyAccess({ id: "m1", role: "owner" }, ""),
     ).toBe(false);
+  });
+});
+
+describe("roleAllows", () => {
+  test("property-scoped roles need their property row", () => {
+    expect(roleAllows("frontdesk", { booking: ["operate"] }, true)).toBe(true);
+    expect(roleAllows("frontdesk", { booking: ["operate"] }, false)).toBe(false);
+  });
+
+  test("org-wide roles do not need a property row", () => {
+    expect(roleAllows("admin", { booking: ["refund"] }, false)).toBe(true);
+    expect(roleAllows("finance", { booking: ["read"] }, false)).toBe(true);
+  });
+
+  test("unknown, empty and missing roles fail closed", () => {
+    expect(roleAllows("superuser", { booking: ["read"] }, true)).toBe(false);
+    expect(roleAllows("", { booking: ["read"] }, true)).toBe(false);
+    expect(roleAllows(null, { booking: ["read"] }, true)).toBe(false);
+    // Not an own property of the roles object.
+    expect(roleAllows("constructor", { booking: ["read"] }, true)).toBe(false);
+  });
+});
+
+describe("userCan", () => {
+  const session = { user: { id: "u1", account_type: "business" } };
+  const row = (r: unknown) => (async () => r) as never;
+
+  test("front desk can check in on their property, but not refund", async () => {
+    const deps = { queryOne: row({ legacy_owner: false, role: "frontdesk", has_access: true }) };
+    expect(await userCan(session, "p1", { booking: ["operate"] }, deps)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(false);
+  });
+
+  test("a manager cannot refund", async () => {
+    const deps = { queryOne: row({ legacy_owner: false, role: "manager", has_access: true }) };
+    expect(await userCan(session, "p1", { booking: ["cancel"] }, deps)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(false);
+  });
+
+  test("a legacy pre-org owner has every grant", async () => {
+    const deps = { queryOne: row({ legacy_owner: true, role: null, has_access: false }) };
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(true);
+  });
+
+  test("no row, no member and no session all fail closed", async () => {
+    expect(await userCan(session, "p1", { booking: ["read"] }, { queryOne: row(null) })).toBe(false);
+    const noMember = { queryOne: row({ legacy_owner: false, role: null, has_access: false }) };
+    expect(await userCan(session, "p1", { booking: ["read"] }, noMember)).toBe(false);
+    expect(await userCan(null, "p1", { booking: ["read"] }, noMember)).toBe(false);
+  });
+});
+
+describe("role guide", () => {
+  test("describes every role, in a fixed order", () => {
+    expect([...ROLE_ORDER].sort() as string[]).toEqual(Object.keys(roles).sort());
+    for (const role of ROLE_ORDER) expect(ROLE_INFO[role].label.length).toBeGreaterThan(0);
+  });
+
+  test("abilities come from the grants", () => {
+    const owner = roleAbilities("owner");
+    expect(owner.cannot).toEqual([]);
+    expect(owner.can.length).toBe(ABILITIES.length);
+    expect(roleAbilities("frontdesk").cannot).toContain("Give goodwill refunds");
+    expect(roleAbilities("admin").cannot).toEqual(["Close the organisation's account"]);
+  });
+
+  test("only owners hand out the owner role", () => {
+    expect(assignableRoles("owner")).toContain("owner");
+    expect(assignableRoles("admin")).not.toContain("owner");
+    expect(assignableRoles("admin")).toContain("admin");
+    expect(assignableRoles("manager")).toEqual([]);
   });
 });

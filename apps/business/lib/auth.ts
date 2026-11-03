@@ -3,6 +3,7 @@ import { sessionForApp } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
 import { sendMagicLink } from "@/lib/mailing/magic-link";
 import { sendSecurityAlert } from "@/lib/mailing/security-alert";
+import { sendInvitationEmail } from "@/lib/mailing/invitation";
 import { forwardAuthEvent } from "@/lib/tirreno";
 import { hostTrustedOrigins } from "@/lib/trusted-origins";
 import { cache } from "react";
@@ -16,6 +17,7 @@ export const auth = createHostAuth({
   databaseUrl: process.env.DATABASE_URL!,
   sendMagicLink,
   sendSecurityAlert,
+  sendInvitationEmail,
   onAuthEvent: forwardAuthEvent,
   cookiePrefix: env.AUTH_COOKIE_PREFIX,
   trustedOrigins: hostTrustedOrigins(process.env.NODE_ENV),

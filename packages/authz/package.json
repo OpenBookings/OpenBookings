@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./permissions": "./src/permissions.ts",
-    "./rates-doc": "./src/rates-doc.ts"
+    "./rates-doc": "./src/rates-doc.ts",
+    "./role-guide": "./src/role-guide.ts"
   },
   "scripts": {
     "test": "bun test",

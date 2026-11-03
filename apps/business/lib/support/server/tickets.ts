@@ -1,5 +1,5 @@
-import { queryOne } from "@openbookings/db";
 import { getOrgScopedDb, propertyReadAccessSql } from "@openbookings/authz";
+import { activeOrgId } from "@/lib/active-org";
 import type { LinkedKind } from "../categories";
 import { isUuid, shortBookingRef } from "../references";
 import { tabStatuses, type TicketStatus, type TicketTab } from "../status";
@@ -27,21 +27,6 @@ type SessionWithUser = {
   user: { id: string; name?: string | null; email: string; account_type?: string | null };
   session: Record<string, unknown>;
 };
-
-/**
- * The org to scope to: the session's active org (the org plugin's
- * `activeOrganizationId`), or — for a session minted before the user had an
- * org — their only membership. getOrgScopedDb re-verifies membership either way.
- */
-async function activeOrgId(session: SessionWithUser): Promise<string | null> {
-  const active = session.session.activeOrganizationId;
-  if (typeof active === "string" && active) return active;
-  const row = await queryOne<{ id: string; n: number }>(
-    `SELECT min("organizationId") AS id, count(*)::int AS n FROM "member" WHERE "userId" = $1`,
-    [session.user.id],
-  );
-  return row?.n === 1 ? row.id : null;
-}
 
 export async function supportScope(session: SessionWithUser | null | undefined): Promise<SupportScope | null> {
   if (!session) return null;
