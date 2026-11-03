@@ -9,10 +9,8 @@ import {
   advancedConfig,
   createAuthPool,
   magicLinkOptions,
-  microsoftUserFromProfile,
   sessionVerificationStamp,
   sharedSessionOptions,
-  stampMicrosoftTenantId,
   userAdditionalFields,
   type BaseAuthConfig,
 } from "./shared";
@@ -40,8 +38,6 @@ export type SecurityAlert = {
 export type HostAuthConfig = BaseAuthConfig & {
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
   /**
    * Sign-in from a device with no prior sign-in on record notifies all org
    * owners (task 17). Optional so tests and tooling can construct the
@@ -261,19 +257,7 @@ export function createHostAuth(config: HostAuthConfig) {
         },
       },
     },
-    account: {
-      ...accountLinkingOptions,
-      additionalFields: {
-        // Entra tenant id from the Microsoft id token's `tid` claim,
-        // stamped by the account.create.before hook. Used for org auto-join
-        // later.
-        tenant_id: {
-          type: "string",
-          required: false,
-          input: false,
-        },
-      },
-    },
+    account: accountLinkingOptions,
     advanced: advancedConfig(config.cookiePrefix, secureCookies),
     databaseHooks: {
       ...baseHooks,
@@ -296,11 +280,6 @@ export function createHostAuth(config: HostAuthConfig) {
               console.error("[auth] new-device alert failed:", err);
             }
           },
-        },
-      },
-      account: {
-        create: {
-          before: async (account) => stampMicrosoftTenantId(account),
         },
       },
     },
@@ -396,29 +375,6 @@ export function createHostAuth(config: HostAuthConfig) {
           },
         }
         : {}),
-      ...(config.microsoftClientId && config.microsoftClientSecret
-        ? {
-          microsoft: {
-            clientId: config.microsoftClientId,
-            clientSecret: config.microsoftClientSecret,
-            tenantId: 'common',
-            authority: "https://login.microsoftonline.com",
-            prompt: "select_account",
-            // Minimal scopes: our multi-tenant Entra app requests only what
-            // sign-in needs, so tenant admins reviewing consent see no Graph
-            // access. disableProfilePhoto skips the Graph /me/photos call
-            // that would otherwise need User.Read.
-            disableDefaultScope: true,
-            scope: ["openid", "profile", "email"],
-            disableProfilePhoto: true,
-            // Refuse unverified emails outright (see microsoftEmailFromProfile):
-            // an unverified claim must not create a user or account row.
-            mapProfileToUser: microsoftUserFromProfile,
-            // Belt and braces: even if a profile slipped through unverified,
-            // no session is issued for it.
-            requireEmailVerification: true,
-          },
-        } : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
     // The stock impersonation route takes no reason and writes no audit_log

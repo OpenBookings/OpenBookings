@@ -21,8 +21,6 @@ export const auth = createHostAuth({
   trustedOrigins: hostTrustedOrigins(process.env.NODE_ENV),
   googleClientId: process.env.GOOGLE_CLIENT_ID_BUSINESS,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET_BUSINESS,
-  microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
-  microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
 });
 
 /**

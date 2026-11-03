@@ -52,35 +52,21 @@ Safari add to `/etc/hosts`:
 Signing in on one dev app must leave the other unauthenticated — if it
 doesn't, the boundary is broken.
 
-**OAuth redirect URIs**: the Google (both clients), Apple, and Microsoft
+**OAuth redirect URIs**: the Google (both clients) and Apple
 apps need the new dev callback origins registered, e.g.
 `http://app.localhost:3002/api/auth/callback/google` and
 `http://business.localhost:3001/api/auth/callback/google` (same pattern per
 provider). Until then, magic-link sign-in works unchanged in dev.
 
-## Microsoft OAuth (host portal only)
+## Host sign-in methods
 
-One **multi-tenant** app registration in our own Entra tenant. Scopes are
-`openid profile email` only (`disableDefaultScope` — no `User.Read`, no
-Graph calls; the profile-photo fetch is disabled).
-
-- **Email claim**: Microsoft does not reliably send `email`; the host
-  instance falls back to `preferred_username` / `upn` only when they are
-  email-shaped (`microsoftEmailFromProfile`). A user whose token has no
-  email-shaped claim cannot sign up — by design, since magic-link recovery
-  and the one-email-one-account invariant need a routable address.
-- **Tenant id**: the `tid` claim is stamped onto `account.tenant_id`
-  (migration `0010_microsoft_tenant.sql`) for org auto-join later.
-- **Admin consent** (for support): many M365 tenants block user consent to
-  third-party apps. A tenant admin can pre-approve us by visiting:
-
-  ```
-  https://login.microsoftonline.com/{their-tenant-id}/adminconsent?client_id={our-client-id}&redirect_uri=https://business.openbookings.co
-  ```
-
-  (`common` also works in place of the tenant id if they are signed in as
-  admin.) Until consent is granted those users see AADSTS65001/90094 —
-  point them at their IT admin with that URL.
+Magic link, Google, and passkeys (the login page has a "Sign in with a
+passkey" button next to the automatic prompt / autofill). There is no
+Microsoft sign-in: it was removed, because a multi-tenant Entra app cannot
+vouch for an email address, and verifying it needed optional ID-token claims
+that tenants control. Hosts who used it sign in with a magic link to the same
+address, which reaches the same account. The `account.tenant_id` column from
+migration `0010_microsoft_tenant.sql` is now unused and can be dropped.
 
 ## Account linking
 
@@ -91,7 +77,7 @@ attaching the OAuth account row to the other portal's user before the
 session hook rejects it (orphan `account` row on a user who never consented
 to it). Explicit linking via `linkSocial()` while signed in still works.
 Consequence to know about: a user who signed up with magic link cannot
-implicitly attach Google/Microsoft by just signing in with it — they get the
+implicitly attach Google by just signing in with it — they get the
 collision/not-linked error and must link from account settings once that UI
 exists.
 

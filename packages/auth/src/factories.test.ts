@@ -80,32 +80,18 @@ describe("host social providers", () => {
       cookiePrefix: "ob-host",
       googleClientId: "g-id",
       googleClientSecret: "g-secret",
-      microsoftClientId: "m-id",
-      microsoftClientSecret: "m-secret",
     });
 
-  test("both require a verified email before issuing a session", () => {
+  test("google requires a verified email before issuing a session", () => {
     const providers = withProviders().options.socialProviders as Record<
       string,
       { requireEmailVerification?: boolean }
     >;
-    expect(providers.microsoft?.requireEmailVerification).toBe(true);
     expect(providers.google?.requireEmailVerification).toBe(true);
   });
 
-  test("an unverified Microsoft profile maps to no email, so the callback aborts", () => {
-    const microsoft = (withProviders().options.socialProviders as Record<string, {
-      mapProfileToUser?: (profile: Record<string, unknown>) => Record<string, unknown>;
-    }>).microsoft;
-    // Self-managed Entra tenant asserting a victim's address, no verification claim.
-    const mapped = microsoft?.mapProfileToUser?.({
-      email: "victim@example.com",
-      email_verified: false,
-      preferred_username: "victim@example.com",
-      upn: "victim@example.com",
-    });
-    expect(mapped?.email).toBeUndefined();
-    expect(mapped?.emailVerified).toBeUndefined();
+  test("google is the only social provider on the host portal", () => {
+    expect(Object.keys(withProviders().options.socialProviders ?? {})).toEqual(["google"]);
   });
 });
 

@@ -8,7 +8,7 @@ import {
     useState,
 } from "react";
 import posthog from "posthog-js";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -66,19 +66,31 @@ export function AuthFormFields({
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
-    const [microsoftLoading, setMicrosoftLoading] = useState(false);
     const [magicLinkError, setMagicLinkError] = useState<string | null>(
         initialError ?? null,
     );
     const [sentEmail, setSentEmail] = useState<string | null>(null);
     const [socialState, setSocialState] = useState<{
-        provider: "google" | "microsoft";
+        provider: "google";
         failed: boolean;
     } | null>(null);
 
     const setCardPhase = useContext(AuthFormPhaseContext)?.setPhase;
 
-    usePasskeySignIn(offerPasskey);
+    const passkey = usePasskeySignIn(offerPasskey);
+    const [passkeyLoading, setPasskeyLoading] = useState(false);
+
+    const handlePasskeyClick = async () => {
+        setPasskeyLoading(true);
+        setMagicLinkError(null);
+        posthog.capture("sign_in_passkey_clicked");
+        const ok = await passkey.signIn();
+        // On success the page reloads; only a failed or dismissed prompt gets here.
+        if (!ok) {
+            setPasskeyLoading(false);
+            setMagicLinkError("Passkey sign-in didn't complete. Try again, or use your email.");
+        }
+    };
 
     useEffect(() => {
         if (!setCardPhase) return;
@@ -91,7 +103,6 @@ export function AuthFormFields({
     const resetSocialState = () => {
         setSocialState(null);
         setGoogleLoading(false);
-        setMicrosoftLoading(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -159,28 +170,7 @@ export function AuthFormFields({
         }
     };
 
-    const handleMicrosoftClick = async () => {
-        setMicrosoftLoading(true);
-        setMagicLinkError(null);
-        setSentEmail(null);
-        posthog.capture("sign_in_microsoft_clicked");
-        try {
-            const redirectPromise = authClient.signIn.social({
-                provider: "microsoft",
-                callbackURL: "/",
-                errorCallbackURL: "/login",
-            });
-            setSocialState({ provider: "microsoft", failed: false });
-            await redirectPromise;
-        } catch (err: unknown) {
-            const code = err instanceof Error ? err.message : String(err);
-            posthog.capture("sign_in_failed", { provider: "microsoft", error_code: code });
-            setSocialState({ provider: "microsoft", failed: true });
-            setMicrosoftLoading(false);
-        }
-    };
-
-    const providerLabel = socialState?.provider === "microsoft" ? "Microsoft" : "Google";
+    const providerLabel = "Google";
 
     if (loading) {
         return (
@@ -225,14 +215,7 @@ export function AuthFormFields({
                 </p>
                 {socialState.failed ? (
                     <div className="flex gap-2 mt-2">
-                        <Button
-                            type="button"
-                            onClick={
-                                socialState.provider === "google"
-                                    ? handleGoogleClick
-                                    : handleMicrosoftClick
-                            }
-                        >
+                        <Button type="button" onClick={handleGoogleClick}>
                             Try Again
                         </Button>
                         <Button type="button" variant="outline" onClick={resetSocialState}>
@@ -289,6 +272,18 @@ export function AuthFormFields({
             </div>
 
             <div className="flex flex-col w-full gap-3">
+                {passkey.supported && offerPasskey ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full flex items-center justify-center gap-3 h-11"
+                        disabled={passkeyLoading}
+                        onClick={handlePasskeyClick}
+                    >
+                        <KeyRound className="w-5 h-5 shrink-0" aria-hidden="true" />
+                        <span>{passkeyLoading ? "Waiting for your passkey..." : "Sign in with a passkey"}</span>
+                    </Button>
+                ) : null}
                 <Button
                     type="button"
                     variant="outline"
@@ -303,21 +298,6 @@ export function AuthFormFields({
                         draggable="false"
                     />
                     <span>{googleLoading ? "Redirecting..." : "Sign in with Google"}</span>
-                </Button>
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full flex items-center justify-center gap-3 h-11"
-                    disabled={microsoftLoading}
-                    onClick={handleMicrosoftClick}
-                >
-                    <img
-                        src="/microsoft_logo.png"
-                        alt=""
-                        className="w-5 h-5 shrink-0"
-                        draggable="false"
-                    />
-                    <span>{microsoftLoading ? "Redirecting..." : "Sign in with Microsoft"}</span>
                 </Button>
             </div>
         </>
