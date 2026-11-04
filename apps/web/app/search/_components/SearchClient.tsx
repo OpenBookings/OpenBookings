@@ -62,7 +62,11 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   const [hotels, setHotels] = useState<StayPosterData[]>([]);
   // Resets to the all-in total on every visit; whether to remember it is still open.
   const [priceMode, setPriceMode] = useState<PriceMode>("total");
-  const [isLoading, setIsLoading] = useState(false);
+  // Starts true when the URL holds a full search, so the first paint shows the
+  // skeletons rather than a flash of "No hotels matched".
+  const [isLoading, setIsLoading] = useState(
+    () => !isDemoMode() && Boolean(committed.lat && committed.lon && committed.checkIn && committed.checkOut),
+  );
   const [searchError, setSearchError] = useState<string | null>(null);
 
   // Demo mode: any search shows the demo properties, no API call.
@@ -277,9 +281,60 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   );
 }
 
+const noop = () => {};
+
+/**
+ * What the cached HTML shows until the browser takes over: the same backdrop,
+ * nav, search bar and skeletons as the real page. `useSearchParams` makes the
+ * page above it browser-only, so without this the prerendered page was empty
+ * and visitors saw black until all the JavaScript had run.
+ */
+function SearchPageFallback({ backdrops }: { backdrops: readonly Backdrop[] }) {
+  const backdrop = useBackdrop(backdrops);
+  return (
+    <div className="min-h-screen px-4 py-20 pb-[100px] font-sans sm:px-6">
+      <GlassBackdrop backdrop={backdrop} />
+      <div className="flex flex-col">
+        <Nav />
+        <div className="relative z-50 mx-auto w-full max-w-4xl">
+          <SearchBarOverlay
+            destination=""
+            setDestination={noop}
+            checkIn=""
+            setCheckIn={noop}
+            checkOut=""
+            setCheckOut={noop}
+            adults={2}
+            setAdults={noop}
+            childCount={0}
+            setChildCount={noop}
+            rooms={1}
+            setRooms={noop}
+            openSearchBar={false}
+            setOpenSearchBar={noop}
+            openDatePicker={false}
+            setOpenDatePicker={noop}
+            openGuestSelector={false}
+            setOpenGuestSelector={noop}
+            onSearch={noop}
+          />
+          <p className="mx-3 mt-3 mb-6 flex h-9 items-center font-sans text-sm text-white/60">Searching…</p>
+        </div>
+        <ul aria-busy="true" aria-label="Loading stays" className={`relative z-10 ${RESULTS_GRID}`}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <li key={i}>
+              <StayPosterSkeleton />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function SearchClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
   return (
-    <Suspense>
+    <Suspense fallback={<SearchPageFallback backdrops={backdrops} />}>
       <SearchPageInner backdrops={backdrops} />
     </Suspense>
   );
