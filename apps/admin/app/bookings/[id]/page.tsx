@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPool } from "@openbookings/db";
 import { CopyId } from "./copy-id";
+import { RealActionsPanel } from "./real-actions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { loadAdminBooking } from "@/lib/booking";
 import { buildTimeline } from "@/lib/timeline";
+import { allowedFor } from "@/lib/real-actions";
 import { requireSuperAdmin } from "@/lib/super-admin";
 
 const eur = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
@@ -37,6 +39,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { booking, guest, property, rooms, transactions, refunds, messages, tickets } = data;
   const tz = property.timezone;
   const timeline = buildTimeline(data);
+  const initial = { guest: await allowedFor(id, "guest"), host: await allowedFor(id, "host") };
 
   const sum = (xs: { amount: number }[]) => xs.reduce((a, x) => a + Number(x.amount), 0);
   const paid = sum(transactions.filter((t) => t.type === "charge" && t.status === "succeeded"));
@@ -236,7 +239,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         )}
       </Section>
 
-      <section id="actions" />
+      <Section id="actions" title="Actions">
+        <RealActionsPanel
+          bookingId={booking.id}
+          rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
+          initial={initial}
+        />
+      </Section>
 
       <details className="text-xs">
         <summary className="cursor-pointer text-sm">Raw data</summary>
