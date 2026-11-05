@@ -54,6 +54,32 @@ describeWithDb("booking search against Postgres", () => {
     expect(ids).toContain(a.bookingId);
   });
 
+  test("finds by email prefix without an @", async () => {
+    const email = (await searchBookings(db, { q: a.bookingId }))[0].guestEmail as string;
+    const ids = (await searchBookings(db, { q: email.slice(0, 12) })).map((r) => r.id);
+    expect(ids).toContain(a.bookingId);
+  });
+
+  test("finds by the 8-character id prefix shown in the table", async () => {
+    const ids = (await searchBookings(db, { q: a.bookingId.slice(0, 8) })).map((r) => r.id);
+    expect(ids).toContain(a.bookingId);
+  });
+
+  test("filters by property", async () => {
+    const other = await seedProperty(db, { tier: "flex" });
+    const c = await seedBooking(db, other, { checkIn: "2031-10-10", nights: 1, rooms: 1 });
+    const pid = (await db.query("SELECT hotel_id FROM bookings WHERE id = $1", [c.bookingId])).rows[0].hotel_id;
+    const rows = await searchBookings(db, { q: "pi_test", property: pid });
+    expect(rows.map((r) => r.id)).toEqual([c.bookingId]);
+  });
+
+  test("ignores malformed filters", async () => {
+    const base = (await searchBookings(db, { q: a.bookingId })).map((r) => r.id);
+    for (const f of [{ status: "foo" }, { property: "x" }, { from: "garbage" }, { from: "2031-02-31" }]) {
+      expect((await searchBookings(db, { q: a.bookingId, ...f })).map((r) => r.id)).toEqual(base);
+    }
+  });
+
   test("filters by status", async () => {
     await db.query("UPDATE bookings SET status = 'cancelled' WHERE id = $1", [a.bookingId]);
     const rows = await searchBookings(db, { q: "pi_test", status: "cancelled" });
@@ -66,7 +92,7 @@ describeWithDb("booking search against Postgres", () => {
   });
 
   test("treats wildcards literally", async () => {
-    for (const q of ["%", "_", "'"]) {
+    for (const q of ["%", "_", "'", "\\"]) {
       expect(await searchBookings(db, { q })).toEqual([]);
     }
   });
