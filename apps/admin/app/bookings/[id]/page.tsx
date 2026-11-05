@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPool } from "@openbookings/db";
+import { CopyId } from "./copy-id";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { loadAdminBooking } from "@/lib/booking";
@@ -48,11 +49,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       <header className="space-y-1">
         <div className="flex items-center gap-3">
           <h1 className="font-mono text-xl">{booking.id}</h1>
+          <CopyId id={booking.id} />
           <Badge variant="secondary">{booking.status}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
           {property.name} · {String(booking.check_in_date)} → {String(booking.check_out_date)} ·{" "}
-          {eur.format(Number(booking.total_amount))}
+          {eur.format(Number(booking.total_amount))} · Booking fee {eur.format(Number(booking.booking_fee_amount ?? 0))}
         </p>
         <p className="text-sm">
           Guest: {guest?.name ?? "-"} <span className="text-muted-foreground">{guest?.email}</span>
@@ -76,7 +78,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               <TableHead>Rate plan</TableHead>
               <TableHead>Guests</TableHead>
               <TableHead>Nights</TableHead>
+              <TableHead className="text-right">Per night</TableHead>
               <TableHead>Policy</TableHead>
+              <TableHead>Free cancellation until</TableHead>
+              <TableHead className="text-right">Tourist tax</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Cancelled</TableHead>
             </TableRow>
@@ -91,7 +96,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   {String(r.adults)}A {String(r.children ?? 0)}C
                 </TableCell>
                 <TableCell>{String(r.total_nights)}</TableCell>
+                <TableCell className="text-right">{eur.format(Number(r.price_per_night))}</TableCell>
                 <TableCell>{String(r.cancellation_tier ?? "-")}</TableCell>
+                <TableCell>
+                  {r.full_refund_until ? fmt(r.full_refund_until as Date, tz) : "none (non-refundable)"}
+                </TableCell>
+                <TableCell className="text-right">{eur.format(Number(r.tourist_tax_amount ?? 0))}</TableCell>
                 <TableCell className="text-right">{eur.format(Number(r.total_amount))}</TableCell>
                 <TableCell>{r.cancelled_at ? fmt(r.cancelled_at, tz) : "-"}</TableCell>
               </TableRow>
@@ -115,6 +125,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                 <TableHead>When</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Provider</TableHead>
+                <TableHead>Provider id</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Failure</TableHead>
@@ -126,6 +137,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   <TableCell>{fmt(t.created_at, tz)}</TableCell>
                   <TableCell>{t.type}</TableCell>
                   <TableCell>{String(t.provider ?? "-")}</TableCell>
+                  <TableCell className="font-mono">{String(t.provider_payment_id ?? "-")}</TableCell>
                   <TableCell>{t.status}</TableCell>
                   <TableCell className="text-right">{eur.format(Number(t.amount))}</TableCell>
                   <TableCell>{[t.failure_code, t.failure_message].filter(Boolean).join(": ") || "-"}</TableCell>

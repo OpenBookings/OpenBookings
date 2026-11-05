@@ -61,6 +61,13 @@ describe("buildTimeline", () => {
     expect(tl.map((e) => e.kind)).toEqual(["created", "confirmed", "rooms_cancelled"]);
   });
 
+  test("created is kept even at or after the first stored event", () => {
+    const b = base();
+    b.events = [ev("checked_in", t("09:00:00"))];
+    const tl = buildTimeline(b);
+    expect(tl.map((e) => e.kind)).toEqual(["checked_in", "created"]);
+  });
+
   test("ties sort stored first", () => {
     const b = base();
     b.events = [ev("checked_in", t("10:00:00"))];
