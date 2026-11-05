@@ -22,7 +22,7 @@ import {
   type RefundResult,
 } from "@openbookings/pricing";
 import { getPool, withTransaction } from "../index";
-import { recordBookingEvent, type BookingEventActor, type BookingEventKind } from "../booking-events";
+import { recordBookingEvent, type BookingEventActor, type BookingEventKind, type NewBookingEvent } from "../booking-events";
 // Imported from the package root for the pool only; the root does not import
 // this module back (apps use "@openbookings/db/booking-lifecycle").
 import type { Queryable } from "../reservation-policy";
@@ -223,6 +223,18 @@ function refundData(actor: Actor | undefined, data: Record<string, unknown>) {
   return actor ? eventData(actor, data) : data;
 }
 
+/**
+ * The event log is a diagnostic view: after the money moved, a failed event
+ * insert must not change refund bookkeeping or stop the remaining refunds.
+ */
+async function recordEventSafely(db: Queryable, event: NewBookingEvent): Promise<void> {
+  try {
+    await recordBookingEvent(db, event);
+  } catch (error) {
+    console.error("booking event not recorded", event.kind, event.bookingId, error);
+  }
+}
+
 type RefundRow = { id: string; reservationId: string | null; amount: number; key: string };
 
 async function insertRefund(
@@ -290,6 +302,7 @@ async function sendRefunds(
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
       continue;
     }
+    let succeeded: { stripeRefundId: string } | null = null;
     try {
       const existing =
         retry && deps.findRefund
@@ -311,13 +324,7 @@ async function sendRefunds(
         `UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2 AND status <> 'succeeded'`,
         [refund.id, row.id],
       );
-      await recordBookingEvent(db, {
-        bookingId: booking.id,
-        reservationId: row.reservationId,
-        kind: "refund_succeeded",
-        actor: SYSTEM,
-        data: refundData(actor, { refundId: row.id, amount: row.amount, stripeRefundId: refund.id }),
-      });
+      succeeded = { stripeRefundId: refund.id };
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "succeeded" });
     } catch (error) {
       const status = (deps.isDefiniteFailure ?? (() => true))(error) ? "failed" : "pending";
@@ -333,7 +340,7 @@ async function sendRefunds(
           JSON.stringify({ bookingId: booking.id, refundId: row.id, amount: row.amount, error: String(error) }),
         ],
       );
-      await recordBookingEvent(db, {
+      await recordEventSafely(db, {
         bookingId: booking.id,
         reservationId: row.reservationId,
         kind: status === "failed" ? "refund_failed" : "refund_uncertain",
@@ -342,6 +349,15 @@ async function sendRefunds(
       });
       deps.onRefundProblem?.({ bookingId: booking.id, refundId: row.id, status, error });
       results.push({ reservationId: row.reservationId, amount: row.amount, status });
+    }
+    if (succeeded) {
+      await recordEventSafely(db, {
+        bookingId: booking.id,
+        reservationId: row.reservationId,
+        kind: "refund_succeeded",
+        actor: SYSTEM,
+        data: refundData(actor, { refundId: row.id, amount: row.amount, stripeRefundId: succeeded.stripeRefundId }),
+      });
     }
   }
   return results;

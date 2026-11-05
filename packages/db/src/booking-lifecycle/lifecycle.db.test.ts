@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
-import { loadBookingEvents } from "../booking-events";
+import { loadBookingEvents, type BookingEventKind } from "../booking-events";
 import { confirmBookingPolicy } from "../reservation-policy";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import {
@@ -205,7 +205,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
   test("cancel writes rooms_cancelled and refund_succeeded", async () => {
     await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: null });
     const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind !== "confirmed");
-    expect(events.map((e) => e.kind)).toEqual(["rooms_cancelled", "refund_succeeded", "refund_succeeded"]);
+    expect(events.map((e) => e.kind)).toEqual(["rooms_cancelled", ...reservationIds.map(() => "refund_succeeded")] as BookingEventKind[]);
     expect(events[0].actorKind).toBe("guest");
     expect(events[0].actorId).toBe("test-guest");
     expect(events[0].data.cancelsBooking).toBe(true);
@@ -232,5 +232,30 @@ describeWithDb("booking lifecycle against Postgres", () => {
     await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
     await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
     expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "confirmed")).toHaveLength(1);
+  });
+
+  test("a failing event insert after the refund never changes the refund outcome", async () => {
+    const base = lifecycleDb();
+    const failing: LifecycleDb = {
+      ...base,
+      query: (text, values) =>
+        text.includes("INSERT INTO booking_events") ? Promise.reject(new Error("events down")) : base.query(text, values),
+    };
+    const errors = console.error;
+    console.error = () => {};
+    try {
+      const result = await cancelRooms({ ...deps(), db: failing }, { bookingId, actor: guest, reservationIds: null });
+      expect(result.ok && result.refunds.map((r) => r.status)).toEqual(reservationIds.map(() => "succeeded"));
+    } finally {
+      console.error = errors;
+    }
+    expect(calls).toHaveLength(reservationIds.length);
+    const statuses = (await db.query(`SELECT status FROM refunds WHERE booking_id = $1`, [bookingId])).rows as { status: string }[];
+    expect(statuses.map((r) => r.status)).toEqual(reservationIds.map(() => "succeeded"));
+    const audit = await one<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM audit_log WHERE action IN ('refund.failed', 'refund.uncertain') AND detail->>'bookingId' = $1`,
+      [bookingId],
+    );
+    expect(audit.n).toBe(0);
   });
 });
