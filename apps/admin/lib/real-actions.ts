@@ -19,7 +19,7 @@ import type { BookingAction } from "@openbookings/pricing";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { actorFor, type ActAs } from "./actor";
 import { UUID_RE } from "./search";
-import { requireSuperAdmin } from "./super-admin";
+import { isStripeTestMode, requireSuperAdmin } from "./super-admin";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const invalid = { ok: false, error: "invalid" } as unknown as LifecycleResult;
@@ -42,6 +42,7 @@ const deps: LifecycleDeps = {
 };
 
 const notFound = { ok: false, error: "not_found" } satisfies LifecycleResult;
+const notTestMode = { ok: false, error: "stripe_not_test_mode" } as unknown as LifecycleResult;
 
 async function run(
   bookingId: string,
@@ -49,6 +50,7 @@ async function run(
   act: (actor: Actor) => Promise<LifecycleResult>,
 ): Promise<LifecycleResult> {
   requireSuperAdmin();
+  if (!isStripeTestMode()) return notTestMode;
   const actor = await actorFor(getPool(), bookingId, as);
   if (!actor) return notFound;
   const result = await act(actor);
@@ -70,7 +72,7 @@ export async function allowedFor(
 /** What a guest cancellation of these rooms (null = all) would refund now. */
 export async function adminPreviewRefund(bookingId: string, reservationIds: string[] | null) {
   requireSuperAdmin();
-  if (badIds(bookingId, reservationIds)) return null;
+  if (!isStripeTestMode() || badIds(bookingId, reservationIds)) return null;
   return previewRefund({ bookingId, reservationIds });
 }
 
@@ -108,6 +110,7 @@ export async function adminGoodwillRefund(bookingId: string, amount: number) {
 
 export async function adminRetryRefunds(bookingId: string) {
   requireSuperAdmin();
+  if (!isStripeTestMode()) return notTestMode;
   if (badIds(bookingId, null)) return invalid;
   const result = await retryRefunds(deps, { bookingId, via: "admin" });
   revalidatePath(`/bookings/${bookingId}`);

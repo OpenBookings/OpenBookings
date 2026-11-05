@@ -93,10 +93,11 @@ describe("buildTimeline", () => {
     test("a stored rooms_cancelled replaces reconstructed room/booking/refund facts a few ms earlier", () => {
       const b = base();
       b.booking.status = "cancelled";
+      const bk = b.booking as { cancelled_at: Date | null };
       const at = t("12:00:00");
       const before = (ms: number) => new Date(at.getTime() - ms);
       b.rooms[0].cancelled_at = before(5);
-      b.booking.cancelled_at = before(5);
+      bk.cancelled_at = before(5);
       b.refunds[0].created_at = before(4);
       b.events = [
         evd("rooms_cancelled", at, { reservationIds: ["r1"], cancelsBooking: true, refundTotal: 50 }),
@@ -116,7 +117,7 @@ describe("buildTimeline", () => {
 
     test("a stored no_show replaces the reconstructed one", () => {
       const b = base();
-      b.booking.no_show_reported_at = new Date(t("12:00:00").getTime() - 2);
+      (b.booking as { no_show_reported_at: Date | null }).no_show_reported_at = new Date(t("12:00:00").getTime() - 2);
       b.events = [ev("no_show", t("12:00:00"))];
       expect(buildTimeline(b).filter((e) => e.kind === "no_show")).toHaveLength(1);
     });

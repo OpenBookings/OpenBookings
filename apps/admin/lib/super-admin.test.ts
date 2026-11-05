@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { databaseHost, isSuperAdminEnabled } from "./super-admin";
+import { databaseHost, isStripeTestMode, isSuperAdminEnabled } from "./super-admin";
 
 describe("isSuperAdminEnabled", () => {
   test('on only with "1" in development', () => {
@@ -26,5 +26,13 @@ describe("databaseHost", () => {
   test("unknown for missing or invalid", () => {
     expect(databaseHost(undefined)).toBe("unknown");
     expect(databaseHost("not a url")).toBe("unknown");
+  });
+});
+
+describe("isStripeTestMode", () => {
+  test("only sk_test_ keys", () => {
+    expect(isStripeTestMode({ STRIPE_SECRET_KEY: "sk_test_abc" })).toBe(true);
+    expect(isStripeTestMode({ STRIPE_SECRET_KEY: "sk_live_abc" })).toBe(false);
+    expect(isStripeTestMode({})).toBe(false);
   });
 });

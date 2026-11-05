@@ -107,7 +107,15 @@ describeWithDb("forced edits against Postgres", () => {
   test("ignores rooms of another booking and rejects bad input", async () => {
     const other = await seedBooking(db, ids, { checkIn: "2031-12-10", nights: 2, rooms: 1 });
     await db.query(`UPDATE reservations SET cancelled_at = now() WHERE id = $1`, [other.reservationIds[0]]);
-    await forceUncancelRooms(db, { bookingId, reservationIds: [other.reservationIds[0]] });
+    expect(await forceUncancelRooms(db, { bookingId, reservationIds: [other.reservationIds[0]] })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(await forceCancelRooms(db, { bookingId, reservationIds: [other.reservationIds[0]] })).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind.startsWith("forced_"))).toEqual([]);
     const r = await db.query(`SELECT cancelled_at FROM reservations WHERE id = $1`, [other.reservationIds[0]]);
     expect(r.rows[0].cancelled_at).not.toBeNull();
     expect(await forceCancelRooms(db, { bookingId, reservationIds: [] })).toEqual({ ok: false, error: "invalid" });

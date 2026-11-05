@@ -18,6 +18,15 @@ const isId = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(
 const idList = (v: unknown): v is string[] =>
   Array.isArray(v) && v.length > 0 && v.every(isId);
 
+/** How many of these reservations belong to the booking. */
+async function owned(tx: Queryable, bookingId: string, reservationIds: string[]): Promise<number> {
+  const { rows } = await tx.query(
+    `SELECT count(*)::int AS n FROM reservations WHERE booking_id = $1 AND id = ANY($2::uuid[])`,
+    [bookingId, reservationIds],
+  );
+  return (rows[0] as { n: number }).n;
+}
+
 async function lock(tx: Queryable, bookingId: string): Promise<{ status: string } | null> {
   const { rows } = await tx.query(`SELECT status FROM bookings WHERE id = $1 FOR UPDATE`, [bookingId]);
   return (rows[0] as { status: string } | undefined) ?? null;
@@ -50,7 +59,7 @@ export async function forceUncancelRooms(
 ): Promise<ForcedResult> {
   if (!isId(i.bookingId) || !idList(i.reservationIds)) return invalid;
   const b = await lock(tx, i.bookingId);
-  if (!b) return notFound;
+  if (!b || (await owned(tx, i.bookingId, i.reservationIds)) === 0) return notFound;
   await tx.query(`UPDATE reservations SET cancelled_at = NULL WHERE booking_id = $1 AND id = ANY($2::uuid[])`, [
     i.bookingId,
     i.reservationIds,
@@ -78,7 +87,7 @@ export async function forceCancelRooms(
 ): Promise<ForcedResult> {
   if (!isId(i.bookingId) || !idList(i.reservationIds)) return invalid;
   const b = await lock(tx, i.bookingId);
-  if (!b) return notFound;
+  if (!b || (await owned(tx, i.bookingId, i.reservationIds)) === 0) return notFound;
   await tx.query(
     `UPDATE reservations SET cancelled_at = now() WHERE booking_id = $1 AND id = ANY($2::uuid[]) AND cancelled_at IS NULL`,
     [i.bookingId, i.reservationIds],

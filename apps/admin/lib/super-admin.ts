@@ -25,3 +25,8 @@ export function databaseHost(url: string | undefined): string {
     return "unknown";
   }
 }
+
+/** Real actions touch Stripe, so they run only against a test-mode key. */
+export function isStripeTestMode(env: Record<string, string | undefined> = process.env): boolean {
+  return typeof env.STRIPE_SECRET_KEY === "string" && env.STRIPE_SECRET_KEY.startsWith("sk_test_");
+}
