@@ -70,7 +70,7 @@ describe("buildHostTimeline", () => {
       new Date("2031-10-20T10:00:00Z"),
     );
     expect(labels(t)).toEqual(["Booked", "Cancelled"]);
-    expect(t.headline.sentence).toMatch(/^€\s376,00 was refunded to the guest\.$/);
+    expect(t.headline.sentence).toBe("€376.00 was refunded to the guest.");
   });
 
   test("left early: the departure replaces check-out", () => {

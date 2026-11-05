@@ -52,7 +52,7 @@ const dayOf = (d: number, tz: string) =>
 const timeOf = (d: number, tz: string) =>
   fmt("time", tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(d));
 const when = (d: number, tz: string) => `${dayOf(d, tz)}, ${timeOf(d, tz)}`;
-const euros = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
+const euros = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" });
 
 /** "12 days", "5 hours", "under an hour". */
 export function timeLeft(ms: number): string {
