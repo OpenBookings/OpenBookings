@@ -109,7 +109,7 @@ export async function adminGoodwillRefund(bookingId: string, amount: number) {
 export async function adminRetryRefunds(bookingId: string) {
   requireSuperAdmin();
   if (badIds(bookingId, null)) return invalid;
-  const result = await retryRefunds(deps, { bookingId });
+  const result = await retryRefunds(deps, { bookingId, via: "admin" });
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }

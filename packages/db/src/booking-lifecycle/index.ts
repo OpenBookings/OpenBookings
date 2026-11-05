@@ -219,8 +219,8 @@ export async function loadBookingState(
 
 const SYSTEM: BookingEventActor = { kind: "system", id: null };
 
-function refundData(actor: Actor | undefined, data: Record<string, unknown>) {
-  return actor ? eventData(actor, data) : data;
+function refundData(actor: { via?: "admin" } | undefined, data: Record<string, unknown>) {
+  return actor?.via ? { ...data, via: actor.via } : data;
 }
 
 /**
@@ -291,7 +291,7 @@ async function sendRefunds(
   booking: BookingRow,
   rows: RefundRow[],
   retry = false,
-  actor?: Actor,
+  actor?: { via?: "admin" },
 ) {
   const now = deps.now?.() ?? new Date();
   const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
@@ -578,7 +578,10 @@ export async function issueGoodwillRefund(
  * looked up on Stripe (when `findRefund` is given), so one that did go through
  * is recorded rather than paid twice.
  */
-export async function retryRefunds(deps: LifecycleDeps, i: { bookingId: string }): Promise<LifecycleResult> {
+export async function retryRefunds(
+  deps: LifecycleDeps,
+  i: { bookingId: string; via?: "admin" },
+): Promise<LifecycleResult> {
   const { db, now } = context(deps);
   const state = await loadBookingState(db, i.bookingId, now);
   if (!state) return { ok: false, error: "not_found" };
@@ -588,5 +591,5 @@ export async function retryRefunds(deps: LifecycleDeps, i: { bookingId: string }
     [i.bookingId],
   );
   if (rows.length === 0) return { ok: false, error: "nothing_to_refund" };
-  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[], true) };
+  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[], true, { via: i.via }) };
 }
