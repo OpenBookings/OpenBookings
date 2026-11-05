@@ -7,6 +7,7 @@ export * from "./schema";
 export * from "./support";
 export * from "./support-tickets";
 export * from "./consent";
+export * from "./booking-events";
 export { sql } from "drizzle-orm";
 
 const connectionType = process.env.ENV_TYPE;
