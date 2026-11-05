@@ -4,6 +4,7 @@ import { PostHogProvider, CookieConsentProvider } from "@openbookings/analytics/
 import { AnalyticsIdentity } from "@/components/AnalyticsIdentity";
 import { CookieBanner } from "@/components/CookieBanner";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { NAV_HINT_SCRIPT } from "@/lib/nav-hint";
 import { consentBannerVersion } from "@openbookings/analytics/consent-events";
 import { documentVersionId, getCurrentVersion, getDocument } from "@/lib/legal/documents";
 import "./globals.css";
@@ -70,8 +71,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${gloock.variable} ${libreFranklin.variable}`}>
-      <head />
+    // suppressHydrationWarning: the nav-hint script sets an attribute and a CSS
+    // variable on <html> before React hydrates.
+    <html lang="en" className={`dark ${gloock.variable} ${libreFranklin.variable}`} suppressHydrationWarning>
+      <head>
+        {/* A constant written in lib/nav-hint.ts, with no request or user data
+            in it. It has to be a plain inline script: next/script's
+            beforeInteractive waits for the JS runtime, which is the delay
+            this exists to avoid. */}
+        {/* eslint-disable-next-line react/no-danger */}
+        <script dangerouslySetInnerHTML={{ __html: NAV_HINT_SCRIPT }} />
+      </head>
       <body>
         <NavigationProgress />
         <CookieConsentProvider bannerVersion={BANNER_VERSION}>

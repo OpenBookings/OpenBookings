@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 type Variant = "glass" | "console";
 
-function initials(name: string): string {
+export function initials(name: string): string {
   return (
     name
       .split(" ")
