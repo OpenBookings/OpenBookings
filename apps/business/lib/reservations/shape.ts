@@ -10,6 +10,7 @@ import {
   type NightValue,
 } from "@openbookings/pricing";
 import { roomPaid } from "@openbookings/db/booking-lifecycle";
+import { buildHostTimeline, type HostTimeline } from "./timeline";
 import type { ReservationStatus, ReservationSummary } from "@/components/dashboard/reservation-types";
 
 const regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
@@ -64,6 +65,7 @@ export type HostReservationRow = {
   timezone: string;
   check_in_time: string | null;
   check_in_until: string | null;
+  check_out_time: string | null;
   departed_early_on: string | null;
   confirmed_at: string | null;
   /** Refunded so far on the booking (rows that did not fail), euros. */
@@ -95,6 +97,11 @@ export type HostReservationRoom = {
 
 export type HostReservation = ReservationSummary & {
   timezone: string;
+  /** The property's check-in and check-out times ("15:00"), when it states them. */
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  /** What applies right now, then the milestones (booked, deadlines, check-in, check-out). */
+  timeline: HostTimeline;
   refundedAmount: number;
   refundIssue: boolean;
   departedEarlyOn: string | null;
@@ -173,6 +180,9 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
       ? rooms.reduce((sum, r) => sum + Math.round(r.paid * 100), 0) / 100
       : Number(row.total_amount),
     timezone: row.timezone,
+    checkInTime: row.check_in_time,
+    checkOutTime: row.check_out_time,
+    timeline: buildHostTimeline(row, now),
     refundedAmount: Number(row.refunded),
     refundIssue: Number(row.unsettled_refunds) > 0,
     departedEarlyOn: row.departed_early_on,

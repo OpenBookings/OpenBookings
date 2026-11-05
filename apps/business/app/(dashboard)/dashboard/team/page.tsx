@@ -8,8 +8,8 @@ import { TeamManager } from "./_components/team-manager";
 
 /**
  * Who is on the team, and what each role means. Owners and general managers
- * add, change and remove people here; everyone else sees their own role and
- * the role guide, but not the list of their colleagues.
+ * get two tabs, People (add, change and remove people) and Roles; everyone
+ * else sees their own role and the roles table, but not their colleagues.
  */
 export default async function TeamPage() {
   const session = await getServerSession();
@@ -25,7 +25,15 @@ export default async function TeamPage() {
     );
   } else if (scope.canManage) {
     const [team, factors] = await Promise.all([loadTeam(scope), stepUpFactors(scope)]);
-    body = <TeamManager team={team} actorRole={scope.role} actorUserId={scope.userId} factors={factors} />;
+    body = (
+      <TeamManager
+        team={team}
+        actorRole={scope.role}
+        actorUserId={scope.userId}
+        factors={factors}
+        rolesPanel={<RoleGuide currentRole={scope.role} inTab />}
+      />
+    );
   } else {
     body = (
       <section className="flex flex-col gap-1 rounded-lg border p-4">
@@ -47,7 +55,7 @@ export default async function TeamPage() {
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-6">
             <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-10">
               {body}
-              <RoleGuide currentRole={scope?.role} />
+              {scope?.canManage ? null : <RoleGuide currentRole={scope?.role} />}
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ import { HOST_ROLES, isPropertyScoped, roles, type HostRole, type Permission } f
 export type RoleInfo = {
   role: HostRole;
   label: string;
-  /** One line: who this role is for. */
+  /** One line: what this role covers. */
   summary: string;
   /** "All properties" or "Only the properties you choose". */
   scope: string;
@@ -22,8 +22,7 @@ export const ROLE_INFO: Record<HostRole, RoleInfo> = {
   owner: {
     role: "owner",
     label: "Owner",
-    summary:
-      "Owns the business on OpenBookings. Everything a general manager can do, plus payouts set-up and closing the account.",
+    summary: "Owns the business on OpenBookings. Everything a general manager can do, plus closing the account.",
     scope: "All properties",
   },
   admin: {
@@ -70,25 +69,55 @@ export const ROLE_ORDER: readonly HostRole[] = [
   "finance",
 ];
 
-/** The abilities a role card lists, each tied to the grant that enforces it. */
-export const ABILITIES: ReadonlyArray<{ label: string; permission: Permission }> = [
-  { label: "See bookings", permission: { booking: ["read"] } },
+export const ABILITY_GROUPS = ["Bookings", "Rates & property", "Finance", "Team & account"] as const;
+export type AbilityGroup = (typeof ABILITY_GROUPS)[number];
+
+/**
+ * The abilities the roles table lists, each tied to the grant that enforces
+ * it. Labels use the words of the dashboard itself (its menu and buttons),
+ * not the grant names.
+ */
+export const ABILITIES: ReadonlyArray<{
+  label: string;
+  /** A short note under the label. */
+  hint?: string;
+  group: AbilityGroup;
+  permission: Permission;
+}> = [
+  { label: "View bookings", group: "Bookings", permission: { booking: ["read"] } },
   {
-    label: "Check guests in, mark no-shows and early departures",
+    // Break the glass (apps/business/lib/reservations/break-glass.ts) checks booking read.
+    label: "View guest phone and address",
+    hint: "Each view is logged",
+    group: "Bookings",
+    permission: { booking: ["read"] },
+  },
+  {
+    label: "Check guests in",
+    hint: "Also no-shows and early departures",
+    group: "Bookings",
     permission: { booking: ["operate"] },
   },
+  { label: "Cancel booking", hint: "The guest gets a full refund", group: "Bookings", permission: { booking: ["cancel"] } },
+  { label: "Refund booking", hint: "Any amount you choose", group: "Bookings", permission: { booking: ["refund"] } },
+  { label: "View rates & availability", group: "Rates & property", permission: { rate: ["read"] } },
+  { label: "Change rates & availability", group: "Rates & property", permission: { rate: ["update"] } },
+  { label: "Edit property and rooms", group: "Rates & property", permission: { property: ["update"] } },
+  { label: "View payouts", group: "Finance", permission: { payout: ["read"] } },
+  { label: "Change payout details", group: "Finance", permission: { payout: ["update"] } },
   {
-    label: "Cancel bookings (refund follows the cancellation policy)",
-    permission: { booking: ["cancel"] },
+    label: "Manage team",
+    hint: "Invite and remove people, change roles",
+    group: "Team & account",
+    permission: { member: ["invite"] },
   },
-  { label: "Give goodwill refunds", permission: { booking: ["refund"] } },
-  { label: "See rates and availability", permission: { rate: ["read"] } },
-  { label: "Change rates and availability", permission: { rate: ["update"] } },
-  { label: "Edit the property and its rooms", permission: { property: ["update"] } },
-  { label: "See payout status", permission: { payout: ["read"] } },
-  { label: "Add and remove people, change roles", permission: { member: ["invite"] } },
-  { label: "Close the organisation's account", permission: { org: ["delete"] } },
+  { label: "Close account", group: "Team & account", permission: { org: ["delete"] } },
 ];
+
+/** Whether `role` holds `permission` (before any property scoping). */
+export function roleHas(role: HostRole, permission: Permission): boolean {
+  return roles[role].authorize(permission as never).success;
+}
 
 export function roleLabel(role: string): string {
   return (role in ROLE_INFO ? ROLE_INFO[role as HostRole].label : null) ?? role;
@@ -98,7 +127,7 @@ export function roleAbilities(role: HostRole): { can: string[]; cannot: string[]
   const can: string[] = [];
   const cannot: string[] = [];
   for (const ability of ABILITIES) {
-    (roles[role].authorize(ability.permission as never).success ? can : cannot).push(ability.label);
+    (roleHas(role, ability.permission) ? can : cannot).push(ability.label);
   }
   return { can, cannot };
 }

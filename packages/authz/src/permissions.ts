@@ -17,8 +17,8 @@ import {
  * Bookings are split by how much trust an action needs:
  * - `operate`: day-of-stay work (check-in, no-show, early departure). Any
  *   refund that follows comes from the booking's cancellation policy.
- * - `cancel`: cancel rooms or the whole booking; the refund again follows
- *   the policy.
+ * - `cancel`: cancel rooms or the whole booking. A host cancellation
+ *   refunds the guest in full, whatever the policy.
  * - `refund`: money back at the host's discretion (goodwill). Owner and
  *   general manager only.
  *

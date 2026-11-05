@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Ban, CalendarX2, Gift, LogIn, LogOut, RotateCw } from "lucide-react";
 import type { LifecycleResult } from "@openbookings/db/booking-lifecycle";
 import {
   AlertDialog,
@@ -14,9 +13,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Ban, HandCoins, LogIn, LogOut, RotateCw, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   hostCancelRooms,
   hostGoodwillRefund,
@@ -41,11 +43,7 @@ const ERRORS: Record<string, string> = {
 const REFUND_FAILED =
   "Done, but the refund didn't go through. Use Retry refund, or contact support if it keeps failing.";
 
-type Pending =
-  | { kind: "no_show" }
-  | { kind: "cancel"; reservationIds: string[] | null; amount: number; label: string }
-  | { kind: "early_departure" }
-  | { kind: "goodwill" };
+type Pending = { kind: "no_show" } | { kind: "cancel" } | { kind: "early_departure" } | { kind: "goodwill" };
 
 /**
  * The actions a host can take on one booking, offered only when the booking's
@@ -57,7 +55,6 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
   const [busy, setBusy] = React.useState(false);
   const [pending, setPending] = React.useState<Pending | null>(null);
   const can = (a: HostReservation["actions"][number]) => reservation.actions.includes(a);
-  const activeRooms = reservation.rooms.filter((r) => !r.cancelledAt);
 
   async function perform(act: () => Promise<LifecycleResult>, success: string) {
     setBusy(true);
@@ -78,112 +75,107 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
     }
   }
 
+  const canRetry = reservation.refundIssue && reservation.canRetryRefunds;
+  const canGoodwill = can("goodwill_refund") && reservation.totalAmount > reservation.refundedAmount;
+  // The one thing due now leads: checking the guest in, else a refund that
+  // didn't go through. The rest are outline icons; Cancel sits apart.
+  const primary = can("mark_checked_in") ? "check_in" : canRetry ? "retry" : null;
+
+  const actions: Array<{ key: string; label: string; icon: React.ReactNode; onClick: () => void }> = [];
+  if (can("mark_checked_in")) {
+    actions.push({
+      key: "check_in",
+      label: "Check in",
+      icon: <LogIn />,
+      onClick: () => perform(() => hostMarkCheckedIn(reservation.id), "Marked as checked in"),
+    });
+  }
+  if (canRetry) {
+    actions.push({
+      key: "retry",
+      label: "Retry refund",
+      icon: <RotateCw />,
+      onClick: () => perform(() => hostRetryRefunds(reservation.id), "Refund sent"),
+    });
+  }
+  if (can("mark_no_show")) {
+    actions.push({ key: "no_show", label: "Mark as no-show", icon: <UserX />, onClick: () => setPending({ kind: "no_show" }) });
+  }
+  if (can("record_early_departure")) {
+    actions.push({ key: "early", label: "Guest left early", icon: <LogOut />, onClick: () => setPending({ kind: "early_departure" }) });
+  }
+  if (canGoodwill) {
+    actions.push({ key: "goodwill", label: "Refund booking", icon: <HandCoins />, onClick: () => setPending({ kind: "goodwill" }) });
+  }
+  // The primary one goes first.
+  actions.sort((x, y) => Number(y.key === primary) - Number(x.key === primary));
+
+  if (actions.length === 0 && !can("cancel")) return null;
+
   return (
-    <div className="flex w-full flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        {can("mark_checked_in") && (
-          <Button
-            size="sm"
-            variant="outline"
+    <TooltipProvider delayDuration={200}>
+      <div className="flex w-full items-center gap-2">
+        {actions.map((action) => (
+          <IconAction
+            key={action.key}
+            label={action.label}
+            variant={action.key === primary ? "default" : "outline"}
             disabled={busy}
-            onClick={() => perform(() => hostMarkCheckedIn(reservation.id), "Marked as checked in")}
+            onClick={action.onClick}
           >
-            <LogIn /> Checked in
-          </Button>
-        )}
-        {can("mark_no_show") && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setPending({ kind: "no_show" })}>
-            <CalendarX2 /> No-show
-          </Button>
-        )}
-        {can("record_early_departure") && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setPending({ kind: "early_departure" })}>
-            <LogOut /> Left early
-          </Button>
-        )}
-        {can("goodwill_refund") && reservation.totalAmount > reservation.refundedAmount && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => setPending({ kind: "goodwill" })}>
-            <Gift /> Goodwill refund
-          </Button>
-        )}
-        {reservation.refundIssue && reservation.canRetryRefunds && (
-          <Button
-            size="sm"
+            {action.icon}
+          </IconAction>
+        ))}
+        {can("cancel") && (
+          <IconAction
+            label="Cancel booking"
             variant="outline"
+            className="ml-auto border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
             disabled={busy}
-            onClick={() => perform(() => hostRetryRefunds(reservation.id), "Refund sent")}
+            onClick={() => setPending({ kind: "cancel" })}
           >
-            <RotateCw /> Retry refund
-          </Button>
+            <Ban />
+          </IconAction>
         )}
+
+        <AlertDialog open={pending !== null} onOpenChange={(open) => !open && !busy && setPending(null)}>
+          <AlertDialogContent>
+            {pending?.kind === "no_show" && (
+              <Confirm
+                title="Mark as no-show?"
+                body="The guest gets no refund, tourist tax included. This can't be undone."
+                action="Mark no-show"
+                busy={busy}
+                onConfirm={() => perform(() => hostMarkNoShow(reservation.id), "Marked as no-show")}
+              />
+            )}
+            {pending?.kind === "cancel" && <CancelRooms reservation={reservation} busy={busy} perform={perform} />}
+            {pending?.kind === "early_departure" && (
+              <EarlyDeparture reservation={reservation} busy={busy} perform={perform} />
+            )}
+            {pending?.kind === "goodwill" && <Goodwill reservation={reservation} busy={busy} perform={perform} />}
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
+    </TooltipProvider>
+  );
+}
 
-      {can("cancel") && (
-        <div className="flex flex-wrap gap-2">
-          {activeRooms.length > 1 &&
-            activeRooms.map((room) => (
-              <Button
-                key={room.reservationId}
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                disabled={busy}
-                onClick={() =>
-                  setPending({ kind: "cancel", reservationIds: [room.reservationId], amount: room.paid, label: room.roomName })
-                }
-              >
-                <Ban /> Cancel {room.roomName}
-              </Button>
-            ))}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-destructive hover:text-destructive ml-auto"
-            disabled={busy}
-            onClick={() =>
-              setPending({
-                kind: "cancel",
-                reservationIds: null,
-                amount: activeRooms.reduce((sum, r) => sum + r.paid, 0),
-                label: activeRooms.length > 1 ? "all rooms" : "this booking",
-              })
-            }
-          >
-            <Ban /> Cancel booking
-          </Button>
-        </div>
-      )}
-
-      <AlertDialog open={pending !== null} onOpenChange={(open) => !open && !busy && setPending(null)}>
-        <AlertDialogContent>
-          {pending?.kind === "no_show" && (
-            <Confirm
-              title="Mark as no-show?"
-              body="The guest gets no refund, tourist tax included. This can't be undone."
-              action="Mark no-show"
-              busy={busy}
-              onConfirm={() => perform(() => hostMarkNoShow(reservation.id), "Marked as no-show")}
-            />
-          )}
-          {pending?.kind === "cancel" && (
-            <Confirm
-              title={`Cancel ${pending.label}?`}
-              body={`The guest gets a full refund of ${euros.format(pending.amount)} from your Stripe balance. Our commission on it is returned to you.`}
-              action="Cancel and refund"
-              destructive
-              busy={busy}
-              onConfirm={() =>
-                perform(() => hostCancelRooms(reservation.id, pending.reservationIds), "Cancelled and refunded")
-              }
-            />
-          )}
-          {pending?.kind === "early_departure" && (
-            <EarlyDeparture reservation={reservation} busy={busy} perform={perform} />
-          )}
-          {pending?.kind === "goodwill" && <Goodwill reservation={reservation} busy={busy} perform={perform} />}
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+/** An icon-only action: the label is its tooltip and its accessible name. */
+function IconAction({
+  label,
+  children,
+  ...props
+}: { label: string; children: React.ReactNode } & Omit<React.ComponentProps<typeof Button>, "size" | "aria-label">) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button size="icon" aria-label={label} {...props}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -266,6 +258,87 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
   );
 }
 
+/**
+ * Which rooms to cancel. A host cancellation always refunds the guest in
+ * full, so each room shows what it cost; the total is capped at what is
+ * left to refund (a goodwill refund may already have gone out).
+ */
+function CancelRooms({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
+  const active = reservation.rooms.filter((r) => !r.cancelledAt);
+  const [chosen, setChosen] = React.useState<string[]>(() => active.map((r) => r.reservationId));
+  const left = Math.max(0, reservation.totalAmount - reservation.refundedAmount);
+  const picked = active.filter((r) => chosen.includes(r.reservationId));
+  const refund = Math.min(left, Math.round(picked.reduce((sum, r) => sum + r.paid, 0) * 100) / 100);
+  const everything = picked.length === active.length;
+  const several = active.length > 1;
+
+  const action =
+    picked.length === 0
+      ? "Pick a room"
+      : everything
+        ? `Cancel ${several ? "all rooms" : "booking"} and refund ${euros.format(refund)}`
+        : `Cancel ${picked.length} ${picked.length === 1 ? "room" : "rooms"} and refund ${euros.format(refund)}`;
+
+  return (
+    <Confirm
+      title={several ? "Cancel rooms" : "Cancel this booking?"}
+      body={
+        several
+          ? "Pick the rooms to cancel. The guest gets a full refund for each, from your Stripe balance. Our commission on it is returned to you."
+          : "The guest gets a full refund from your Stripe balance. Our commission on it is returned to you."
+      }
+      action={action}
+      destructive
+      busy={busy}
+      disabled={picked.length === 0}
+      onConfirm={() =>
+        perform(
+          () => hostCancelRooms(reservation.id, everything ? null : picked.map((r) => r.reservationId)),
+          "Cancelled and refunded",
+        )
+      }
+    >
+      <div className="flex flex-col gap-2">
+        {several
+          ? active.map((room) => {
+              const id = `cancel-${room.reservationId}`;
+              const checked = chosen.includes(room.reservationId);
+              return (
+                <label
+                  key={room.reservationId}
+                  htmlFor={id}
+                  className="flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm has-[[data-state=checked]]:border-input"
+                >
+                  <Checkbox
+                    id={id}
+                    checked={checked}
+                    disabled={busy}
+                    onCheckedChange={(value) =>
+                      setChosen((current) =>
+                        value === true
+                          ? [...new Set([...current, room.reservationId])]
+                          : current.filter((c) => c !== room.reservationId),
+                      )
+                    }
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-medium">{room.roomName}</span>
+                    <span className="text-xs text-muted-foreground">{room.tierLabel}</span>
+                  </span>
+                  <span className="tabular-nums">{euros.format(room.paid)}</span>
+                </label>
+              );
+            })
+          : null}
+        <div className="flex items-baseline justify-between rounded-md bg-muted px-3 py-2.5 text-sm font-semibold">
+          <span>Guest gets back</span>
+          <span className="tabular-nums">{euros.format(refund)}</span>
+        </div>
+      </div>
+    </Confirm>
+  );
+}
+
 function Goodwill({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
   const left = Math.round((reservation.totalAmount - reservation.refundedAmount) * 100) / 100;
   const [amount, setAmount] = React.useState("");
@@ -273,7 +346,7 @@ function Goodwill({ reservation, busy, perform }: { reservation: HostReservation
   const valid = Number.isFinite(value) && value > 0 && value <= left;
   return (
     <Confirm
-      title="Goodwill refund"
+      title="Refund booking"
       body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${euros.format(left)} is left to refund.`}
       action={valid ? `Refund ${euros.format(value)}` : "Refund"}
       busy={busy}

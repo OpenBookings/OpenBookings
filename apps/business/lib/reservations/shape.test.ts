@@ -26,6 +26,7 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   timezone: "Europe/Amsterdam",
   check_in_time: "15:00",
   check_in_until: "22:00",
+  check_out_time: "11:00",
   departed_early_on: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
   refunded: 0,

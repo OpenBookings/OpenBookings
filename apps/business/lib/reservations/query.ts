@@ -37,6 +37,7 @@ export const HOST_RESERVATIONS_SQL = `
     p.timezone,
     to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
+    to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
     b.departed_early_on::text AS departed_early_on,
     b.confirmed_at,
     COALESCE((SELECT SUM(rf.amount) FROM refunds rf
