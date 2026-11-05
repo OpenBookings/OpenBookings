@@ -45,6 +45,30 @@ function rec(
   };
 }
 
+/**
+ * Row timestamps (JS clock / transaction start) and event timestamps
+ * (clock_timestamp) differ by a few ms, so a fact and the stored event that
+ * describes it can't be matched by time. Match by meaning instead.
+ */
+function coveredByStored(stored: TimelineEntry[]): (f: TimelineEntry) => boolean {
+  const has = (kind: string) => stored.some((e) => e.kind === kind);
+  const ids = (e: TimelineEntry) => (Array.isArray(e.data.reservationIds) ? (e.data.reservationIds as unknown[]) : []);
+  const cancelledRooms = new Set(
+    stored.filter((e) => e.kind === "rooms_cancelled" || e.kind === "forced_cancel").flatMap(ids),
+  );
+  const cancelsBooking = stored.some((e) => e.data.cancelsBooking === true);
+  const refundIds = new Set(
+    stored.filter((e) => e.kind.startsWith("refund_")).map((e) => e.data.refundId),
+  );
+  return (f) => {
+    if (f.kind === "confirmed" || f.kind === "no_show") return has(f.kind);
+    if (f.kind === "room_cancelled") return f.reservationId !== null && cancelledRooms.has(f.reservationId);
+    if (f.kind === "booking_cancelled") return cancelsBooking;
+    if (f.kind.startsWith("refund_")) return refundIds.has(f.data.refundId);
+    return false;
+  };
+}
+
 export function buildTimeline(b: Input): TimelineEntry[] {
   const { booking } = b;
   const facts: TimelineEntry[] = [
@@ -75,7 +99,7 @@ export function buildTimeline(b: Input): TimelineEntry[] {
         actorId: r.created_by,
         reason: r.reason,
         reservationId: r.reservation_id,
-        data: { amount: r.amount },
+        data: { amount: r.amount, refundId: r.id },
       }),
     );
   }
@@ -87,7 +111,10 @@ export function buildTimeline(b: Input): TimelineEntry[] {
   let kept = facts;
   if (stored.length > 0) {
     const first = Math.min(...stored.map((e) => e.at.getTime()));
-    kept = facts.filter((f) => f.kind === "created" || f.at.getTime() < first);
+    const covered = coveredByStored(stored);
+    kept = facts.filter(
+      (f) => f.kind === "created" || (f.at.getTime() < first && !covered(f)),
+    );
   }
   const all = [...stored, ...kept];
   return all
