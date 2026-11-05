@@ -2,7 +2,7 @@ import type { Queryable } from "@openbookings/db";
 
 export type QueryKind = "empty" | "uuid" | "id_prefix" | "payment_intent" | "email" | "text";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function classifyQuery(q: string): { kind: QueryKind; value: string } {
   const value = q.trim();
