@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPool } from "@openbookings/db";
 import { CopyId } from "./copy-id";
+import { ForcedPanel } from "./forced-panel";
 import { RealActionsPanel } from "./real-actions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -244,6 +245,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           bookingId={booking.id}
           rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
           initial={initial}
+        />
+        <ForcedPanel
+          bookingId={booking.id}
+          status={String(booking.status)}
+          rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
+          refunds={refunds.map((r) => ({ id: r.id, reason: String(r.reason), amount: Number(r.amount), status: String(r.status) }))}
         />
       </Section>
 
