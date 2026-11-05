@@ -629,3 +629,21 @@
 .spectrum-border[data-active="true"]::before {
   opacity: 0.85;
 }
+
+/*
+ * The nav's top-right corner while the session check is in flight
+ * (components/nav.tsx, lib/nav-hint.ts). The <head> script sets
+ * data-nav-hint="in" when this device was signed in last time.
+ */
+.nav-hint-in {
+  display: none;
+}
+html[data-nav-hint="in"] .nav-hint-in {
+  display: flex;
+}
+html[data-nav-hint="in"] .nav-hint-in::after {
+  content: var(--nav-initials, "");
+}
+html[data-nav-hint="in"] .nav-hint-out {
+  display: none;
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -17,7 +18,14 @@ const ITEM =
 export function AccountNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const active = activeSection(pathname);
+  // The tab clicked last, and the page it was clicked on. It shows as current
+  // straight away, instead of only once the next page has loaded.
+  const [clicked, setClicked] = useState<{ href: string; from: string } | null>(null);
+  // Once the pathname moves on, forget the click, so coming back to that page
+  // later (browser back, a link elsewhere) doesn't highlight the old target.
+  // Reset during render rather than in an effect, so no stale frame is painted.
+  if (clicked && clicked.from !== pathname) setClicked(null);
+  const active = activeSection(clicked?.from === pathname ? clicked.href : pathname);
 
   return (
     <nav aria-label="Account" className="-mx-4 lg:mx-0 lg:w-56 lg:shrink-0">
@@ -29,6 +37,11 @@ export function AccountNav() {
               <Link
                 href={section.href}
                 aria-current={current ? "page" : undefined}
+                onClick={(event) => {
+                  // A new-tab click leaves this page where it is.
+                  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  setClicked({ href: section.href, from: pathname });
+                }}
                 className={cn(
                   ITEM,
                   current
