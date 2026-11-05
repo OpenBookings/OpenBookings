@@ -193,6 +193,7 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
   try {
     await client.query("BEGIN");
     await client.query(`delete from refunds where booking_id = $1`, [DEMO_CONFIRMED_BOOKING_ID]);
+    await client.query(`delete from booking_events where booking_id = $1`, [DEMO_CONFIRMED_BOOKING_ID]);
     await client.query(
       `insert into bookings
          (id, hotel_id, user_id, check_in_date, check_out_date, status, total_amount, currency)
