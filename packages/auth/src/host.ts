@@ -248,6 +248,7 @@ export function createHostAuth(config: HostAuthConfig) {
     database: pool,
     user: { additionalFields: userAdditionalFields },
     session: {
+      freshAge: sharedSessionOptions.freshAge,
       // Shorter lifetime than the guest app (task 17): idle host sessions
       // die after 24h; activity extends them hourly.
       expiresIn: 60 * 60 * 24,

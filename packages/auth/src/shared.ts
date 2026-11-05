@@ -366,8 +366,17 @@ export const userAdditionalFields = {
   },
 } as const;
 
-/** `session` options both instances share (cookie cache + portal stamp). */
+/**
+ * `session` options both instances share (cookie cache + portal stamp).
+ *
+ * `freshAge: 0` turns off Better Auth's built-in freshness gate. Left at its
+ * default (1 day since sign-in) it answers 403 SESSION_NOT_FRESH to
+ * /list-sessions, so the security pages broke for anyone signed in for more
+ * than a day. Recency is the step-up gate's job (`stepUpRequiredForRequest`),
+ * which also covers /unlink-account, the other endpoint the gate guarded.
+ */
 export const sharedSessionOptions = {
+  freshAge: 0,
   cookieCache: {
     enabled: true,
     maxAge: 5 * 60,
@@ -460,6 +469,8 @@ export function stepUpRequiredForRequest(
     case "/organization/remove-member":
     case "/change-email":
     case "/delete-user":
+    // Was behind Better Auth's freshness gate, which is off (freshAge: 0).
+    case "/unlink-account":
     // A stolen session must not be able to add itself a way back in: invite
     // an accomplice, enrol its own passkey or authenticator, or strip the
     // real owner's factors.

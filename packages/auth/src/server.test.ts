@@ -289,6 +289,17 @@ describe("stepUpRequiredForRequest — admin plugin endpoints", () => {
   });
 });
 
+describe("stepUpRequiredForRequest — endpoints Better Auth gated on freshness", () => {
+  // freshAge is 0 on both instances, so the step-up gate takes over.
+  test("unlinking a social account needs a fresh step-up", () => {
+    expect(stepUpRequiredForRequest("/unlink-account", {})).toBe(true);
+  });
+
+  test("listing sessions does not", () => {
+    expect(stepUpRequiredForRequest("/list-sessions", {})).toBe(false);
+  });
+});
+
 describe("sessionVerificationStamp", () => {
   const now = new Date("2026-01-01T00:00:00Z");
 

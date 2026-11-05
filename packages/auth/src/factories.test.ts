@@ -60,6 +60,16 @@ describe("factory plugin surface", () => {
     expect(typeof guest.options.user?.deleteUser?.sendDeleteAccountVerification).toBe("function");
   });
 
+  // Better Auth's own freshness gate (default 1 day since sign-in) 403s
+  // /list-sessions on the security pages for any session older than that.
+  // Recency is enforced by the step-up gate instead (see step-up-hooks).
+  test("both instances turn off Better Auth's session freshness gate", () => {
+    const guest = createGuestAuth(base);
+    const host = createHostAuth({ ...base, cookiePrefix: "ob-host" });
+    expect(guest.options.session?.freshAge).toBe(0);
+    expect(host.options.session?.freshAge).toBe(0);
+  });
+
   // Asserted on the route table rather than through `guest.handler`: since
   // Better Auth 1.7 the handler validates the database schema before it
   // routes, so it cannot answer at all against a dead connection string.
