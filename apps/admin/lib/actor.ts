@@ -10,6 +10,7 @@ export type ActAs = "guest" | "host";
  * Null when the booking is missing or (host) the property has no owner user.
  */
 export async function actorFor(db: Queryable, bookingId: string, as: ActAs): Promise<Actor | null> {
+  if (as !== "guest" && as !== "host") return null;
   if (!UUID_RE.test(bookingId)) return null;
   const { rows } = await db.query(
     `SELECT b.user_id, p.owner_user_id

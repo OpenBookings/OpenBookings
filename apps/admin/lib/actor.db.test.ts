@@ -52,4 +52,11 @@ describeWithDb("actorFor against Postgres", () => {
     expect(await actorFor(db, "abc", "guest")).toBeNull();
     expect(await actorFor(db, "7f1f6f0e-0000-4000-8000-000000000000", "guest")).toBeNull();
   });
+
+  test("invalid as gives null", async () => {
+    const owner = await seedGuest(db);
+    await db.query(`UPDATE properties SET owner_user_id = $1 WHERE id = $2`, [owner, ids.propertyId]);
+    expect(await actorFor(db, bookingId, "admin" as never)).toBeNull();
+    expect(await actorFor(db, bookingId, "" as never)).toBeNull();
+  });
 });

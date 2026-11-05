@@ -18,7 +18,15 @@ import {
 import type { BookingAction } from "@openbookings/pricing";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { actorFor, type ActAs } from "./actor";
+import { UUID_RE } from "./search";
 import { requireSuperAdmin } from "./super-admin";
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const invalid = { ok: false, error: "invalid" } as unknown as LifecycleResult;
+const badIds = (bookingId: string, ids: string[] | null) =>
+  typeof bookingId !== "string" ||
+  !UUID_RE.test(bookingId) ||
+  (ids !== null && (!Array.isArray(ids) || ids.some((i) => typeof i !== "string" || !UUID_RE.test(i))));
 
 /**
  * Real booking actions, run as the booking's guest or the property owner and
@@ -62,33 +70,45 @@ export async function allowedFor(
 /** What a guest cancellation of these rooms (null = all) would refund now. */
 export async function adminPreviewRefund(bookingId: string, reservationIds: string[] | null) {
   requireSuperAdmin();
+  if (badIds(bookingId, reservationIds)) return null;
   return previewRefund({ bookingId, reservationIds });
 }
 
 export async function adminCancelRooms(bookingId: string, as: ActAs, reservationIds: string[] | null) {
+  requireSuperAdmin();
+  if (badIds(bookingId, reservationIds)) return invalid;
   return run(bookingId, as, (actor) => cancelRooms(deps, { bookingId, actor, reservationIds }));
 }
 
 export async function adminMarkCheckedIn(bookingId: string, as: ActAs) {
+  requireSuperAdmin();
+  if (badIds(bookingId, null)) return invalid;
   return run(bookingId, as, (actor) => markCheckedIn(deps, { bookingId, actor }));
 }
 
 export async function adminMarkNoShow(bookingId: string, as: ActAs) {
+  requireSuperAdmin();
+  if (badIds(bookingId, null)) return invalid;
   return run(bookingId, as, (actor) => markNoShow(deps, { bookingId, actor }));
 }
 
 export async function adminRecordEarlyDeparture(bookingId: string, as: ActAs, lastNightStayed: string) {
+  requireSuperAdmin();
+  if (badIds(bookingId, null) || typeof lastNightStayed !== "string" || !DATE_RE.test(lastNightStayed)) return invalid;
   return run(bookingId, as, (actor) => recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed }));
 }
 
 /** Always as host. */
 export async function adminGoodwillRefund(bookingId: string, amount: number) {
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
+  requireSuperAdmin();
+  if (badIds(bookingId, null)) return invalid;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
   return run(bookingId, "host", (actor) => issueGoodwillRefund(deps, { bookingId, actor, amount }));
 }
 
 export async function adminRetryRefunds(bookingId: string) {
   requireSuperAdmin();
+  if (badIds(bookingId, null)) return invalid;
   const result = await retryRefunds(deps, { bookingId });
   revalidatePath(`/bookings/${bookingId}`);
   return result;

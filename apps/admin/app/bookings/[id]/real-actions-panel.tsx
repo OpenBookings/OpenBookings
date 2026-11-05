@@ -42,11 +42,27 @@ export function RealActionsPanel({
   const allowed = initial[as];
   const can = (a: BookingAction) => allowed.actor && !pending && allowed.actions.includes(a);
   const ids = selected.length > 0 ? selected : null;
+  const [failure, setFailure] = useState<string | null>(null);
   const perform = (fn: () => Promise<LifecycleResult>) =>
     start(async () => {
-      setResult(await fn());
-      setPreview(undefined);
-      setSelected([]);
+      setFailure(null);
+      try {
+        setResult(await fn());
+        setPreview(undefined);
+        setSelected([]);
+      } catch (e) {
+        setResult(null);
+        setFailure(e instanceof Error ? e.message : String(e));
+      }
+    });
+  const doPreview = () =>
+    start(async () => {
+      setFailure(null);
+      try {
+        setPreview((await adminPreviewRefund(bookingId, ids)) ?? "none");
+      } catch (e) {
+        setFailure(e instanceof Error ? e.message : String(e));
+      }
     });
 
   return (
@@ -61,7 +77,9 @@ export function RealActionsPanel({
       </div>
       {!allowed.actor ? (
         <p className="text-sm text-muted-foreground">
-          No host user on this property, so host actions are unavailable.
+          {as === "host"
+            ? "No host user on this property, so host actions are unavailable."
+            : "No guest user on this booking, so guest actions are unavailable."}
         </p>
       ) : null}
 
@@ -88,7 +106,7 @@ export function RealActionsPanel({
             size="sm"
             variant="outline"
             disabled={!can("cancel")}
-            onClick={() => start(async () => setPreview((await adminPreviewRefund(bookingId, ids)) ?? "none"))}
+            onClick={doPreview}
           >
             Preview refund
           </Button>
@@ -105,7 +123,7 @@ export function RealActionsPanel({
           <p className="text-sm text-muted-foreground">No preview available.</p>
         ) : preview ? (
           <div className="text-sm">
-            Total {eur.format(preview.total)}
+            Guest-cancellation refund preview: total {eur.format(preview.total)}
             <ul>
               {preview.perRoom.map((p) => (
                 <li key={p.reservationId}>
@@ -161,6 +179,11 @@ export function RealActionsPanel({
         </Button>
       </div>
 
+      {failure ? (
+        <div className="text-sm text-destructive" role="alert">
+          {failure}
+        </div>
+      ) : null}
       {result ? (
         <div className="text-sm" role="status">
           {result.ok ? (
