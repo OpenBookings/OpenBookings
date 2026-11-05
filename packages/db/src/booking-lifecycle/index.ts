@@ -22,6 +22,7 @@ import {
   type RefundResult,
 } from "@openbookings/pricing";
 import { getPool, withTransaction } from "../index";
+import { recordBookingEvent, type BookingEventActor, type BookingEventKind } from "../booking-events";
 // Imported from the package root for the pool only; the root does not import
 // this module back (apps use "@openbookings/db/booking-lifecycle").
 import type { Queryable } from "../reservation-policy";
@@ -71,7 +72,17 @@ export type LifecycleDeps = {
 /** Stripe forgets idempotency keys after about a day; a retry key changes per window, after a lookup. */
 const RETRY_KEY_WINDOW_MS = 20 * 3_600_000;
 
-export type Actor = { kind: "guest" | "host"; userId: string };
+/** `via: "admin"`: the dev dashboard acting as this guest or host; stamped on every event the action writes. */
+export type Actor = { kind: "guest" | "host"; userId: string; via?: "admin" };
+
+function eventActor(a: Actor): BookingEventActor {
+  return { kind: a.kind, id: a.userId };
+}
+
+/** Event data, plus `via` when an admin acted. */
+function eventData(a: Actor, data: Record<string, unknown>): Record<string, unknown> {
+  return a.via ? { ...data, via: a.via } : data;
+}
 
 export type RefundStatus = "pending" | "succeeded" | "failed";
 
@@ -206,6 +217,12 @@ export async function loadBookingState(
 
 // ── Writing ───────────────────────────────────────────────────────────────────
 
+const SYSTEM: BookingEventActor = { kind: "system", id: null };
+
+function refundData(actor: Actor | undefined, data: Record<string, unknown>) {
+  return actor ? eventData(actor, data) : data;
+}
+
 type RefundRow = { id: string; reservationId: string | null; amount: number; key: string };
 
 async function insertRefund(
@@ -262,6 +279,7 @@ async function sendRefunds(
   booking: BookingRow,
   rows: RefundRow[],
   retry = false,
+  actor?: Actor,
 ) {
   const now = deps.now?.() ?? new Date();
   const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
@@ -293,6 +311,13 @@ async function sendRefunds(
         `UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2 AND status <> 'succeeded'`,
         [refund.id, row.id],
       );
+      await recordBookingEvent(db, {
+        bookingId: booking.id,
+        reservationId: row.reservationId,
+        kind: "refund_succeeded",
+        actor: SYSTEM,
+        data: refundData(actor, { refundId: row.id, amount: row.amount, stripeRefundId: refund.id }),
+      });
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "succeeded" });
     } catch (error) {
       const status = (deps.isDefiniteFailure ?? (() => true))(error) ? "failed" : "pending";
@@ -308,6 +333,13 @@ async function sendRefunds(
           JSON.stringify({ bookingId: booking.id, refundId: row.id, amount: row.amount, error: String(error) }),
         ],
       );
+      await recordBookingEvent(db, {
+        bookingId: booking.id,
+        reservationId: row.reservationId,
+        kind: status === "failed" ? "refund_failed" : "refund_uncertain",
+        actor: SYSTEM,
+        data: refundData(actor, { refundId: row.id, amount: row.amount, error: String(error) }),
+      });
       deps.onRefundProblem?.({ bookingId: booking.id, refundId: row.id, status, error });
       results.push({ reservationId: row.reservationId, amount: row.amount, status });
     }
@@ -389,31 +421,50 @@ export async function cancelRooms(
       );
     }
     const rows = await insertPlanned(tx, i.bookingId, i.actor, plan.rooms);
+    const reservationIds = plan.rooms.map((r) => r.reservationId);
+    await recordBookingEvent(tx, {
+      bookingId: i.bookingId,
+      reservationId: reservationIds.length === 1 ? reservationIds[0] : null,
+      kind: "rooms_cancelled",
+      actor: eventActor(i.actor),
+      data: eventData(i.actor, {
+        reservationIds,
+        cancelsBooking: plan.cancelsBooking,
+        refundTotal: plan.totalCents / 100,
+      }),
+    });
     return { ok: true as const, booking: state.booking, rows };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
 }
 
 async function setStatus(
   deps: LifecycleDeps,
   i: { bookingId: string; actor: Actor },
   action: BookingAction,
+  kind: BookingEventKind,
   update: string,
 ): Promise<LifecycleResult> {
   const { db, now } = context(deps);
   return db.transaction(async (tx) => {
-    const state = await loadBookingState(tx, i.bookingId, now, true);
+    const state = await loadBookingState(tx, i.bookingId, now, true, i.actor.kind);
     if (!state) return { ok: false, error: "not_found" };
     if (!state.actions.includes(action)) return { ok: false, error: "not_allowed" };
     await tx.query(update, [i.bookingId, now]);
+    await recordBookingEvent(tx, {
+      bookingId: i.bookingId,
+      kind,
+      actor: eventActor(i.actor),
+      data: eventData(i.actor, {}),
+    });
     return { ok: true, refunds: [] };
   });
 }
 
 /** The guest arrived. */
 export function markCheckedIn(deps: LifecycleDeps, i: { bookingId: string; actor: Actor }) {
-  return setStatus(deps, i, "mark_checked_in", `UPDATE bookings SET status = 'checked_in', updated_at = $2 WHERE id = $1`);
+  return setStatus(deps, i, "mark_checked_in", "checked_in", `UPDATE bookings SET status = 'checked_in', updated_at = $2 WHERE id = $1`);
 }
 
 /** The guest never came. Nothing is refunded, tourist tax included (decided 2026-10-30). */
@@ -422,6 +473,7 @@ export function markNoShow(deps: LifecycleDeps, i: { bookingId: string; actor: A
     deps,
     i,
     "mark_no_show",
+    "no_show",
     `UPDATE bookings SET status = 'no_show', no_show_reported_at = $2, updated_at = NOW() WHERE id = $1`,
   );
 }
@@ -433,7 +485,7 @@ export async function recordEarlyDeparture(
 ): Promise<LifecycleResult> {
   const { db, now } = context(deps);
   const done = await db.transaction(async (tx) => {
-    const state = await loadBookingState(tx, i.bookingId, now, true);
+    const state = await loadBookingState(tx, i.bookingId, now, true, i.actor.kind);
     if (!state) return { ok: false as const, error: "not_found" as const };
     if (!state.actions.includes("record_early_departure")) return { ok: false as const, error: "not_allowed" as const };
 
@@ -449,10 +501,16 @@ export async function recordEarlyDeparture(
       [i.bookingId, i.lastNightStayed],
     );
     const rows = await insertPlanned(tx, i.bookingId, i.actor, plan.rooms);
+    await recordBookingEvent(tx, {
+      bookingId: i.bookingId,
+      kind: "early_departure",
+      actor: eventActor(i.actor),
+      data: eventData(i.actor, { lastNightStayed: i.lastNightStayed }),
+    });
     return { ok: true as const, booking: state.booking, rows };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
 }
 
 /** The host refunds an amount of their choosing, capped at what is left unrefunded. Hosts only. */
@@ -487,10 +545,16 @@ export async function issueGoodwillRefund(
       key: `refund:${i.bookingId}:goodwill:${(count[0] as { n: number }).n}`,
       breakdown: { requested: i.amount, capped: plan.amount },
     });
+    await recordBookingEvent(tx, {
+      bookingId: i.bookingId,
+      kind: "goodwill_refund",
+      actor: eventActor(i.actor),
+      data: eventData(i.actor, { requested: i.amount, amount: plan.amount }),
+    });
     return { ok: true as const, booking: state.booking, rows: [row] };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows) };
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
 }
 
 /**

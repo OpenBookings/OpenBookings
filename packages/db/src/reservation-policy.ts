@@ -1,4 +1,5 @@
 import { reservationPolicy, type PropertyCancellationTier, type TouristTaxRule } from "@openbookings/pricing";
+import { recordBookingEvent } from "./booking-events";
 
 /** A pg Client, PoolClient or Pool: anything that runs a parameterised query. */
 export type Queryable = {
@@ -103,10 +104,14 @@ export async function confirmBookingPolicy(
     );
   }
 
-  await db.query(
+  const { rows: confirmed } = await db.query(
     `UPDATE bookings
      SET status = 'confirmed', confirmed_at = COALESCE(confirmed_at, $2), updated_at = NOW()
-     WHERE id = $1 AND status = 'pending'`,
+     WHERE id = $1 AND status = 'pending'
+     RETURNING id`,
     [input.bookingId, input.confirmedAt],
   );
+  if (confirmed.length > 0) {
+    await recordBookingEvent(db, { bookingId: input.bookingId, kind: "confirmed", actor: { kind: "system", id: null } });
+  }
 }

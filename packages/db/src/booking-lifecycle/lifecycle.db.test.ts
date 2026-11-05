@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { loadBookingEvents } from "../booking-events";
 import { confirmBookingPolicy } from "../reservation-policy";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import {
@@ -200,5 +201,36 @@ describeWithDb("booking lifecycle against Postgres", () => {
       ok: false,
       error: "not_allowed",
     });
+  });
+  test("cancel writes rooms_cancelled and refund_succeeded", async () => {
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: null });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind !== "confirmed");
+    expect(events.map((e) => e.kind)).toEqual(["rooms_cancelled", "refund_succeeded", "refund_succeeded"]);
+    expect(events[0].actorKind).toBe("guest");
+    expect(events[0].actorId).toBe("test-guest");
+    expect(events[0].data.cancelsBooking).toBe(true);
+    expect(events[1].actorKind).toBe("system");
+    expect(events.slice(1).map((e) => e.reservationId).sort()).toEqual([...reservationIds].sort());
+  });
+
+  test("no-show writes no_show with via admin", async () => {
+    const afterWindow = new Date(CHECK_IN_AT + 12 * 3_600_000);
+    await markNoShow(deps(afterWindow), { bookingId, actor: { ...host, via: "admin" } });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "no_show");
+    expect(events).toHaveLength(1);
+    expect(events[0].actorKind).toBe("host");
+    expect(events[0].data.via).toBe("admin");
+  });
+
+  test("a refused action writes nothing", async () => {
+    const afterWindow = new Date(CHECK_IN_AT + 12 * 3_600_000);
+    expect(await markNoShow(deps(afterWindow), { bookingId, actor: guest })).toEqual({ ok: false, error: "not_allowed" });
+    expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind !== "confirmed")).toEqual([]);
+  });
+
+  test("confirming writes confirmed once", async () => {
+    await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
+    await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
+    expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "confirmed")).toHaveLength(1);
   });
 });
