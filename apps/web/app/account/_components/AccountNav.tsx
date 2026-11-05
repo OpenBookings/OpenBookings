@@ -19,9 +19,12 @@ export function AccountNav() {
   const pathname = usePathname();
   const router = useRouter();
   // The tab clicked last, and the page it was clicked on. It shows as current
-  // straight away, instead of only once the next page has loaded; when the
-  // pathname moves on, the real one takes over again.
+  // straight away, instead of only once the next page has loaded.
   const [clicked, setClicked] = useState<{ href: string; from: string } | null>(null);
+  // Once the pathname moves on, forget the click, so coming back to that page
+  // later (browser back, a link elsewhere) doesn't highlight the old target.
+  // Reset during render rather than in an effect, so no stale frame is painted.
+  if (clicked && clicked.from !== pathname) setClicked(null);
   const active = activeSection(clicked?.from === pathname ? clicked.href : pathname);
 
   return (
