@@ -19,6 +19,7 @@
     "@openbookings/authz": "workspace:*",
     "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
+    "@openbookings/demo": "workspace:*",
     "@openbookings/images": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/maps": "workspace:*",
