@@ -476,6 +476,11 @@ export interface ResolvedRoom
    * include VAT by contract with the host, so nothing else is added.
    */
   total_price: number
+  /**
+   * What each night cost after modifiers, each rounded to cents. The last
+   * night absorbs rounding so the nights sum to `room_price` exactly.
+   */
+  priced_nights: { date: string; price: number }[]
   applied_modifiers: ModifierType[]
   /** Ordered build-up of `total_price`. See PriceStep. */
   trace: PriceStep[]
@@ -517,6 +522,7 @@ export function resolveRoom(
     room_price: roomPrice,
     tourist_tax: touristTax,
     total_price: round2(roomPrice + touristTax.total),
+    priced_nights: roundedPricedNights(pricedNights(state), roomPrice),
     applied_modifiers: [...state.applied],
     trace: roundTrace(state.trace),
   }
@@ -532,6 +538,17 @@ export function resolveRoom(
 function pricedNights(state: CalculationState): { date: string; price: number }[] {
   const scale = state.subtotal > 0 ? state.total / state.subtotal : 0
   return state.nights.map(n => ({ date: n.date, price: (n.base_price + n._surcharge) * scale }))
+}
+
+function roundedPricedNights(
+  nights: { date: string; price: number }[],
+  roomPrice: number
+): { date: string; price: number }[] {
+  const rounded = nights.map(n => ({ date: n.date, price: round2(n.price) }))
+  if (rounded.length === 0) return rounded
+  const head = rounded.slice(0, -1).reduce((sum, n) => sum + n.price, 0)
+  rounded[rounded.length - 1].price = round2(roomPrice - head)
+  return rounded
 }
 
 // ─────────────────────────────────────────────
