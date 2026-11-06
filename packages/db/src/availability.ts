@@ -240,7 +240,12 @@ function assertStay(checkIn: string, checkOut: string): void {
   }
 }
 
-async function loadRooms(
+/**
+ * Every non-archived room of these properties, with its property id. Search
+ * loads this once for all its hotels, then judges each room and each hotel
+ * with `roomReasons` and `summariseSearchAvailability`.
+ */
+export async function loadRoomsAvailability(
   db: Queryable,
   i: { propertyIds: string[]; checkIn: string; checkOut: string; now: Date; excludeIntentId?: string | null },
 ): Promise<{ propertyId: string; room: RoomAvailability }[]> {
@@ -292,7 +297,7 @@ export async function loadStayAvailability(
   db: Queryable,
   i: { propertyId: string; checkIn: string; checkOut: string; now: Date; excludeIntentId?: string | null },
 ): Promise<RoomAvailability[]> {
-  const rooms = await loadRooms(db, { ...i, propertyIds: [i.propertyId] });
+  const rooms = await loadRoomsAvailability(db, { ...i, propertyIds: [i.propertyId] });
   return rooms.map((r) => r.room);
 }
 
@@ -317,7 +322,36 @@ export async function loadSearchAvailability(
     now: Date;
   },
 ): Promise<Map<string, PropertyAvailability>> {
-  const rooms = await loadRooms(db, { propertyIds: i.propertyIds, checkIn: i.checkIn, checkOut: i.checkOut, now: i.now });
+  const rooms = await loadRoomsAvailability(db, {
+    propertyIds: i.propertyIds,
+    checkIn: i.checkIn,
+    checkOut: i.checkOut,
+    now: i.now,
+  });
+  return summariseSearchAvailability(rooms, i);
+}
+
+/**
+ * What stands against a room for one room's share of the party, apart from
+ * its rate plans' own reasons: off sale, closed, too small, no unit left, or
+ * no active rate plan. Empty when the room itself can be sold.
+ */
+export function roomReasons(room: RoomAvailability, party: { adults: number; children: number }): UnavailableReason[] {
+  const own: UnavailableReason[] = [];
+  if (!room.onSale) own.push("not_on_sale");
+  if (room.roomClosed) own.push("room_closed");
+  if (party.adults > room.maxAdults || party.children > room.maxChildren) own.push("too_many_guests");
+  if (room.unitsLeft < 1) own.push("sold_out");
+  // A room with no active rate plan cannot be sold, whatever its stock says.
+  if (room.ratePlans.length === 0 && !own.includes("not_on_sale")) own.push("not_on_sale");
+  return own;
+}
+
+/** `loadSearchAvailability` over rooms already loaded with `loadRoomsAvailability`. */
+export function summariseSearchAvailability(
+  rooms: { propertyId: string; room: RoomAvailability }[],
+  i: { propertyIds: string[]; adults: number; children: number; rooms: number },
+): Map<string, PropertyAvailability> {
   const party = perRoomParty({ adults: i.adults, children: i.children, rooms: i.rooms });
 
   const tally = new Map<string, { units: number; anyQualifies: boolean; reasons: Set<UnavailableReason> }>();
@@ -326,13 +360,7 @@ export async function loadSearchAvailability(
   for (const { propertyId, room } of rooms) {
     const t = tally.get(propertyId);
     if (!t) continue;
-    const own: UnavailableReason[] = [];
-    if (!room.onSale) own.push("not_on_sale");
-    if (room.roomClosed) own.push("room_closed");
-    if (party.adults > room.maxAdults || party.children > room.maxChildren) own.push("too_many_guests");
-    if (room.unitsLeft < 1) own.push("sold_out");
-    // A room with no active rate plan cannot be sold, whatever its stock says.
-    if (room.ratePlans.length === 0) own.push("not_on_sale");
+    const own = roomReasons(room, party);
     const openPlan = room.ratePlans.some((p) => p.reasons.length === 0);
 
     if (own.length === 0 && openPlan) {

@@ -1,88 +1,73 @@
-import type { HotelSearchInput } from "@/types/hotel";
-import { getDb, sql } from "@openbookings/db";
-import { freeCancellationUntil, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
+import {
+  getDb,
+  getPool,
+  loadRoomsAvailability,
+  sql,
+  summariseSearchAvailability,
+  withTransaction,
+} from "@openbookings/db";
+import { ensureDemoHotels, hasDemoHotelsNear, isTestingMode } from "@openbookings/demo";
+import { freeCancellationUntil, perRoomParty, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
 import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
-import { searchBoundErrors } from "./search-bounds";
+import { parseStayInput, todayInZone, type StayInput } from "@/lib/booking/stay-input";
+import { orderByAvailability, priceCandidates } from "./availability-order";
+import { pointBoundErrors } from "./search-bounds";
 
-/** Parse and validate URL params into HotelSearchInput */
-function parseSearchParams(
-  searchParams: URLSearchParams
-): { input: HotelSearchInput; errors: string[] } {
+type SearchInput = StayInput & {
+  lat: number;
+  lon: number;
+  /** The destination label the guest searched, for naming generated demo hotels. */
+  place: string | null;
+};
+
+/**
+ * Search spans every EU time zone, so "in the past" is judged in one of them.
+ * Europe/Amsterdam, like the rest of the guest app's "today".
+ */
+const SEARCH_ZONE = "Europe/Amsterdam";
+
+/** Parse and validate URL params. Nothing reaches generate_series unless this passes. */
+function parseSearchParams(searchParams: URLSearchParams): { input: SearchInput | null; errors: string[] } {
   const errors: string[] = [];
-  const lat = searchParams.get("lat");
-  const lon = searchParams.get("lon");
-  const checkin = searchParams.get("checkin");
-  const checkout = searchParams.get("checkout");
-  const adults = searchParams.get("adults");
-  const children = searchParams.get("children");
-  const rooms = searchParams.get("rooms");
-
-  const num = (v: string | null, name: string): number | null => {
-    if (v == null || v === "") return null;
-    const n = Number(v);
-    if (Number.isNaN(n)) {
-      errors.push(`${name} must be a number`);
-      return null;
+  const coordinate = (name: "lat" | "lon"): number => {
+    const v = searchParams.get(name);
+    if (v == null || v === "") {
+      errors.push(`${name} is required`);
+      return NaN;
     }
+    const n = Number(v);
+    if (Number.isNaN(n)) errors.push(`${name} must be a number`);
     return n;
   };
+  const lat = coordinate("lat");
+  const lon = coordinate("lon");
+  if (errors.length === 0) errors.push(...pointBoundErrors({ lat, lon }));
 
-  const latN = num(lat, "lat");
-  const lonN = num(lon, "lon");
-  const adultsN = num(adults, "adults");
-  const roomsN = num(rooms, "rooms");
-  let childrenN: number | null = null;
-  if (children != null && children !== "") {
-    const c = num(children, "children");
-    if (c != null) childrenN = c;
-  }
+  const stay = parseStayInput(searchParams, todayInZone(SEARCH_ZONE));
+  if (!stay.ok) errors.push(...stay.errors);
+  if (errors.length > 0 || !stay.ok) return { input: null, errors };
 
-  if (lat == null || lat === "") errors.push("lat is required");
-  if (lon == null || lon === "") errors.push("lon is required");
-  if (checkin == null || checkin === "") errors.push("checkin is required");
-  if (checkout == null || checkout === "") errors.push("checkout is required");
-  if (adults == null || adults === "") errors.push("adults is required");
-  if (rooms == null || rooms === "") errors.push("rooms is required");
-
-  if (errors.length > 0) {
-    return {
-      input: {
-        lat: latN ?? 0,
-        lon: lonN ?? 0,
-        checkin: checkin ?? "",
-        checkout: checkout ?? "",
-        adults: adultsN ?? 0,
-        children: childrenN,
-        rooms: roomsN ?? 0,
-      },
-      errors,
-    };
-  }
-
-  const input: HotelSearchInput = {
-    lat: latN as number,
-    lon: lonN as number,
-    checkin: checkin as string,
-    checkout: checkout as string,
-    adults: adultsN as number,
-    children: childrenN,
-    rooms: roomsN as number,
-  };
-  // Shape is fine; now bound it, before anything reaches generate_series.
-  errors.push(...searchBoundErrors(input));
-  return { input, errors };
+  const place = searchParams.get("place")?.trim().slice(0, 200) || null;
+  return { input: { ...stay.value, lat, lon, place }, errors };
 }
 
-function buildHotelSearchQuery(
-  lat: number,
-  lon: number,
-  checkin: string,
-  checkout: string,
-  adults: number,
-  children: number
-) {
+/**
+ * Testing mode: the first search near a point creates the eight demo hotels
+ * there. Steady state is one indexed query; the generator's transaction and
+ * lock only run for a new area. A failure is logged and the search goes on.
+ */
+async function ensureDemoArea(i: { lat: number; lon: number; place: string | null }): Promise<void> {
+  try {
+    if (await hasDemoHotelsNear(getPool(), i)) return;
+    await withTransaction((tx) => ensureDemoHotels(tx, i));
+  } catch (err) {
+    console.error("[search] demo hotels:", err instanceof Error ? err.message : err);
+  }
+}
+
+function buildHotelSearchQuery(lat: number, lon: number, checkin: string, checkout: string, testing: boolean) {
   return sql`
 -- ─────────────────────────────────────────────
 -- Inputs
@@ -92,9 +77,7 @@ WITH user_input AS (
     ${lat}::float AS lat,
     ${lon}::float AS lng,
     ${checkin}::date  AS arrival,
-    ${checkout}::date AS departure,
-    ${adults}::int   AS adults,
-    ${children}::int   AS children
+    ${checkout}::date AS departure
 ),
 
 -- ─────────────────────────────────────────────
@@ -109,7 +92,8 @@ stay_dates AS (
 ),
 
 -- ─────────────────────────────────────────────
--- Step 1: Active rooms within radius that fit guest count
+-- Step 1: Active rooms within radius. Whether a room fits the party or
+-- is available is the availability rule's call, after this query.
 -- ─────────────────────────────────────────────
 candidate_rooms AS (
   SELECT
@@ -161,8 +145,7 @@ candidate_rooms AS (
     LIMIT 1
   ) rp ON TRUE
   WHERE p.is_active
-    AND u.adults   <= r.max_adults
-    AND u.children <= r.max_children
+    AND (NOT p.is_demo OR ${testing})
     AND ST_DWithin(
       p.location::geography,
       ST_SetSRID(ST_MakePoint(u.lng, u.lat), 4326)::geography,
@@ -287,13 +270,10 @@ LEFT JOIN LATERAL (
 `;
 }
 
-async function runSearch(input: HotelSearchInput) {
-  const children = input.children ?? 0
-
-  const result = await getDb().execute(
-    buildHotelSearchQuery(input.lat, input.lon, input.checkin, input.checkout, input.adults, children)
-  )
+async function runSearch(input: SearchInput, testing: boolean) {
+  const result = await getDb().execute(buildHotelSearchQuery(input.lat, input.lon, input.checkIn, input.checkOut, testing))
   const rows = result.rows as unknown as RoomRow[]
+  if (rows.length === 0) return []
 
   const roomRows = rows.map(row => ({
     ...row,
@@ -302,12 +282,23 @@ async function runSearch(input: HotelSearchInput) {
     tourist_tax_rules:
       typeof row.tourist_tax_rules === 'string' ? JSON.parse(row.tourist_tax_rules) : row.tourist_tax_rules,
   })) as RoomRow[]
-  
+
   const now = new Date()
-  return resolveSearchResults(roomRows, {
-    adults: input.adults,
-    children,
-    arrivalDate: input.checkin,
+  const propertyIds = [...new Set(roomRows.map(row => row.hotel_id))]
+  const rooms = await loadRoomsAvailability(getPool(), {
+    propertyIds,
+    checkIn: input.checkIn,
+    checkOut: input.checkOut,
+    now,
+  })
+  const availability = summariseSearchAvailability(rooms, { propertyIds, ...input })
+  // Each card is priced for one room's share of the party.
+  const party = perRoomParty(input)
+
+  const results = resolveSearchResults(priceCandidates(roomRows, rooms, availability, party), {
+    adults: party.adults,
+    children: party.children,
+    arrivalDate: input.checkIn,
   }).map(result => {
     const until =
       result.cancellation_tier && result.timezone
@@ -315,12 +306,31 @@ async function runSearch(input: HotelSearchInput) {
             tier: snapshotTier(result.cancellation_tier, result.is_refundable),
             timeZone: result.timezone,
             checkInTime: result.check_in_time ?? null,
-            arrivalDate: input.checkin,
+            arrivalDate: input.checkIn,
             now,
           })
         : null
-    return { ...result, free_cancellation_until: until ? until.toISOString() : null }
+    const a = availability.get(result.hotel_id)
+    return {
+      ...result,
+      free_cancellation_until: until ? until.toISOString() : null,
+      availability: { bookable: a?.bookable ?? false, reason: a?.reason ?? null },
+    }
   })
+  return orderByAvailability(results, { testing })
+}
+
+/** Analytics properties, under the names the search events have always used. */
+function searchProperties(i: SearchInput) {
+  return {
+    lat: i.lat,
+    lon: i.lon,
+    checkin: i.checkIn,
+    checkout: i.checkOut,
+    adults: i.adults,
+    children: i.children,
+    rooms: i.rooms,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -328,13 +338,16 @@ export async function GET(request: NextRequest) {
   const { input, errors } = parseSearchParams(searchParams)
   const distinctId = request.headers.get("x-posthog-distinct-id") ?? "anonymous"
 
-  if (errors.length > 0) {
+  if (!input) {
     return NextResponse.json({ errors }, { status: 400 })
   }
 
+  const testing = isTestingMode()
+  if (testing) await ensureDemoArea(input)
+
   let results
   try {
-    results = await runSearch(input)
+    results = await runSearch(input, testing)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Database error"
 
@@ -350,7 +363,7 @@ export async function GET(request: NextRequest) {
       event: "hotel_search_failed",
       properties: {
         error_message: message,
-        ...input,
+        ...searchProperties(input),
       },
     })
     await posthog.shutdown()
@@ -364,7 +377,7 @@ export async function GET(request: NextRequest) {
     event: "hotel_search_completed",
     properties: {
       result_count: results.length,
-      ...input,
+      ...searchProperties(input),
     },
   })
   await posthog.shutdown()

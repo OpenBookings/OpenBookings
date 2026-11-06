@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { cached, propertyPageKey } from "@openbookings/cache";
 import { getDb, sql } from "@openbookings/db";
+import { isTestingMode } from "@openbookings/demo";
 import type { TouristTaxRule } from "@openbookings/pricing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import { buildHeroQuery, type HotelPageData } from "./hotel-page-query";
@@ -69,11 +70,12 @@ export const PROPERTY_PAGE_TTL = {
  * text. Every other field is text, uuid, an integer, a text array or already
  * JSON, and reaches the caller unchanged.
  *
- * An inactive or unknown slug yields no hero row, and therefore no row at all.
+ * An inactive or unknown slug, or a demo hotel with testing off, yields no
+ * hero row, and therefore no row at all.
  */
 function buildPropertyPageQuery(slug: string) {
   return sql`
-  WITH hero AS (${buildHeroQuery(slug)})
+  WITH hero AS (${buildHeroQuery(slug, isTestingMode())})
   SELECT
     hero.*,
     (

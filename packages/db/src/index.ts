@@ -196,3 +196,4 @@ export function getDb() {
 }
 export * from "./reservation-policy";
 export * from "./availability";
+export * from "./booking-intents";

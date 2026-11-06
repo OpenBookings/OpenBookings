@@ -1,4 +1,5 @@
 import { getDb } from "@openbookings/db";
+import { isTestingMode } from "@openbookings/demo";
 import { NextRequest, NextResponse } from "next/server";
 import { buildHeroQuery } from "@/lib/hotel-page-query";
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   let row: HotelPageData | null;
   try {
-    const result = await getDb().execute(buildHeroQuery(slug));
+    const result = await getDb().execute(buildHeroQuery(slug, isTestingMode()));
     row = (result.rows[0] as unknown as HotelPageData) ?? null;
   } catch (err) {
     // Logged, not returned — see the note in ../route.ts.

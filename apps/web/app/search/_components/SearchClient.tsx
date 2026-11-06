@@ -103,6 +103,8 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
           children: String(committed.children),
           rooms: String(committed.rooms),
         });
+        // Names the demo hotels testing mode generates for a new area.
+        if (committed.destination) params.set("place", committed.destination);
         const res = await fetch(`/api/query?${params.toString()}`, { signal: controller.signal });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -121,7 +123,20 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
 
     runSearch();
     return () => controller.abort();
-  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms]);
+  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms, committed.destination]);
+
+  // The property page reads the stay under the same names as /api/query.
+  const stayQuery = useMemo(() => {
+    if (!committed.checkIn || !committed.checkOut) return "";
+    const params = new URLSearchParams({
+      checkin: committed.checkIn,
+      checkout: committed.checkOut,
+      adults: String(committed.adults),
+      children: String(committed.children),
+      rooms: String(committed.rooms),
+    });
+    return `?${params.toString()}`;
+  }, [committed]);
 
   const sortedHotels = useMemo(() => {
     const list = [...(demoHotels ?? hotels)];
@@ -268,7 +283,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
               {sortedHotels.map((stay, index) => (
                 <li key={stay.id}>
                   {/* The first row is above the fold at every width. */}
-                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}`} priority={index < 3} />
+                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}${stayQuery}`} priority={index < 3} />
                 </li>
               ))}
             </ul>

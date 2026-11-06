@@ -90,8 +90,10 @@ export interface HotelPageData {
  *
  * `property_content` is LEFT JOINed and the highlights are a correlated
  * aggregate, so this is still one round trip.
+ *
+ * Demo hotels (`is_demo`) are found only when `testing` is on.
  */
-export function buildHeroQuery(slug: string) {
+export function buildHeroQuery(slug: string, testing: boolean) {
   return sql`
   SELECT
     p.id,
@@ -159,6 +161,7 @@ export function buildHeroQuery(slug: string) {
   FROM properties p
   LEFT JOIN property_content c ON c.property_id = p.id
   WHERE p.slug = ${slug} AND p.is_active
+    AND (NOT p.is_demo OR ${testing})
   LIMIT 1
 `;
 }
