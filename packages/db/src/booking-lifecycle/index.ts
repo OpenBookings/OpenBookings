@@ -86,8 +86,16 @@ function eventData(a: Actor, data: Record<string, unknown>): Record<string, unkn
 
 export type RefundStatus = "pending" | "succeeded" | "failed";
 
+/** What a cancelRooms call itself cancelled, so a caller can tell the guest exactly that. */
+export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+
 export type LifecycleResult =
-  | { ok: true; refunds: { reservationId: string | null; amount: number; status: RefundStatus }[] }
+  | {
+      ok: true;
+      refunds: { reservationId: string | null; amount: number; status: RefundStatus }[];
+      /** Set by cancelRooms only. */
+      cancelled?: CancelledRooms;
+    }
   | { ok: false; error: PlanError };
 
 const defaultDb: LifecycleDb = {
@@ -449,10 +457,19 @@ export async function cancelRooms(
         refundTotal: plan.totalCents / 100,
       }),
     });
-    return { ok: true as const, booking: state.booking, rows };
+    return {
+      ok: true as const,
+      booking: state.booking,
+      rows,
+      cancelled: { reservationIds, refundTotal: plan.totalCents / 100, cancelsBooking: plan.cancelsBooking },
+    };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
+  return {
+    ok: true,
+    refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor),
+    cancelled: done.cancelled,
+  };
 }
 
 async function setStatus(

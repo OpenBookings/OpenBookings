@@ -51,7 +51,7 @@ export async function guestCancelRooms(bookingId: string, reservationIds: string
     },
     { bookingId, actor: { kind: 'guest', userId }, reservationIds },
   );
-  if (result.ok) await sendCancellation(bookingId);
+  if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }

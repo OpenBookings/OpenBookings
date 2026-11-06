@@ -66,7 +66,7 @@ async function run(
 export async function hostCancelRooms(bookingId: string, reservationIds: string[] | null) {
   return run(bookingId, ACTION_PERMISSION.cancel, async (actor) => {
     const result = await cancelRooms(deps, { bookingId, actor, reservationIds });
-    if (result.ok) await sendCancellation(bookingId);
+    if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
     return result;
   });
 }

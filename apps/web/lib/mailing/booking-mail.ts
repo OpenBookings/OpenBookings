@@ -1,9 +1,8 @@
-import { sendBookingCancelled } from "@openbookings/mailing/booking-send";
+import * as Sentry from "@sentry/nextjs";
+import { sendBookingCancelled, type CancelledRooms } from "@openbookings/mailing/booking-send";
 
-const urls = {
-  webUrl: process.env.NEXT_PUBLIC_WEB_URL || "https://openbookings.co",
-  businessUrl: process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co",
-};
-
-/** Tells the guest and the host that rooms were cancelled. Never throws. */
-export const sendCancellation = (bookingId: string) => sendBookingCancelled(bookingId, urls);
+/** Tells the guest and the host which rooms were cancelled. Never throws. */
+export const sendCancellation = (bookingId: string, cancelled: CancelledRooms) =>
+  sendBookingCancelled(bookingId, cancelled, (error, extra) =>
+    Sentry.captureException(error, { tags: { area: "booking-mail", kind: extra.kind }, extra }),
+  );

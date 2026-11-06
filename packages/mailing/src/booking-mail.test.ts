@@ -19,8 +19,8 @@ const mails = {
   confirmed: guestBookingConfirmed({ propertyName: EVIL, ...stay, rooms, total: "€300.00", bookingUrl: "https://web.test/bookings/b1" }),
   oversold: guestOversoldRefunded({ propertyName: EVIL, amount: "€300.00", searchUrl: "https://web.test/search" }),
   hostNew: hostNewBooking({ propertyName: EVIL, guestName: EVIL, ...stay, rooms, total: "€300.00", reservationsUrl: "https://biz.test/r" }),
-  cancelled: guestBookingCancelled({ propertyName: EVIL, rooms: ["Deluxe <Room>"], refund: "€100.00", bookingUrl: "https://web.test/bookings/b1" }),
-  hostCancelled: hostBookingCancelled({ propertyName: EVIL, guestName: EVIL, rooms: ["Deluxe <Room>"], reservationsUrl: "https://biz.test/r" }),
+  cancelled: guestBookingCancelled({ propertyName: EVIL, rooms: ["Deluxe <Room>"], refund: "€100.00", cancelsBooking: true, bookingUrl: "https://web.test/bookings/b1" }),
+  hostCancelled: hostBookingCancelled({ propertyName: EVIL, guestName: EVIL, rooms: ["Deluxe <Room>"], cancelsBooking: true, reservationsUrl: "https://biz.test/r" }),
 };
 
 test("every composer escapes the property name", () => {
@@ -52,4 +52,18 @@ test("dates come from the string, never from local time", () => {
 
 test("euros read in British English", () => {
   expect(formatEuro(1234.5)).toBe("€1,234.50");
+});
+
+test("a partial cancellation does not say the booking was cancelled", () => {
+  const part = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: "€50.00", cancelsBooking: false, bookingUrl: "https://web.test/b" });
+  expect(part.html).not.toContain("Your booking<br />was cancelled");
+  expect(part.subject).toBe("Rooms cancelled: Hotel");
+  const host = hostBookingCancelled({ propertyName: "Hotel", guestName: "G", rooms: ["A"], cancelsBooking: false, reservationsUrl: "https://biz.test/r" });
+  expect(host.subject).toBe("Rooms cancelled at Hotel");
+});
+
+test("no refund says so instead of the statement line", () => {
+  const none = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: null, cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(none.html).toContain("No refund is due under your cancellation terms.");
+  expect(none.html).not.toContain("statement");
 });

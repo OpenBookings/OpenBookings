@@ -75,26 +75,42 @@ export function hostNewBooking(i: {
   });
 }
 
-export function guestBookingCancelled(i: { propertyName: string; rooms: string[]; refund: string; bookingUrl: string }): ActionMail {
+/** `refund` is null when nothing is due back. `cancelsBooking`: every room is now cancelled. */
+export function guestBookingCancelled(i: {
+  propertyName: string;
+  rooms: string[];
+  refund: string | null;
+  cancelsBooking: boolean;
+  bookingUrl: string;
+}): ActionMail {
+  const refund = i.refund
+    ? `Refund: ${STRONG(i.refund)}. It can take a few days to show on your statement.`
+    : "No refund is due under your cancellation terms.";
   return composeActionMail({
-    subject: `Booking cancelled: ${i.propertyName}`,
-    preheader: `Your booking at ${i.propertyName} was cancelled.`,
+    subject: i.cancelsBooking ? `Booking cancelled: ${i.propertyName}` : `Rooms cancelled: ${i.propertyName}`,
+    preheader: i.cancelsBooking ? `Your booking at ${i.propertyName} was cancelled.` : `Part of your booking at ${i.propertyName} was cancelled.`,
     eyebrow: "Booking",
-    headline: "Your booking<br />was cancelled.",
-    body: `Cancelled at ${STRONG(i.propertyName)}: ${roomNames(i.rooms)}.<br /><br />Refund: ${STRONG(i.refund)}. It can take a few days to show on your statement.`,
+    headline: i.cancelsBooking ? "Your booking<br />was cancelled." : "Some rooms<br />were cancelled.",
+    body: `Cancelled at ${STRONG(i.propertyName)}: ${roomNames(i.rooms)}.${i.cancelsBooking ? "" : " The rest of your booking stands."}<br /><br />${refund}`,
     ctaUrl: i.bookingUrl,
     ctaLabel: "View your booking",
     footnote: FOOTNOTE,
   });
 }
 
-export function hostBookingCancelled(i: { propertyName: string; guestName: string; rooms: string[]; reservationsUrl: string }): ActionMail {
+export function hostBookingCancelled(i: {
+  propertyName: string;
+  guestName: string;
+  rooms: string[];
+  cancelsBooking: boolean;
+  reservationsUrl: string;
+}): ActionMail {
   return composeActionMail({
-    subject: `Booking cancelled at ${i.propertyName}`,
-    preheader: `A booking at ${i.propertyName} was cancelled.`,
+    subject: i.cancelsBooking ? `Booking cancelled at ${i.propertyName}` : `Rooms cancelled at ${i.propertyName}`,
+    preheader: `${i.cancelsBooking ? "A booking" : "Part of a booking"} at ${i.propertyName} was cancelled.`,
     eyebrow: "Reservations",
-    headline: "A booking<br />was cancelled.",
-    body: `The booking by ${STRONG(i.guestName)} at ${STRONG(i.propertyName)} was cancelled: ${roomNames(i.rooms)}. The rooms are available again.`,
+    headline: i.cancelsBooking ? "A booking<br />was cancelled." : "Some rooms<br />were cancelled.",
+    body: `${i.cancelsBooking ? "The booking" : "Part of the booking"} by ${STRONG(i.guestName)} at ${STRONG(i.propertyName)} was cancelled: ${roomNames(i.rooms)}. The cancelled rooms are available again.`,
     ctaUrl: i.reservationsUrl,
     ctaLabel: "Open reservations",
     footnote: FOOTNOTE,

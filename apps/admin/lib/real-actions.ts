@@ -17,7 +17,7 @@ import {
 } from "@openbookings/db/booking-lifecycle";
 import type { BookingAction } from "@openbookings/pricing";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
-import { sendCancellation } from "./booking-mail";
+import { sendBookingCancelled as sendCancellation } from "@openbookings/mailing/booking-send";
 import { actorFor, type ActAs } from "./actor";
 import { UUID_RE } from "./search";
 import { isStripeTestMode, requireSuperAdmin } from "./super-admin";
@@ -82,7 +82,7 @@ export async function adminCancelRooms(bookingId: string, as: ActAs, reservation
   if (badIds(bookingId, reservationIds)) return invalid;
   return run(bookingId, as, async (actor) => {
     const result = await cancelRooms(deps, { bookingId, actor, reservationIds });
-    if (result.ok) await sendCancellation(bookingId);
+    if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
     return result;
   });
 }

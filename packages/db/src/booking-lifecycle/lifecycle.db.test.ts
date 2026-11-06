@@ -78,7 +78,11 @@ describeWithDb("booking lifecycle against Postgres", () => {
 
   test("a guest cancelling one room refunds that room and keeps the booking", async () => {
     const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
-    expect(result).toEqual({ ok: true, refunds: [{ reservationId: reservationIds[0], amount: 309, status: "succeeded" }] });
+    expect(result).toEqual({
+      ok: true,
+      refunds: [{ reservationId: reservationIds[0], amount: 309, status: "succeeded" }],
+      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, cancelsBooking: false },
+    });
     expect(calls.map((c) => c.amountCents)).toEqual([30_900]);
 
     const res = await one<{ cancelled_at: Date | null }>(`SELECT cancelled_at FROM reservations WHERE id = $1`, [reservationIds[0]]);
