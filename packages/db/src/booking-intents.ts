@@ -1,8 +1,9 @@
 import type { TouristTaxLine } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
+import { recordBookingEvent } from "./booking-events";
 // Type only: booking-lifecycle imports the package root at runtime, so a value import would be circular.
 import type { LifecycleDb } from "./booking-lifecycle";
-import type { Queryable } from "./reservation-policy";
+import { confirmBookingPolicy, type Queryable } from "./reservation-policy";
 
 /**
  * One room of a guest's selection, priced on the server for its own party.
@@ -334,4 +335,156 @@ export async function markIntentFailed(db: Queryable, i: { intentId: string }): 
     `UPDATE booking_intents SET status = 'failed', updated_at = now() WHERE id = $1 AND status = 'open'`,
     [i.intentId],
   );
+}
+
+/**
+ * What a payment became. `oversold` carries the payment back so the caller
+ * can refund it without reading anything again. `firstTime` is false on a
+ * redelivered event: the work was done by an earlier call.
+ */
+export type ConvertResult =
+  | { outcome: "confirmed"; bookingId: string; firstTime: boolean }
+  | { outcome: "oversold"; firstTime: boolean; paymentIntentId: string; accountId: string; amountCents: number };
+
+/**
+ * Turn a paid intent into a confirmed booking, exactly once.
+ *
+ * One transaction, locking in `createBookingIntent`'s order (the intent, then
+ * its rooms by id) so the two never deadlock. The intent lock makes redelivered
+ * payment events queue up: the second sees `paid` (or `oversold`) and returns
+ * what the first did.
+ *
+ * Any other status converts, `expired`, `abandoned` and `failed` included: the
+ * guest was charged, so the stock is counted again (without this intent's own
+ * hold). Short on any room, the intent becomes `oversold` and no booking is
+ * made; the caller refunds the payment.
+ *
+ * The booking is inserted `confirmed`, never `pending`, so `confirmBookingPolicy`
+ * only snapshots the policy here; `confirmed_at` and the `confirmed` event are
+ * written by this function.
+ */
+export async function convertIntentToBooking(
+  db: LifecycleDb,
+  i: { intentId: string; paymentIntentId: string; accountId: string; amountCents: number; now: Date },
+): Promise<ConvertResult> {
+  const oversold = (firstTime: boolean): ConvertResult => ({
+    outcome: "oversold",
+    firstTime,
+    paymentIntentId: i.paymentIntentId,
+    accountId: i.accountId,
+    amountCents: i.amountCents,
+  });
+
+  return db.transaction(async (tx) => {
+    const { rows: locked } = UUID.test(i.intentId)
+      ? await tx.query(`SELECT status, booking_id FROM booking_intents WHERE id = $1::uuid FOR UPDATE`, [i.intentId])
+      : { rows: [] };
+    const current = locked[0] as { status: BookingIntentStatus; booking_id: string | null } | undefined;
+    if (!current) throw new Error(`Booking intent ${i.intentId} not found`);
+    if (current.status === "paid") {
+      // Never a second booking for one payment, even if the first was deleted.
+      if (!current.booking_id) throw new Error(`Paid booking intent ${i.intentId} has no booking`);
+      return { outcome: "confirmed" as const, bookingId: current.booking_id, firstTime: false };
+    }
+    if (current.status === "oversold" || current.status === "refunded_oversold") return oversold(false);
+
+    const { rows } = await tx.query(INTENT_SQL(`bi.id = $1::uuid`), [i.intentId]);
+    const intent = toIntent(rows[0] as IntentRow);
+
+    const wanted = new Map<string, number>();
+    for (const r of intent.rooms) wanted.set(r.roomId, (wanted.get(r.roomId) ?? 0) + 1);
+    await tx.query(`SELECT id FROM rooms WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`, [[...wanted.keys()]]);
+
+    const availability = await loadStayAvailability(tx, {
+      propertyId: intent.propertyId,
+      checkIn: intent.checkIn,
+      checkOut: intent.checkOut,
+      now: i.now,
+      excludeIntentId: intent.id,
+    });
+    const unitsLeft = new Map(availability.map((a) => [a.roomId, a.unitsLeft]));
+    if ([...wanted].some(([id, n]) => n > (unitsLeft.get(id) ?? 0))) {
+      await tx.query(
+        `UPDATE booking_intents SET status = 'oversold', payment_reference = $2, updated_at = now() WHERE id = $1`,
+        [intent.id, i.paymentIntentId],
+      );
+      return oversold(true);
+    }
+
+    const { rows: bookingRows } = await tx.query(
+      `INSERT INTO bookings
+         (hotel_id, user_id, check_in_date, check_out_date, status, confirmed_at,
+          total_amount, booking_fee_amount, currency, stripe_payment_intent_id)
+       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8)
+       RETURNING id`,
+      [
+        intent.propertyId,
+        intent.userId,
+        intent.checkIn,
+        intent.checkOut,
+        i.now,
+        Math.round(intent.snapshot.total),
+        intent.snapshot.currency,
+        i.paymentIntentId,
+      ],
+    );
+    const bookingId = (bookingRows[0] as { id: string }).id;
+
+    const nightPrices: Record<string, { date: string; price: number }[]> = {};
+    for (const r of intent.rooms) {
+      const { rows: reservationRows } = await tx.query(
+        `INSERT INTO reservations
+           (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night,
+            total_amount, tourist_tax_amount, tourist_tax_lines)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+         RETURNING id`,
+        [
+          bookingId,
+          r.roomId,
+          r.ratePlanId,
+          r.adults,
+          r.children,
+          r.nights.length,
+          Math.round(r.stayTotal / r.nights.length),
+          Math.round(r.stayTotal),
+          r.touristTax,
+          JSON.stringify(r.touristTaxLines),
+        ],
+      );
+      nightPrices[(reservationRows[0] as { id: string }).id] = r.nights;
+    }
+
+    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices });
+    await recordBookingEvent(tx, {
+      bookingId,
+      kind: "confirmed",
+      actor: { kind: "system", id: null },
+      data: { intentId: intent.id, paymentIntentId: i.paymentIntentId },
+    });
+    await tx.query(
+      `INSERT INTO transactions (booking_id, type, provider, provider_payment_id, amount, currency, status)
+       VALUES ($1, 'charge', 'stripe', $2, $3, $4, 'succeeded')`,
+      [bookingId, i.paymentIntentId, Math.round(i.amountCents / 100), intent.snapshot.currency],
+    );
+    await tx.query(
+      `UPDATE booking_intents
+       SET status = 'paid', booking_id = $2, payment_reference = $3, updated_at = now()
+       WHERE id = $1`,
+      [intent.id, bookingId, i.paymentIntentId],
+    );
+
+    return { outcome: "confirmed" as const, bookingId, firstTime: true };
+  });
+}
+
+/** The oversold payment was refunded. True only for the `oversold` → `refunded_oversold` step itself. */
+export async function markIntentRefundedOversold(db: Queryable, i: { intentId: string; refundId: string }): Promise<boolean> {
+  if (!UUID.test(i.intentId)) return false;
+  const { rows } = await db.query(
+    `UPDATE booking_intents SET status = 'refunded_oversold', refund_reference = $2, updated_at = now()
+     WHERE id = $1 AND status = 'oversold'
+     RETURNING id`,
+    [i.intentId, i.refundId],
+  );
+  return rows.length > 0;
 }
