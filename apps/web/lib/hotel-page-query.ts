@@ -40,6 +40,11 @@ export interface HotelPageData {
   check_in_time: string;
   check_in_until: string | null;
   check_out_time: string;
+  /**
+   * IANA zone the property's dates are in. Optional: pages cached before it
+   * was added do not have it.
+   */
+  timezone?: string;
 
   // Everything below is `property_content`, and is NULL until the host fills it in.
   overview_headline: string | null;
@@ -109,6 +114,7 @@ export function buildHeroQuery(slug: string, testing: boolean) {
     to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
+    p.timezone,
     p.cancellation_tier,
     c.overview_headline, c.overview_description, c.location_about,
     c.cta_headline, c.cta_body, c.fine_print,
