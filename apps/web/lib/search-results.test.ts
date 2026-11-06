@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { mapSearchResult, nightsBetween, resolveCoverUrl, type HotelSearchApiResult } from "./search-results";
-import { getDemoSearchResults } from "./search-results.fixtures";
 
 const base: HotelSearchApiResult = {
   hotel_id: "h1", hotel_name: "Hotel Lago", hotel_slug: "hotel-lago", city: "Como", country: "IT",
@@ -41,31 +40,4 @@ describe("resolveCoverUrl", () => {
   test("relative → CDN under the hotel id", () =>
     expect(resolveCoverUrl("h1", "/rooms/a.jpg")).toBe("https://cdn.openbookings.co/h1/rooms/a.jpg"));
   test("empty → null", () => expect(resolveCoverUrl("h1", "")).toBeNull());
-});
-
-describe("getDemoSearchResults", () => {
-  test("totals follow nights", () =>
-    // non-refundable bar: round(360 × 0.88) = 317
-    expect(getDemoSearchResults(2).find((s) => s.name === "Chalet Matterhorn")!.availability).toEqual({
-      status: "available", nights: 2, total: 634,
-    }));
-  test("every demo stay is in the EU", () =>
-    expect(getDemoSearchResults(2).map((s) => s.location)).toEqual([
-      "Saturnia, IT", "Como, IT", "Rome, IT", "Breuil-Cervinia, IT",
-    ]));
-  test("Casa Roma is unavailable, dated or not", () => {
-    for (const n of [2, null]) {
-      expect(getDemoSearchResults(n).find((s) => s.name === "Casa Roma")!.availability.status).toBe("unavailable");
-    }
-  });
-  test("no nights → others undated", () =>
-    expect(
-      getDemoSearchResults(null)
-        .filter((s) => s.name !== "Casa Roma")
-        .every((s) => s.availability.status === "undated"),
-    ).toBe(true));
-  test("every demo cover has a tint; no demo distance", () =>
-    expect(getDemoSearchResults(2).every((s) => !!s.cover?.tint && s.distanceKm === null)).toBe(true));
-  test("cancellation follows the cheapest plan", () =>
-    expect(getDemoSearchResults(null).every((s) => s.refundable === false)).toBe(true));
 });

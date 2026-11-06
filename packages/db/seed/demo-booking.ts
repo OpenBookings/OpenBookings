@@ -4,13 +4,11 @@
  * property's organisation.
  *
  * It attaches to whatever property is already in the database rather than
- * inventing one, so the summary renders the real Terme Di Saturnia rows,
+ * inventing one, so the bookings show the real Terme Di Saturnia rows,
  * images and check-in times.
  *
- * Money: every `bigint` amount in this schema is in MAJOR units (whole euros) —
- * `rate_plans.bar` of 109 is €109, and the pricing calculator rounds to two
- * decimals rather than working in minor units. Stripe is handed minor units,
- * converted at the edge in `_lib/booking.ts`.
+ * Money: every `bigint` amount in this schema is in MAJOR units (whole euros),
+ * so `rate_plans.bar` of 109 is €109.
  *
  * Run: bun --env-file=../../.env.local packages/db/seed/demo-booking.ts
  */
@@ -42,7 +40,6 @@ const ADULTS = 2;
 const PRICE_PER_NIGHT = 185;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
 const BOOKING_FEE_RATE = 0.045;
-
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
