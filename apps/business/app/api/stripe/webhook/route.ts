@@ -1,4 +1,10 @@
-import { constructWebhookEvent, refundCommissionForCharge, refundPayment, type StripeEvent } from "@openbookings/stripe";
+import {
+  constructWebhookEvent,
+  findRefundByMetadata,
+  refundCommissionForCharge,
+  refundPayment,
+  type StripeEvent,
+} from "@openbookings/stripe";
 import { expireIntent, getPool, markIntentFailed, query, withTransaction } from "@openbookings/db";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
 import * as Sentry from "@sentry/nextjs";
@@ -100,12 +106,13 @@ const poolDb: LifecycleDb = {
 const confirmation: ConfirmationDeps = {
   db: poolDb,
   refund: refundPayment,
+  findRefund: findRefundByMetadata,
   now: () => new Date(),
   // The booking emails come with their templates; until then nothing is sent.
   sendConfirmed: async () => {},
   sendOversold: async () => {},
-  report: (error, { level, extra }) =>
-    Sentry.captureException(error, { level, tags: { area: "booking-confirmation" }, extra }),
+  report: (error, { level, tags, extra }) =>
+    Sentry.captureException(error, { level, tags: { area: "booking-confirmation", ...tags }, extra }),
 };
 
 deps.onCheckoutPaid = (input) => confirmPaidCheckout(input, confirmation);

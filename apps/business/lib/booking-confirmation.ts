@@ -1,6 +1,6 @@
 import { convertIntentToBooking, IntentNotFoundError, markIntentRefundedOversold } from "@openbookings/db";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
-import type { refundPayment } from "@openbookings/stripe";
+import type { findRefundByMetadata, refundPayment } from "@openbookings/stripe";
 import type { StripeEventDeps } from "./stripe-events";
 
 /**
@@ -11,17 +11,24 @@ import type { StripeEventDeps } from "./stripe-events";
  * step is safe to repeat: the conversion returns what an earlier call did, and
  * each refund carries an idempotency key, so a retry never pays out twice. A
  * failed refund is thrown for that reason: Stripe retries the event, and the
- * guest is not left without their money.
+ * guest is not left without their money. Stripe forgets idempotency keys
+ * after about a day, so a refund is looked up on Stripe before it is made: a
+ * replay days later finds the first refund instead of being refused for good.
  */
 export type ConfirmationDeps = {
   db: LifecycleDb;
   refund: typeof refundPayment;
+  /** A refund this module already made for the payment, recognised by its metadata. */
+  findRefund: typeof findRefundByMetadata;
   now: () => Date;
   /** Never allowed to fail the webhook: the booking stands without its email. */
   sendConfirmed: (bookingId: string) => Promise<void>;
   sendOversold: (intentId: string) => Promise<void>;
   /** Something a person must look at (Sentry). */
-  report: (error: unknown, context: { level: "error" | "warning"; extra: Record<string, unknown> }) => void;
+  report: (
+    error: unknown,
+    context: { level: "error" | "warning"; tags?: Record<string, string>; extra: Record<string, unknown> },
+  ) => void;
   /** Tests replace these; the app uses the real ones. */
   convert?: typeof convertIntentToBooking;
   markRefunded?: typeof markIntentRefundedOversold;
@@ -58,16 +65,11 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
   // second tab). This one bought nothing: all of it goes back.
   const stored = result.outcome === "confirmed" ? result.paymentReference : result.paymentIntentId;
   if (stored !== i.paymentIntentId) {
-    deps.report(new Error(`Second payment for booking intent ${i.intentId}; refunding it in full`), {
+    const refund = await refundInFull(i, deps, "duplicate");
+    deps.report(new Error(`Second payment for booking intent ${i.intentId} refunded in full`), {
       level: "error",
-      extra: { ...extra, keptPaymentIntentId: stored },
-    });
-    await deps.refund({
-      paymentIntentId: i.paymentIntentId,
-      stripeAccountId: i.stripeAccountId,
-      amountCents: i.amountCents,
-      idempotencyKey: `duplicate:${i.paymentIntentId}`,
-      metadata: { intentId: i.intentId, reason: "duplicate" },
+      tags: { reason: "duplicate", intentId: i.intentId },
+      extra: { ...extra, keptPaymentIntentId: stored, refundId: refund.id },
     });
     return;
   }
@@ -82,13 +84,7 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
   }
 
   // Oversold: the rooms went to someone else between the hold and the payment.
-  const refund = await deps.refund({
-    paymentIntentId: i.paymentIntentId,
-    stripeAccountId: i.stripeAccountId,
-    amountCents: i.amountCents,
-    idempotencyKey: `oversold:${i.intentId}`,
-    metadata: { intentId: i.intentId, reason: "oversold" },
-  });
+  const refund = await refundInFull(i, deps, "oversold");
   // Only the call that moves the intent to refunded tells the guest, so a
   // redelivered event does not email them twice.
   if (!(await markRefunded(deps.db, { intentId: i.intentId, refundId: refund.id }))) return;
@@ -98,4 +94,40 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
     console.error("[booking-confirmation] oversold email failed:", error instanceof Error ? error.message : error);
     deps.report(error, { level: "warning", extra });
   });
+}
+
+/**
+ * This call's payment, back to the guest in full: the refund already made for
+ * it if Stripe has one, else a new one. A failure is reported (the route only
+ * logs a 500) and thrown, so Stripe retries the event.
+ */
+async function refundInFull(
+  i: PaidCheckout,
+  deps: ConfirmationDeps,
+  reason: "oversold" | "duplicate",
+): Promise<{ id: string }> {
+  const metadata = { intentId: i.intentId, reason };
+  try {
+    const existing = await deps.findRefund({
+      paymentIntentId: i.paymentIntentId,
+      stripeAccountId: i.stripeAccountId,
+      metadata,
+    });
+    if (existing) return existing;
+    return await deps.refund({
+      paymentIntentId: i.paymentIntentId,
+      stripeAccountId: i.stripeAccountId,
+      amountCents: i.amountCents,
+      // Oversold: one refund per intent. Duplicate: one per extra payment.
+      idempotencyKey: reason === "oversold" ? `oversold:${i.intentId}` : `duplicate:${i.paymentIntentId}`,
+      metadata,
+    });
+  } catch (error) {
+    deps.report(error, {
+      level: "error",
+      tags: { reason, intentId: i.intentId },
+      extra: { sessionId: i.sessionId, paymentIntentId: i.paymentIntentId, eventId: i.eventId },
+    });
+    throw error;
+  }
 }

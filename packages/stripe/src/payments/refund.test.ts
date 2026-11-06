@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildRefundParams, isDefiniteRefundFailure, matchRefund } from "./refund";
+import { buildRefundParams, isDefiniteRefundFailure, matchRefund, matchRefundByMetadata } from "./refund";
 
 describe("buildRefundParams", () => {
   test("refunds the payment on the host's account and returns our fee in proportion", () => {
@@ -44,5 +44,21 @@ describe("matchRefund", () => {
     ];
     expect(matchRefund(refunds, "row-1")).toEqual({ id: "re_ok" });
     expect(matchRefund(refunds, "row-3")).toBeNull();
+  });
+});
+
+describe("matchRefundByMetadata", () => {
+  test("finds a live refund carrying every given metadata value", () => {
+    const refunds = [
+      { id: "re_dup", status: "succeeded", metadata: { intentId: "i-1", reason: "duplicate" } },
+      { id: "re_canceled", status: "canceled", metadata: { intentId: "i-1", reason: "oversold" } },
+      { id: "re_ok", status: "pending", metadata: { intentId: "i-1", reason: "oversold" } },
+    ];
+    expect(matchRefundByMetadata(refunds, { intentId: "i-1", reason: "oversold" })).toEqual({ id: "re_ok" });
+    expect(matchRefundByMetadata(refunds, { intentId: "i-2", reason: "oversold" })).toBeNull();
+  });
+
+  test("a refund without metadata never matches", () => {
+    expect(matchRefundByMetadata([{ id: "re_1", status: "succeeded", metadata: null }], { reason: "oversold" })).toBeNull();
   });
 });

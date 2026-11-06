@@ -54,9 +54,14 @@ function setup(results: (ConvertResult | Error)[], over: Partial<ConfirmationDep
       calls.push(["refund", i]);
       return { id: "re_1", status: "succeeded" };
     },
+    findRefund: async (i) => {
+      calls.push(["findRefund", i]);
+      return null;
+    },
     sendConfirmed: async (bookingId) => void calls.push(["sendConfirmed", bookingId]),
     sendOversold: async (intentId) => void calls.push(["sendOversold", intentId]),
-    report: (error, context) => void calls.push(["report", error instanceof Error ? error.message : error, context.level]),
+    report: (error, context) =>
+      void calls.push(["report", error instanceof Error ? error.message : error, context.level, context.tags]),
     ...over,
   };
   return { deps, calls, of: (name: string) => calls.filter((c) => c[0] === name) };
@@ -130,8 +135,26 @@ describe("confirmPaidCheckout", () => {
       },
     });
     await expect(confirmPaidCheckout(paid, t.deps)).rejects.toThrow("Stripe unreachable");
+    // Thrown for Stripe to retry, and reported: the route only logs a 500.
+    expect(t.of("report")).toEqual([["report", "Stripe unreachable", "error", { reason: "oversold", intentId: INTENT }]]);
     expect(t.of("markRefunded")).toEqual([]);
     expect(t.of("sendOversold")).toEqual([]);
+  });
+
+  test("an oversold refund already on Stripe is found, not made again: idempotency keys expire after a day", async () => {
+    const t = setup([oversold(true)], {
+      findRefund: async (i) => {
+        t.calls.push(["findRefund", i]);
+        return { id: "re_earlier" };
+      },
+    });
+    await confirmPaidCheckout(paid, t.deps);
+    expect(t.of("findRefund")).toEqual([
+      ["findRefund", { paymentIntentId: "pi_1", stripeAccountId: "acct_1", metadata: { intentId: INTENT, reason: "oversold" } }],
+    ]);
+    expect(t.of("refund")).toEqual([]);
+    expect(t.of("markRefunded")).toEqual([["markRefunded", { intentId: INTENT, refundId: "re_earlier" }]]);
+    expect(t.of("sendOversold")).toEqual([["sendOversold", INTENT]]);
   });
 
   test("a second payment for an already confirmed intent is refunded in full, and no confirmation is sent", async () => {
@@ -150,7 +173,24 @@ describe("confirmPaidCheckout", () => {
       ],
     ]);
     expect(t.of("sendConfirmed")).toEqual([]);
-    expect(t.of("report").map((c) => c[2])).toEqual(["error"]);
+    // Reported once, after the money went back.
+    expect(t.calls.map((c) => c[0])).toEqual(["convert", "findRefund", "refund", "report"]);
+    expect(t.of("report").map((c) => [c[2], c[3]])).toEqual([["error", { reason: "duplicate", intentId: INTENT }]]);
+  });
+
+  test("a duplicate refund already on Stripe is found, not made again", async () => {
+    const t = setup([confirmed(false, "pi_first")], {
+      findRefund: async (i) => {
+        t.calls.push(["findRefund", i]);
+        return { id: "re_earlier" };
+      },
+    });
+    await confirmPaidCheckout(paid, t.deps);
+    expect(t.of("findRefund")).toEqual([
+      ["findRefund", { paymentIntentId: "pi_1", stripeAccountId: "acct_1", metadata: { intentId: INTENT, reason: "duplicate" } }],
+    ]);
+    expect(t.of("refund")).toEqual([]);
+    expect(t.of("report").length).toBe(1);
   });
 
   test("a second payment for an oversold intent is refunded as a duplicate, not as the oversold payment", async () => {
@@ -161,13 +201,25 @@ describe("confirmPaidCheckout", () => {
     expect(t.of("sendOversold")).toEqual([]);
   });
 
-  test("a duplicate refund that fails is thrown, so Stripe retries the event", async () => {
+  test("a duplicate refund that fails is reported and thrown, so Stripe retries the event", async () => {
     const t = setup([confirmed(false, "pi_first")], {
       refund: async () => {
         throw new Error("Stripe unreachable");
       },
     });
     await expect(confirmPaidCheckout(paid, t.deps)).rejects.toThrow("Stripe unreachable");
+    expect(t.of("report")).toEqual([["report", "Stripe unreachable", "error", { reason: "duplicate", intentId: INTENT }]]);
+  });
+
+  test("a refund lookup that fails is reported and thrown too", async () => {
+    const t = setup([oversold(true)], {
+      findRefund: async () => {
+        throw new Error("rate limited");
+      },
+    });
+    await expect(confirmPaidCheckout(paid, t.deps)).rejects.toThrow("rate limited");
+    expect(t.of("report").map((c) => c[1])).toEqual(["rate limited"]);
+    expect(t.of("refund")).toEqual([]);
   });
 
   test("a payment for an intent that does not exist is reported, not retried", async () => {

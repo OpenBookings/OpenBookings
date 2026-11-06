@@ -16,9 +16,11 @@ export { refundCommissionForCharge, type CommissionRefund } from './payments/com
 export { constructWebhookEvent, type StripeEvent } from './webhooks';
 export {
   buildRefundParams,
+  findRefundByMetadata,
   findRefundForRow,
   isDefiniteRefundFailure,
   matchRefund,
+  matchRefundByMetadata,
   refundPayment,
   type RefundPaymentInput,
 } from './payments/refund';
