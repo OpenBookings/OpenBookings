@@ -195,3 +195,4 @@ export function getDb() {
   return instance;
 }
 export * from "./reservation-policy";
+export * from "./availability";
