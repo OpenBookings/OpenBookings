@@ -106,15 +106,86 @@ describe("handleStripeEvent", () => {
     expect(t.calls).toEqual([]);
   });
 
-  test("events with no work yet are left unmarked, so they can be replayed once there is some", async () => {
-    const t = setup();
-    expect(await handleStripeEvent(event("checkout.session.completed", { id: "cs_1" }), t.deps)).toBe("ignored");
-    expect(t.processed.size).toBe(0);
-  });
 
   test("events this app has no use for are acknowledged and ignored", async () => {
     const t = setup();
     expect(await handleStripeEvent(event("customer.created", { id: "cus_1" }), t.deps)).toBe("ignored");
+    expect(t.calls).toEqual([]);
+  });
+});
+
+describe("handleStripeEvent: booking checkouts", () => {
+  const INTENT = "6f1c2b9e-3d4a-4e5f-8a7b-0c1d2e3f4a5b";
+  const session = (over: Record<string, unknown> = {}) => ({
+    id: "cs_test_1",
+    payment_status: "paid",
+    payment_intent: "pi_1",
+    amount_total: 48_250,
+    metadata: { bookingIntentId: INTENT },
+    ...over,
+  });
+
+  function checkoutSetup() {
+    const t = setup();
+    t.deps.onCheckoutPaid = async (i) => void t.calls.push(["paid", i]);
+    t.deps.onCheckoutFailed = async (i) => void t.calls.push(["failed", i]);
+    t.deps.onCheckoutExpired = async (i) => void t.calls.push(["expired", i]);
+    return t;
+  }
+
+  const paid = { eventId: "evt_1", intentId: INTENT, sessionId: "cs_test_1", paymentIntentId: "pi_1", stripeAccountId: "acct_1", amountCents: 48_250 };
+
+  test("a paid checkout confirms the intent it was opened for, with the payment as Stripe charged it", async () => {
+    const t = checkoutSetup();
+    expect(await handleStripeEvent(event("checkout.session.completed", session()), t.deps)).toBe("handled");
+    expect(t.calls).toEqual([["paid", paid]]);
+    expect(t.processed.has("evt_1")).toBe(true);
+  });
+
+  test("a completed checkout still waiting on a bank is left for async_payment_succeeded", async () => {
+    const t = checkoutSetup();
+    expect(await handleStripeEvent(event("checkout.session.completed", session({ payment_status: "unpaid" })), t.deps)).toBe("ignored");
+    expect(t.calls).toEqual([]);
+    expect(t.processed.size).toBe(0);
+  });
+
+  test("a bank payment that clears later confirms the intent the same way", async () => {
+    const t = checkoutSetup();
+    expect(await handleStripeEvent(event("checkout.session.async_payment_succeeded", session()), t.deps)).toBe("handled");
+    expect(t.calls).toEqual([["paid", paid]]);
+  });
+
+  test("a bank payment that fails releases the intent", async () => {
+    const t = checkoutSetup();
+    expect(await handleStripeEvent(event("checkout.session.async_payment_failed", session({ payment_status: "unpaid" })), t.deps)).toBe("handled");
+    expect(t.calls).toEqual([["failed", { intentId: INTENT, sessionId: "cs_test_1" }]]);
+  });
+
+  test("an expired checkout ends the intent's hold", async () => {
+    const t = checkoutSetup();
+    const expired = session({ payment_status: "unpaid", payment_intent: null, amount_total: 48_250 });
+    expect(await handleStripeEvent(event("checkout.session.expired", expired), t.deps)).toBe("handled");
+    expect(t.calls).toEqual([["expired", { intentId: INTENT, sessionId: "cs_test_1" }]]);
+  });
+
+  test("a checkout that is not a booking intent's is not ours to act on", async () => {
+    const t = checkoutSetup();
+    for (const type of [
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "checkout.session.async_payment_failed",
+      "checkout.session.expired",
+    ]) {
+      expect(await handleStripeEvent(event(type, session({ metadata: {} })), t.deps)).toBe("ignored");
+    }
+    expect(t.calls).toEqual([]);
+    expect(t.processed.size).toBe(0);
+  });
+
+  test("a test-mode checkout reaching the live deployment is ignored", async () => {
+    const t = checkoutSetup();
+    t.deps.livemode = true;
+    expect(await handleStripeEvent(event("checkout.session.completed", session()), t.deps)).toBe("ignored");
     expect(t.calls).toEqual([]);
   });
 });

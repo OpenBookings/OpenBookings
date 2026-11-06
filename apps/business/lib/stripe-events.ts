@@ -6,8 +6,8 @@
  *
  * Bookings are direct charges, so payment events arrive for the host's
  * connected account (`event.account`). Handlers here record and notify. The
- * only money they ever move is OpenBookings' own commission, back to the host
- * — never the host's funds.
+ * money they move is OpenBookings' own commission, back to the host, and a
+ * guest's payment that could not become a booking, back to the guest.
  */
 
 export type StripeEventLike = {
@@ -54,12 +54,29 @@ export type StripeEventDeps = {
     last4: string | null;
     country: string | null;
   }) => Promise<void>;
+  /**
+   * A booking checkout was paid: turn its intent into a booking, or refund it.
+   * Amounts are Stripe's, in cents, as charged on the host's account.
+   */
+  onCheckoutPaid?: (input: {
+    eventId: string;
+    intentId: string;
+    sessionId: string;
+    paymentIntentId: string;
+    stripeAccountId: string;
+    amountCents: number;
+  }) => Promise<void>;
+  /** A delayed payment (a bank debit) failed: the intent stops holding its rooms. */
+  onCheckoutFailed?: (input: { intentId: string; sessionId: string }) => Promise<void>;
+  /** The checkout lapsed unpaid: the intent's hold ends now. */
+  onCheckoutExpired?: (input: { intentId: string; sessionId: string }) => Promise<void>;
 };
 
 export type StripeEventOutcome = "handled" | "ignored" | "duplicate";
 
 type Obj = Record<string, unknown>;
 const str = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+const asObj = (value: unknown): Obj => (value && typeof value === "object" ? (value as Obj) : {});
 
 export async function handleStripeEvent(
   event: StripeEventLike,
@@ -112,9 +129,29 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
         });
     }
 
-    // checkout.session.completed is deliberately not handled yet: creating
-    // the booking from it comes with real booking intents. Leaving it
-    // unmarked means those events can still be replayed once it is.
+    // `completed` while still `unpaid` is a bank payment that has not cleared:
+    // async_payment_succeeded (or _failed) follows, and decides.
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
+      const confirm = deps.onCheckoutPaid;
+      const intentId = str(asObj(object.metadata).bookingIntentId);
+      const sessionId = str(object.id);
+      const paymentIntentId = str(object.payment_intent);
+      const amountCents = object.amount_total;
+      if (!confirm || !account || !intentId || !sessionId || !paymentIntentId) return null;
+      if (object.payment_status !== "paid" || typeof amountCents !== "number") return null;
+      return () =>
+        confirm({ eventId: event.id, intentId, sessionId, paymentIntentId, stripeAccountId: account, amountCents });
+    }
+
+    case "checkout.session.async_payment_failed":
+    case "checkout.session.expired": {
+      const release = event.type === "checkout.session.expired" ? deps.onCheckoutExpired : deps.onCheckoutFailed;
+      const intentId = str(asObj(object.metadata).bookingIntentId);
+      const sessionId = str(object.id);
+      if (!release || !intentId || !sessionId) return null;
+      return () => release({ intentId, sessionId });
+    }
 
     case "charge.refunded": {
       const chargeId = str(object.id);

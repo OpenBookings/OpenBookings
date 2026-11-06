@@ -1,6 +1,9 @@
-import { constructWebhookEvent, refundCommissionForCharge, type StripeEvent } from "@openbookings/stripe";
-import { query } from "@openbookings/db";
+import { constructWebhookEvent, refundCommissionForCharge, refundPayment, type StripeEvent } from "@openbookings/stripe";
+import { expireIntent, getPool, markIntentFailed, query, withTransaction } from "@openbookings/db";
+import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
+import { confirmPaidCheckout, type ConfirmationDeps } from "@/lib/booking-confirmation";
 import { handleStripeEvent, type StripeEventDeps } from "@/lib/stripe-events";
 import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
@@ -87,6 +90,47 @@ deps.onExternalAccountChanged = async ({ eventId, stripeAccountId, change, last4
   ).catch((error) => {
     console.error("[stripe-webhook] payout alert failed:", error instanceof Error ? error.message : error);
   });
+};
+
+const poolDb: LifecycleDb = {
+  query: (text, values) => getPool().query(text, values),
+  transaction: (fn) => withTransaction((client) => fn(client)),
+};
+
+const confirmation: ConfirmationDeps = {
+  db: poolDb,
+  refund: refundPayment,
+  now: () => new Date(),
+  // The booking emails come with their templates; until then nothing is sent.
+  sendConfirmed: async () => {},
+  sendOversold: async () => {},
+  report: (error, { level, extra }) =>
+    Sentry.captureException(error, { level, tags: { area: "booking-confirmation" }, extra }),
+};
+
+deps.onCheckoutPaid = (input) => confirmPaidCheckout(input, confirmation);
+
+/**
+ * Whether this session is still the one the intent is paying with. An intent
+ * whose unusable session was replaced also hears about the old one expiring,
+ * and that must not end the hold the new session is paying against.
+ */
+async function isCurrentSession(intentId: string, sessionId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `SELECT id FROM booking_intents WHERE id::text = $1 AND payment_session_id = $2`,
+    [intentId, sessionId],
+  );
+  return rows.length > 0;
+}
+
+deps.onCheckoutFailed = async ({ intentId, sessionId }) => {
+  if (await isCurrentSession(intentId, sessionId)) await markIntentFailed(poolDb, { intentId });
+};
+
+// Stripe's session outlives the hold, so the hold has normally lapsed by now;
+// `force` ends it either way: an expired session can no longer be paid.
+deps.onCheckoutExpired = async ({ intentId, sessionId }) => {
+  if (await isCurrentSession(intentId, sessionId)) await expireIntent(poolDb, { intentId, now: new Date(), force: true });
 };
 
 export async function POST(req: Request) {
