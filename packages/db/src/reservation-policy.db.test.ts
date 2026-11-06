@@ -81,4 +81,38 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
     const res = (await db.query(`SELECT cancellation_tier FROM reservations WHERE id = $1`, [reservationIds[0]])).rows[0];
     expect(res.cancellation_tier).toBe("non_refundable");
   });
+
+  /** The rules say €6 a night (€18); the guest was charged something else. */
+  const chargedTax = async (charged: number, opts: { rules: boolean }) => {
+    const ids = await seedProperty(db, { tier: "standard" });
+    if (opts.rules) await touristTax(ids.propertyId);
+    const { bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: "2031-11-10", nights: 3 });
+    await confirmBookingPolicy(db, {
+      bookingId,
+      confirmedAt: new Date("2031-10-01T10:00:00Z"),
+      touristTax: { [reservationIds[0]]: charged },
+    });
+    return (
+      await db.query(`SELECT tourist_tax_amount::float8 AS tax, nights FROM reservations WHERE id = $1`, [reservationIds[0]])
+    ).rows[0] as { tax: number; nights: { touristTax: number }[] };
+  };
+
+  test("charged tax replaces the current rules' total, split over the nights the same way", async () => {
+    const res = await chargedTax(10, { rules: true });
+    expect(res.tax).toBe(10);
+    // 6:6:6 scaled to €10; the cent left over goes on the first night.
+    expect(res.nights.map((n) => n.touristTax)).toEqual([3.34, 3.33, 3.33]);
+  });
+
+  test("charged tax equal to the rules' total changes nothing", async () => {
+    const res = await chargedTax(18, { rules: true });
+    expect(res.tax).toBe(18);
+    expect(res.nights.map((n) => n.touristTax)).toEqual([6, 6, 6]);
+  });
+
+  test("charged tax with no rules left lands on the first night", async () => {
+    const res = await chargedTax(7.5, { rules: false });
+    expect(res.tax).toBe(7.5);
+    expect(res.nights.map((n) => n.touristTax)).toEqual([7.5, 0, 0]);
+  });
 });

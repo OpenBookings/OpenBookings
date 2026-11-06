@@ -338,13 +338,26 @@ export async function markIntentFailed(db: Queryable, i: { intentId: string }): 
 }
 
 /**
- * What a payment became. `oversold` carries the payment back so the caller
- * can refund it without reading anything again. `firstTime` is false on a
- * redelivered event: the work was done by an earlier call.
+ * What a payment became. `firstTime` is false when an earlier call already did
+ * the work (a redelivered event, or a second payment for the same intent).
+ *
+ * The payment reference is always the one stored on the intent: on a first
+ * call that is this call's payment, afterwards the payment that converted it.
+ * A caller holding a different payment must refund it. `oversold` carries
+ * `accountId` and `amountCents` from the call, so the caller can refund
+ * without reading anything again.
  */
 export type ConvertResult =
-  | { outcome: "confirmed"; bookingId: string; firstTime: boolean }
+  | { outcome: "confirmed"; bookingId: string; firstTime: boolean; paymentReference: string }
   | { outcome: "oversold"; firstTime: boolean; paymentIntentId: string; accountId: string; amountCents: number };
+
+/** No booking intent with this id. The payment cannot be matched to anything: alert, do not retry. */
+export class IntentNotFoundError extends Error {
+  constructor(readonly intentId: string) {
+    super(`Booking intent ${intentId} not found`);
+    this.name = "IntentNotFoundError";
+  }
+}
 
 /**
  * Turn a paid intent into a confirmed booking, exactly once.
@@ -367,26 +380,41 @@ export async function convertIntentToBooking(
   db: LifecycleDb,
   i: { intentId: string; paymentIntentId: string; accountId: string; amountCents: number; now: Date },
 ): Promise<ConvertResult> {
-  const oversold = (firstTime: boolean): ConvertResult => ({
+  const oversold = (firstTime: boolean, paymentIntentId: string): ConvertResult => ({
     outcome: "oversold",
     firstTime,
-    paymentIntentId: i.paymentIntentId,
+    paymentIntentId,
     accountId: i.accountId,
     amountCents: i.amountCents,
   });
 
   return db.transaction(async (tx) => {
     const { rows: locked } = UUID.test(i.intentId)
-      ? await tx.query(`SELECT status, booking_id FROM booking_intents WHERE id = $1::uuid FOR UPDATE`, [i.intentId])
+      ? await tx.query(
+          `SELECT status, booking_id, payment_reference FROM booking_intents WHERE id = $1::uuid FOR UPDATE`,
+          [i.intentId],
+        )
       : { rows: [] };
-    const current = locked[0] as { status: BookingIntentStatus; booking_id: string | null } | undefined;
-    if (!current) throw new Error(`Booking intent ${i.intentId} not found`);
+    const current = locked[0] as
+      | { status: BookingIntentStatus; booking_id: string | null; payment_reference: string | null }
+      | undefined;
+    if (!current) throw new IntentNotFoundError(i.intentId);
     if (current.status === "paid") {
-      // Never a second booking for one payment, even if the first was deleted.
-      if (!current.booking_id) throw new Error(`Paid booking intent ${i.intentId} has no booking`);
-      return { outcome: "confirmed" as const, bookingId: current.booking_id, firstTime: false };
+      // Never a second booking for one intent, even if the first was deleted.
+      if (!current.booking_id || !current.payment_reference) {
+        throw new Error(`Paid booking intent ${i.intentId} has no booking or payment reference`);
+      }
+      return {
+        outcome: "confirmed" as const,
+        bookingId: current.booking_id,
+        firstTime: false,
+        paymentReference: current.payment_reference,
+      };
     }
-    if (current.status === "oversold" || current.status === "refunded_oversold") return oversold(false);
+    if (current.status === "oversold" || current.status === "refunded_oversold") {
+      // Always set on the way to oversold; the call's payment only if it somehow is not.
+      return oversold(false, current.payment_reference ?? i.paymentIntentId);
+    }
 
     const { rows } = await tx.query(INTENT_SQL(`bi.id = $1::uuid`), [i.intentId]);
     const intent = toIntent(rows[0] as IntentRow);
@@ -408,7 +436,7 @@ export async function convertIntentToBooking(
         `UPDATE booking_intents SET status = 'oversold', payment_reference = $2, updated_at = now() WHERE id = $1`,
         [intent.id, i.paymentIntentId],
       );
-      return oversold(true);
+      return oversold(true, i.paymentIntentId);
     }
 
     const { rows: bookingRows } = await tx.query(
@@ -431,6 +459,7 @@ export async function convertIntentToBooking(
     const bookingId = (bookingRows[0] as { id: string }).id;
 
     const nightPrices: Record<string, { date: string; price: number }[]> = {};
+    const touristTax: Record<string, number> = {};
     for (const r of intent.rooms) {
       const { rows: reservationRows } = await tx.query(
         `INSERT INTO reservations
@@ -451,10 +480,13 @@ export async function convertIntentToBooking(
           JSON.stringify(r.touristTaxLines),
         ],
       );
-      nightPrices[(reservationRows[0] as { id: string }).id] = r.nights;
+      const reservationId = (reservationRows[0] as { id: string }).id;
+      nightPrices[reservationId] = r.nights;
+      touristTax[reservationId] = r.touristTax;
     }
 
-    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices });
+    // The tax the guest was charged, not what the rules say now: they may have changed before a late payment.
+    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices, touristTax });
     await recordBookingEvent(tx, {
       bookingId,
       kind: "confirmed",
@@ -473,7 +505,7 @@ export async function convertIntentToBooking(
       [intent.id, bookingId, i.paymentIntentId],
     );
 
-    return { outcome: "confirmed" as const, bookingId, firstTime: true };
+    return { outcome: "confirmed" as const, bookingId, firstTime: true, paymentReference: i.paymentIntentId };
   });
 }
 

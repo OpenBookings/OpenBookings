@@ -6,6 +6,7 @@ import {
   convertIntentToBooking,
   createBookingIntent,
   expireIntent,
+  IntentNotFoundError,
   markIntentRefundedOversold,
   type IntentRoomInput,
   type IntentSnapshot,
@@ -204,7 +205,13 @@ describeWithDb("converting a paid booking intent", () => {
     const first = await convert(intentId);
     const second = await convert(intentId);
     expect(first.outcome).toBe("confirmed");
-    expect(second).toEqual({ outcome: "confirmed", bookingId: (first as { bookingId: string }).bookingId, firstTime: false });
+    expect(first).toMatchObject({ firstTime: true, paymentReference: "pi_convert" });
+    expect(second).toEqual({
+      outcome: "confirmed",
+      bookingId: (first as { bookingId: string }).bookingId,
+      firstTime: false,
+      paymentReference: "pi_convert",
+    });
     expect(await bookingsFor("pi_convert")).toHaveLength(1);
     expect((await db.query(`SELECT count(*)::int AS n FROM transactions WHERE provider_payment_id = 'pi_convert'`)).rows[0].n).toBe(1);
   });
@@ -266,5 +273,57 @@ describeWithDb("converting a paid booking intent", () => {
     await convert(intentId);
     expect(await markIntentRefundedOversold(db, { intentId, refundId: "re_1" })).toBe(false);
     expect(await intentRow(intentId)).toMatchObject({ status: "paid", refund_reference: null });
+  });
+
+  test("a second payment for a paid intent gets the stored reference back", async () => {
+    const { intentId } = await intent();
+    const first = await convert(intentId);
+    const second = await convert(intentId, NOW, "pi_second");
+    expect(second).toEqual({
+      outcome: "confirmed",
+      bookingId: (first as { bookingId: string }).bookingId,
+      firstTime: false,
+      paymentReference: "pi_convert",
+    });
+    expect(await bookingsFor("pi_second")).toHaveLength(0);
+    expect((await intentRow(intentId)).payment_reference).toBe("pi_convert");
+  });
+
+  test("a second payment for an oversold intent gets the stored reference back", async () => {
+    await db.query(`UPDATE rooms SET total_units = 1 WHERE id = $1`, [ids.roomId]);
+    const { intentId } = await intent();
+    await expireIntent(db, { intentId, now: NOW, force: true });
+    const other = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2 });
+    await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [other.bookingId]);
+    await convert(intentId, LATE);
+
+    expect(await convert(intentId, LATE, "pi_second")).toMatchObject({
+      outcome: "oversold",
+      firstTime: false,
+      paymentIntentId: "pi_convert",
+    });
+    expect((await intentRow(intentId)).payment_reference).toBe("pi_convert");
+  });
+
+  test("an unknown or malformed intent id is IntentNotFoundError", async () => {
+    await expect(convert(crypto.randomUUID())).rejects.toBeInstanceOf(IntentNotFoundError);
+    await expect(convert("not-a-uuid")).rejects.toBeInstanceOf(IntentNotFoundError);
+  });
+
+  test("the reservation keeps the tourist tax the guest was charged when the rules change before payment", async () => {
+    const { intentId } = await intent();
+    // €5 pp/pn now: the current rules would say €20 for the room, the guest paid €12.
+    await db.query(`UPDATE tourist_tax_rules SET charges = $2::jsonb WHERE property_id = $1`, [
+      ids.propertyId,
+      JSON.stringify([{ kind: "fixed", amount: 5, perPerson: true, perNight: true, perRoom: false }]),
+    ]);
+    const result = await convert(intentId, LATE);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+
+    const res = (
+      await db.query(`SELECT tourist_tax_amount::float8 AS tax, nights FROM reservations WHERE booking_id = $1`, [result.bookingId])
+    ).rows[0] as { tax: number; nights: { touristTax: number }[] };
+    expect(res.tax).toBe(12);
+    expect(res.nights.map((n) => n.touristTax)).toEqual([6, 6]);
   });
 });
