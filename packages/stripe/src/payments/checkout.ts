@@ -100,3 +100,28 @@ export function retrieveBookingCheckout(
     { stripeAccount: stripeAccountId },
   );
 }
+
+/**
+ * Stripe's refusal to expire a Session that is no longer `open`: it already
+ * expired, or the guest completed it. Either way there is nothing left to stop.
+ */
+const NOT_OPEN = /only checkout sessions with a status in .*open.* can be expired/i;
+
+function isNotOpenError(error: unknown): boolean {
+  const e = error as { type?: unknown; message?: unknown } | null;
+  return e?.type === 'StripeInvalidRequestError' && typeof e.message === 'string' && NOT_OPEN.test(e.message);
+}
+
+/**
+ * Stop a booking's Checkout Session from taking payment, on the host's
+ * connected account where it lives. A Session that is already expired or
+ * complete is left alone; every other error is the caller's to handle.
+ */
+export async function expireBookingCheckout(sessionId: string, stripeAccountId: string): Promise<void> {
+  try {
+    await stripe.checkout.sessions.expire(sessionId, {}, { stripeAccount: stripeAccountId });
+  } catch (error) {
+    if (isNotOpenError(error)) return;
+    throw error;
+  }
+}
