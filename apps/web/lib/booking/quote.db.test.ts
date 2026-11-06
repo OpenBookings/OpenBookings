@@ -112,6 +112,15 @@ describeWithDb("stay quote against Postgres", () => {
     expect(plans).not.toContain(tooDear);
   });
 
+  test("a Non-refundable rate is left out when the refundable one beside it is restricted", async () => {
+    await db.query(`UPDATE rate_plans SET min_stay = 5 WHERE id = $1`, [ids.ratePlanId]);
+    const nr = await nrPlan(85);
+    const plans = (await quote())!.rooms[0].ratePlans;
+    expect(plans.map((p) => p.ratePlanId)).toEqual([ids.ratePlanId]);
+    expect(plans[0].reasons).toEqual(["min_stay"]);
+    expect(await select([double({ ratePlanId: nr })])).toMatchObject({ ok: false, error: "invalid_selection" });
+  });
+
   test("rate restrictions come back as reasons, not as missing rates", async () => {
     await db.query(`UPDATE rate_plans SET min_stay = 5 WHERE id = $1`, [ids.ratePlanId]);
     const plan = (await quote())!.rooms[0].ratePlans[0];
@@ -122,6 +131,20 @@ describeWithDb("stay quote against Postgres", () => {
     await db.query(`UPDATE properties SET is_demo = true WHERE id = $1`, [ids.propertyId]);
     expect(await quote(false)).toBeNull();
     expect((await quote(true))?.propertyId).toBe(ids.propertyId);
+  });
+
+  test("selection: stays outside the quote's bounds are invalid", async () => {
+    const at = (checkIn: string, checkOut: string, selection = [double()]) =>
+      priceSelection(db, { propertyId: ids.propertyId, checkIn, checkOut, selection, now: NOW, testing: false });
+    // NOW is 2031-10-01 in Europe/Amsterdam.
+    expect(await at("2031-09-30", "2031-10-02")).toMatchObject({ ok: false, error: "invalid_selection" });
+    expect(await at("2031-11-10", "2031-12-11")).toMatchObject({ ok: false, error: "invalid_selection" }); // 31 nights
+    expect(await at("2031-02-30", "2031-03-02")).toMatchObject({ ok: false, error: "invalid_selection" });
+    expect(await at("2031-11-13", "2031-11-10")).toMatchObject({ ok: false, error: "invalid_selection" });
+    const ten = Array.from({ length: 10 }, () => double({ adults: 1 }));
+    expect(await at(CHECK_IN, CHECK_OUT, ten)).toMatchObject({ ok: false, error: "invalid_selection" });
+    // Today itself and 30 nights are fine.
+    expect((await at("2031-10-01", "2031-10-31")).ok).toBe(true);
   });
 
   test("selection: a room of another property is invalid", async () => {

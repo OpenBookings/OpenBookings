@@ -108,7 +108,8 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
         const res = await fetch(`/api/query?${params.toString()}`, { signal: controller.signal });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          throw new Error(body?.error ?? `Search failed (${res.status})`);
+          // A 400 lists what was wrong in `errors`; other failures say it in `error`.
+          throw new Error(body?.errors?.[0] ?? body?.error ?? `Search failed (${res.status})`);
         }
         const results: HotelSearchApiResult[] = await res.json();
         setHotels(results.map(mapSearchResult));

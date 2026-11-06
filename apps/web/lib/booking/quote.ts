@@ -20,7 +20,8 @@ import {
 } from "@openbookings/pricing";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
 import { toCents } from "@/app/checkout/_lib/booking-lines";
-import { todayInZone, type StayInput } from "./stay-input";
+import { stayBoundErrors } from "@/app/api/query/search-bounds";
+import { MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
 
 /**
  * Exact prices and availability for a stay at one property: every active room
@@ -235,10 +236,20 @@ type PricedRoom = {
 
 /**
  * Each room's rate plans priced for one party, with Non-refundable rates that
- * fail Annex B B.4.3 for this stay already dropped. The comparison is on the
- * stay's room price, the number the guest would pay, not the base rate.
+ * fail Annex B B.4.3 for this stay already dropped: a Non-refundable rate is
+ * offered only beside a refundable rate on the same room that can be booked
+ * for these dates (no rate-plan reasons) and costs at least 10% more. The
+ * comparison is on the stay's room price, the number the guest would pay, not
+ * the base rate. Room-level reasons (sold out, closed…) hit every rate alike,
+ * so they don't decide this.
  */
-function priceRooms(rows: PlanRow[], party: { adults: number; children: number }, arrivalDate: string, today: string): PricedRoom[] {
+function priceRooms(
+  rows: PlanRow[],
+  byRoom: Map<string, RoomAvailability>,
+  party: { adults: number; children: number },
+  arrivalDate: string,
+  today: string,
+): PricedRoom[] {
   const rooms = new Map<string, PricedRoom>();
   for (const row of rows) {
     const room = rooms.get(row.room_id) ?? { roomId: row.room_id, name: row.room_name, roomType: row.room_type, plans: [] };
@@ -246,7 +257,11 @@ function priceRooms(rows: PlanRow[], party: { adults: number; children: number }
     rooms.set(row.room_id, room);
   }
   for (const room of rooms.values()) {
-    const refundableTotals = room.plans.filter((p) => p.row.is_refundable).map((p) => p.priced.room_price);
+    const plans = byRoom.get(room.roomId)?.ratePlans ?? [];
+    const open = (ratePlanId: string) => plans.some((p) => p.ratePlanId === ratePlanId && p.reasons.length === 0);
+    const refundableTotals = room.plans
+      .filter((p) => p.row.is_refundable && open(p.row.rate_plan_id))
+      .map((p) => p.priced.room_price);
     room.plans = room.plans.filter((p) => p.row.is_refundable || nonRefundableQualifies(p.priced.room_price, refundableTotals));
   }
   return [...rooms.values()];
@@ -270,7 +285,7 @@ export async function quoteStay(
   const today = todayInZone(property.timezone, i.now);
 
   const rooms: QuotedRoom[] = [];
-  for (const room of priceRooms(rows, party, checkIn, today)) {
+  for (const room of priceRooms(rows, byRoom, party, checkIn, today)) {
     const a = byRoom.get(room.roomId);
     if (!a) continue;
     const reasons = roomReasons(a, party);
@@ -306,7 +321,6 @@ type SelectionResult =
   | { ok: true; rooms: IntentRoomInput[]; snapshot: IntentSnapshot }
   | { ok: false; error: "invalid_selection" | "too_many_guests" | "unavailable"; detail: string };
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function applicationFeeEnabled(): boolean {
@@ -319,8 +333,9 @@ function applicationFeeEnabled(): boolean {
  * attempted. Not authoritative: intent creation re-checks under lock.
  *
  * Fails `invalid_selection` for anything the guest could not have been shown
- * (another property's room, an unknown or hidden rate, a demo hotel with
- * testing off), `too_many_guests` for a room's party over its maximum, and
+ * (a stay outside the quote's bounds or before today in the property's zone,
+ * more than MAX_ROOMS rooms, another property's room, an unknown or hidden
+ * rate, a demo hotel with testing off), `too_many_guests` for a room's party over its maximum, and
  * `unavailable` when a room has fewer units left than selected or its rate
  * cannot be booked for these dates.
  */
@@ -329,8 +344,10 @@ export async function priceSelection(
   i: { propertyId: string; checkIn: string; checkOut: string; selection: SelectedRoom[]; now: Date; testing: boolean },
 ): Promise<SelectionResult> {
   const invalid = (detail: string): SelectionResult => ({ ok: false, error: "invalid_selection", detail });
-  if (!DATE.test(i.checkIn) || !DATE.test(i.checkOut) || i.checkOut <= i.checkIn) return invalid("invalid stay dates");
+  const bounds = stayBoundErrors({ checkin: i.checkIn, checkout: i.checkOut });
+  if (bounds.length > 0) return invalid(bounds.join("; "));
   if (i.selection.length === 0) return invalid("no rooms selected");
+  if (i.selection.length > MAX_ROOMS) return invalid(`at most ${MAX_ROOMS} rooms per booking`);
   for (const s of i.selection) {
     if (!Number.isInteger(s.adults) || s.adults < 1 || !Number.isInteger(s.children) || s.children < 0) {
       return invalid("every room needs a whole number of guests, at least one adult");
@@ -339,13 +356,15 @@ export async function priceSelection(
 
   const property = await loadVisibleProperty(db, { id: i.propertyId }, i.testing);
   if (!property) return invalid("property not found");
+  // Both are real dates here, so string order is date order.
+  const today = todayInZone(property.timezone, i.now);
+  if (i.checkIn < today) return invalid("checkin cannot be in the past");
 
   const [rows, availability] = await Promise.all([
     loadPlanRows(db, { propertyId: property.id, checkIn: i.checkIn, checkOut: i.checkOut }),
     loadStayAvailability(db, { propertyId: property.id, checkIn: i.checkIn, checkOut: i.checkOut, now: i.now }),
   ]);
   const byRoom = new Map(availability.map((a) => [a.roomId, a]));
-  const today = todayInZone(property.timezone, i.now);
 
   type Picked = { s: SelectedRoom; room: PricedRoom; plan: PricedRoom["plans"][number]; a: RoomAvailability };
   const picked: Picked[] = [];
@@ -353,7 +372,7 @@ export async function priceSelection(
     const roomRows = rows.filter((r) => r.room_id === s.roomId);
     const a = byRoom.get(s.roomId);
     if (roomRows.length === 0 || !a) return invalid(`room ${s.roomId} is not offered at this property`);
-    const [room] = priceRooms(roomRows, { adults: s.adults, children: s.children }, i.checkIn, today);
+    const [room] = priceRooms(roomRows, byRoom, { adults: s.adults, children: s.children }, i.checkIn, today);
     const plan = room?.plans.find((p) => p.row.rate_plan_id === s.ratePlanId);
     if (!room || !plan) return invalid(`rate ${s.ratePlanId} is not offered for ${roomRows[0].room_name}`);
     picked.push({ s, room, plan, a });

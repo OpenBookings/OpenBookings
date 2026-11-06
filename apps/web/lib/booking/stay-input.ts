@@ -33,7 +33,7 @@ function count(value: string | null, min: number, max: number): number | null {
 /**
  * Validates a stay before anything reaches SQL. `todayInZone` is today where
  * the stay happens (the property's zone; search, which has no single property,
- * uses Europe/Amsterdam): a check-in before it is refused.
+ * uses Atlantic/Azores, the EU's earliest today): a check-in before it is refused.
  */
 export function parseStayInput(
   p: URLSearchParams | Record<string, unknown>,

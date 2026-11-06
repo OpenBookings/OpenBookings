@@ -23,10 +23,12 @@ type SearchInput = StayInput & {
 };
 
 /**
- * Search spans every EU time zone, so "in the past" is judged in one of them.
- * Europe/Amsterdam, like the rest of the guest app's "today".
+ * Search spans every EU time zone and has no single property's, so "in the
+ * past" is judged in the westernmost one: the Azores' today is the earliest
+ * today anywhere in the EU, so no guest is refused a stay that starts tonight
+ * where they are. The stay quote and booking intents use the property's zone.
  */
-const SEARCH_ZONE = "Europe/Amsterdam";
+const SEARCH_ZONE = "Atlantic/Azores";
 
 /** Parse and validate URL params. Nothing reaches generate_series unless this passes. */
 function parseSearchParams(searchParams: URLSearchParams): { input: SearchInput | null; errors: string[] } {

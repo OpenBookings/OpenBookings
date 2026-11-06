@@ -175,6 +175,10 @@ export function getHotelPage(slug: string): Promise<PropertyPagePayload | null> 
   }
   return cached<PropertyPagePayload>(propertyPageKey(slug), () => loadFromDb(slug), {
     ...PROPERTY_PAGE_TTL,
+    // Testing mode shows demo hotels, which a normal deploy must not serve
+    // from a shared cache, and demo data changes under the tester's hands.
+    // So testing mode neither reads nor writes the cache.
+    ...(isTestingMode() ? { redis: null } : {}),
     onError: (error, ctx) =>
       Sentry.captureException(error, {
         tags: { area: "cache", surface: "property-page", phase: ctx.phase },
