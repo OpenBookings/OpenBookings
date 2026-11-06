@@ -26,6 +26,12 @@ describe("onboardingWallDecision", () => {
     });
   }
 
+  test("a host whose only organisation is the demo one reaches the dashboard and may still onboard their own", () => {
+    const facts = { hasCompletedOrg: false, hasDemoMembership: true, wizardInProgress: false };
+    expect(onboardingWallDecision({ path: "/dashboard", ...facts })).toBe("allow");
+    expect(onboardingWallDecision({ path: "/onboarding", ...facts })).toBe("allow");
+  });
+
   test("anyone without a completed organisation may always reach onboarding, so no redirect loops", () => {
     for (const wizardInProgress of [true, false]) {
       expect(onboardingWallDecision({ path: "/onboarding", hasCompletedOrg: false, wizardInProgress })).toBe("allow");

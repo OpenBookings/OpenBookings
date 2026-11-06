@@ -1,4 +1,5 @@
 import { queryOne } from "@openbookings/db";
+import { DEMO_ORG_ID } from "@openbookings/demo";
 
 /**
  * What the onboarding wall, the onboarding pages and the account-link route
@@ -12,6 +13,8 @@ import { queryOne } from "@openbookings/db";
 export type OnboardingFacts = {
   /** Member, in any role, of an organisation that finished onboarding. */
   hasCompletedOrg: boolean;
+  /** Member of the demo organisation, which only exists in testing mode. */
+  hasDemoMembership: boolean;
   /** The user's wizard row, or null if they never started the wizard. */
   wizard: {
     completedSteps: string[];
@@ -24,6 +27,7 @@ export type OnboardingFacts = {
 export async function getOnboardingFacts(userId: string): Promise<OnboardingFacts> {
   const row = await queryOne<{
     has_completed_org: boolean;
+    has_demo_membership: boolean;
     has_wizard: boolean;
     completed_steps: string[] | null;
     stripe_account_id: string | null;
@@ -35,6 +39,9 @@ export async function getOnboardingFacts(userId: string): Promise<OnboardingFact
          JOIN org_profile op ON op.organization_id = m."organizationId"
          WHERE m."userId" = $1 AND op.onboarding_completed_at IS NOT NULL
        ) AS has_completed_org,
+       EXISTS (
+         SELECT 1 FROM "member" WHERE "userId" = $1 AND "organizationId" = $2
+       ) AS has_demo_membership,
        ho.user_id IS NOT NULL AS has_wizard,
        ho.completed_steps,
        ho.step_data->>'stripe_account_id' AS stripe_account_id,
@@ -45,11 +52,12 @@ export async function getOnboardingFacts(userId: string): Promise<OnboardingFact
        ) AS wizard_finished
      FROM (SELECT 1) AS one
      LEFT JOIN host_onboarding ho ON ho.user_id = $1`,
-    [userId],
+    [userId, DEMO_ORG_ID],
   );
 
   return {
     hasCompletedOrg: row?.has_completed_org ?? false,
+    hasDemoMembership: row?.has_demo_membership ?? false,
     wizard: row?.has_wizard
       ? {
           completedSteps: row.completed_steps ?? [],

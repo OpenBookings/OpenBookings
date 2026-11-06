@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth"; // from packages/auth
 import { getOnboardingFacts, wizardInProgress } from "@/lib/onboarding-facts";
 import { onboardingWallDecision } from "@/lib/onboarding-wall";
 import { headers } from "next/headers";
+import { withTransaction } from "@openbookings/db";
+import { ensureDemoMembership, isTestingMode } from "@openbookings/demo";
 
 const env = readAuthEnv();
 const secureCookies = env.AUTH_BASE_URL.startsWith("https://");
@@ -57,10 +59,16 @@ export async function proxy(request: NextRequest) {
   // React bug during chained navigations (vercel/next.js#63121).
   const path = request.nextUrl.pathname;
   if (path.startsWith("/dashboard") || path.startsWith("/onboarding")) {
+    // Testing mode: every host owns the demo organisation. Done here, ahead of
+    // the wall, so a host's first dashboard request already counts it.
+    if (isTestingMode()) {
+      await withTransaction((tx) => ensureDemoMembership(tx, { userId: session.user.id }));
+    }
     const facts = await getOnboardingFacts(session.user.id);
     const decision = onboardingWallDecision({
       path,
       hasCompletedOrg: facts.hasCompletedOrg,
+      hasDemoMembership: facts.hasDemoMembership,
       wizardInProgress: wizardInProgress(facts),
     });
     if (decision !== "allow") {
