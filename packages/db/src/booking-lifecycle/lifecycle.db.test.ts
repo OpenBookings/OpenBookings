@@ -95,6 +95,33 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(row).toEqual({ status: "succeeded", stripe_refund_id: "re_1" });
   });
 
+  test("a booking converted from an intent is refunded on the account that was charged", async () => {
+    // Demo hotels have no account of their own; they charge on the platform's fallback.
+    const property = await one<{ hotel_id: string }>(`SELECT hotel_id FROM bookings WHERE id = $1`, [bookingId]);
+    await db.query(`UPDATE properties SET stripe_account_id = NULL WHERE id = $1`, [property.hotel_id]);
+    await db.query(
+      `INSERT INTO booking_intents
+         (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot,
+          total_amount, payment_account_id, booking_id)
+       SELECT b.user_id, b.hotel_id, b.check_in_date, b.check_out_date, 'paid', NOW(), '{}'::jsonb,
+              618, 'acct_charged', b.id
+         FROM bookings b WHERE b.id = $1`,
+      [bookingId],
+    );
+    const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(result.ok && result.refunds.map((r) => r.status)).toEqual(["succeeded"]);
+    expect(calls.map((c) => c.stripeAccountId)).toEqual(["acct_charged"]);
+  });
+
+  test("a booking without an intent is refunded on the property's account", async () => {
+    const property = await one<{ stripe_account_id: string }>(
+      `SELECT p.stripe_account_id FROM bookings b JOIN properties p ON p.id = b.hotel_id WHERE b.id = $1`,
+      [bookingId],
+    );
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(calls.map((c) => c.stripeAccountId)).toEqual([property.stripe_account_id]);
+  });
+
   test("cancelling the same room twice refunds once", async () => {
     await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
     const again = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
