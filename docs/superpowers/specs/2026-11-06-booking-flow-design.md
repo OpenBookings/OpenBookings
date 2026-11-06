@@ -296,12 +296,14 @@ excluded from search, property pages and booking everywhere. The demo
 organisation has rates confirmed tax-inclusive, so checkout accepts its
 hotels.
 
-**Host side**: with testing on, a signed-in user is added to the demo
-organisation automatically (idempotent, on sign-in to either app). *(My
-call: as owner, so every host action can be tried; and on sign-in rather
-than first booking, so the dashboard is there from the start.)* Generated
-data and auto-membership are both scoped to `TESTING`; nothing about them
-runs otherwise.
+**Host side**: an email is either a guest or a host account (hard email
+exclusivity in `packages/auth`), so the guest account cannot open the
+business dashboard. Decided by Wouter: with testing on, **any host account
+that signs in to the business app is added to the demo organisation as
+owner** (idempotent, in the host auth's session-create hook). The tester
+uses a separate host account next to their guest account. Generated data
+and auto-membership are both scoped to `TESTING`; nothing about them runs
+otherwise.
 
 **Generation ("adaptive")**: when a search runs with testing on and there
 are no generated hotels within the search radius of the point, the 8 are
