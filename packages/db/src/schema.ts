@@ -733,8 +733,8 @@ export const bookingIntents = pgTable(
     propertyId: uuid("property_id")
       .notNull()
       .references(() => properties.id),
-    checkInDate: date("check_in_date"),
-    checkOutDate: date("check_out_date"),
+    checkInDate: date("check_in_date").notNull(),
+    checkOutDate: date("check_out_date").notNull(),
     status: text("status").notNull().default("open"),
     holdExpiresAt: timestamp("hold_expires_at", { withTimezone: true }).notNull(),
     snapshot: jsonb("snapshot").notNull(),

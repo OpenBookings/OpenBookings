@@ -56,6 +56,20 @@ describeWithDb("booking intents schema against Postgres", () => {
     await expect(insertIntent({ checkOut: "2031-11-10" })).rejects.toThrow();
   });
 
+  test("an intent's dates are required", async () => {
+    for (const [checkIn, checkOut] of [[null, "2031-11-12"], ["2031-11-10", null]]) {
+      await db.query("SAVEPOINT no_dates");
+      await expect(
+        db.query(
+          `INSERT INTO booking_intents (user_id, property_id, check_in_date, check_out_date, hold_expires_at, snapshot, total_amount)
+           VALUES ($1, $2, $3::date, $4::date, now(), '{}'::jsonb, 200.00)`,
+          [userId, ids.propertyId, checkIn, checkOut],
+        ),
+      ).rejects.toThrow(/not-null/);
+      await db.query("ROLLBACK TO SAVEPOINT no_dates");
+    }
+  });
+
   test("status must be a known value", async () => {
     await expect(insertIntent({ status: "bogus" })).rejects.toThrow();
   });
