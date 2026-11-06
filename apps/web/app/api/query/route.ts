@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseStayInput, todayInZone, type StayInput } from "@/lib/booking/stay-input";
 import { orderByAvailability, priceCandidates } from "./availability-order";
 import { pointBoundErrors } from "./search-bounds";
+import { resolveSearchTarget } from "./search-target";
 
 type SearchInput = StayInput & {
   lat: number;
@@ -336,7 +337,14 @@ function searchProperties(i: SearchInput) {
 }
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
+  const target = await resolveSearchTarget(request.nextUrl.searchParams)
+  if (!target.ok) {
+    return NextResponse.json({ errors: target.errors }, { status: 400 })
+  }
+  const searchParams = new URLSearchParams(request.nextUrl.searchParams)
+  if (target.lat != null) searchParams.set("lat", target.lat)
+  if (target.lon != null) searchParams.set("lon", target.lon)
+  if (target.place) searchParams.set("place", target.place)
   const { input, errors } = parseSearchParams(searchParams)
   const distinctId = request.headers.get("x-posthog-distinct-id") ?? "anonymous"
 

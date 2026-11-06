@@ -28,6 +28,9 @@ const PRICE_MODES: { mode: PriceMode; label: string }[] = [
   { mode: "night", label: "Per night" },
 ];
 
+const hasDestination = (c: { destination: string; lat: string | null; lon: string | null }) =>
+  Boolean(c.destination.trim() || (c.lat && c.lon));
+
 function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   const backdrop = useBackdrop(backdrops);
   const router = useRouter();
@@ -64,7 +67,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   // Starts true when the URL holds a full search, so the first paint shows the
   // skeletons rather than a flash of "No hotels matched".
   const [isLoading, setIsLoading] = useState(
-    () => Boolean(committed.lat && committed.lon && committed.checkIn && committed.checkOut),
+    () => Boolean(hasDestination(committed) && committed.checkIn && committed.checkOut),
   );
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -74,7 +77,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
       setSearchError(null);
     };
 
-    if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
+    if (!hasDestination(committed) || !committed.checkIn || !committed.checkOut) {
       clearResults();
       return;
     }
@@ -86,16 +89,18 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
       setSearchError(null);
       try {
         const params = new URLSearchParams({
-          lat: committed.lat as string,
-          lon: committed.lon as string,
           checkin: committed.checkIn,
           checkout: committed.checkOut,
           adults: String(committed.adults),
           children: String(committed.children),
           rooms: String(committed.rooms),
         });
-        // Names the demo hotels testing mode generates for a new area.
-        if (committed.destination) params.set("place", committed.destination);
+        // The server resolves the name; coordinates only if the URL carries them.
+        if (committed.destination) params.set("destination", committed.destination);
+        if (committed.lat && committed.lon) {
+          params.set("lat", committed.lat);
+          params.set("lon", committed.lon);
+        }
         const res = await fetch(`/api/query?${params.toString()}`, { signal: controller.signal });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -154,12 +159,6 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
     if (adults) params.set("adults", adults.toString());
     if (childCount) params.set("children", childCount.toString());
     if (rooms) params.set("rooms", rooms.toString());
-    // No destination geocoding UI yet — carry the previously resolved
-    // coordinates through so an unchanged destination keeps returning results.
-    if (destination === committed.destination && committed.lat && committed.lon) {
-      params.set("lat", committed.lat);
-      params.set("lon", committed.lon);
-    }
 
     const searchUrl = `/search?${params.toString()}`;
     router.push(searchUrl);
@@ -265,7 +264,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
             // A failed search already shows its error in the results bar.
             searchError ? null : (
               <p className="text-center font-sans text-sm text-white/60">
-                {committed.lat && committed.lon
+                {hasDestination(committed)
                   ? "No hotels matched your search. Try different dates or guest counts."
                   : "Search for a destination to see available hotels."}
               </p>
