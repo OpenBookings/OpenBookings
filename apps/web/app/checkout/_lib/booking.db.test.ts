@@ -146,6 +146,7 @@ describeWithDb("checkout summary of a booking intent", () => {
     expect(s.nights).toBe(2);
     expect(s.lines.length).toBe(4);
     expect(totalCents(s.lines)).toBe(toCents(snapshot.total));
+    expect(s.intentTotal).toBe(snapshot.total);
     expect(s.currency).toBe("eur");
   });
 

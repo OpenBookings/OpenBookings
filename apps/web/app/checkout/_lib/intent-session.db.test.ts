@@ -85,10 +85,10 @@ describeWithDb("payment session of a booking intent", () => {
   const NEW: PaymentSession = { id: "cs_new", clientSecret: "cs_new_secret", expiresAt: 1_900_000_000 };
 
   /** Fake Stripe around the test's own connection; `create` may run SQL first, as a racing request would. */
-  function deps(over: { retrieved?: string | null; beforeCreate?: string } = {}) {
+  function deps(over: { retrieved?: string | null; noSecret?: boolean; beforeCreate?: string } = {}) {
     const retrieve = mock<IntentSessionDeps["retrieve"]>(async () => ({
       status: over.retrieved ?? null,
-      clientSecret: over.retrieved === "open" ? "cs_old_secret" : null,
+      clientSecret: over.retrieved === "open" && !over.noSecret ? "cs_old_secret" : null,
       expiresAt: 1_800_000_000,
     }));
     const create = mock(async () => {
@@ -96,9 +96,10 @@ describeWithDb("payment session of a booking intent", () => {
       return NEW;
     });
     const expire = mock<IntentSessionDeps["expire"]>(async () => {});
+    const report = mock<IntentSessionDeps["report"]>(() => {});
     const tx: Queryable = { query: (text, values) => db.query(text, values) };
-    const d: IntentSessionDeps = { transaction: (fn) => fn(tx), retrieve, create, expire };
-    return { d, retrieve, create, expire };
+    const d: IntentSessionDeps = { transaction: (fn) => fn(tx), retrieve, create, expire, report };
+    return { d, retrieve, create, expire, report };
   }
 
   const open = (d: IntentSessionDeps, over: { userId?: string; now?: Date } = {}) =>
@@ -151,6 +152,46 @@ describeWithDb("payment session of a booking intent", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  test("an open session without a client secret is expired before another is made", async () => {
+    await attachOld();
+    const { d, create, expire } = deps({ retrieved: "open", noSecret: true });
+    const order: string[] = [];
+    expire.mockImplementation(async (id) => void order.push(`expire ${id}`));
+    create.mockImplementation(async () => (order.push("create"), NEW));
+    expect(await open(d)).toEqual({ ok: true, reused: false, session: NEW });
+    expect(expire.mock.calls).toEqual([["cs_old", "acct_old"]]);
+    expect(order).toEqual(["expire cs_old", "create"]);
+    expect((await stored()).payment_session_id).toBe("cs_new");
+  });
+
+  test("when that old session cannot be expired, no second one is made", async () => {
+    await attachOld();
+    const { d, create, expire } = deps({ retrieved: "open", noSecret: true });
+    expire.mockImplementation(async () => {
+      throw new Error("socket hang up");
+    });
+    await expect(open(d)).rejects.toThrow("socket hang up");
+    expect(create).not.toHaveBeenCalled();
+    expect((await stored()).payment_session_id).toBe("cs_old");
+  });
+
+  test("a paid intent is answered as paid, never as a lapsed hold", async () => {
+    await db.query(`UPDATE booking_intents SET status = 'paid' WHERE id = $1`, [intentId]);
+    const { d, create, retrieve } = deps();
+    expect(await open(d)).toEqual({ ok: false, code: "already_paid" });
+    expect(create).not.toHaveBeenCalled();
+    expect(retrieve).not.toHaveBeenCalled();
+  });
+
+  test("an oversold intent is answered as oversold, before or after its refund", async () => {
+    for (const status of ["oversold", "refunded_oversold"]) {
+      await db.query(`UPDATE booking_intents SET status = $2 WHERE id = $1`, [intentId, status]);
+      const { d, create } = deps();
+      expect(await open(d)).toEqual({ ok: false, code: "oversold" });
+      expect(create).not.toHaveBeenCalled();
+    }
+  });
+
   test("a hold that has run out gets no session", async () => {
     const { d, create } = deps();
     expect(await open(d, { now: new Date(NOW.getTime() + 15 * MINUTE) })).toEqual({ ok: false, code: "hold_expired" });
@@ -169,6 +210,16 @@ describeWithDb("payment session of a booking intent", () => {
     expect(await open(d)).toEqual({ ok: false, code: "hold_expired" });
     expect(expire.mock.calls).toEqual([["cs_new", "acct_host"]]);
     expect((await stored()).payment_session_id).toBeNull();
+  });
+
+  test("the guest still hears the hold lapsed when expiring that session fails; the failure is reported", async () => {
+    const { d, expire, report } = deps({ beforeCreate: `UPDATE booking_intents SET status = 'abandoned' WHERE id = $1` });
+    const failure = new Error("socket hang up");
+    expire.mockImplementation(async () => {
+      throw failure;
+    });
+    expect(await open(d)).toEqual({ ok: false, code: "hold_expired" });
+    expect(report.mock.calls).toEqual([[failure, { sessionId: "cs_new" }]]);
   });
 
   test("another guest's intent is not found", async () => {

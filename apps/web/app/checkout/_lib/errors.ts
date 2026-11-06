@@ -34,7 +34,9 @@ export type CheckoutErrorCode =
   /** The intent's hold ran out (or the guest replaced it): its rooms are no longer held. */
   | 'hold_expired'
   /** The intent's session was already paid; another would charge twice. */
-  | 'already_paid';
+  | 'already_paid'
+  /** Paid, but the rooms were gone by then: the payment is refunded in full. */
+  | 'oversold';
 
 export type CheckoutErrorCopy = {
   message: string;
@@ -91,6 +93,13 @@ const CHECKOUT_ERRORS: Record<CheckoutErrorCode, CheckoutErrorCopy> = {
   },
   already_paid: {
     message: 'This booking has already been paid. Do not pay again — check your email for the confirmation.',
+    retryable: false,
+  },
+  oversold: {
+    // The guest was charged, so this must not say otherwise — and must not
+    // invite paying again for rooms that are gone.
+    message:
+      'These rooms were taken by another booking just as your payment went through. Your payment is being refunded in full, or already has been — you do not need to do anything. You can look for other rooms at the property.',
     retryable: false,
   },
 };
@@ -219,6 +228,9 @@ export const ELEMENT_LOAD_FAILED: CheckoutErrorCopy = {
 
 /** The session was already paid — a back button or a second tab. */
 export const CHECKOUT_ALREADY_PAID: CheckoutErrorCopy = CHECKOUT_ERRORS.already_paid;
+
+/** Paid after the rooms were gone; refunded in full by the webhook. */
+export const CHECKOUT_OVERSOLD: CheckoutErrorCopy = CHECKOUT_ERRORS.oversold;
 
 /* -------------------------------------------------------------------------
  * Decline mapping

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
-import { CheckoutClient, CheckoutSignIn } from '../_components/CheckoutClient';
+import type { BookingIntentStatus } from '@openbookings/db';
+import { CheckoutClient, CheckoutSignIn, type CheckoutClientProps } from '../_components/CheckoutClient';
 import type { GateViewer } from '../_components/CheckoutGate';
 import type { TripSummaryCancellation } from '../_components/TripSummary';
 import {
@@ -58,6 +59,13 @@ function groupCancellations(rooms: StayRoom[]): TripSummaryCancellation[] {
   return [...groups.values()];
 }
 
+/** What the page shows for the intent's status. Paid and oversold intents were charged; no other was. */
+function intentStatus(status: BookingIntentStatus): CheckoutClientProps['intentStatus'] {
+  if (status === 'open' || status === 'paid') return status;
+  if (status === 'oversold' || status === 'refunded_oversold') return 'oversold';
+  return 'expired';
+}
+
 export default async function CheckoutPage({ params }: { params: Promise<{ intentId: string }> }) {
   const { intentId } = await params;
   const viewer = await getViewer();
@@ -89,7 +97,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
       holdExpiresAt={summary.holdExpiresAt.getTime()}
       // An open intent whose hold has run out is ended by the page's
       // countdown, which finds it already at zero.
-      intentStatus={summary.status === 'paid' ? 'paid' : summary.status === 'open' ? 'open' : 'expired'}
+      intentStatus={intentStatus(summary.status)}
       backHref={`/p/${summary.propertySlug}`}
       heroImageUrl={summary.heroImageUrl}
       logoUrl={summary.logoUrl}

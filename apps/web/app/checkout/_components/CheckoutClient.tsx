@@ -9,6 +9,7 @@ import { buildAppearance } from '../_lib/appearance';
 import {
   CHECKOUT_ALREADY_PAID,
   CHECKOUT_EXPIRED,
+  CHECKOUT_OVERSOLD,
   checkoutErrorCopy,
   STRIPE_JS_UNAVAILABLE,
   type CheckoutErrorCopy,
@@ -58,8 +59,11 @@ export type CheckoutClientProps = TripSummaryProps & {
   intentId: string;
   /** Unix milliseconds the intent stops holding its rooms. */
   holdExpiresAt: number;
-  /** `expired` covers any intent that can no longer be paid but was not. */
-  intentStatus: 'open' | 'expired' | 'paid';
+  /**
+   * `paid` and `oversold` were charged (oversold is refunded in full);
+   * `expired` covers any other intent that can no longer be paid.
+   */
+  intentStatus: 'open' | 'expired' | 'paid' | 'oversold';
   /** The property page: where a lapsed hold starts again. */
   backHref: string;
 };
@@ -136,6 +140,10 @@ export function CheckoutClient(props: CheckoutClientProps) {
   // Already paid: the form must never come back for a second payment.
   if (props.intentStatus === 'paid') {
     return <NoticeShell heroImageUrl={props.heroImageUrl} copy={CHECKOUT_ALREADY_PAID} backHref={props.backHref} />;
+  }
+  // Charged, then refunded: neither "nothing has been charged" nor a way to pay again.
+  if (props.intentStatus === 'oversold') {
+    return <NoticeShell heroImageUrl={props.heroImageUrl} copy={CHECKOUT_OVERSOLD} backHref={props.backHref} />;
   }
 
   if (!appearance) {

@@ -277,6 +277,14 @@ export async function loadIntentBySession(
   return rows[0] ? toIntent(rows[0] as IntentRow) : null;
 }
 
+/** `attachPaymentSession` found the intent no longer open: the session just made must be expired. */
+export class IntentNotOpenError extends Error {
+  constructor(readonly intentId: string) {
+    super(`Booking intent ${intentId} is no longer open`);
+    this.name = "IntentNotOpenError";
+  }
+}
+
 /**
  * Record the payment session made for an open intent. Throws when the intent
  * is no longer open (the guest replaced it, or its hold was expired): the
@@ -296,7 +304,7 @@ export async function attachPaymentSession(
      RETURNING id`,
     [i.intentId, i.sessionId, i.accountId],
   );
-  if (rows.length === 0) throw new Error(`Booking intent ${i.intentId} is no longer open`);
+  if (rows.length === 0) throw new IntentNotOpenError(i.intentId);
 }
 
 /**

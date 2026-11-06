@@ -77,6 +77,8 @@ export type StaySummary = {
   checkOutTime: string | null;
 
   lines: BookingLine[];
+  /** Euros, what the guest agreed to when the rooms were held; `lines` must add up to it. */
+  intentTotal: number;
   /** Euros, every room's tourist tax; already in `lines`. */
   touristTaxTotal: number;
   platformFeeCents: number;
@@ -312,6 +314,7 @@ export async function getBookingSummary(
     checkOutTime: trimSeconds(property.check_out_time),
 
     lines,
+    intentTotal: intent.snapshot.total,
     touristTaxTotal: intent.snapshot.touristTaxTotal,
     // OpenBookings' commission on the stay, excluding tourist tax, in the
     // units Stripe wants. Zero until the fee is switched on for this deployment.

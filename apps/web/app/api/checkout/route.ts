@@ -8,8 +8,8 @@ import {
   totalCents,
   type BookingSummary,
 } from '@/app/checkout/_lib/booking';
-import { stayCents } from '@/app/checkout/_lib/booking-lines';
-import { openIntentSession } from '@/app/checkout/_lib/intent-session';
+import { stayCents, toCents } from '@/app/checkout/_lib/booking-lines';
+import { openIntentSession, refusalFor } from '@/app/checkout/_lib/intent-session';
 import {
   checkoutErrorCopy,
   classifyStripeError,
@@ -24,7 +24,7 @@ import { getClientIP } from '@/lib/rateLimit';
  *
  * POST /api/checkout { intentId, 'cf-turnstile-response' }
  * → 200 { clientSecret, expiresAt }
- * → 409 { error: { code: 'hold_expired' | 'already_paid' } } when the intent can no longer be paid
+ * → 409 { error: { code: 'hold_expired' | 'already_paid' | 'oversold' } } when the intent can no longer be paid
  *
  * An intent has at most one payable session: one Stripe still has open is
  * handed back rather than a second made beside it.
@@ -118,6 +118,15 @@ function assertChargeable(summary: BookingSummary): number {
   }
 
   const total = totalCents(summary.lines);
+  // The lines are rebuilt from the intent's rooms; the guest agreed to the
+  // intent's total. Should the two ever part, nothing is charged at all.
+  if (total !== toCents(summary.intentTotal)) {
+    throw new CheckoutError(
+      'booking_invalid',
+      `Lines total ${total} differs from the intent total ${toCents(summary.intentTotal)}`
+    );
+  }
+
   const minimum = MINIMUM_CHARGE[summary.currency.toLowerCase()] ?? 50;
   if (total < minimum) {
     throw new CheckoutError(
@@ -238,9 +247,10 @@ export async function POST(request: Request) {
 
     // Checked again under a lock in `openIntentSession`; this early answer
     // spares Stripe a request for an intent that is plainly over.
-    if (booking.status !== 'open' || booking.holdExpiresAt.getTime() <= Date.now()) {
-      return failure('hold_expired', 409);
-    }
+    // A paid or oversold intent was charged, so it is never answered as a
+    // lapsed hold ("nothing has been charged").
+    if (booking.status !== 'open') return failure(refusalFor(booking.status), 409);
+    if (booking.holdExpiresAt.getTime() <= Date.now()) return failure('hold_expired', 409);
 
     const total = assertChargeable(booking);
     const appUrl = resolveAppUrl();
@@ -290,13 +300,14 @@ export async function POST(request: Request) {
             returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
             expiresAt: resolveExpiry(),
           }),
-        // Logged, not the guest's problem: the session lapses on its own, and
-        // a payment on an intent that is not open is caught when it is confirmed.
-        expire: (sessionId, accountId) =>
-          expireBookingCheckout(sessionId, accountId).catch((err) => {
-            Sentry.captureException(err, { tags: { area: 'checkout' }, extra: { intentId: booking.intentId, sessionId } });
-            console.error('[checkout] expire orphaned session', sessionId, err instanceof Error ? err.message : String(err));
-          }),
+        expire: expireBookingCheckout,
+        // An orphaned session that could not be expired: logged, not the
+        // guest's problem. It lapses on its own, and a payment on an intent
+        // that is not open is caught when it is confirmed.
+        report: (err, { sessionId }) => {
+          Sentry.captureException(err, { tags: { area: 'checkout' }, extra: { intentId: booking.intentId, sessionId } });
+          console.error('[checkout] expire orphaned session', sessionId, err instanceof Error ? err.message : String(err));
+        },
       },
       { intentId: booking.intentId, userId: user.id, accountId: stripeAccountId, now: new Date() }
     );

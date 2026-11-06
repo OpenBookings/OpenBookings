@@ -7,6 +7,7 @@ import {
   createBookingIntent,
   expireIntent,
   HOLD_MINUTES,
+  IntentNotOpenError,
   loadIntent,
   loadIntentBySession,
   markIntentFailed,
@@ -219,7 +220,7 @@ describeWithDb("booking intents against Postgres", () => {
     await created(guest); // abandons the first
     await expect(
       attachPaymentSession(db, { intentId: first.intentId, sessionId: "cs_late", accountId: "acct_a" }),
-    ).rejects.toThrow(/no longer open/);
+    ).rejects.toBeInstanceOf(IntentNotOpenError);
     expect((await loadIntent(db, { intentId: first.intentId, userId: guest }))?.paymentSessionId).toBeNull();
   });
 
