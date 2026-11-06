@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@openbookings/db": "workspace:*",
+    "@openbookings/mailing": "workspace:*",
     "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "class-variance-authority": "^0.7.1",

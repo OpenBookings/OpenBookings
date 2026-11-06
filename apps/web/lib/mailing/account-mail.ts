@@ -1,34 +1,10 @@
-import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing";
+import { composeActionMail, escapeHtml, getEmailClient, type ActionMail } from "@openbookings/mailing";
 
 const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
 const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
 
-/** One email about a change to the guest's own account. */
-export type AccountMail = { subject: string; html: string };
-
-/**
- * Fills the shared "account-action" template. `headline`, `body` and `footnote`
- * are HTML written here: callers escape what came from the guest. Every other
- * field is plain text, escaped by loadTemplate.
- */
-function compose(input: {
-  subject: string;
-  preheader: string;
-  eyebrow: string;
-  headline: string;
-  body: string;
-  ctaUrl: string;
-  ctaLabel: string;
-  footnote: string;
-}): AccountMail {
-  return {
-    subject: input.subject,
-    // headline, body and footnote are markup written in this file, with the
-    // user-supplied parts already escaped; every other slot is plain text and
-    // is escaped by loadTemplate.
-    html: loadTemplate("account-action", input, { htmlSlots: ["headline", "body", "footnote"] }),
-  };
-}
+export type AccountMail = ActionMail;
+const compose = composeActionMail;
 
 const NOT_YOU =
   'Didn\'t ask for this? Ignore this email and nothing changes. Worried? Email <a href="mailto:support@openbookings.co" style="color:#AAAAAA;text-decoration:underline;">support@openbookings.co</a>.';

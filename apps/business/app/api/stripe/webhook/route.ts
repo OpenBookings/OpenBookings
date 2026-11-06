@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { confirmPaidCheckout, type ConfirmationDeps } from "@/lib/booking-confirmation";
 import { handleStripeEvent, type StripeEventDeps } from "@/lib/stripe-events";
+import { sendConfirmed, sendOversold } from "@/lib/mailing/booking-mail";
 import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
 export const dynamic = "force-dynamic";
@@ -108,9 +109,8 @@ const confirmation: ConfirmationDeps = {
   refund: refundPayment,
   findRefund: findRefundByMetadata,
   now: () => new Date(),
-  // The booking emails come with their templates; until then nothing is sent.
-  sendConfirmed: async () => {},
-  sendOversold: async () => {},
+  sendConfirmed,
+  sendOversold,
   report: (error, { level, tags, extra }) =>
     Sentry.captureException(error, { level, tags: { area: "booking-confirmation", ...tags }, extra }),
 };

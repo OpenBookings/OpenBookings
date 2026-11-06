@@ -3,16 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./booking-send": "./src/booking-send.ts"
   },
   "scripts": {
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openbookings/db": "workspace:*",
+    "@openbookings/demo": "workspace:*",
     "lettermint": "^2.8.0"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
+    "@types/bun": "^1.3.14",
     "@types/node": "^22.20.1",
     "typescript": "^5.9.3"
   }

@@ -18,6 +18,7 @@ import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
 import { goodwillAmount } from "./goodwill-amount";
+import { sendCancellation } from "@/lib/mailing/booking-mail";
 import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
 
 /**
@@ -63,7 +64,11 @@ async function run(
 }
 
 export async function hostCancelRooms(bookingId: string, reservationIds: string[] | null) {
-  return run(bookingId, ACTION_PERMISSION.cancel, (actor) => cancelRooms(deps, { bookingId, actor, reservationIds }));
+  return run(bookingId, ACTION_PERMISSION.cancel, async (actor) => {
+    const result = await cancelRooms(deps, { bookingId, actor, reservationIds });
+    if (result.ok) await sendCancellation(bookingId);
+    return result;
+  });
 }
 
 export async function hostMarkCheckedIn(bookingId: string) {
