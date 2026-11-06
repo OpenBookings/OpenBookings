@@ -83,6 +83,7 @@ describeWithDb("demo hotels", () => {
     expect(second).toEqual({ created: false, propertyIds: [] });
   });
 
+  // Generates sixteen hotels against the shared dev database: beyond bun's 5 s default.
   test("the same area always gets the same hotels, whatever the place label", async () => {
     const area = { lat: 46.31, lon: 15.12 };
     const read = async (ids: string[]) =>
@@ -111,7 +112,7 @@ describeWithDb("demo hotels", () => {
     expect(await read(b.propertyIds)).toEqual(first);
     expect(await cities(b.propertyIds)).toEqual(["Celje"]);
     expect(new Set(first.map((r) => r.name)).size).toBe(8);
-  });
+  }, 30_000);
 
   test("each scenario answers search the way it is meant to", async () => {
     const { propertyIds } = await ensureDemoHotels(db, LISBON);
