@@ -1,0 +1,66 @@
+import { parseStayInput } from "@/lib/booking/stay-input";
+import { parseSearchDate } from "@/app/api/query/search-bounds";
+import { clampGuests, type Guests } from "@/components/plug-in/guest-limits";
+
+/**
+ * The stay a guest is looking at on the property page, read from the URL
+ * (`checkin`, `checkout`, `adults`, `children`, `rooms`; search card links set
+ * them). The page HTML is the same for everyone; this is read in the browser.
+ */
+export type Stay = { checkIn: string; checkOut: string; nights: number; adults: number; children: number; rooms: number };
+
+const DAY_MS = 86_400_000;
+const DEFAULT_PARTY: Guests = { adults: 2, children: 0, rooms: 1 };
+
+/** Nights between two real YYYY-MM-DD dates. */
+function nightsBetween(checkIn: string, checkOut: string): number {
+  return Math.round(((parseSearchDate(checkOut) ?? 0) - (parseSearchDate(checkIn) ?? 0)) / DAY_MS);
+}
+
+/**
+ * The stay in the URL, or null when it has no dates or they could not be
+ * booked (reversed, too long, in the past where the hotel is). A missing
+ * party is the search bar's default, 2 adults in 1 room.
+ */
+export function stayFromParams(p: URLSearchParams, todayInZone: string): Stay | null {
+  if (!p.get("checkin") || !p.get("checkout")) return null;
+  const withParty = new URLSearchParams(p);
+  for (const key of ["adults", "rooms"] as const) {
+    if (!withParty.get(key)) withParty.set(key, String(DEFAULT_PARTY[key]));
+  }
+  const parsed = parseStayInput(withParty, todayInZone);
+  if (!parsed.ok) return null;
+  const s = parsed.value;
+  return { ...s, nights: nightsBetween(s.checkIn, s.checkOut) };
+}
+
+export function stayToParams(s: Omit<Stay, "nights">): URLSearchParams {
+  const p = new URLSearchParams({ checkin: s.checkIn, checkout: s.checkOut, adults: String(s.adults) });
+  if (s.children > 0) p.set("children", String(s.children));
+  p.set("rooms", String(s.rooms));
+  return p;
+}
+
+/** The party in the URL, with or without dates, as the guest picker allows it. */
+export function partyFromParams(p: URLSearchParams): Guests {
+  const read = (key: keyof Guests) => {
+    const v = p.get(key);
+    return v !== null && /^\d+$/.test(v) ? Number(v) : DEFAULT_PARTY[key];
+  };
+  return clampGuests({ adults: read("adults"), children: read("children"), rooms: read("rooms") });
+}
+
+const DAY_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** "Dec 16 – Dec 20". The dates are calendar dates, so they are read in UTC. */
+export function stayDatesLabel(s: { checkIn: string; checkOut: string }): string {
+  const day = (d: string) => DAY_LABEL.format(new Date(parseSearchDate(d) ?? 0));
+  return `${day(s.checkIn)} – ${day(s.checkOut)}`;
+}
+
+/** "2 adults", "1 adult, 1 child". */
+export function guestsLabel(g: { adults: number; children: number }): string {
+  const adults = `${g.adults} ${g.adults === 1 ? "adult" : "adults"}`;
+  if (g.children === 0) return adults;
+  return `${adults}, ${g.children} ${g.children === 1 ? "child" : "children"}`;
+}
