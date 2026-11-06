@@ -64,3 +64,21 @@ export function guestsLabel(g: { adults: number; children: number }): string {
   if (g.children === 0) return adults;
   return `${adults}, ${g.children} ${g.children === 1 ? "child" : "children"}`;
 }
+
+/** What the date and guest pickers hand back: dates may still be missing. */
+export type StayDraft = { checkIn: string | null; checkOut: string | null; adults: number; children: number; rooms: number };
+
+/**
+ * The URL's params with the picked stay written over them. Anything else in
+ * the URL stays, except a pending `book`: that selection was for the old stay.
+ */
+export function withStay(current: URLSearchParams, next: StayDraft): URLSearchParams {
+  const p = new URLSearchParams(current);
+  for (const key of ["checkin", "checkout", "adults", "children", "rooms", "book"]) p.delete(key);
+  const written =
+    next.checkIn && next.checkOut
+      ? stayToParams({ checkIn: next.checkIn, checkOut: next.checkOut, adults: next.adults, children: next.children, rooms: next.rooms })
+      : new URLSearchParams({ adults: String(next.adults), ...(next.children > 0 ? { children: String(next.children) } : {}), rooms: String(next.rooms) });
+  for (const [k, v] of written) p.set(k, v);
+  return p;
+}

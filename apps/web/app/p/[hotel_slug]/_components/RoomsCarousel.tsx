@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   motion, AnimatePresence, MotionConfig, useAnimate, useReducedMotion,
   type Transition, type Variants,
@@ -14,9 +14,10 @@ import type { DbRoom, DbRatePlan } from "./constants";
 import { TIER_SUMMARIES } from "@openbookings/pricing";
 import { useRoomLikes } from "./use-room-likes";
 import { todayInZone } from "@/lib/booking/stay-input";
-import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, type Stay } from "../_lib/stay";
+import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, withStay, type Stay, type StayDraft } from "../_lib/stay";
 import { mergeQuote, pruneQuantities, type PricedRate, type QuoteState, type RoomView } from "../_lib/merge-quote";
 import { useStayQuote } from "../_lib/useStayQuote";
+import { StayPickers, type StayPanel } from "./StayPickers";
 
 type ViewMode = "images" | "rates";
 
@@ -88,7 +89,13 @@ function cancellationLine(rate: DbRatePlan): string {
 }
 
 /** The stay as the room panel's date and guest fields show it. */
-type StayFields = { hasStay: boolean; datesLabel: string; guestsLabel: string };
+type StayFields = {
+  hasStay: boolean;
+  datesLabel: string;
+  guestsLabel: string;
+  onOpenDates: () => void;
+  onOpenGuests: () => void;
+};
 
 // Panel geometry, shared by the panel itself and the rates area beside it.
 const PANEL_WIDTH = "min(28%, 296px)";
@@ -258,6 +265,7 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
             >
               <button
                 type="button"
+                onClick={stayFields.onOpenDates}
                 className="w-full h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 flex items-center justify-between text-sm text-white/90 hover:bg-white/10 transition-colors"
               >
                 <span>{stayFields.datesLabel}</span>
@@ -265,6 +273,7 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
               </button>
               <button
                 type="button"
+                onClick={stayFields.onOpenGuests}
                 className="w-full h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 flex items-center justify-between text-sm text-white/90 hover:bg-white/10 transition-colors"
               >
                 <span>{stayFields.guestsLabel}</span>
@@ -943,7 +952,11 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
     () => (searchKey ? stayFromParams(new URLSearchParams(searchKey), todayInZone(timeZone)) : null),
     [searchKey, timeZone],
   );
-  const party = useMemo(() => partyFromParams(new URLSearchParams(searchKey)), [searchKey]);
+  // The guest picker's starting point: the stay's party, or the URL's without dates.
+  const party = useMemo(() => {
+    if (stay) return { adults: stay.adults, children: stay.children, rooms: stay.rooms };
+    return partyFromParams(new URLSearchParams(searchKey));
+  }, [stay, searchKey]);
   const quote: QuoteState = useStayQuote(slug, stay);
   const allViews = useMemo(() => mergeQuote(rooms, quote), [rooms, quote]);
 
@@ -957,10 +970,21 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
   const pruned = pruneQuantities(rooms, allViews, quantities);
   if (pruned !== quantities) setQuantities(pruned);
 
+  // A picked stay goes into the URL, which re-runs the quote.
+  const router = useRouter();
+  const pathname = usePathname();
+  const [panel, setPanel] = useState<StayPanel>(null);
+  const closePanel = useCallback(() => setPanel(null), []);
+  const applyStay = useCallback((next: StayDraft) => {
+    router.replace(`${pathname}?${withStay(new URLSearchParams(searchKey), next).toString()}`, { scroll: false });
+  }, [router, pathname, searchKey]);
+
   const stayFields: StayFields = {
     hasStay: stay !== null,
     datesLabel: stay ? stayDatesLabel(stay) : "Pick dates",
-    guestsLabel: guestsLabel(stay ?? party),
+    guestsLabel: guestsLabel(party),
+    onOpenDates: () => setPanel("dates"),
+    onOpenGuests: () => setPanel("guests"),
   };
 
   const navigate = useCallback((i: number) => {
@@ -1021,6 +1045,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
             <p className="text-sm text-white/90">Nothing is available for these dates.</p>
             <button
               type="button"
+              onClick={stayFields.onOpenDates}
               className="h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
             >
               Change dates
@@ -1045,6 +1070,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
             ratesConfirmed={ratesConfirmed}
           />
         )}
+        <StayPickers stay={stay} party={party} openPanel={panel} onClose={closePanel} onChange={applyStay} />
         {likes.signIn}
       </section>
     </MotionConfig>

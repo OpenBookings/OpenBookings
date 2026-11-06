@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, stayToParams } from "./stay";
+import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, stayToParams, withStay } from "./stay";
 
 const TODAY = "2026-11-06";
 const params = (s: string) => new URLSearchParams(s);
@@ -75,5 +75,30 @@ describe("labels", () => {
     expect(guestsLabel({ adults: 2, children: 0 })).toBe("2 adults");
     expect(guestsLabel({ adults: 1, children: 1 })).toBe("1 adult, 1 child");
     expect(guestsLabel({ adults: 2, children: 3 })).toBe("2 adults, 3 children");
+  });
+});
+
+describe("withStay", () => {
+  test("writes picked dates and party over the URL's, keeping other params", () => {
+    const next = withStay(params("checkin=2026-12-16&checkout=2026-12-19&adults=2&rooms=1&utm=x"), {
+      checkIn: "2026-12-20",
+      checkOut: "2026-12-22",
+      adults: 3,
+      children: 1,
+      rooms: 2,
+    });
+    expect(next.get("utm")).toBe("x");
+    expect(stayFromParams(next, TODAY)).toEqual({ checkIn: "2026-12-20", checkOut: "2026-12-22", nights: 2, adults: 3, children: 1, rooms: 2 });
+  });
+
+  test("a party without dates is kept for when dates are picked", () => {
+    const next = withStay(params(""), { checkIn: null, checkOut: null, adults: 1, children: 0, rooms: 1 });
+    expect(next.toString()).toBe("adults=1&rooms=1");
+  });
+
+  test("drops children when there are none and a pending booking", () => {
+    const next = withStay(params("children=2&book=abc:1"), { checkIn: "2026-12-20", checkOut: "2026-12-22", adults: 2, children: 0, rooms: 1 });
+    expect(next.has("children")).toBe(false);
+    expect(next.has("book")).toBe(false);
   });
 });
