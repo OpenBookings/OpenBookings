@@ -59,6 +59,19 @@ hotels.
   organisation, so demo bookings show in the business dashboard.
 - **The old in-memory demo mode (`NEXT_PUBLIC_DEMO_DATA`) is removed.**
   Running the frontend now always needs a database.
+- **UI builds on the existing screens; tweaks only** (concept:
+  https://claude.ai/artifact/B1FnzYNT3WmNW43DjqPA34). Answers from its
+  review (2026-11-06):
+  - Rooms left are shown to guests only when **fewer than 3** are left
+    ("2 left"). Guests never see the host's total.
+  - The party is **split evenly** over the selected rooms; no per-room
+    guest editing for now.
+  - **Hotels that can't be booked for the search are not shown in search.**
+    Exception: **in testing mode only**, they are listed after the bookable
+    ones with their reason, so every demo case is one click away.
+  - **Rates that can't be booked are hidden** on the property page; a room
+    with no bookable rate is hidden too. If no room is left, the rooms
+    section says so in one line and offers to change dates.
 - **Emails are really sent in testing mode, to the signed-in account's
   address** — including the host-side emails for generated hotels, so one
   person sees both sides.
@@ -228,8 +241,8 @@ pressing Book on the last room at once cannot both get it.
 
 1. **Search** carries dates, adults, children and rooms (it already does).
    Results now reflect availability: hotels that cannot be booked for the
-   dates still appear, marked with the reason. *(My call: show, not hide —
-   matches "Sold out — appears, but cannot be booked".)*
+   dates are left out. In testing mode only, they are listed after the
+   bookable ones with their reason (decided by Wouter).
 2. **Search card → property page** passes the dates and party in the URL.
 3. **Property page** gets a working date/guest picker. The page HTML stays
    cached; a client call (e.g. `GET /api/stay-quote`) fetches availability
