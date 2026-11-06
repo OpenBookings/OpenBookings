@@ -311,6 +311,7 @@
       "name": "@openbookings/demo",
       "version": "0.0.0",
       "dependencies": {
+        "@openbookings/authz": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/images": "workspace:*",
         "@openbookings/pricing": "workspace:*",
