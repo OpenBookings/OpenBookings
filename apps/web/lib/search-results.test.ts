@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mapSearchResult, nightsBetween, resolveCoverUrl, type HotelSearchApiResult } from "./search-results";
-import { getDemoSearchResults } from "./demo-data";
+import { getDemoSearchResults } from "./search-results.fixtures";
 
 const base: HotelSearchApiResult = {
   hotel_id: "h1", hotel_name: "Hotel Lago", hotel_slug: "hotel-lago", city: "Como", country: "IT",

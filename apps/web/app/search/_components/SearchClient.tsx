@@ -15,8 +15,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { GlassBackdrop } from "@/components/GlassBackdrop";
 import type { Backdrop } from "@openbookings/images";
 import { useBackdrop } from "@openbookings/images/react";
-import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
-import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
+import { mapSearchResult, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
@@ -65,19 +64,11 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   // Starts true when the URL holds a full search, so the first paint shows the
   // skeletons rather than a flash of "No hotels matched".
   const [isLoading, setIsLoading] = useState(
-    () => !isDemoMode() && Boolean(committed.lat && committed.lon && committed.checkIn && committed.checkOut),
+    () => Boolean(committed.lat && committed.lon && committed.checkIn && committed.checkOut),
   );
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Demo mode: any search shows the demo properties, no API call.
-  const demoHotels = useMemo(
-    () => (isDemoMode() ? getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)) : null),
-    [committed.checkIn, committed.checkOut],
-  );
-
   useEffect(() => {
-    if (isDemoMode()) return;
-
     const clearResults = () => {
       setHotels([]);
       setSearchError(null);
@@ -140,11 +131,11 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   }, [committed]);
 
   const sortedHotels = useMemo(() => {
-    const list = [...(demoHotels ?? hotels)];
+    const list = [...hotels];
     if (sortBy === "price_asc") return list.sort((a, b) => comparePrice(a, b, "asc"));
     if (sortBy === "price_desc") return list.sort((a, b) => comparePrice(a, b, "desc"));
     return list;
-  }, [demoHotels, hotels, sortBy]);
+  }, [hotels, sortBy]);
 
   const isDirty =
     destination !== committed.destination ||

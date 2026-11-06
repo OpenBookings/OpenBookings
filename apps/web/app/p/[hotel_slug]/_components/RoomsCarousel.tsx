@@ -63,7 +63,7 @@ function formatDate(d: Date) {
 
 const BASE_DATE = new Date();
 const CHECK_IN  = formatDate(BASE_DATE);
-/** Placeholder stay until the date picker works: tonight plus this many nights. */
+/** Placeholder stay: tonight plus this many nights. Replaced by the picked dates, priced through /api/stay-quote. */
 const NIGHTS: number = 3;
 const CHECK_OUT = formatDate(new Date(BASE_DATE.getFullYear(), BASE_DATE.getMonth(), BASE_DATE.getDate() + NIGHTS));
 
