@@ -12,8 +12,9 @@
 
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 import type { Queryable } from "@openbookings/db";
+import { DEMO_ORG_ID } from "@openbookings/mode";
 
-export const DEMO_ORG_ID = "demo-organisation";
+export { DEMO_ORG_ID };
 
 const DEMO_ORG_NAME = "OpenBookings Demo";
 const DEMO_ORG_SLUG = "openbookings-demo";

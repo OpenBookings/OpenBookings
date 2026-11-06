@@ -64,13 +64,15 @@ export async function proxy(request: NextRequest) {
     // of the wall, so a host's first dashboard request already counts it.
     // Outside testing mode a leftover membership has no effect.
     const testing = isTestingMode();
+    let ensured = false;
     if (testing && !facts.hasDemoMembership) {
       await withTransaction((tx) => ensureDemoMembership(tx, { userId: session.user.id }));
+      ensured = true;
     }
     const decision = onboardingWallDecision({
       path,
       hasCompletedOrg: facts.hasCompletedOrg,
-      hasDemoMembership: testing,
+      hasDemoMembership: testing && (facts.hasDemoMembership || ensured),
       wizardInProgress: wizardInProgress(facts),
     });
     if (decision !== "allow") {

@@ -19,3 +19,10 @@ export function assertTestingModeSafe(
     );
   }
 }
+
+/**
+ * The organisation that owns every generated demo hotel. It lives here, not
+ * in @openbookings/demo, so authz can refuse it outside testing mode without
+ * a dependency cycle (demo depends on authz).
+ */
+export const DEMO_ORG_ID = "demo-organisation";

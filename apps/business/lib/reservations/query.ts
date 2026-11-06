@@ -1,3 +1,4 @@
+import { isTestingMode } from "@openbookings/mode";
 import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import { toHostReservation, type HostReservation, type HostReservationRow } from "./shape";
 import { actionsForViewer, viewerCanRetryRefunds } from "./permissions";
@@ -11,7 +12,7 @@ const PAST_DAYS = 30;
  *
  * `$1` is the host (getHostScopedDb binds it).
  */
-export const HOST_RESERVATIONS_SQL = `
+export const hostReservationsSql = (testing: boolean = isTestingMode()) => `
   SELECT
     b.id AS booking_id,
     b.status,
@@ -60,7 +61,7 @@ export const HOST_RESERVATIONS_SQL = `
   FROM bookings b
   JOIN properties p ON p.id = b.hotel_id
   LEFT JOIN "user" u ON u.id = b.user_id
-  WHERE ${propertyReadAccessSql("$1")}
+  WHERE ${propertyReadAccessSql("$1", testing)}
     AND b.status <> 'pending'
     AND b.check_out_date >= CURRENT_DATE - ${PAST_DAYS}
   ORDER BY b.check_in_date, b.created_at
@@ -70,9 +71,10 @@ export async function loadHostReservations(
   session: SessionLike,
   host: Pick<ReturnType<typeof getHostScopedDb>, "query"> = getHostScopedDb(session),
   now: Date = new Date(),
+  testing: boolean = isTestingMode(),
 ): Promise<HostReservation[]> {
   const rows = await host.query<HostReservationRow & { viewer_role: string | null; viewer_has_access: boolean }>(
-    HOST_RESERVATIONS_SQL,
+    hostReservationsSql(testing),
   );
   return rows.map((row) => {
     const reservation = toHostReservation(row, now);

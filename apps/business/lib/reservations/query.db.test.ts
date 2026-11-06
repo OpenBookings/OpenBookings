@@ -9,6 +9,8 @@ import { Client } from "pg";
 import type { SessionLike } from "@openbookings/authz";
 import { confirmBookingPolicy } from "@openbookings/db";
 import { applyPendingMigrations } from "@/app/(dashboard)/dashboard/listings/_lib/pending-migrations";
+import { DEMO_ORG_ID } from "@openbookings/mode";
+import { userOwnsProperty } from "@openbookings/authz";
 import { loadHostReservations } from "./query";
 
 const connectionString = process.env.DATABASE_URL;
@@ -22,6 +24,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
   let owner: string;
   let stranger: string;
   let bookingId: string;
+  let propertyId: string;
 
   const session = (id: string): SessionLike => ({ user: { id, account_type: "business" } });
   const hostDb = (s: SessionLike) => ({
@@ -60,6 +63,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
        RETURNING id`,
       [`test-property-${crypto.randomUUID()}`, owner],
     );
+    propertyId = property.id;
     const room = await one(
       `INSERT INTO rooms (property_id, name, base_occupancy, max_adults, total_units, is_active)
        VALUES ($1, 'Deluxe', 2, 2, 3, true) RETURNING id`,
@@ -100,5 +104,35 @@ describeWithDb("loadHostReservations against Postgres", () => {
   test("another host sees nothing", async () => {
     const list = await loadHostReservations(session(stranger), hostDb(session(stranger)));
     expect(list.find((r) => r.id === bookingId)).toBeUndefined();
+  });
+
+  describe("a leftover demo membership", () => {
+    beforeEach(async () => {
+      await db.query(
+        `INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Demo', 'demo-test', NOW()) ON CONFLICT (id) DO NOTHING`,
+        [DEMO_ORG_ID],
+      );
+      await db.query(`UPDATE properties SET organization_id = $1, owner_user_id = NULL WHERE id = $2`, [DEMO_ORG_ID, propertyId]);
+      await db.query(
+        `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt") VALUES (gen_random_uuid()::text, $1, $2, 'owner', NOW())`,
+        [DEMO_ORG_ID, stranger],
+      );
+    });
+    const ownsDeps = (testing: boolean) => ({
+      testing,
+      queryOne: async <T,>(sql: string, values: unknown[] = []) => ((await db.query(sql, values)).rows[0] ?? null) as T | null,
+    });
+
+    test("grants nothing with testing mode off", async () => {
+      const list = await loadHostReservations(session(stranger), hostDb(session(stranger)), new Date(), false);
+      expect(list.find((r) => r.id === bookingId)).toBeUndefined();
+      expect(await userOwnsProperty(session(stranger), propertyId, ownsDeps(false))).toBe(false);
+    });
+
+    test("applies with testing mode on", async () => {
+      const list = await loadHostReservations(session(stranger), hostDb(session(stranger)), new Date(), true);
+      expect(list.find((r) => r.id === bookingId)).toBeDefined();
+      expect(await userOwnsProperty(session(stranger), propertyId, ownsDeps(true))).toBe(true);
+    });
   });
 });

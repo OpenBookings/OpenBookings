@@ -7,7 +7,7 @@
  */
 
 import { getPool } from "@openbookings/db";
-import { isTestingMode } from "../src/mode";
+import { isTestingMode } from "@openbookings/mode";
 import { resetDemoData } from "../src/membership";
 
 async function main(): Promise<void> {
