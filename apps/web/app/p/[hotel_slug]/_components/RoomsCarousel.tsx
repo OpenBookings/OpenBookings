@@ -18,6 +18,8 @@ import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, withStay,
 import { mergeQuote, pruneQuantities, type PricedRate, type QuoteState, type RoomView } from "../_lib/merge-quote";
 import { useStayQuote } from "../_lib/useStayQuote";
 import { StayPickers, type StayPanel } from "./StayPickers";
+import { BookSignIn } from "./BookSignIn";
+import { useBookNow } from "./useBookNow";
 
 type ViewMode = "images" | "rates";
 
@@ -586,11 +588,27 @@ type Selection = {
 
 type RoomPicks = { roomIndex: number; picks: Selection[] };
 
-function SelectionSummary({ rooms, views, stay, quantities, visible, ratesConfirmed, activeIndex }: {
+/** Book now's state, worked out by the section. */
+type BookBar = {
+  /** Per rate picked: who sleeps in those rooms, "2 adults". */
+  pickGuests: Record<string, string>;
+  /** One line in place of the total's caption, or null. */
+  message: string | null;
+  /** The total to show instead of the summed one, once the price changed. */
+  totalOverride: number | null;
+  /** Keeps the bar up with nothing picked, so its message is still seen. */
+  keepOpen: boolean;
+  canBook: boolean;
+  pending: boolean;
+  onBook: () => void;
+};
+
+function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ratesConfirmed, activeIndex }: {
   /** The rooms shown, and their views in the same order. */
   rooms: DbRoom[];
   views: RoomView[];
   stay: Stay | null;
+  bookBar: BookBar;
   quantities: Record<string, number>;
   visible: boolean;
   ratesConfirmed: boolean;
@@ -616,9 +634,9 @@ function SelectionSummary({ rooms, views, stay, quantities, visible, ratesConfir
     if (picks.length > 0) groups.push({ roomIndex, picks });
   });
   // With dates, the stay's quoted total; without, today's price for one night.
-  const shownTotal = stay
+  const shownTotal = bookBar.totalOverride ?? (stay
     ? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null)
-    : Math.round(nightlyTotal * 100) / 100;
+    : Math.round(nightlyTotal * 100) / 100);
   const groupsKey = groups.map((g) => g.roomIndex).join(",");
 
   // If the tags overflow, the room on screen is scrolled into view.
@@ -671,7 +689,7 @@ function SelectionSummary({ rooms, views, stay, quantities, visible, ratesConfir
 
   return (
     <AnimatePresence>
-      {visible && groups.length > 0 && (
+      {visible && (groups.length > 0 || bookBar.keepOpen) && (
         <motion.div
           key="summary"
           initial={{ opacity: 0, y: BAR_DROP_PX }}
@@ -718,7 +736,10 @@ function SelectionSummary({ rooms, views, stay, quantities, visible, ratesConfir
                             <p className="text-sm font-semibold text-white leading-none">
                               <span className="tabular-nums">{p.qty}×</span> {p.roomName}
                             </p>
-                            <p className="text-[11px] text-white/60 mt-1 leading-none">{p.rateName}</p>
+                            <p className="text-[11px] text-white/60 mt-1 leading-none">
+                              {p.rateName}
+                              {bookBar.pickGuests[p.rateId] ? ` · ${bookBar.pickGuests[p.rateId]}` : ""}
+                            </p>
                           </div>
                         ))}
                       </motion.li>
@@ -735,20 +756,20 @@ function SelectionSummary({ rooms, views, stay, quantities, visible, ratesConfir
                 <p className="text-[11px] text-white/60 mt-1 leading-none">
                   {!ratesConfirmed
                     ? "Not bookable yet"
-                    : stay
+                    : bookBar.message ?? (stay
                       ? `total · ${stay.nights} ${stay.nights === 1 ? "night" : "nights"} · incl. tax`
-                      : "Pick your dates"}
+                      : "Pick your dates")}
                 </p>
               </div>
             </div>
 
             {/* Inset 1px top and bottom: solid white reads taller than the dark
-                glass beside it, so this makes the two look the same height.
-                Not wired yet: checkout still reads one fixed, seeded booking
-                rather than a selection made here. */}
+                glass beside it, so this makes the two look the same height. */}
             <button
               type="button"
-              disabled={!ratesConfirmed || shownTotal == null}
+              onClick={bookBar.onBook}
+              disabled={!ratesConfirmed || shownTotal == null || !bookBar.canBook || bookBar.pending}
+              aria-busy={bookBar.pending || undefined}
               className="group shrink-0 my-px pl-6 pr-5 rounded-[15px] bg-white text-black text-sm font-semibold flex items-center gap-2 transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Book now
@@ -773,6 +794,7 @@ type StageProps = {
   stay: Stay | null;
   stayFields: StayFields;
   quoteFailed: boolean;
+  bookBar: BookBar;
   activeIndex: number;
   dir: number;
   onNavigate: (i: number) => void;
@@ -786,7 +808,7 @@ type StageProps = {
 };
 
 function RoomsStage({
-  rooms, views, stay, stayFields, quoteFailed, activeIndex, dir, onNavigate, viewMode, liked, onToggleLike, onViewRates,
+  rooms, views, stay, stayFields, quoteFailed, bookBar, activeIndex, dir, onNavigate, viewMode, liked, onToggleLike, onViewRates,
   quantities, onQtyChange, ratesConfirmed,
 }: StageProps) {
   const count = rooms.length;
@@ -893,6 +915,7 @@ function RoomsStage({
             rooms={rooms}
             views={views}
             stay={stay}
+            bookBar={bookBar}
             quantities={quantities}
             visible={viewMode === "rates"}
             ratesConfirmed={ratesConfirmed}
@@ -938,7 +961,7 @@ function RoomsSectionWithStay(props: RoomsSectionProps) {
   return <RoomsSectionView {...props} search={search} />;
 }
 
-function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: RoomsSectionProps & {
+function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, search }: RoomsSectionProps & {
   search: URLSearchParams | null;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("images");
@@ -957,7 +980,8 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
     if (stay) return { adults: stay.adults, children: stay.children, rooms: stay.rooms };
     return partyFromParams(new URLSearchParams(searchKey));
   }, [stay, searchKey]);
-  const quote: QuoteState = useStayQuote(slug, stay);
+  const [reload, setReload] = useState(0);
+  const quote: QuoteState = useStayQuote(slug, stay, reload);
   const allViews = useMemo(() => mergeQuote(rooms, quote), [rooms, quote]);
 
   // Only rooms that can be booked for the stay are shown; the carousel counts those.
@@ -1003,6 +1027,23 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
     if (val < 0) return;
     setQuantities((q) => ({ ...q, [id]: val }));
   }, []);
+
+  const bookNow = useBookNow({
+    propertyId,
+    stay,
+    quote,
+    rooms,
+    views: allViews,
+    shownRooms,
+    shownViews,
+    quantities,
+    setQuantities,
+    searchKey,
+    pathname,
+    askDates: useCallback(() => setPanel("dates"), []),
+    showRates: useCallback(() => setViewMode("rates"), []),
+    reloadQuote: useCallback(() => setReload((n) => n + 1), []),
+  });
 
   return (
     // Guests who ask for reduced motion get the fades but none of the sliding.
@@ -1058,6 +1099,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
             stay={stay}
             stayFields={stayFields}
             quoteFailed={stay !== null && quote.status === "error"}
+            bookBar={bookNow.bar}
             activeIndex={current}
             dir={dir}
             onNavigate={navigate}
@@ -1071,6 +1113,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, timeZone, search }: Roo
           />
         )}
         <StayPickers stay={stay} party={party} openPanel={panel} onClose={closePanel} onChange={applyStay} />
+        <BookSignIn callbackURL={bookNow.signInURL} onClose={bookNow.closeSignIn} />
         {likes.signIn}
       </section>
     </MotionConfig>

@@ -23,6 +23,9 @@ export type RoomView = {
   visible: boolean;
   unitsLeft: number | null;
   leftCaption: string | null;
+  /** How many one unit sleeps, from the quote; null without one. */
+  maxAdults: number | null;
+  maxChildren: number | null;
   rates: Record<string, PricedRate | null>;
 };
 
@@ -48,6 +51,8 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
       visible: true,
       unitsLeft: null,
       leftCaption: null,
+      maxAdults: null,
+      maxChildren: null,
       rates: Object.fromEntries(room.rate_plans.map((plan) => [plan.id, null])),
     }));
   }
@@ -88,6 +93,8 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
       visible: Object.keys(rates).length > 0,
       unitsLeft,
       leftCaption: leftCaption(unitsLeft),
+      maxAdults: q?.maxAdults ?? null,
+      maxChildren: q?.maxChildren ?? null,
       rates,
     };
   });

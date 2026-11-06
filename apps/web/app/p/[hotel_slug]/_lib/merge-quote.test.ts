@@ -69,8 +69,8 @@ describe("mergeQuote", () => {
   test("without a stay every room and rate shows, unpriced", () => {
     const views = mergeQuote(ROOMS, { status: "none" });
     expect(views).toEqual([
-      { roomId: "a", visible: true, unitsLeft: null, leftCaption: null, rates: { a1: null, a2: null } },
-      { roomId: "b", visible: true, unitsLeft: null, leftCaption: null, rates: { b1: null } },
+      { roomId: "a", visible: true, unitsLeft: null, leftCaption: null, maxAdults: null, maxChildren: null, rates: { a1: null, a2: null } },
+      { roomId: "b", visible: true, unitsLeft: null, leftCaption: null, maxAdults: null, maxChildren: null, rates: { b1: null } },
     ]);
   });
 
@@ -122,7 +122,7 @@ describe("mergeQuote", () => {
 
   test("only the last one or two rooms are counted out loud", () => {
     const left = (unitsLeft: number) => mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1")], { unitsLeft })]))[0];
-    expect(left(1)).toMatchObject({ unitsLeft: 1, leftCaption: "1 left" });
+    expect(left(1)).toMatchObject({ unitsLeft: 1, leftCaption: "1 left", maxAdults: 2, maxChildren: 1 });
     expect(left(2)).toMatchObject({ unitsLeft: 2, leftCaption: "2 left" });
     expect(left(3)).toMatchObject({ unitsLeft: 3, leftCaption: null });
   });
