@@ -236,8 +236,8 @@ function EditAvailabilityDialog({
             onChange={(e) => setBlocked(e.target.value)}
           />
           <p className="text-muted-foreground text-xs">
-            Units held back for maintenance or owner use. Subtracted from the
-            computed baseline.
+            Rooms held back for maintenance or owner use. They only count when
+            no room number is set for the night.
           </p>
         </div>
 
@@ -247,13 +247,14 @@ function EditAvailabilityDialog({
             id="ari-override"
             type="number"
             min={0}
-            placeholder="Leave empty to use the computed number"
+            placeholder="Leave empty to use the normal count"
             value={override.value}
             onChange={(e) => override.setValue(e.target.value)}
           />
           <p className="text-muted-foreground text-xs">
-            An explicit number overrides units minus bookings and blocks
-            entirely. Clearing it restores the computed baseline.
+            How many rooms exist on these nights. Bookings and guests who are
+            paying come off it automatically. Clearing it goes back to the
+            room's normal count minus blocked rooms.
           </p>
         </div>
 

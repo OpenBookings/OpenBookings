@@ -214,7 +214,9 @@ function AvailabilityDetail({
 
         <Section title="How this number is reached">
           <Field label="Capacity" value={cell.totalUnits} />
-          <Field label="Blocked" value={`− ${cell.blocked}`} />
+          {cell.override === null && (
+            <Field label="Blocked" value={`− ${cell.blocked}`} />
+          )}
           <Field
             label="Manual override"
             value={cell.override ?? "Not set"}
@@ -321,6 +323,9 @@ function RateDetail({
   onStage: (edits: DraftEdit[]) => void;
 }) {
   const first = run.cells[0];
+  const nightTotal =
+    room.availability.find((a) => a.date === first.date)?.total ??
+    room.totalUnits;
   const last = run.cells[run.cells.length - 1];
   const range = { startDate: first.date, endDate: last.date };
   // Staging is per cell, so a bar spanning a week stages seven edits. The
@@ -385,8 +390,8 @@ function RateDetail({
           <p className="text-sm">
             {first.available === 0
               ? "No rooms left on this room type."
-              : `${first.available} of ${room.totalUnits} room${
-                  room.totalUnits === 1 ? "" : "s"
+              : `${first.available} of ${nightTotal} room${
+                  nightTotal === 1 ? "" : "s"
                 } left, shared across every rate plan on ${room.name}.`}
           </p>
           <p className="text-muted-foreground text-sm">

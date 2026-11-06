@@ -17,9 +17,10 @@
  * leaves nothing behind and the cases cannot see each other. That matters more
  * than usual here: the branch is cloned from a database with real rows in it.
  *
- * Scope note: this covers what the SQL itself decides. The precedence rule —
- * `available_override ?? computed` — lives in `loadAriGrid`, not in the query;
- * the query only has to surface the column faithfully, which is asserted here.
+ * Scope note: this covers what the SQL itself decides. The rule —
+ * the host's number is the night's total, and bookings and holds come off it —
+ * lives in `buildAvailabilityCell`, not in the query; the query only has to
+ * surface the columns faithfully, which is asserted here.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
