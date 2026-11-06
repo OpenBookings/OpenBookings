@@ -164,7 +164,7 @@ export async function sendOversoldRefunded(intentId: string, deps: SendDeps = {}
     await rowsOf<{ guestEmail: string; property_name: string; amount: number }>(
       c.db,
       `SELECT u.email AS "guestEmail", p.name AS property_name,
-              (i.total_amount + i.tourist_tax_amount)::float8 AS amount
+              i.total_amount::float8 AS amount -- what was charged and refunded; includes tourist tax
          FROM booking_intents i
          JOIN properties p ON p.id = i.property_id
          JOIN "user" u ON u.id = i.user_id

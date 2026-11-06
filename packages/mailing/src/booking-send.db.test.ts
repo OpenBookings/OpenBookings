@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
-import { sendBookingCancelled, sendBookingConfirmed, type SendDeps } from "./booking-send";
+import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, type SendDeps } from "./booking-send";
 
 let db: Client;
 let sent: { to: string; subject: string; html: string }[];
@@ -99,6 +99,23 @@ describeWithDb("booking emails against Postgres", () => {
       expect(m.subject).toStartWith("Rooms cancelled");
     }
     expect(sent.find((m) => m.to === guestEmail)!.html).toContain("€103.00");
+  });
+
+  test("an oversold refund states the intent's total, which already includes tourist tax", async () => {
+    // €400 of rooms + €12 tourist tax: the guest was charged (and refunded) €412.
+    const intent = await one<{ id: string }>(
+      `INSERT INTO booking_intents
+         (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at,
+          snapshot, total_amount, tourist_tax_amount)
+       SELECT b.user_id, $2, '2027-03-12', '2027-03-14', 'refunded_oversold', NOW(), '{}'::jsonb, 412, 12
+         FROM bookings b WHERE b.id = $1
+       RETURNING id`,
+      [bookingId, propertyId],
+    );
+    await sendOversoldRefunded(intent.id, deps());
+    expect(to()).toEqual([guestEmail]);
+    expect(sent[0]!.html).toContain("€412.00");
+    expect(sent[0]!.html).not.toContain("€424.00");
   });
 
   test("a failing sender is reported, never thrown", async () => {
