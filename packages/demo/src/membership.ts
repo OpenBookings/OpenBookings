@@ -32,7 +32,7 @@ async function deleted(db: Queryable, deleteSql: string): Promise<number> {
  * demo organisation and its members stay. Rows that point at bookings without
  * cascading (refunds, transactions) go first; rooms, rate plans, inventory,
  * restrictions, images, tax rules, access rows and message threads go with
- * the properties through their cascades. Audit rows keep their booking ids.
+ * the properties through their cascades. Audit rows are not touched; they keep any booking ids in their jsonb detail.
  */
 export async function resetDemoData(db: LifecycleDb): Promise<{ properties: number; bookings: number; intents: number }> {
   return db.transaction(async (tx) => {

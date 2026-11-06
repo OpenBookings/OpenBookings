@@ -42,7 +42,17 @@ export type SessionLike = {
 type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
 
 /** Test seam: pass a fake queryOne. Defaults to the shared pg pool. */
-export type AuthzDeps = { queryOne?: QueryOneFn };
+export type AuthzDeps = { queryOne?: QueryOneFn; isOrgAllowed?: (orgId: string) => boolean };
+
+let orgGuard: (orgId: string) => boolean = () => true;
+/**
+ * Lets an app veto organisations (the business app refuses the demo
+ * organisation outside testing mode). authz cannot import @openbookings/demo:
+ * demo depends on authz.
+ */
+export function setOrgGuard(guard: (orgId: string) => boolean): void {
+  orgGuard = guard;
+}
 
 function ownerId(session: SessionLike | null | undefined): string | null {
   const id = session?.user?.id;
@@ -318,6 +328,7 @@ export async function getOrgScopedDb(
   const orgId = session?.session?.activeOrganizationId;
   if (!userId || !orgId) return null;
   if (session?.user?.account_type !== "business") return null;
+  if (!(deps.isOrgAllowed ?? orgGuard)(orgId)) return null;
 
   const queryOne = deps.queryOne ?? dbQueryOne;
   const membership = await queryOne<{ role: string }>(

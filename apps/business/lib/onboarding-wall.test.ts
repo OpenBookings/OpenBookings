@@ -3,11 +3,11 @@ import { onboardingWallDecision } from "./onboarding-wall";
 
 // The five kinds of user from the design, by the two facts the wall reads.
 const users = {
-  "host mid-wizard": { hasCompletedOrg: false, wizardInProgress: true },
-  "host who finished": { hasCompletedOrg: true, wizardInProgress: false },
-  "invited member who never ran the wizard": { hasCompletedOrg: true, wizardInProgress: false },
-  "member of one org onboarding their own business": { hasCompletedOrg: true, wizardInProgress: true },
-  "owner removed from their organisation": { hasCompletedOrg: false, wizardInProgress: false },
+  "host mid-wizard": { hasCompletedOrg: false, hasDemoMembership: false, wizardInProgress: true },
+  "host who finished": { hasCompletedOrg: true, hasDemoMembership: false, wizardInProgress: false },
+  "invited member who never ran the wizard": { hasCompletedOrg: true, hasDemoMembership: false, wizardInProgress: false },
+  "member of one org onboarding their own business": { hasCompletedOrg: true, hasDemoMembership: false, wizardInProgress: true },
+  "owner removed from their organisation": { hasCompletedOrg: false, hasDemoMembership: false, wizardInProgress: false },
 } as const;
 
 const expected: Record<keyof typeof users, { dashboard: string; onboarding: string }> = {
@@ -34,11 +34,11 @@ describe("onboardingWallDecision", () => {
 
   test("anyone without a completed organisation may always reach onboarding, so no redirect loops", () => {
     for (const wizardInProgress of [true, false]) {
-      expect(onboardingWallDecision({ path: "/onboarding", hasCompletedOrg: false, wizardInProgress })).toBe("allow");
+      expect(onboardingWallDecision({ path: "/onboarding", hasCompletedOrg: false, hasDemoMembership: false, wizardInProgress })).toBe("allow");
     }
   });
 
   test("paths outside the wall are left alone", () => {
-    expect(onboardingWallDecision({ path: "/account", hasCompletedOrg: false, wizardInProgress: false })).toBe("allow");
+    expect(onboardingWallDecision({ path: "/account", hasCompletedOrg: false, hasDemoMembership: false, wizardInProgress: false })).toBe("allow");
   });
 });

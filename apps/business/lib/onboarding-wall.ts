@@ -22,7 +22,7 @@ export type OnboardingWallDecision = "allow" | "/onboarding" | "/dashboard";
 export function onboardingWallDecision(input: {
   path: string;
   hasCompletedOrg: boolean;
-  hasDemoMembership?: boolean;
+  hasDemoMembership: boolean;
   wizardInProgress: boolean;
 }): OnboardingWallDecision {
   if (input.path.startsWith("/dashboard")) {

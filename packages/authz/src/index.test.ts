@@ -3,6 +3,7 @@ import {
   PROPERTY_EDIT_ACCESS_SQL,
   propertyReadAccessSql,
   getHostScopedDb,
+  getOrgScopedDb,
   getThreadForParticipant,
   userOwnsProperty,
   userOwnsRatePlan,
@@ -254,5 +255,17 @@ describe("getThreadForParticipant — the host side needs current access", () =>
     // legacy ownership of an org-less row), not merely be the stamped host_id.
     expect(sql).toContain("p.id = t.property_id");
     expect(sql).toContain(propertyReadAccessSql("$2"));
+  });
+});
+
+describe("getOrgScopedDb org guard", () => {
+  test("refuses an organisation the guard vetoes, before looking at membership", async () => {
+    let looked = false;
+    const db = await getOrgScopedDb(
+      { user: { id: "u1", account_type: "business" }, session: { activeOrganizationId: "demo-organisation" } },
+      { isOrgAllowed: () => false, queryOne: async () => ((looked = true), { role: "owner" } as never) },
+    );
+    expect(db).toBeNull();
+    expect(looked).toBe(false);
   });
 });

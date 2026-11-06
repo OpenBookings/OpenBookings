@@ -59,16 +59,18 @@ export async function proxy(request: NextRequest) {
   // React bug during chained navigations (vercel/next.js#63121).
   const path = request.nextUrl.pathname;
   if (path.startsWith("/dashboard") || path.startsWith("/onboarding")) {
-    // Testing mode: every host owns the demo organisation. Done here, ahead of
-    // the wall, so a host's first dashboard request already counts it.
-    if (isTestingMode()) {
+    const facts = await getOnboardingFacts(session.user.id);
+    // Testing mode: every host owns the demo organisation. Added here, ahead
+    // of the wall, so a host's first dashboard request already counts it.
+    // Outside testing mode a leftover membership has no effect.
+    const testing = isTestingMode();
+    if (testing && !facts.hasDemoMembership) {
       await withTransaction((tx) => ensureDemoMembership(tx, { userId: session.user.id }));
     }
-    const facts = await getOnboardingFacts(session.user.id);
     const decision = onboardingWallDecision({
       path,
       hasCompletedOrg: facts.hasCompletedOrg,
-      hasDemoMembership: facts.hasDemoMembership,
+      hasDemoMembership: testing,
       wizardInProgress: wizardInProgress(facts),
     });
     if (decision !== "allow") {

@@ -6,10 +6,15 @@ import { sendSecurityAlert } from "@/lib/mailing/security-alert";
 import { sendInvitationEmail } from "@/lib/mailing/invitation";
 import { forwardAuthEvent } from "@/lib/tirreno";
 import { hostTrustedOrigins } from "@/lib/trusted-origins";
+import { setOrgGuard } from "@openbookings/authz";
+import { DEMO_ORG_ID, isTestingMode } from "@openbookings/demo";
 import { cache } from "react";
 import { headers } from "next/headers";
 
 const env = readAuthEnv();
+
+// Leftover demo rows must not act outside testing mode.
+setOrgGuard((orgId) => orgId !== DEMO_ORG_ID || isTestingMode());
 
 export const auth = createHostAuth({
   baseURL: env.AUTH_BASE_URL,

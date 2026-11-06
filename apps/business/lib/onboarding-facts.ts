@@ -24,8 +24,11 @@ export type OnboardingFacts = {
   } | null;
 };
 
-export async function getOnboardingFacts(userId: string): Promise<OnboardingFacts> {
-  const row = await queryOne<{
+export async function getOnboardingFacts(
+  userId: string,
+  run: typeof queryOne = queryOne,
+): Promise<OnboardingFacts> {
+  const row = await run<{
     has_completed_org: boolean;
     has_demo_membership: boolean;
     has_wizard: boolean;

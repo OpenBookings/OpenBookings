@@ -1,7 +1,9 @@
 /**
- * The one organisation that owns every generated demo hotel. It has no
- * members, so no host ever sees it in the business app; it exists so demo
- * properties look like any other on the booking path.
+ * The one organisation that owns every generated demo hotel. In testing mode
+ * every host who signs in to the business app becomes its owner (see
+ * membership.ts), so the tester sees the demo hotels and their bookings.
+ * Outside testing mode the app ignores it, whatever rows are left over. It
+ * exists so demo properties look like any other on the booking path.
  *
  * Checkout only sells a property whose organisation confirmed that its rates
  * include VAT (an `org_consent` row for RATES_TAX_INCLUSIVE_DOC_ID), so the
