@@ -101,15 +101,21 @@ export interface AvailabilityCell {
   totalUnits: number;
   /** Units consumed by reservations on confirmed/completed bookings. */
   booked: number;
+  /** Units in an open, unexpired booking intent (a guest is paying). */
+  held: number;
   /** Units withheld by the host (maintenance, owner use). */
   blocked: number;
   /** totalUnits - booked - blocked, floored at 0. */
   computed: number;
-  /** Host's explicit number, when set. */
+  /** Host's explicit number, when set. It is the night's total, not what is left. */
   override: number | null;
-  /** override ?? computed — the number the grid shows. */
+  /** Rooms this night: the host's number, else totalUnits - blocked. Never reduced by bookings. */
+  total: number;
+  /** total - booked - held, floored at 0: what a guest can still book. */
+  left: number;
+  /** Same as `left`; the number the grid shows. */
   effective: number;
-  /** Which layer produced `effective`. Drives the detail panel's explanation. */
+  /** Which layer produced `total`. Drives the detail panel's explanation. */
   source: "computed" | "override";
   note: string | null;
   updatedBy: string | null;

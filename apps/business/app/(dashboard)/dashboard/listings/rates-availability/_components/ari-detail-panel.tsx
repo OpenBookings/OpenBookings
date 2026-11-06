@@ -200,33 +200,32 @@ function AvailabilityDetail({
         <Section title="Effective availability">
           <Field
             label="Available"
-            value={`${cell.effective} of ${cell.totalUnits}`}
+            value={`${cell.left} of ${cell.total}`}
             emphasis
           />
           <p className="text-muted-foreground text-xs">
             {cell.source === "override"
-              ? "A manual override is in effect. The computed baseline is being ignored."
-              : "Computed from units, bookings and blocks. No manual override is set."}
+              ? "Your number is the rooms for this night. Bookings come off it."
+              : "Rooms for this night come from units and blocks. No manual number is set."}
           </p>
         </Section>
 
         <Separator />
 
         <Section title="How this number is reached">
-          <Field label="Total units" value={cell.totalUnits} />
-          <Field label="Booked" value={`− ${cell.booked}`} />
+          <Field label="Capacity" value={cell.totalUnits} />
           <Field label="Blocked" value={`− ${cell.blocked}`} />
-          <Separator className="my-2" />
-          <Field
-            label="Computed baseline"
-            value={cell.computed}
-            emphasis={cell.source === "computed"}
-          />
           <Field
             label="Manual override"
             value={cell.override ?? "Not set"}
             emphasis={cell.source === "override"}
           />
+          <Separator className="my-2" />
+          <Field label="Rooms this night" value={cell.total} />
+          <Field label="Booked" value={`− ${cell.booked}`} />
+          <Field label="Held" value={`− ${cell.held}`} />
+          <Separator className="my-2" />
+          <Field label="Left to book" value={cell.left} emphasis />
         </Section>
 
         {(cell.note || updatedAt) && (
@@ -802,10 +801,10 @@ function SoldOutDetail({
         <div key={cell.date} className="space-y-0.5">
           <Field
             label={formatFullDate(cell.date)}
-            value={`${cell.effective} of ${cell.totalUnits}`}
+            value={`${cell.left} of ${cell.total}`}
           />
           <p className="text-muted-foreground text-xs">
-            {cell.booked} booked, {cell.blocked} blocked
+            {cell.booked} booked, {cell.held} held, {cell.blocked} blocked
             {cell.source === "override" && " · manual override in effect"}
           </p>
         </div>

@@ -1,6 +1,8 @@
 import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
 import {
+  bookableUnits,
   hasStayLengthDiscount,
+  nightTotal,
   resolveNightlyRates,
   type Modifier,
 } from "@openbookings/pricing";
@@ -62,6 +64,7 @@ interface AvailabilityQueryRow {
   date: string;
   effective_total: number;
   booked: number;
+  held: number;
   blocked: number;
   available_override: number | null;
   note: string | null;
@@ -75,6 +78,56 @@ interface AvailabilityQueryRow {
   closure_by: string | null;
   closure_by_name: string | null;
   closure_at: string | null;
+}
+
+/**
+ * One room type on one night. The host's number (`available_override`) is the
+ * night's total and never moves by itself; what goes down is what is left to
+ * book: total - booked - held. The same two functions decide it for guests.
+ */
+export function buildAvailabilityCell(
+  row: Pick<
+    AvailabilityQueryRow,
+    | "date"
+    | "total_units"
+    | "effective_total"
+    | "booked"
+    | "held"
+    | "blocked"
+    | "available_override"
+    | "note"
+    | "updated_by"
+    | "updated_by_name"
+    | "updated_at"
+  >,
+  closure: RoomClosureRule | null,
+): AvailabilityCell {
+  const override = row.available_override;
+  const total = nightTotal({
+    override,
+    totalRooms: row.effective_total,
+    totalUnits: row.total_units,
+    blocked: row.blocked,
+  });
+  const left = bookableUnits({ total, booked: row.booked, held: row.held });
+  return {
+    date: row.date,
+    totalUnits: row.effective_total,
+    booked: row.booked,
+    held: row.held,
+    blocked: row.blocked,
+    computed: Math.max(0, row.effective_total - row.booked - row.blocked),
+    override,
+    total,
+    left,
+    effective: left,
+    source: override === null ? "computed" : "override",
+    note: row.note,
+    updatedBy: row.updated_by,
+    updatedByName: row.updated_by_name,
+    updatedAt: row.updated_at,
+    closure,
+  };
 }
 
 interface RateQueryRow {
@@ -165,6 +218,18 @@ booked AS (
   WHERE b.status::text IN ('confirmed', 'checked_in', 'completed')
     AND res.cancelled_at IS NULL
   GROUP BY res.room_id, d.d
+),
+-- One unit per room of an open, unexpired booking intent, for each night it
+-- covers. Mirrors the held CTE in packages/db/src/availability.ts.
+held AS (
+  SELECT bir.room_id, d.d AS date, COUNT(*)::int AS units
+  FROM booking_intent_rooms bir
+  JOIN booking_intents bi ON bi.id = bir.intent_id
+  JOIN scope_rooms sr ON sr.id = bir.room_id
+  JOIN dates d ON d.d >= bi.check_in_date AND d.d < bi.check_out_date
+  WHERE bi.status = 'open'
+    AND bi.hold_expires_at > now()
+  GROUP BY bir.room_id, d.d
 )
 SELECT
   sr.id                                        AS room_id,
@@ -176,6 +241,7 @@ SELECT
   d.d::text                                    AS date,
   COALESCE(inv.total_rooms, sr.total_units)    AS effective_total,
   COALESCE(bk.units, 0)                        AS booked,
+  COALESCE(h.units, 0)                         AS held,
   COALESCE(inv.blocked_rooms, 0)               AS blocked,
   inv.available_override,
   inv.note,
@@ -193,6 +259,7 @@ FROM scope_rooms sr
 CROSS JOIN dates d
 LEFT JOIN room_inventory inv ON inv.room_id = sr.id AND inv.date = d.d
 LEFT JOIN booked bk          ON bk.room_id  = sr.id AND bk.date = d.d
+LEFT JOIN held h             ON h.room_id   = sr.id AND h.date  = d.d
 LEFT JOIN "user" u           ON u.id = inv.updated_by
 -- The room-type closure, which cascades to every rate plan on the room. Read
 -- here rather than in the rates query: it is a room-type fact, and fetching it
@@ -549,13 +616,6 @@ export async function loadAriGrid(
       rooms.set(row.room_id, room);
     }
 
-    const computed = Math.max(
-      0,
-      row.effective_total - row.booked - row.blocked,
-    );
-    const override = row.available_override;
-    const effective = override ?? computed;
-
     const closure: RoomClosureRule | null =
       row.closure_id && row.closure_start && row.closure_end
         ? {
@@ -569,23 +629,9 @@ export async function loadAriGrid(
           }
         : null;
 
-    const cell: AvailabilityCell = {
-      date: row.date,
-      totalUnits: row.effective_total,
-      booked: row.booked,
-      blocked: row.blocked,
-      computed,
-      override,
-      effective,
-      source: override === null ? "computed" : "override",
-      note: row.note,
-      updatedBy: row.updated_by,
-      updatedByName: row.updated_by_name,
-      updatedAt: row.updated_at,
-      closure,
-    };
+    const cell = buildAvailabilityCell(row, closure);
     room.availability.push(cell);
-    availabilityByRoomDate.set(`${row.room_id}|${row.date}`, effective);
+    availabilityByRoomDate.set(`${row.room_id}|${row.date}`, cell.left);
     if (closure) closureByRoomDate.set(`${row.room_id}|${row.date}`, closure);
   }
 
