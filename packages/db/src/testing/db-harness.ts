@@ -25,7 +25,7 @@ export const describeWithDb = connectionString ? describe : describe.skip;
  * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
  * branch, so a long list here makes them queue behind each other's locks.
  */
-const PENDING: string[] = ["0032_booking_events.sql"];
+const PENDING: string[] = ["0032_booking_events.sql", "0033_booking_intents.sql"];
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 
 export async function applyPendingMigrations(db: Client): Promise<void> {
