@@ -10,7 +10,6 @@
 
 import type { Queryable } from "@openbookings/db";
 import {
-  insertAvailabilityOverride,
   insertDayOfWeekModifier,
   insertDemoProperty,
   insertDemoRatePlan,
@@ -33,12 +32,11 @@ const SPREAD_METERS = 2_800;
 const METERS_PER_DEGREE = 111_320;
 
 /**
- * Dated rules (sold out, closed to arrival) run from yesterday — a guest whose
- * local date is behind the database's still starts inside them — through
- * two years of arrivals plus the longest stay a search prices (30 nights).
+ * Demo hotels are committed and never refreshed, so a dated rule must not run
+ * out: closed-to-arrival starts yesterday (a guest whose local date is behind
+ * the database's still starts inside it) and never ends.
  */
-const RULE_DAYS_BEFORE = 1;
-const RULE_DAYS_AFTER = 730 + 30;
+const OPEN_END = "9999-12-31";
 
 const ADJECTIVES = [
   "Golden", "Quiet", "Silver", "Little", "Old", "Blue", "Green", "Hidden",
@@ -90,11 +88,8 @@ export async function ensureDemoHotels(
   const organizationId = await ensureDemoOrganisation(tx);
   const eu = nearestEuPlace(i.lat, i.lon);
   const city = i.place?.split(",")[0]?.trim().slice(0, 100) || eu.capital;
-  const { rows } = await tx.query(
-    `SELECT (CURRENT_DATE - $1::int)::text AS start_date, (CURRENT_DATE + $2::int)::text AS end_date`,
-    [RULE_DAYS_BEFORE, RULE_DAYS_AFTER],
-  );
-  const range = rows[0] as { start_date: string; end_date: string };
+  const { rows } = await tx.query(`SELECT (CURRENT_DATE - 1)::text AS yesterday`);
+  const ctaRange = { startDate: (rows[0] as { yesterday: string }).yesterday, endDate: OPEN_END };
 
   const rng = seededRng(key);
   const names = hotelNames(rng, DEMO_SCENARIOS.length);
@@ -113,7 +108,7 @@ export async function ensureDemoHotels(
       organizationId,
       images: pickDemoImages(rng),
     });
-    await buildScenario(tx, rng, { propertyId, spec: SCENARIOS[scenario], range });
+    await buildScenario(tx, rng, { propertyId, spec: SCENARIOS[scenario], ctaRange });
     propertyIds.push(propertyId);
   }
   return { created: true, propertyIds };
@@ -122,9 +117,9 @@ export async function ensureDemoHotels(
 async function buildScenario(
   tx: Queryable,
   rng: Rng,
-  i: { propertyId: string; spec: ScenarioSpec; range: { start_date: string; end_date: string } },
+  i: { propertyId: string; spec: ScenarioSpec; ctaRange: { startDate: string; endDate: string } },
 ): Promise<void> {
-  const { spec, range } = i;
+  const { spec, ctaRange } = i;
   const basePrice = rng.int(70, 180);
   for (const t of spec.rooms) {
     const { roomId } = await insertDemoRoom(tx, {
@@ -139,9 +134,6 @@ async function buildScenario(
       totalUnits: typeof spec.units === "number" ? spec.units : rng.int(spec.units[0], spec.units[1]),
       imageUrl: pickRoomImage(rng),
     });
-    if (spec.soldOut) {
-      await insertAvailabilityOverride(tx, { roomId, startDate: range.start_date, endDate: range.end_date, available: 0 });
-    }
 
     const mealPlan = rng.pick(MEAL_PLANS);
     const bar = Math.round(basePrice * t.priceFactor);
@@ -152,7 +144,7 @@ async function buildScenario(
     for (const plan of plans) {
       const { ratePlanId } = await insertDemoRatePlan(tx, { roomId, ...plan, minStay: spec.minStay, mealPlan });
       if (spec.closedToArrival) {
-        await insertRestriction(tx, { ratePlanId, startDate: range.start_date, endDate: range.end_date, closedToArrival: true });
+        await insertRestriction(tx, { ratePlanId, ...ctaRange, closedToArrival: true });
       }
       if (spec.weekendSurcharge !== null) {
         await insertDayOfWeekModifier(tx, { ratePlanId, days: [5, 6], amount: spec.weekendSurcharge });

@@ -91,15 +91,17 @@ const COMPACT_SINGLE: DemoRoomTemplate = {
 export type ScenarioSpec = {
   tier: "flex" | "standard";
   rooms: readonly DemoRoomTemplate[];
-  /** Units per room type: a fixed number, or a range drawn per room. */
+  /**
+   * Units per room type: a fixed number, or a range drawn per room. Zero is
+   * how sold out never ends: no dated stock rows that a committed demo hotel
+   * would outlive, and search reports it as `sold_out`.
+   */
   units: number | readonly [min: number, max: number];
   /** A non-refundable plan beside each refundable one. */
   nonRefundable: boolean;
   /** `rate_plans.min_stay` of every plan. */
   minStay: number;
-  /** `available_override = 0` on every room, every night. */
-  soldOut: boolean;
-  /** A closed-to-arrival restriction on every plan, every day. */
+  /** An open-ended closed-to-arrival restriction on every plan. */
   closedToArrival: boolean;
   /** Euros added on Friday and Saturday nights (JS `getDay` 5 and 6). */
   weekendSurcharge: number | null;
@@ -111,7 +113,6 @@ const BASE: Omit<ScenarioSpec, "tier" | "rooms"> = {
   units: [3, 6],
   nonRefundable: false,
   minStay: 1,
-  soldOut: false,
   closedToArrival: false,
   weekendSurcharge: null,
   touristTax: null,
@@ -120,7 +121,7 @@ const BASE: Omit<ScenarioSpec, "tier" | "rooms"> = {
 export const SCENARIOS: Readonly<Record<DemoScenario, ScenarioSpec>> = {
   normal: { ...BASE, tier: "flex", rooms: [DOUBLE, TWIN, FAMILY], units: [6, 10], nonRefundable: true },
   last_room: { ...BASE, tier: "flex", rooms: [DOUBLE], units: 1 },
-  sold_out: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], soldOut: true },
+  sold_out: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], units: 0 },
   min_stay: { ...BASE, tier: "standard", rooms: [DOUBLE, FAMILY], minStay: 5 },
   no_arrival: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], closedToArrival: true },
   non_refundable: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], nonRefundable: true },

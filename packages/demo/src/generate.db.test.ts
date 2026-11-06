@@ -83,29 +83,33 @@ describeWithDb("demo hotels", () => {
     expect(second).toEqual({ created: false, propertyIds: [] });
   });
 
-  test("the same area always gets the same hotels", async () => {
-    const area = { lat: 46.31, lon: 15.12, place: null };
+  test("the same area always gets the same hotels, whatever the place label", async () => {
+    const area = { lat: 46.31, lon: 15.12 };
     const read = async (ids: string[]) =>
       (
         await db.query(
-          `SELECT p.name, p.slug, p.city, array_agg(rp.bar ORDER BY r.name, rp.name) AS bars
+          `SELECT p.name, p.slug, ST_AsText(p.location) AS location, array_agg(rp.bar ORDER BY r.name, rp.name) AS bars
            FROM properties p JOIN rooms r ON r.property_id = p.id JOIN rate_plans rp ON rp.room_id = r.id
            WHERE p.id = ANY($1::uuid[]) GROUP BY p.id ORDER BY p.slug`,
           [ids],
         )
       ).rows;
+    const cities = async (ids: string[]) =>
+      (await db.query(`SELECT DISTINCT city FROM properties WHERE id = ANY($1::uuid[])`, [ids])).rows.map((r) => r.city);
 
     await db.query("SAVEPOINT fresh");
-    const a = await ensureDemoHotels(db, area);
+    const a = await ensureDemoHotels(db, { ...area, place: null });
     const first = await read(a.propertyIds);
+    // No place given: the nearest EU capital names the city.
+    expect(await cities(a.propertyIds)).toEqual(["Ljubljana"]);
     await db.query("ROLLBACK TO SAVEPOINT fresh");
 
     expect(await hasDemoHotelsNear(db, area)).toBe(false);
-    const b = await ensureDemoHotels(db, area);
+    const b = await ensureDemoHotels(db, { ...area, place: "Celje, Slovenia" });
     expect(b.created).toBe(true);
+    // Only the label follows the place; names, spots and prices follow the area.
     expect(await read(b.propertyIds)).toEqual(first);
-    // No place given: the nearest EU capital names the city.
-    expect(first[0].city).toBe("Ljubljana");
+    expect(await cities(b.propertyIds)).toEqual(["Celje"]);
     expect(new Set(first.map((r) => r.name)).size).toBe(8);
   });
 
@@ -114,26 +118,31 @@ describeWithDb("demo hotels", () => {
     const ids = await scenarioIds(propertyIds);
     expect([...ids.keys()]).toEqual([...DEMO_SCENARIOS]);
 
-    const { rows } = await db.query(`SELECT (CURRENT_DATE + 40)::text AS check_in, (CURRENT_DATE + 43)::text AS check_out`);
-    const availability = await loadSearchAvailability(db, {
-      propertyIds,
-      checkIn: rows[0].check_in,
-      checkOut: rows[0].check_out,
-      adults: 2,
-      children: 0,
-      rooms: 1,
-      now: new Date(),
-    });
-    const of = (s: DemoScenario) => availability.get(ids.get(s)!);
+    // Soon, and long after the hotels were made: nothing here may run out.
+    for (const daysOut of [40, 5 * 365]) {
+      const { rows } = await db.query(`SELECT (CURRENT_DATE + $1::int)::text AS check_in, (CURRENT_DATE + $1::int + 3)::text AS check_out`, [
+        daysOut,
+      ]);
+      const availability = await loadSearchAvailability(db, {
+        propertyIds,
+        checkIn: rows[0].check_in,
+        checkOut: rows[0].check_out,
+        adults: 2,
+        children: 0,
+        rooms: 1,
+        now: new Date(),
+      });
+      const of = (s: DemoScenario) => availability.get(ids.get(s)!);
 
-    expect(of("normal")).toMatchObject({ bookable: true, reason: null });
-    expect(of("last_room")).toMatchObject({ bookable: true, reason: null });
-    expect(of("sold_out")).toMatchObject({ bookable: false, reason: "sold_out" });
-    expect(of("min_stay")).toMatchObject({ bookable: false, reason: "min_stay" });
-    expect(of("no_arrival")).toMatchObject({ bookable: false, reason: "closed_to_arrival" });
-    expect(of("non_refundable")).toMatchObject({ bookable: true, reason: null });
-    expect(of("weekend_prices")).toMatchObject({ bookable: true, reason: null });
-    expect(of("small_rooms")).toMatchObject({ bookable: false, reason: "too_many_guests" });
+      expect(of("normal")).toMatchObject({ bookable: true, reason: null });
+      expect(of("last_room")).toMatchObject({ bookable: true, reason: null });
+      expect(of("sold_out")).toMatchObject({ bookable: false, reason: "sold_out" });
+      expect(of("min_stay")).toMatchObject({ bookable: false, reason: "min_stay" });
+      expect(of("no_arrival")).toMatchObject({ bookable: false, reason: "closed_to_arrival" });
+      expect(of("non_refundable")).toMatchObject({ bookable: true, reason: null });
+      expect(of("weekend_prices")).toMatchObject({ bookable: true, reason: null });
+      expect(of("small_rooms")).toMatchObject({ bookable: false, reason: "too_many_guests" });
+    }
   });
 
   test("scenario stock, plans and prices", async () => {
@@ -175,18 +184,16 @@ describeWithDb("demo hotels", () => {
     }
     for (const r of await rooms("min_stay")) for (const p of r.plans) expect(p.minStay).toBe(5);
 
-    // Sold out and closed to arrival from today through the whole search horizon.
+    // Sold out and closed to arrival from today on, with no end date to outlive.
     const soldOut = await rooms("sold_out");
-    const { rows: inv } = await db.query(
-      `SELECT count(*)::int AS n, bool_and(available_override = 0) AS all_zero,
-              min(date) <= CURRENT_DATE AS from_today, max(date) >= CURRENT_DATE + 760 AS to_horizon
-       FROM room_inventory WHERE room_id = ANY($1::uuid[])`,
-      [soldOut.map((r) => r.id)],
-    );
-    expect(inv[0]).toMatchObject({ all_zero: true, from_today: true, to_horizon: true });
+    for (const r of soldOut) expect(r.total_units).toBe(0);
+    const { rows: inv } = await db.query(`SELECT count(*)::int AS n FROM room_inventory WHERE room_id = ANY($1::uuid[])`, [
+      soldOut.map((r) => r.id),
+    ]);
+    expect(inv[0].n).toBe(0);
 
     const { rows: cta } = await db.query(
-      `SELECT bool_and(rpr.closed_to_arrival AND rpr.start_date <= CURRENT_DATE AND rpr.end_date >= CURRENT_DATE + 760) AS covered,
+      `SELECT bool_and(rpr.closed_to_arrival AND rpr.start_date <= CURRENT_DATE AND rpr.end_date = '9999-12-31') AS covered,
               count(DISTINCT rpr.rate_plan_id)::int AS plans,
               (SELECT count(*)::int FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id WHERE r.property_id = $1) AS all_plans
        FROM rate_plan_restrictions rpr JOIN rate_plans rp ON rp.id = rpr.rate_plan_id JOIN rooms r ON r.id = rp.room_id
