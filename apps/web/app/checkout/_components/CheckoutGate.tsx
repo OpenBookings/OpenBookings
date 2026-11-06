@@ -7,17 +7,6 @@ import { AuthFormFields, AuthFormPhaseProvider } from '@/components/auth/AuthFor
 import { Backdrop } from './Backdrop';
 
 /**
- * Where sign-in returns to.
- *
- * A bare path rather than an absolute URL: the magic-link route resolves it
- * against our own origin and refuses anything that lands elsewhere, and
- * Better Auth checks social callbacks against `trustedOrigins`. Landing back
- * on /checkout re-runs this gate, which now finds a session and moves on to
- * the next step.
- */
-const GATE_CALLBACK_URL = '/checkout';
-
-/**
  * The screen that stands between arriving at /checkout and being able to pay.
  *
  * Three things have to be true before a Checkout Session is worth creating: we
@@ -68,6 +57,16 @@ export type CheckoutGateProps = {
   verified: boolean;
   /** Where the Turnstile widget mounts. Must stay in the DOM — see above. */
   turnstileRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Where sign-in returns to: this checkout's own path, `/checkout/<intentId>`.
+   *
+   * A bare path rather than an absolute URL: the magic-link route resolves it
+   * against our own origin and refuses anything that lands elsewhere, and
+   * Better Auth checks social callbacks against `trustedOrigins`. Landing back
+   * here re-runs this gate, which now finds a session and moves on to the
+   * next step.
+   */
+  callbackURL: string;
 };
 
 type StepStatus = 'done' | 'active' | 'pending';
@@ -167,6 +166,7 @@ export function CheckoutGate({
   viewer,
   verified,
   turnstileRef,
+  callbackURL,
 }: CheckoutGateProps) {
   const signedIn = viewer !== null;
 
@@ -235,7 +235,7 @@ export function CheckoutGate({
           {!signedIn ? (
             <div className="mt-6 flex flex-col items-center gap-4">
               <AuthFormPhaseProvider>
-                <AuthFormFields callbackURL={GATE_CALLBACK_URL} />
+                <AuthFormFields callbackURL={callbackURL} />
               </AuthFormPhaseProvider>
             </div>
           ) : (

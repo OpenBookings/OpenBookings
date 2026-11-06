@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Clock, HelpCircle, XCircle } from 'lucide-react';
 import * as Sentry from '@sentry/nextjs';
+import { getPool, loadIntentBySession } from '@openbookings/db';
 import { retrieveBookingCheckout } from '@openbookings/stripe';
-import { getBookingSummary } from '../_lib/booking';
+import { getServerSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { describeDeclineCode } from '../_lib/errors';
 
@@ -120,9 +121,13 @@ async function resolveOutcome(sessionId: string | undefined): Promise<Outcome> {
     // The Session was created on the host's connected account, so that is
     // where it has to be looked up. A failure to find the booking lands in the
     // catch below as "unverified": we cannot say what happened to the money.
-    const { stripeAccountId } = await getBookingSummary();
-    if (!stripeAccountId) throw new Error('Booking has no connected Stripe account');
-    session = await retrieveBookingCheckout(sessionId, stripeAccountId);
+    // The guest's own intent holds the account its session was made on.
+    const auth = await getServerSession();
+    const intent = auth?.user?.id
+      ? await loadIntentBySession(getPool(), { sessionId, userId: auth.user.id })
+      : null;
+    if (!intent?.paymentAccountId) throw new Error('No booking intent of this guest has this session');
+    session = await retrieveBookingCheckout(sessionId, intent.paymentAccountId);
   } catch (err) {
     // Stripe positively confirming there is no such Session is different from
     // Stripe being unreachable: the id is wrong, and there is no payment of

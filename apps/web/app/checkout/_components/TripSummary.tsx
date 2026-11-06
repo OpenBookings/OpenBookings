@@ -18,16 +18,36 @@ import { useCheckoutForm } from '@stripe/react-stripe-js/checkout';
  * you act on.
  */
 
-export type TripSummaryProps = {
-  logoUrl: string;
-  propertyName: string;
-  locationLabel: string | null;
-
+/** One room of the booking, as listed. */
+export type TripSummaryRoom = {
+  /** The intent's own row; a room type can be picked twice. */
+  id: string;
   roomName: string;
   roomType: string | null;
   bedType: string | null;
   sizeSqm: number | null;
   roomImageUrl: string;
+  ratePlanName: string;
+  /** "2 adults · 1 child", this room's own party. */
+  guestsLabel: string;
+};
+
+/** One set of cancellation terms, and the rooms it applies to. */
+export type TripSummaryCancellation = {
+  /** "Flex", "Non-refundable", ... */
+  tierLabel: string;
+  /** The policy as sentences with exact local deadlines, most urgent first. */
+  policyLines: string[];
+  roomNames: string[];
+};
+
+export type TripSummaryProps = {
+  logoUrl: string;
+  propertyName: string;
+  locationLabel: string | null;
+
+  /** In the order the guest picked them. */
+  rooms: TripSummaryRoom[];
 
   checkInDay: string;
   checkInMonth: string;
@@ -36,13 +56,10 @@ export type TripSummaryProps = {
   checkInTime: string | null;
   checkOutTime: string | null;
   nightsLabel: string;
-  guestsLabel: string;
 
-  /** "Flex", "Non-refundable", ... */
-  cancellationTierLabel: string;
-  /** The policy as sentences with exact local deadlines, most urgent first. */
-  policyLines: string[];
-  /** A Non-refundable rate: the guest confirms it before the card form shows. */
+  /** One entry per distinct set of terms: rooms on the same terms share one. */
+  cancellations: TripSummaryCancellation[];
+  /** A Non-refundable rate on any room: the guest confirms it before the card form shows. */
   requiresNonRefundableConsent: boolean;
 };
 
@@ -72,18 +89,14 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 function RoomIdentity({
   logoUrl,
   propertyName,
-  roomName,
-  roomType,
-  roomImageUrl,
-  attributes,
+  rooms,
 }: {
   logoUrl: string;
   propertyName: string;
-  roomName: string;
-  roomType: string | null;
-  roomImageUrl: string;
-  attributes: string[];
+  rooms: TripSummaryRoom[];
 }) {
+  // One room keeps the page's heading; several share it, so none claims it.
+  const Heading = rooms.length === 1 ? 'h1' : 'h2';
   return (
     <div className="space-y-7 sm:space-y-9">
       <div className="flex items-center justify-center gap-4">
@@ -101,26 +114,37 @@ function RoomIdentity({
         />
       </div>
 
-      <div className="flex items-center gap-5 sm:gap-7">
-        {roomImageUrl && (
-          <Image
-            src={roomImageUrl}
-            alt=""
-            width={224}
-            height={126}
-            className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
-            {roomName}
-            {roomType && roomType !== roomName ? ` ${roomType}` : ''}
-          </h1>
-          {attributes.length > 0 && (
-            <p className="mt-3 text-sm text-white/55">{attributes.join(' · ')}</p>
-          )}
-        </div>
-      </div>
+      {rooms.length > 1 && <h1 className="sr-only">Your rooms at {propertyName}</h1>}
+      {rooms.map((room) => {
+        const attributes = [
+          room.bedType && `${room.bedType} bed`,
+          room.sizeSqm && `${room.sizeSqm} m²`,
+          room.guestsLabel,
+          room.ratePlanName,
+        ].filter((value): value is string => Boolean(value));
+        return (
+          <div key={room.id} className="flex items-center gap-5 sm:gap-7">
+            {room.roomImageUrl && (
+              <Image
+                src={room.roomImageUrl}
+                alt=""
+                width={224}
+                height={126}
+                className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <Heading className="font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
+                {room.roomName}
+                {room.roomType && room.roomType !== room.roomName ? ` ${room.roomType}` : ''}
+              </Heading>
+              {attributes.length > 0 && (
+                <p className="mt-3 text-sm text-white/55">{attributes.join(' · ')}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -313,17 +337,20 @@ function Ledger() {
  * times in the property's zone: "until Mon 9 Nov 2026, 15:00" answers the
  * question a rule like "24 hours before check-in" only describes.
  */
-function PolicyFooter({
-  cancellationTierLabel,
+function PolicyPanel({
+  tierLabel,
   policyLines,
+  roomsLabel,
 }: {
-  cancellationTierLabel: string;
+  tierLabel: string;
   policyLines: string[];
+  /** Which rooms these terms are for, when the rooms' terms differ. */
+  roomsLabel: string | null;
 }) {
   const [headline, ...rest] = policyLines;
   const freeWindow = headline?.startsWith('Free cancellation') || headline?.startsWith('Full refund');
   return (
-    <footer>
+    <>
       {/*
         Given a panel of its own, and the page's accent, because this is the
         sentence that lets someone press pay: the risk of committing is the last
@@ -334,7 +361,8 @@ function PolicyFooter({
       */}
       <div className="rounded-2xl border border-[#a5b4f0]/25 bg-[#a5b4f0]/[0.07] p-5 backdrop-blur-md sm:p-6">
         <p className="text-[11px] font-semibold tracking-[0.18em] text-white/55 uppercase">
-          Cancellation · {cancellationTierLabel}
+          Cancellation · {tierLabel}
+          {roomsLabel && ` · ${roomsLabel}`}
         </p>
         {headline && (
           <p className="mt-2 flex items-start gap-3">
@@ -355,6 +383,23 @@ function PolicyFooter({
             ))}
           </ul>
         )}
+      </div>
+    </>
+  );
+}
+
+function PolicyFooter({ cancellations }: { cancellations: TripSummaryCancellation[] }) {
+  return (
+    <footer>
+      <div className="space-y-4">
+        {cancellations.map((terms) => (
+          <PolicyPanel
+            key={`${terms.tierLabel}|${terms.policyLines.join('|')}`}
+            tierLabel={terms.tierLabel}
+            policyLines={terms.policyLines}
+            roomsLabel={cancellations.length > 1 ? terms.roomNames.join(', ') : null}
+          />
+        ))}
       </div>
 
       <p className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-white/60">
@@ -390,24 +435,11 @@ function PolicyFooter({
 /* ─────────────────────────── composition ─────────────────────────── */
 
 export function TripSummary(props: TripSummaryProps) {
-  const attributes = [
-    props.bedType && `${props.bedType} bed`,
-    props.sizeSqm && `${props.sizeSqm} m²`,
-    props.guestsLabel,
-  ].filter((value): value is string => Boolean(value));
-
   return (
     // Spacing carries the hierarchy: wide gaps between the four movements,
     // tight ones inside each. The rhythm is what stops this reading as a list.
     <section className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 space-y-8 motion-safe:duration-500 sm:space-y-10">
-      <RoomIdentity
-        logoUrl={props.logoUrl}
-        propertyName={props.propertyName}
-        roomName={props.roomName}
-        roomType={props.roomType}
-        roomImageUrl={props.roomImageUrl}
-        attributes={attributes}
-      />
+      <RoomIdentity logoUrl={props.logoUrl} propertyName={props.propertyName} rooms={props.rooms} />
 
       <StayRail
         checkInDay={props.checkInDay}
@@ -421,7 +453,7 @@ export function TripSummary(props: TripSummaryProps) {
 
       <Ledger />
 
-      <PolicyFooter cancellationTierLabel={props.cancellationTierLabel} policyLines={props.policyLines} />
+      <PolicyFooter cancellations={props.cancellations} />
     </section>
   );
 }

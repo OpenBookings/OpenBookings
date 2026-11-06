@@ -11,6 +11,8 @@ export type CheckoutNoticeProps = {
   onRetry?: () => void;
   /** "Try again" reads wrong for a lapsed hold, which is a fresh start. */
   retryLabel?: string;
+  /** Where "Back to the property" goes: the property page, when we know it. */
+  backHref?: string;
 };
 
 /**
@@ -22,7 +24,7 @@ export type CheckoutNoticeProps = {
  * the guest to keep pressing it. Those cases get a way out of the page
  * instead.
  */
-export function CheckoutNotice({ copy, onRetry, retryLabel = 'Try again' }: CheckoutNoticeProps) {
+export function CheckoutNotice({ copy, onRetry, retryLabel = 'Try again', backHref = '/' }: CheckoutNoticeProps) {
   return (
     <div
       role="alert"
@@ -44,7 +46,7 @@ export function CheckoutNotice({ copy, onRetry, retryLabel = 'Try again' }: Chec
           variant="outline"
           className="h-12 w-full rounded-xl border-neutral-300 text-base font-semibold"
         >
-          <Link href="/">Back to the property</Link>
+          <Link href={backHref}>Back to the property</Link>
         </Button>
       )}
     </div>

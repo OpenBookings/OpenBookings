@@ -23,14 +23,16 @@ import { CheckoutNotice } from './CheckoutNotice';
  * leak; the webhook reads it back from `customer_details`.
  *
  * What is left here is only what Stripe cannot know about: our room hold, and
- * the page-level takeovers for a session that has lapsed or already been paid.
+ * the takeovers for a hold that has lapsed or a session already paid.
  */
 
 export type PaymentCardProps = {
-  /** Unix seconds the Session lapses at, or null if the route didn't say. */
-  expiresAt: number | null;
+  /** The intent's hold has run out (`useHoldCountdown`), so the form must go. */
+  holdLapsed: boolean;
   /** Asks the parent for a brand new Session. */
   onRestart: () => void;
+  /** The property page, where a lapsed hold starts again. */
+  backHref: string;
   /**
    * A Non-refundable rate (Annex B B.4.3): the guest ticks that they
    * understand before the card form appears. The form has its own pay
@@ -39,53 +41,24 @@ export type PaymentCardProps = {
   requiresNonRefundableConsent?: boolean;
 };
 
-/** `setTimeout` treats delays past this as zero and fires immediately. */
-const MAX_TIMEOUT_MS = 2 ** 31 - 1;
-
 function CardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-3xl bg-white/70 p-4 shadow-2xl backdrop-blur-md sm:p-5">{children}</div>
   );
 }
 
-export function PaymentCard({ expiresAt, onRestart, requiresNonRefundableConsent = false }: PaymentCardProps) {
+export function PaymentCard({
+  holdLapsed,
+  onRestart,
+  backHref,
+  requiresNonRefundableConsent = false,
+}: PaymentCardProps) {
   const checkoutState = useCheckoutForm();
   const [consented, setConsented] = useState(false);
-  const [holdLapsed, setHoldLapsed] = useState(false);
+  // Stripe refusing a confirm because the session expired; the countdown
+  // covers the hold itself.
+  const [sessionLapsed, setSessionLapsed] = useState(false);
   const [formFailed, setFormFailed] = useState(false);
-
-  /**
-   * Watches the hold rather than waiting for Stripe to refuse the payment.
-   *
-   * A guest who opens checkout and comes back an hour later would otherwise
-   * fill in a card, press pay, and be told something vague. Timers are also
-   * throttled in background tabs and stop entirely while a laptop sleeps, so
-   * the wall clock is rechecked whenever the tab becomes visible again rather
-   * than trusted to have fired.
-   */
-  useEffect(() => {
-    if (expiresAt === null) return;
-
-    const deadline = expiresAt * 1000;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const check = () => {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        setHoldLapsed(true);
-        return;
-      }
-      clearTimeout(timer);
-      timer = setTimeout(check, Math.min(remaining, MAX_TIMEOUT_MS));
-    };
-
-    check();
-    document.addEventListener('visibilitychange', check);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('visibilitychange', check);
-    };
-  }, [expiresAt]);
 
   // Reported from an effect rather than inline: the provider's error branch
   // re-renders, and reporting during render would file the same issue again
@@ -121,7 +94,7 @@ export function PaymentCard({ expiresAt, onRestart, requiresNonRefundableConsent
         const result = await checkout.confirm({ formConfirmEvent: event });
         if (result.type === 'error') {
           if (isExpiredSessionError(result.error)) {
-            setHoldLapsed(true);
+            setSessionLapsed(true);
             return;
           }
           // Left for Stripe to display; recorded here so a systematic failure
@@ -141,8 +114,8 @@ export function PaymentCard({ expiresAt, onRestart, requiresNonRefundableConsent
     [checkout]
   );
 
-  if (holdLapsed) {
-    return <CheckoutNotice copy={CHECKOUT_EXPIRED} onRetry={onRestart} retryLabel="Start again" />;
+  if (holdLapsed || sessionLapsed) {
+    return <CheckoutNotice copy={CHECKOUT_EXPIRED} backHref={backHref} />;
   }
 
   if (checkoutState.type === 'loading') {
@@ -170,7 +143,7 @@ export function PaymentCard({ expiresAt, onRestart, requiresNonRefundableConsent
   // Session that is already done. Showing the form again invites a second
   // payment for the same room.
   if (session.status.type === 'expired') {
-    return <CheckoutNotice copy={CHECKOUT_EXPIRED} onRetry={onRestart} retryLabel="Start again" />;
+    return <CheckoutNotice copy={CHECKOUT_EXPIRED} backHref={backHref} />;
   }
   if (session.status.type === 'complete') {
     return <CheckoutNotice copy={CHECKOUT_ALREADY_PAID} />;

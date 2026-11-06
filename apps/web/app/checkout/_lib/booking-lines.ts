@@ -18,39 +18,46 @@ export function toCents(majorUnits: number): number {
 }
 
 /**
- * What the guest pays for a stay: the room, per night, plus the tourist tax
- * worked out from the property's own rules, one line per charge.
+ * What the guest pays for a booking intent: per room, one line for the whole
+ * stay (its nights summed exactly, then rounded once to cents), followed by
+ * that room's tourist tax. The nights are the intent's own prices, fixed when
+ * the rooms were held, so nothing is re-priced here.
  *
  * Rates include VAT and every mandatory fee by contract with the host — every
  * organisation confirms it on record before it can set a price (see
  * `propertyRatesConfirmed`). Tourist tax is the one thing added on top, and it
  * is shown as its own lines so the guest can see the all-in total build up,
- * and so it never carries VAT. The unit price stays visible, so "€185 × 3"
- * reconciles by eye. `properties.tax_rate` is not an input on purpose.
+ * and so it never carries VAT. `properties.tax_rate` is not an input on purpose.
  */
-export function buildBookingLines(stay: {
-  roomName: string;
-  roomType: string | null;
-  pricePerNight: number;
-  nights: number;
-  touristTax?: TouristTaxLine[];
-}): BookingLine[] {
-  return [
-    {
-      name: `${stay.roomName}${stay.roomType ? ` ${stay.roomType}` : ''}`,
-      unitAmountCents: toCents(stay.pricePerNight),
-      quantity: stay.nights,
-      kind: 'stay',
-    },
-    ...(stay.touristTax ?? []).map(
-      (line): BookingLine => ({
-        name: `Tourist tax · ${line.label}`,
-        unitAmountCents: toCents(line.amount),
+export function buildIntentLines(
+  rooms: {
+    roomName: string;
+    roomType: string | null;
+    nights: { date: string; price: number }[];
+    touristTaxLines: TouristTaxLine[];
+  }[],
+): BookingLine[] {
+  return rooms.flatMap((room): BookingLine[] => {
+    const n = room.nights.length;
+    return [
+      {
+        name: `${room.roomName}${room.roomType ? ` ${room.roomType}` : ''} · ${n} ${n === 1 ? 'night' : 'nights'}`,
+        unitAmountCents: toCents(room.nights.reduce((sum, night) => sum + night.price, 0)),
         quantity: 1,
-        kind: 'tourist_tax',
-      }),
-    ),
-  ];
+        kind: 'stay',
+      },
+      ...taxLines(room.touristTaxLines),
+    ];
+  });
+}
+
+function taxLines(lines: TouristTaxLine[]): BookingLine[] {
+  return lines.map((line) => ({
+    name: `Tourist tax · ${line.label}`,
+    unitAmountCents: toCents(line.amount),
+    quantity: 1,
+    kind: 'tourist_tax',
+  }));
 }
 
 /** The room lines alone, in minor units: what commission is taken on. */

@@ -30,7 +30,11 @@ export type CheckoutErrorCode =
   /** The Turnstile check did not pass, so the Session was never requested. */
   | 'verification_failed'
   /** Nobody is signed in, so there is no guest to attach the booking to. */
-  | 'auth_required';
+  | 'auth_required'
+  /** The intent's hold ran out (or the guest replaced it): its rooms are no longer held. */
+  | 'hold_expired'
+  /** The intent's session was already paid; another would charge twice. */
+  | 'already_paid';
 
 export type CheckoutErrorCopy = {
   message: string;
@@ -77,6 +81,17 @@ const CHECKOUT_ERRORS: Record<CheckoutErrorCode, CheckoutErrorCopy> = {
     // is exactly the right recovery, hence retryable.
     message: 'Your sign-in expired before we could start the payment. Nothing has been charged — please sign in again.',
     retryable: true,
+  },
+  hold_expired: {
+    // Not retryable in place: this hold is over, and only a new one — from
+    // the property page, where availability is checked again — can be paid.
+    message:
+      'Your room was only held for a short while and that hold has now lapsed. Nothing has been charged — start again to check whether it is still free.',
+    retryable: false,
+  },
+  already_paid: {
+    message: 'This booking has already been paid. Do not pay again — check your email for the confirmation.',
+    retryable: false,
   },
 };
 
@@ -190,14 +205,10 @@ export const STRIPE_JS_UNAVAILABLE: CheckoutErrorCopy = {
 };
 
 /**
- * The hold ran out while the page was open. Retryable, but only in the sense
- * that a fresh Session is worth asking for — the old one is unusable.
+ * The hold ran out while the page was open. Starting again means a new hold
+ * from the property page, so the notice links there instead of retrying.
  */
-export const CHECKOUT_EXPIRED: CheckoutErrorCopy = {
-  message:
-    'Your room was only held for a short while and that hold has now lapsed. Nothing has been charged — start again to check whether it is still free.',
-  retryable: true,
-};
+export const CHECKOUT_EXPIRED: CheckoutErrorCopy = CHECKOUT_ERRORS.hold_expired;
 
 /** Stripe.js loaded but an Element inside the form never rendered. */
 export const ELEMENT_LOAD_FAILED: CheckoutErrorCopy = {
@@ -207,10 +218,7 @@ export const ELEMENT_LOAD_FAILED: CheckoutErrorCopy = {
 };
 
 /** The session was already paid — a back button or a second tab. */
-export const CHECKOUT_ALREADY_PAID: CheckoutErrorCopy = {
-  message: 'This booking has already been paid. Do not pay again — check your email for the confirmation.',
-  retryable: false,
-};
+export const CHECKOUT_ALREADY_PAID: CheckoutErrorCopy = CHECKOUT_ERRORS.already_paid;
 
 /* -------------------------------------------------------------------------
  * Decline mapping
