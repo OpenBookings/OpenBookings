@@ -4,6 +4,7 @@ import {
   propertyReadAccessSql,
   getHostScopedDb,
   getOrgScopedDb,
+  userCan,
   getThreadForParticipant,
   userOwnsProperty,
   userOwnsRatePlan,
@@ -267,5 +268,25 @@ describe("getOrgScopedDb org guard", () => {
     );
     expect(db).toBeNull();
     expect(looked).toBe(false);
+  });
+});
+
+describe("demo organisation in testing mode", () => {
+  const session = { user: { id: "u1", account_type: "business" }, session: { activeOrganizationId: "demo-organisation" } };
+
+  test("getOrgScopedDb allows it when testing is on", async () => {
+    const db = await getOrgScopedDb(session, { testing: true, queryOne: async () => ({ role: "owner" }) as never });
+    expect(db?.organizationId).toBe("demo-organisation");
+  });
+
+  test("userCan binds the testing decision as the third parameter", async () => {
+    for (const testing of [true, false]) {
+      let values: unknown[] = [];
+      await userCan(session, "p1", "property:update" as never, {
+        testing,
+        queryOne: async (_sql: string, v?: unknown[]) => ((values = v ?? []), null) as never,
+      });
+      expect(values).toEqual(["p1", "u1", testing]);
+    }
   });
 });
