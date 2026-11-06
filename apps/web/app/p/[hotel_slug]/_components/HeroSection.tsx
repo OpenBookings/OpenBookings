@@ -35,14 +35,14 @@ export function HeroSection({ hotel }: { hotel: HotelPageData }) {
         </div>
 
         <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
+          <a
+            href="#rooms"
             className="min-w-44 max-w-xs w-full bg-black/30 backdrop-blur-2xl rounded-xl border border-white/20 shadow-2xl px-6 py-4 flex items-center justify-center hover:bg-black/50 transition-colors"
           >
             <span className="text-xl sm:text-2xl font-serif whitespace-nowrap text-white">
               Book Now
             </span>
-          </button>
+          </a>
 
           <div className="flex flex-col items-center">
             <span className="text-base text-white/60 select-none">Scroll for more</span>
