@@ -15,8 +15,7 @@
 import { getPool, loadIntent, type BookingIntentStatus, type Queryable } from '@openbookings/db';
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
 import { isTestingMode } from '@openbookings/demo';
-import { buildIntentLines, stayCents, type BookingLine } from './booking-lines';
-import { applicationFeeCents } from '@openbookings/stripe';
+import { buildIntentLines, type BookingLine } from './booking-lines';
 import type { PropertyCancellationTier } from '@openbookings/pricing';
 import { checkoutCancellationTerms, type CheckoutCancellationTerms } from './cancellation-terms';
 
@@ -109,7 +108,6 @@ type PropertyRow = {
   cancellation_tier: PropertyCancellationTier;
   is_demo: boolean;
   rates_confirmed: boolean;
-  commission_rate: string;
   stripe_account_id: string | null;
   hero_image_url: string | null;
   logo_url: string | null;
@@ -128,7 +126,6 @@ const PROPERTY_QUERY = `
       select 1 from org_consent oc
       where oc.organization_id = p.organization_id and oc.doc_id = $2
     )                   as rates_confirmed,
-    p.commission_rate,
     p.stripe_account_id,
     hero.url            as hero_image_url,
     logo.url            as logo_url
@@ -194,22 +191,6 @@ function parseDate(value: string): Date {
 /** "14:00:00" → "14:00". Seconds are noise on an arrival time. */
 function trimSeconds(value: string | null): string | null {
   return value ? value.slice(0, 5) : null;
-}
-
-/**
- * The commission on these lines. A rate that cannot be a commission (someone
- * typing `4.5` for 4.5%) must not take the checkout page down, and must not
- * be charged either: NaN makes the booking fail `assertChargeable` in the
- * route as a handled, non-retryable error.
- */
-function commissionCents(lines: BookingLine[], rate: string): number {
-  try {
-    // The stay only. Tourist tax is the host's to pay to their town, and
-    // OpenBookings never takes commission on it.
-    return applicationFeeCents(stayCents(lines), Number(rate));
-  } catch {
-    return Number.NaN;
-  }
 }
 
 /**
@@ -317,8 +298,12 @@ export async function getBookingSummary(
     intentTotal: intent.snapshot.total,
     touristTaxTotal: intent.snapshot.touristTaxTotal,
     // OpenBookings' commission on the stay, excluding tourist tax, in the
-    // units Stripe wants. Zero until the fee is switched on for this deployment.
-    platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, property.commission_rate) : 0,
+    // units Stripe wants: the one the intent recorded when the rooms were held,
+    // not one from today's rate. Zero until the fee is switched on for this
+    // deployment. A malformed value reads as NaN, which `assertChargeable` in
+    // the route refuses as a handled, non-retryable error (as it does a fee
+    // below zero or not below the total).
+    platformFeeCents: applicationFeeEnabled() ? Number(intent.snapshot.commissionCents) : 0,
     currency: intent.snapshot.currency.toLowerCase(),
 
     // The host's own connected account: the booking is charged on it. The env

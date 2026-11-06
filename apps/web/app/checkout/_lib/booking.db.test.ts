@@ -47,6 +47,7 @@ describeWithDb("checkout summary of a booking intent", () => {
   let nrPlanId: string;
   let guest: string;
   const fallback = process.env.STRIPE_CONNECT_ACCOUNT_ID;
+  const feeFlag = process.env.STRIPE_APPLICATION_FEE_ENABLED;
 
   beforeAll(async () => {
     db = new Client({ connectionString });
@@ -80,6 +81,8 @@ describeWithDb("checkout summary of a booking intent", () => {
     await db.query("ROLLBACK");
     if (fallback === undefined) delete process.env.STRIPE_CONNECT_ACCOUNT_ID;
     else process.env.STRIPE_CONNECT_ACCOUNT_ID = fallback;
+    if (feeFlag === undefined) delete process.env.STRIPE_APPLICATION_FEE_ENABLED;
+    else process.env.STRIPE_APPLICATION_FEE_ENABLED = feeFlag;
   });
 
   const room = (roomId: string, ratePlanId: string, price: number, tax: number): IntentRoomInput => ({
@@ -94,13 +97,13 @@ describeWithDb("checkout summary of a booking intent", () => {
   });
 
   /** A Double on "Room only" and a Garden Suite on "Non-refundable", in that order. */
-  async function twoRoomIntent(userId = guest): Promise<{ intentId: string; snapshot: IntentSnapshot }> {
+  async function twoRoomIntent(userId = guest, commissionCents = 0): Promise<{ intentId: string; snapshot: IntentSnapshot }> {
     const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13), room(suiteId, nrPlanId, 140, 13)];
     const snapshot: IntentSnapshot = {
       roomsTotal: 480,
       touristTaxTotal: 26,
       total: 506,
-      commissionCents: 0,
+      commissionCents,
       currency: "EUR",
       rooms: [
         { roomId: ids.roomId, ratePlanId: ids.ratePlanId, roomName: "Double", ratePlanName: "Room only", isRefundable: true, freeCancellationUntil: null },
@@ -148,6 +151,16 @@ describeWithDb("checkout summary of a booking intent", () => {
     expect(totalCents(s.lines)).toBe(toCents(snapshot.total));
     expect(s.intentTotal).toBe(snapshot.total);
     expect(s.currency).toBe("eur");
+  });
+
+  test("the fee is the commission the intent recorded, not one from today's rate", async () => {
+    // 4.5% of the €480 stay when the rooms were held; the host's rate has changed since.
+    const { intentId } = await twoRoomIntent(guest, 2160);
+    await db.query(`UPDATE properties SET commission_rate = 0.12 WHERE id = $1`, [ids.propertyId]);
+    process.env.STRIPE_APPLICATION_FEE_ENABLED = "true";
+    expect((await summary(intentId)).platformFeeCents).toBe(2160);
+    process.env.STRIPE_APPLICATION_FEE_ENABLED = "false";
+    expect((await summary(intentId)).platformFeeCents).toBe(0);
   });
 
   test("the host's own connected account is the one charged", async () => {

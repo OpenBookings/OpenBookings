@@ -143,7 +143,8 @@ Flex (24h) and Standard (7d) cancellation tiers are spread across them.
 - **Commission: follow the current checkout code.** *(My call — the code is
   newer and deliberate.)* The property's `commission_rate` is taken as a
   Stripe application fee on the **stay amount only, tourist tax excluded**
-  (`commissionCents` / `stayCents` in `checkout/_lib/booking.ts`), and only
+  (computed into the intent snapshot's `commissionCents` by
+  `lib/booking/quote.ts` and charged from it at checkout), and only
   when `STRIPE_APPLICATION_FEE_ENABLED=true`, as today. The guest pays **no
   booking or service fee** (the terms promise this); the seed's 4.5%
   added on top of the guest total is a seed artifact and is not copied. The
