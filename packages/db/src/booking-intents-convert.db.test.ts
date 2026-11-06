@@ -173,12 +173,20 @@ describeWithDb("converting a paid booking intent", () => {
 
     const events = (await db.query(`SELECT kind, actor_kind, data FROM booking_events WHERE booking_id = $1`, [result.bookingId]))
       .rows;
-    expect(events).toEqual([{ kind: "confirmed", actor_kind: "system", data: { intentId, paymentIntentId: "pi_convert" } }]);
+    // The bigint totals are rounded; the event and the charge keep the exact amounts.
+    expect(events).toEqual([
+      {
+        kind: "confirmed",
+        actor_kind: "system",
+        data: { intentId, paymentIntentId: "pi_convert", amountCents: 46300, snapshotTotal: snap.total },
+      },
+    ]);
 
     const charges = (
-      await db.query(`SELECT type, provider, provider_payment_id, amount, currency, status FROM transactions WHERE booking_id = $1`, [
-        result.bookingId,
-      ])
+      await db.query(
+        `SELECT type, provider, provider_payment_id, amount, currency, status, metadata FROM transactions WHERE booking_id = $1`,
+        [result.bookingId],
+      )
     ).rows;
     expect(charges).toHaveLength(1);
     expect(charges[0]).toMatchObject({
@@ -187,6 +195,7 @@ describeWithDb("converting a paid booking intent", () => {
       provider_payment_id: "pi_convert",
       currency: "EUR",
       status: "succeeded",
+      metadata: { amountCents: 46300 },
     });
     expect(Number(charges[0].amount)).toBe(463);
 

@@ -134,6 +134,9 @@ Flex (24h) and Standard (7d) cancellation tiers are spread across them.
 
 - Money in the schema is in **major units** (euros); cents only at the Stripe
   boundary (see `checkout/_lib/booking.ts` header).
+  The `bigint` booking, reservation and transaction totals are rounded to
+  whole euros; the exact charge lives in `transactions.metadata.amountCents`
+  and the exact night prices in `reservations.nights`.
 - **EUR only, EU only** — generated hotels too.
 - Rates are **tax-inclusive**; tourist tax is added on top. Direct charges
   on the host's connected account; OpenBookings never holds funds.

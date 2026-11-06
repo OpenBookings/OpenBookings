@@ -491,12 +491,24 @@ export async function convertIntentToBooking(
       bookingId,
       kind: "confirmed",
       actor: { kind: "system", id: null },
-      data: { intentId: intent.id, paymentIntentId: i.paymentIntentId },
+      // The bigint totals are whole euros; these keep the exact charge.
+      data: {
+        intentId: intent.id,
+        paymentIntentId: i.paymentIntentId,
+        amountCents: i.amountCents,
+        snapshotTotal: intent.snapshot.total,
+      },
     });
     await tx.query(
-      `INSERT INTO transactions (booking_id, type, provider, provider_payment_id, amount, currency, status)
-       VALUES ($1, 'charge', 'stripe', $2, $3, $4, 'succeeded')`,
-      [bookingId, i.paymentIntentId, Math.round(i.amountCents / 100), intent.snapshot.currency],
+      `INSERT INTO transactions (booking_id, type, provider, provider_payment_id, amount, currency, status, metadata)
+       VALUES ($1, 'charge', 'stripe', $2, $3, $4, 'succeeded', $5::jsonb)`,
+      [
+        bookingId,
+        i.paymentIntentId,
+        Math.round(i.amountCents / 100),
+        intent.snapshot.currency,
+        JSON.stringify({ amountCents: i.amountCents }),
+      ],
     );
     await tx.query(
       `UPDATE booking_intents
