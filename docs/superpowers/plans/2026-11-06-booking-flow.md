@@ -127,7 +127,7 @@
   }): Promise<Map<string, PropertyAvailability>>;
   ```
 - SQL: one query per call (date spine via `generate_series(checkIn, checkOut - 1)`), modelled on `AVAILABILITY_SQL` in `apps/business/.../rates-availability/_lib/ari-query.ts` for `booked` and `room_closures`, plus a `held` CTE: `SUM` of `booking_intent_rooms` joined to `booking_intents` with `status = 'open' AND hold_expires_at > $now AND id IS DISTINCT FROM $exclude`, per room per night in the intent's range. Rate-plan rules from `rate_plan_restrictions` (`is_active`, `priority DESC`, one row per date per plan, dates `[checkIn, checkOut]`). Only active rate plans, non-archived rooms; `onSale = rooms.is_active`.
-- `loadSearchAvailability`: a property is `bookable` when some on-sale room has `unitsLeft >= rooms` and fits `perRoomParty` and has a plan with no reasons; otherwise `reason = pickReason(all reasons seen)`, where a room's own reasons add `sold_out` (unitsLeft < rooms), `room_closed`, `too_many_guests`, `not_on_sale`.
+- `loadSearchAvailability`: a room *qualifies* when it is on sale, not closed, fits `perRoomParty`, has `unitsLeft >= 1` and has a plan with no reasons. A property is `bookable` when the **sum of `unitsLeft` over its qualifying rooms** is `>= rooms` (a guest can mix room types). Otherwise `reason`: `sold_out` if some rooms qualify but their units fall short; else `pickReason(all reasons seen)`, where a room's own reasons add `sold_out` (unitsLeft 0), `room_closed`, `too_many_guests`, `not_on_sale`.
 
 - [ ] **Step 1: Write failing tests** (each in its own rolled-back transaction, using `seedProperty` and direct inserts):
   - `host number is the total`: `rooms.total_units = 10`, `room_inventory.available_override = 8` on night 1, one confirmed booking of 1 unit on night 1 → night 1 `{ total: 8, booked: 1, bookable: 7 }`.
@@ -136,7 +136,7 @@
   - `cancelled room and early departure free stock`.
   - `pending booking does not hold stock`.
   - `rate rules`: min stay 5 on the plan for a 3-night stay → plan reasons `['min_stay']`; closed-to-arrival restriction on check-in → `['closed_to_arrival']`; room closure over a night → `roomClosed: true`.
-  - `search reason`: property with `total_units 1` and one confirmed booking → `{ bookable: false, reason: 'sold_out' }`; room `max_adults 1`, search 2 adults 1 room → `too_many_guests`; same with `rooms: 2` and 2 units → `bookable: true`.
+  - `search reason`: property with `total_units 1` and one confirmed booking → `{ bookable: false, reason: 'sold_out' }`; room `max_adults 1`, search 2 adults 1 room → `too_many_guests`; same with `rooms: 2` and 2 units → `bookable: true`; `mixed room types`: two room types with 1 unit each, search `rooms: 2` → `bookable: true`, `rooms: 3` → `sold_out`.
 - [ ] **Step 2: Run** `cd packages/db && bun --env-file=../../.env.local test src/availability.db.test.ts` → FAIL.
 - [ ] **Step 3: Implement** both functions.
 - [ ] **Step 4: Run** → PASS; typecheck clean.
@@ -158,8 +158,9 @@
 - [ ] **Step 1: Update/add failing tests**: override 8 with 3 booked → `effective 5`, `left 5` (was 8); no override, total 4, blocked 1, booked 1, held 1 → `left 1`.
 - [ ] **Step 2: Run** `cd apps/business && bun --env-file=.env.local test app/\(dashboard\)/dashboard/listings/rates-availability/_lib/ari-query.availability.test.ts` → FAIL.
 - [ ] **Step 3: Implement.** Replace `override ?? computed` with the shared functions; add `held` to the SQL the same way as Task 3.
-- [ ] **Step 4: Run** → PASS; `bun run typecheck` in `apps/business` → clean.
-- [ ] **Step 5: Commit** `Show bookable rooms in the rates grid, host number as total`.
+- [ ] **Step 4: Check every reader of `effective`** — `rg -n "\.effective\b" apps/business --glob '!**/node_modules/**'` (today: `ari-grid.tsx`, `ari-detail-panel.tsx`, `runs.ts`, `mock-ari.ts` + test). Each must treat it as "rooms left", not the night total; where one shows or edits the host's own number, switch it to `total`/`override`. Update `mock-ari.ts` so its cells carry `held` and `left`.
+- [ ] **Step 5: Run** → PASS; `bun run typecheck` and `bun test` in `apps/business` → clean.
+- [ ] **Step 6: Commit** `Show bookable rooms in the rates grid, host number as total`.
 
 ---
 
@@ -236,17 +237,19 @@
   export async function ensureDemoOrganisation(db: Queryable): Promise<string>; // organization + org_profile + org_consent(rates doc), idempotent
   export type DemoScenario = 'normal' | 'last_room' | 'sold_out' | 'min_stay' | 'no_arrival' | 'non_refundable' | 'weekend_prices' | 'small_rooms';
   export const DEMO_SCENARIOS: readonly DemoScenario[]; // in that order
+  /** Any `is_demo` property within 25 km. Lock-free fast path for callers. */
+  export async function hasDemoHotelsNear(db: Queryable, i: { lat: number; lon: number }): Promise<boolean>;
   /** Must run inside a transaction (it takes a transaction-scoped advisory lock). */
   export async function ensureDemoHotels(tx: Queryable, i: { lat: number; lon: number; place?: string | null }): Promise<{ created: boolean; propertyIds: string[] }>;
   ```
   Callers wrap it: `withTransaction((tx) => ensureDemoHotels(tx, …))` (`withTransaction` from `@openbookings/db`). Tests call it on their own `BEGIN`…`ROLLBACK` client.
 - Behaviour: if any `is_demo` property lies within **25 km** of the point, return `created: false`. Otherwise, under `pg_advisory_xact_lock(hashtext('demo:' || areaKey))`, re-check, then create 8 hotels within ~3 km of the point (rng-jittered), named from the rng (`'<Adjective> <Noun> <Hotel|House|Suites>'` style word lists), city = `place` (first comma part) or `nearestEuPlace().capital`, country/timezone from `nearestEuPlace`, slug `demo-<areaKey slug>-<scenario>`. Scenario setup must hold **for any dates** (range today → today + 730 days):
-  - `normal`: 3 room types, `total_units` 6–10, flex tier, refundable + NR (NR bar ≤ 0.85 × refundable).
+  - `normal`: 3 room types, `total_units` 6–10, flex tier, refundable + NR. Every NR bar is `Math.floor(refundableBar * 0.85)` (whole euros, and strictly inside the Annex B B.4.3 ≥10%-cheaper rule).
   - `last_room`: one room type, `total_units 1`.
   - `sold_out`: `insertAvailabilityOverride(available: 0)` over the range.
   - `min_stay`: plan `min_stay 5`.
   - `no_arrival`: `closedToArrival` restriction over the range on every plan.
-  - `non_refundable`: refundable plan + NR plan with NR bar ≤ 0.85 × refundable (spec: Annex B B.4.3 must not be bypassed).
+  - `non_refundable`: refundable plan + NR plan, NR bar `Math.floor(refundableBar * 0.85)` (spec: Annex B B.4.3 must not be bypassed).
   - `weekend_prices`: `insertDayOfWeekModifier(days [5,6], amount 40)` + tourist tax €3.50 per person per night.
   - `small_rooms`: rooms `max_adults 1`, `max_children 0`, `total_units 4`.
   - Tiers: `normal`, `weekend_prices`, `small_rooms`, `last_room` → `flex`; others `standard`.
@@ -295,8 +298,8 @@
   (`IntentRoomInput`, `IntentSnapshot` are defined in Task 9's `packages/db/src/booking-intents.ts`; create the types file in this task if Task 9 has not landed, and Task 9 moves nothing.)
 - Search result items gain `availability: { bookable: boolean; reason: UnavailableReason | null }`. Rooms that do not fit `perRoomParty` or are unavailable are not price candidates; a hotel with none is still returned (priced from its cheapest room) with `bookable: false`.
 - `GET /api/stay-quote?property=<slug>&checkin&checkout&adults&children&rooms` → `200 StayQuote`, `400 { errors }`, `404` unknown/inactive/demo-when-off property. Not cached (`dynamic = 'force-dynamic'`), so the cached property page HTML is untouched.
-- Quote pricing: one SQL for the property's active rooms × **all** active rate plans, with steps 2–4 of the search query (nightly override, modifiers, tourist tax rules) → `RoomRow` → `resolveRoom(row, { adults, children, arrivalDate }, today)`. NR plans follow the same Annex B B.4.3 filter as `withCancellationTerms` in `apps/web/lib/listing-prices.ts` (extract the predicate into `packages/pricing` if both need it). Quote prices for the **per-room party** (`perRoomParty`); `priceSelection` prices each selected room for its own adults/children and fails `too_many_guests` if a room's party exceeds its max.
-- Search in testing mode: before running the query, `await withTransaction((tx) => ensureDemoHotels(tx, { lat, lon, place }))`; generation failure is logged and the search continues.
+- Quote pricing: one SQL for the property's active rooms × **all** active rate plans, with steps 2–4 of the search query (nightly override, modifiers, tourist tax rules) → `RoomRow` → `resolveRoom(row, { adults, children, arrivalDate }, today)`. NR plans follow the same Annex B B.4.3 filter as `withCancellationTerms` in `apps/web/lib/listing-prices.ts` (extract the predicate into `packages/pricing` if both need it). Quote prices for the **per-room party** (`perRoomParty`); `priceSelection` prices each selected room for its own adults/children and fails `too_many_guests` if a room's party exceeds its max. It also groups the selection by `roomId` and fails `unavailable` (detail names the room) when the count for a room exceeds its `unitsLeft`, or when the chosen rate plan has any reasons. This is an early check so the guest hears it before a hold is attempted; Task 9 re-checks under lock.
+- Search in testing mode: first `await hasDemoHotelsNear(db, { lat, lon })` (Task 7; a plain query, no transaction, no lock) and only when it is `false` run `await withTransaction((tx) => ensureDemoHotels(tx, { lat, lon, place }))`, so steady-state searches pay one indexed query and nothing else. Generation failure is logged and the search continues.
 
 - [ ] **Step 1: Failing tests**:
   - `quote rejects bad stays` (`parseStayInput`): checkout = checkin → error; checkin before `todayInZone` → error; 31 nights → error; adults 0 → error; rooms 0 → error; valid input → `ok`.
@@ -324,7 +327,7 @@
     nights: { date: string; price: number }[]; stayTotal: number; touristTax: number; touristTaxLines: TouristTaxLine[] };
   export type IntentSnapshot = { roomsTotal: number; touristTaxTotal: number; total: number; commissionCents: number; currency: 'EUR';
     rooms: { roomId: string; ratePlanId: string; roomName: string; ratePlanName: string; isRefundable: boolean; freeCancellationUntil: string | null }[] };
-  export type BookingIntent = { id: string; userId: string; propertyId: string; checkIn: string; checkOut: string;
+  export type BookingIntent = { id: string; userId: string; propertyId: string; propertySlug: string; checkIn: string; checkOut: string;
     status: 'open' | 'paid' | 'expired' | 'failed' | 'abandoned' | 'oversold' | 'refunded_oversold';
     holdExpiresAt: Date; snapshot: IntentSnapshot; rooms: (IntentRoomInput & { id: string })[];
     paymentSessionId: string | null; paymentAccountId: string | null; bookingId: string | null };
@@ -333,6 +336,7 @@
     rooms: IntentRoomInput[]; snapshot: IntentSnapshot; now: Date }):
     Promise<{ ok: true; intentId: string; holdExpiresAt: Date; abandoned: AbandonedSession[] } | { ok: false; error: 'unavailable'; roomIds: string[] }>;
   export async function loadIntent(db: Queryable, i: { intentId: string; userId: string }): Promise<BookingIntent | null>;
+  /** Return page only. The webhook finds its intent through session metadata (`bookingIntentId`), never through this. */
   export async function loadIntentBySession(db: Queryable, i: { sessionId: string; userId: string }): Promise<BookingIntent | null>;
   export async function attachPaymentSession(db: Queryable, i: { intentId: string; sessionId: string; accountId: string }): Promise<void>;
   export async function expireIntent(db: Queryable, i: { intentId: string; now: Date; force?: boolean }): Promise<{ sessionId: string | null; accountId: string | null } | null>;
@@ -341,7 +345,7 @@
   export async function expireBookingCheckout(sessionId: string, stripeAccountId: string): Promise<void>; // swallows "already expired/complete"
   ```
   `LifecycleDb` is the type in `packages/db/src/booking-lifecycle/index.ts` (`Queryable & { transaction }`); import it with `import type` — that module imports `../index` at runtime, so a value import would be circular.
-- `createBookingIntent`: one transaction; `SELECT … FROM rooms WHERE id = ANY($ids) ORDER BY id FOR UPDATE`; set every other `open` intent of this user to `abandoned` (collect their sessions); `loadStayAvailability(excludeIntentId: null)`; count requested units per room; any room short → rollback, `unavailable`. Insert intent (`hold_expires_at = now + HOLD_MINUTES`) and rooms.
+- `createBookingIntent`: one transaction. **Lock order is always `booking_intents` first, then `rooms` ordered by id** (the same order as Task 11's conversion, so the two can never deadlock): first `UPDATE booking_intents SET status = 'abandoned' WHERE user_id = $1 AND status = 'open' RETURNING id, payment_session_id, payment_account_id` (collect their sessions), then `SELECT … FROM rooms WHERE id = ANY($ids) ORDER BY id FOR UPDATE`, then `loadStayAvailability(excludeIntentId: null)`; count requested units per room; any room short → rollback, `unavailable`. Insert intent (`hold_expires_at = now + HOLD_MINUTES`) and rooms. This is the authoritative availability check; `priceSelection`'s is an early, unlocked one.
 - `expireIntent`: `open` → `expired` only if `hold_expires_at <= now` (or `force`); returns the session to expire; any other status → `null`.
 - `POST /api/booking-intents` body `{ propertyId, checkIn, checkOut, rooms: SelectedRoom[], expectedTotal: number }`: no session → 401; zod-validate (1–9 rooms); property must be visible (`is_demo` rule); `priceSelection`; `expectedTotal` differs from `snapshot.total` by more than €0.005 → `409 { error: 'price_changed', quote }`; `createBookingIntent`; for each abandoned session `await expireBookingCheckout(...).catch(log)`; → `201 { intentId, holdExpiresAt, checkoutUrl: '/checkout/' + intentId }`; `unavailable` → `409 { error: 'unavailable', roomIds }`. Rate-limit like `apps/web/lib/rateLimit.ts` does elsewhere.
 - `POST /api/booking-intents/[id]/expire`: owner only; `expireIntent` (no force) → if a session came back, `expireBookingCheckout`; `200 { status }`.
@@ -351,7 +355,7 @@
   - `new intent abandons the previous open one`: user's first intent has `payment_session_id 'cs_a'`; second create → first `status 'abandoned'`, `abandoned` contains `{ sessionId: 'cs_a' }`, and the first intent's hold no longer counts.
   - `hold length`: `holdExpiresAt - now === 15 min`.
   - `intent owner only`: `loadIntent` with another user id → `null`.
-  - `intent rejects foreign and demo rooms` lives in Task 8's `priceSelection` tests; here assert `expireIntent` before the hold ends → `null` and status still `open`; after → `expired`; on a `paid` intent → `null`.
+  - `intent rejects foreign and demo rooms` lives in Task 8's `priceSelection` tests (add there: two units of a room with `unitsLeft 1` → `unavailable`); here assert `expireIntent` before the hold ends → `null` and status still `open`; after → `expired`; on a `paid` intent → `null`.
   - `checkout.test.ts`: `expireBookingCheckout` swallows a Stripe error whose message says the session is not open (mock `stripe.checkout.sessions.expire` the way the existing tests mock the client).
 - [ ] **Step 2: Run** `cd packages/db && bun --env-file=../../.env.local test src/booking-intents.db.test.ts`; `cd packages/stripe && bun test src/payments/checkout.test.ts` → FAIL.
 - [ ] **Step 3: Implement.**
@@ -379,7 +383,7 @@
   ```
   `buildIntentLines`: per room one `stay` line, `quantity 1`, `unitAmountCents = toCents(sum of nights)`, name `"<room name> <type> · <n> nights"`; then that room's tourist-tax lines (`kind 'tourist_tax'`). Commission stays `commissionCents(lines, rate)` (unchanged helper).
 - `POST /api/checkout` `{ intentId, turnstileToken }`: intent must be the user's and `open` with `hold_expires_at > now` (else `409 { code: 'hold_expired' }`); if `payment_session_id` is set and Stripe says it is `open`, return its client secret (never two payable sessions); else create one (`expiresAt` = now + 30 min + margin), `attachPaymentSession`. Metadata: `{ bookingIntentId, totalCents, touristTaxCents }` — drop `roomId` and `userId` (the intent carries the user; resolves the TODO at old route l.266). Remove `recordTouristTax` (tax is fixed on the intent).
-- `ratesConfirmed` / `assertChargeable` unchanged. Dev fallback `STRIPE_CONNECT_ACCOUNT_ID` unchanged (local only).
+- `ratesConfirmed` / `assertChargeable` unchanged. **Keep the dev fallback** when rewriting the loader: `stripeAccountId = row.stripe_account_id ?? (NODE_ENV === 'production' ? '' : STRIPE_CONNECT_ACCOUNT_ID ?? '')` (today's l.386). Demo hotels have `stripe_account_id NULL` and are only reachable in testing mode, which is local only, so this is what makes them chargeable; add a test that a demo intent's summary gets the fallback account.
 
 - [ ] **Step 1: Failing tests**: `buildIntentLines` for two rooms (3 nights €100/€100/€140; 2 nights €90/€90) with one tax line each → 4 lines, stay amounts `34000` and `18000`, `stayCents` `52000`; `booking.db.test.ts`: `getBookingSummary` of another user's intent throws `BookingNotFoundError`; of a two-room intent → `rooms.length === 2` and `lines` total equals `toCents(snapshot.total)`.
 - [ ] **Step 2: Run** `cd apps/web && bun test app/checkout/_lib/booking-lines.test.ts && bun --env-file=.env.local test app/checkout/_lib/booking.db.test.ts` → FAIL.
@@ -405,11 +409,11 @@
   export async function convertIntentToBooking(db: LifecycleDb, i: { intentId: string; paymentIntentId: string; accountId: string; amountCents: number; now: Date }): Promise<ConvertResult>;
   export async function markIntentRefundedOversold(db: Queryable, i: { intentId: string; refundId: string }): Promise<boolean>; // true only on the oversold → refunded_oversold transition
   ```
-- Algorithm (one transaction): lock the intent `FOR UPDATE`. `paid` → return `{confirmed, bookingId, firstTime:false}`. `oversold`/`refunded_oversold` → return `{oversold, firstTime:false, …}`. Otherwise lock its rooms (`FOR UPDATE`, ordered by id), `loadStayAvailability(excludeIntentId: intentId)`; short → set `status 'oversold'`, `payment_reference = paymentIntentId`, return `{oversold, firstTime:true}`. Else insert `bookings` (`status 'confirmed'`, `user_id`, `hotel_id`, dates, `total_amount = Math.round(snapshot.roomsTotal)`, `booking_fee_amount 0`, `currency`, `stripe_payment_intent_id = paymentIntentId`), one `reservations` row per intent room (`total_nights`, `price_per_night = Math.round(stayTotal / nights)`, `total_amount = Math.round(stayTotal)`, `tourist_tax_amount`, `tourist_tax_lines`, adults/children), then `confirmBookingPolicy(tx, { bookingId, confirmedAt: now, nightPrices })` with each reservation's exact `nights`, `recordBookingEvent(kind 'confirmed', actor system, data { intentId, paymentIntentId })`, a `transactions` row (`type 'charge'`, `provider 'stripe'`, `provider_payment_id`, `amount = Math.round(amountCents / 100)`, `status` = the paid value of `payment_status` enum — read the enum in `schema.ts`), intent → `paid`, `booking_id`, `payment_reference`.
+- Algorithm (one transaction): lock the intent `FOR UPDATE`. `paid` → return `{confirmed, bookingId, firstTime:false}`. `oversold`/`refunded_oversold` → return `{oversold, firstTime:false, …}`. Otherwise lock its rooms (`FOR UPDATE`, ordered by id), `loadStayAvailability(excludeIntentId: intentId)`; short → set `status 'oversold'`, `payment_reference = paymentIntentId`, return `{oversold, firstTime:true}`. Else insert `bookings` (`status 'confirmed'`, `user_id`, `hotel_id`, dates, `total_amount = Math.round(snapshot.total)` — what the guest paid, tourist tax included, matching `transactions.amount` and the guest bookings list's `total_paid` (`apps/web/app/account/bookings/_lib/list.ts`), `booking_fee_amount 0`, `currency`, `stripe_payment_intent_id = paymentIntentId`), one `reservations` row per intent room (`total_nights`, `price_per_night = Math.round(stayTotal / nights)`, `total_amount = Math.round(stayTotal)`, `tourist_tax_amount`, `tourist_tax_lines`, adults/children), then `confirmBookingPolicy(tx, { bookingId, confirmedAt: now, nightPrices })` with each reservation's exact `nights`, `recordBookingEvent(kind 'confirmed', actor system, data { intentId, paymentIntentId })`, a `transactions` row (`type 'charge'`, `provider 'stripe'`, `provider_payment_id`, `amount = Math.round(amountCents / 100)`, `status` = the paid value of `payment_status` enum — read the enum in `schema.ts`), intent → `paid`, `booking_id`, `payment_reference`.
 - Works from statuses `open`, `expired`, `abandoned`, `failed` (a late payment is still a payment).
 
 - [ ] **Step 1: Failing tests**:
-  - `confirms a two-room intent`: → one booking `confirmed` with `confirmed_at`, 2 reservations with `cancellation_tier` set and `nights` equal to the intent's, one `booking_events` row `confirmed`, intent `paid`.
+  - `confirms a two-room intent`: → one booking `confirmed` with `confirmed_at` and `total_amount = Math.round(snapshot.total)`, 2 reservations with `cancellation_tier` set and `nights` equal to the intent's, one `booking_events` row `confirmed`, intent `paid`.
   - `convert is idempotent`: second call → same `bookingId`, `firstTime: false`, still one booking.
   - `late payment on a free room confirms`: intent `expired`, stock still free → `confirmed`.
   - `late payment on a taken room is oversold`: intent `expired`, another confirmed booking took the only unit → `{oversold, firstTime:true}`, no booking row; second call → `firstTime:false`.
@@ -445,13 +449,13 @@
   ```
 - Event routing: `checkout.session.completed` with `payment_status === 'paid'` → `onCheckoutPaid`; `completed` with `'unpaid'` → ignored (async method pending); `checkout.session.async_payment_succeeded` → `onCheckoutPaid`; `async_payment_failed` → `onCheckoutFailed`; `checkout.session.expired` → `onCheckoutExpired` (uses `expireIntent({force:true})`). `intentId` = `metadata.bookingIntentId`; missing → ignored. `amountCents = amount_total`; `paymentIntentId = payment_intent` (string).
 - `confirmPaidCheckout`: `convertIntentToBooking`; `confirmed && firstTime` → `sendConfirmed` (errors logged, never thrown — the booking stands); `oversold` → `refund({ paymentIntentId, stripeAccountId, amountCents, idempotencyKey: 'oversold:' + intentId, metadata: { intentId, reason: 'oversold' } })` (throws → webhook retries), then `markIntentRefundedOversold`; if it returned `true` → `sendOversold`.
-- Return page: signed-in user + `session_id` → `loadIntentBySession`; `paid` → paid outcome with action `{ href: '/bookings/' + bookingId, label: 'View booking' }`; `oversold`/`refunded_oversold` → new outcome "Those rooms were just taken" / "Your payment was refunded in full…"; otherwise the existing Stripe-status logic using `intent.paymentAccountId`. `RETRY.href` → the hotel page with the same dates and party (`/p/<slug>?checkin=…`).
+- Return page: signed-in user + `session_id` → `loadIntentBySession`; `paid` → paid outcome with action `{ href: '/bookings/' + bookingId, label: 'View booking' }`; `oversold`/`refunded_oversold` → new outcome "Those rooms were just taken" / "Your payment was refunded in full…"; otherwise the existing Stripe-status logic using `intent.paymentAccountId`. `RETRY.href` → the hotel page with the same dates and party, built from `intent.propertySlug`, the intent's dates and its rooms' guest counts (`/p/<slug>?checkin=…&checkout=…&adults=…&children=…&rooms=…`).
 
 - [ ] **Step 1: Failing tests**: `stripe-events.test.ts` — each of the five event shapes calls the right dep with the right fields; missing `bookingIntentId` → `"ignored"`; `completed` + `unpaid` → `"ignored"`; livemode mismatch still `"ignored"`. `booking-confirmation.test.ts` (fakes for every dep): `oversold refunds once across retries` — two calls on an oversold result → `refund` called twice with the same idempotency key, `sendOversold` once; confirmed first time → `sendConfirmed` once; confirmed again → not sent; `sendConfirmed` throwing does not throw out.
 - [ ] **Step 2: Run** `cd apps/business && bun test lib/stripe-events.test.ts lib/booking-confirmation.test.ts` → FAIL.
 - [ ] **Step 3: Implement** handler cases, `confirmPaidCheckout`, route wiring, return page.
 - [ ] **Step 4: Run** → PASS; typecheck `apps/business`, `apps/web` → clean.
-- [ ] **Step 5: Manual end-to-end** (local, `TESTING=true` in both apps' env, `stripe listen --forward-connect-to localhost:<business port>/api/stripe/webhook`): search Lisbon → hotel `normal` → `POST /api/booking-intents` from the browser console with two rooms → `/checkout/<id>` → pay with `4242 4242 4242 4242` → return page links to `/bookings/<id>` showing two rooms. Record the result in the commit message.
+- [ ] **Step 5: Manual end-to-end** (local, `TESTING=true` in both apps' env, `stripe listen --forward-connect-to localhost:<business port>/api/stripe/webhook`): search Lisbon → hotel `normal` → `POST /api/booking-intents` from the browser console with two rooms → `/checkout/<id>` → pay with `4242 4242 4242 4242` → return page links to `/bookings/<id>` showing two rooms. **No emails are expected yet**: the senders are no-ops until Task 13, so silence here is not a bug. Record the result in the commit message.
 - [ ] **Step 6: Commit** `Confirm bookings from the Stripe webhook`.
 
 ---
