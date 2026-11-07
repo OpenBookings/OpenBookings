@@ -157,6 +157,20 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
       );
     }
     await confirmBookingPolicy(client, { bookingId: DEMO_CONFIRMED_BOOKING_ID, confirmedAt: new Date() });
+    // The exact split (0035), from the nights and tourist tax the policy snapshot just wrote.
+    await client.query(
+      `update bookings b
+       set rooms_total_cents = r.rooms_cents, tourist_tax_cents = r.tax_cents,
+           total_cents = r.rooms_cents + r.tax_cents, commission_cents = 0
+       from (
+         select booking_id,
+                sum((select round(sum((n->>'price')::numeric) * 100) from jsonb_array_elements(nights) n)) as rooms_cents,
+                sum(round(tourist_tax_amount * 100)) as tax_cents
+         from reservations group by booking_id
+       ) r
+       where r.booking_id = b.id and b.id = $1`,
+      [DEMO_CONFIRMED_BOOKING_ID],
+    );
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

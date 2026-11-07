@@ -29,6 +29,7 @@ const PENDING: string[] = [
   "0032_booking_events.sql",
   "0033_booking_intents.sql",
   "0034_booking_intents_dates_not_null.sql",
+  "0035_booking_money_cents.sql",
 ];
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 

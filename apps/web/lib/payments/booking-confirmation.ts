@@ -1,14 +1,14 @@
 import { convertIntentToBooking, IntentNotFoundError, markIntentRefundedOversold } from "@openbookings/db";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
-import type { findRefundByMetadata, refundPayment } from "@openbookings/stripe";
-import type { StripeEventDeps } from "./stripe-events";
+import type { findRefundByMetadata, PaidCheckout as StripePaidCheckout, refundPayment } from "@openbookings/stripe";
 
 /**
  * What a paid booking checkout becomes: a confirmed booking, or — when the
  * rooms were gone by the time the money arrived — a full refund.
  *
- * Runs once per Stripe delivery, and Stripe delivers at least once, so every
- * step is safe to repeat: the conversion returns what an earlier call did, and
+ * Runs once per Stripe delivery, and Stripe delivers at least once, and the
+ * payment reconciliation may run it again for a payment the webhook already
+ * settled (or is settling at that moment), so every step is safe to repeat: the conversion returns what an earlier call did, and
  * each refund carries an idempotency key, so a retry never pays out twice. A
  * failed refund is thrown for that reason: Stripe retries the event, and the
  * guest is not left without their money. Stripe forgets idempotency keys
@@ -34,7 +34,11 @@ export type ConfirmationDeps = {
   markRefunded?: typeof markIntentRefundedOversold;
 };
 
-export type PaidCheckout = Parameters<NonNullable<StripeEventDeps["onCheckoutPaid"]>>[0];
+/**
+ * A paid checkout, from the webhook (`eventId`) or found by the payment
+ * reconciliation (`eventId: null`). Either way the same steps run.
+ */
+export type PaidCheckout = StripePaidCheckout & { eventId: string | null };
 
 export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDeps): Promise<void> {
   const convert = deps.convert ?? convertIntentToBooking;

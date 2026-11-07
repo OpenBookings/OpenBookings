@@ -329,6 +329,59 @@ export async function expireIntent(
   return row ? { sessionId: row.payment_session_id, accountId: row.payment_account_id } : null;
 }
 
+/**
+ * Whether this session is still the one the intent is paying with. An intent
+ * whose unusable session was replaced also hears about the old one expiring,
+ * and that must not end the hold the new session is paying against.
+ */
+export async function isCurrentPaymentSession(db: Queryable, i: { intentId: string; sessionId: string }): Promise<boolean> {
+  if (!UUID.test(i.intentId)) return false;
+  const { rows } = await db.query(`SELECT id FROM booking_intents WHERE id = $1::uuid AND payment_session_id = $2`, [
+    i.intentId,
+    i.sessionId,
+  ]);
+  return rows.length > 0;
+}
+
+/** A payment session whose outcome the database has not recorded. */
+export type UnsettledPayment = { intentId: string; sessionId: string; accountId: string };
+
+/**
+ * Payment sessions to check with Stripe, because the webhook may never have
+ * told us how they ended. Oldest first.
+ *
+ * - Skipped while younger than `graceMinutes`: the webhook normally settles a
+ *   session within seconds, and Stripe's own retries start after that.
+ * - Every `open` intent with a session: it stays a candidate until Stripe
+ *   reports the session paid or expired, which settles it either way.
+ * - `expired` and `abandoned` intents only while younger than `windowMinutes`:
+ *   their session could still have been paid in its last minutes, but past the
+ *   session's lifetime nothing more can happen to it. A bank debit that clears
+ *   days later is settled by its own webhook (`async_payment_succeeded`).
+ */
+export async function listUnsettledPayments(
+  db: Queryable,
+  i: { now: Date; graceMinutes: number; windowMinutes: number; limit: number },
+): Promise<UnsettledPayment[]> {
+  const { rows } = await db.query(
+    `SELECT id, payment_session_id, payment_account_id
+     FROM booking_intents
+     WHERE payment_session_id IS NOT NULL
+       AND payment_account_id IS NOT NULL
+       AND created_at <= $1::timestamptz - make_interval(mins => $2::int)
+       AND (status = 'open'
+            OR (status IN ('expired', 'abandoned') AND created_at > $1::timestamptz - make_interval(mins => $3::int)))
+     ORDER BY created_at
+     LIMIT $4`,
+    [i.now, i.graceMinutes, i.windowMinutes, i.limit],
+  );
+  return (rows as { id: string; payment_session_id: string; payment_account_id: string }[]).map((r) => ({
+    intentId: r.id,
+    sessionId: r.payment_session_id,
+    accountId: r.payment_account_id,
+  }));
+}
+
 /** The payment failed: an open intent stops holding its rooms. Any other status is left as it is. */
 export async function markIntentFailed(db: Queryable, i: { intentId: string }): Promise<void> {
   await db.query(
@@ -442,8 +495,9 @@ export async function convertIntentToBooking(
     const { rows: bookingRows } = await tx.query(
       `INSERT INTO bookings
          (hotel_id, user_id, check_in_date, check_out_date, status, confirmed_at,
-          total_amount, booking_fee_amount, currency, stripe_payment_intent_id)
-       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8)
+          total_amount, booking_fee_amount, currency, stripe_payment_intent_id,
+          rooms_total_cents, tourist_tax_cents, total_cents, commission_cents)
+       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8, $9::bigint, $10::bigint, $9::bigint + $10::bigint, $11)
        RETURNING id`,
       [
         intent.propertyId,
@@ -454,6 +508,9 @@ export async function convertIntentToBooking(
         Math.round(intent.snapshot.total),
         intent.snapshot.currency,
         i.paymentIntentId,
+        Math.round(intent.snapshot.roomsTotal * 100),
+        Math.round(intent.snapshot.touristTaxTotal * 100),
+        intent.snapshot.commissionCents,
       ],
     );
     const bookingId = (bookingRows[0] as { id: string }).id;

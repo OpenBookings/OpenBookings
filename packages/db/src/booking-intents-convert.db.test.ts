@@ -123,6 +123,35 @@ describeWithDb("converting a paid booking intent", () => {
   const bookingsFor = async (paymentIntentId: string) =>
     (await db.query(`SELECT id FROM bookings WHERE stripe_payment_intent_id = $1`, [paymentIntentId])).rows as { id: string }[];
 
+  test("keeps the exact money split on the booking, in cents", async () => {
+    const rooms = [room(ids.roomId, ids.ratePlanId), room(ids.roomId, ids.ratePlanId)];
+    const snap = { ...snapshot(rooms), commissionCents: 1976 };
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: snap,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    const result = await convert(created.intentId);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+
+    const booking = (
+      await db.query(
+        `SELECT rooms_total_cents, tourist_tax_cents, total_cents, commission_cents FROM bookings WHERE id = $1`,
+        [result.bookingId],
+      )
+    ).rows[0];
+    // 2 × €219.50 rooms and 2 × €12 tax: whole-euro rounding would lose the 50 cents.
+    expect(Number(booking.rooms_total_cents)).toBe(43900);
+    expect(Number(booking.tourist_tax_cents)).toBe(2400);
+    expect(Number(booking.total_cents)).toBe(46300);
+    expect(Number(booking.commission_cents)).toBe(1976);
+  });
+
   test("confirms a two-room intent", async () => {
     const { intentId, rooms, snapshot: snap } = await intent(2);
     const result = await convert(intentId);

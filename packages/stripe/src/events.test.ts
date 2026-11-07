@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { handleStripeEvent, type StripeEventDeps, type StripeEventLike } from "./stripe-events";
+import { handleStripeEvent, readPaidCheckout, type StripeEventDeps, type StripeEventLike } from "./events";
 
 function setup(over: Partial<StripeEventDeps> = {}) {
   const calls: unknown[][] = [];
@@ -187,5 +187,56 @@ describe("handleStripeEvent: booking checkouts", () => {
     t.deps.livemode = true;
     expect(await handleStripeEvent(event("checkout.session.completed", session()), t.deps)).toBe("ignored");
     expect(t.calls).toEqual([]);
+  });
+});
+
+describe("handleStripeEvent: one endpoint per app", () => {
+  test("an app without the commission handlers ignores refunds and disputes, and records nothing", async () => {
+    // The booking endpoint wires only checkout handlers. Recording a refund it
+    // cannot act on would make the host endpoint skip it as a duplicate.
+    const t = setup({ refundCommission: undefined, audit: undefined });
+    for (const [type, object] of [
+      ["charge.refunded", { id: "ch_1" }],
+      ["charge.dispute.closed", { id: "dp_1", charge: "ch_1", status: "lost", amount: 100 }],
+      ["charge.dispute.created", { id: "dp_1", charge: "ch_1", amount: 100 }],
+    ] as const) {
+      expect(await handleStripeEvent(event(type, object), t.deps)).toBe("ignored");
+    }
+    expect(t.processed.size).toBe(0);
+  });
+
+  test("an app without the checkout handlers ignores checkouts, and records nothing", async () => {
+    const t = setup();
+    const paidSession = { id: "cs_1", payment_status: "paid", payment_intent: "pi_1", amount_total: 100, metadata: { bookingIntentId: "i1" } };
+    expect(await handleStripeEvent(event("checkout.session.completed", paidSession), t.deps)).toBe("ignored");
+    expect(t.processed.size).toBe(0);
+  });
+});
+
+describe("readPaidCheckout", () => {
+  const session = (over: Record<string, unknown> = {}) => ({
+    id: "cs_1",
+    payment_status: "paid",
+    payment_intent: "pi_1",
+    amount_total: 48_250,
+    metadata: { bookingIntentId: "i1" },
+    ...over,
+  });
+  const expected = { intentId: "i1", sessionId: "cs_1", paymentIntentId: "pi_1", stripeAccountId: "acct_1", amountCents: 48_250 };
+
+  test("reads a paid booking session, as an event carries it", () => {
+    expect(readPaidCheckout(session(), "acct_1")).toEqual(expected);
+  });
+
+  test("reads a session retrieved with its payment intent expanded", () => {
+    expect(readPaidCheckout(session({ payment_intent: { id: "pi_1", status: "succeeded" } }), "acct_1")).toEqual(expected);
+  });
+
+  test("is null for anything that is not a paid booking checkout", () => {
+    expect(readPaidCheckout(session({ payment_status: "unpaid" }), "acct_1")).toBeNull();
+    expect(readPaidCheckout(session({ metadata: {} }), "acct_1")).toBeNull();
+    expect(readPaidCheckout(session({ payment_intent: null }), "acct_1")).toBeNull();
+    expect(readPaidCheckout(session(), null)).toBeNull();
+    expect(readPaidCheckout(null, "acct_1")).toBeNull();
   });
 });

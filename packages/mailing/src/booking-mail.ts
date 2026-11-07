@@ -1,32 +1,118 @@
 import { composeActionMail, type ActionMail } from "./action-mail";
-import { formatStayDate } from "./format";
+import { formatEuro, formatStayDate } from "./format";
 import { escapeHtml } from "./template";
 
-/** One booked room as the mail lists it. `guests` and the dates are plain text. */
-export type MailRoom = { name: string; ratePlan: string; guests: string; freeCancellationUntil: string | null };
+/**
+ * One booked room as the mail lists it. `guests` and the dates are plain text.
+ * `nights` are what each night cost (euros, VAT included); `touristTaxLines`
+ * are the charges the guest was shown at booking.
+ */
+export type MailRoom = {
+  name: string;
+  ratePlan: string;
+  guests: string;
+  freeCancellationUntil: string | null;
+  nights: { date: string; price: number }[];
+  touristTaxLines: { label: string; amount: number }[];
+};
+
+/** What the guest paid, in cents, as the booking stores it. */
+export type MailMoney = { roomsCents: number; touristTaxCents: number; totalCents: number };
+
+/** The host's legal details, when they filled them in. The hotel is the seller of the stay. */
+export type MailSeller = { legalName: string | null; vatNumber: string | null };
 
 const STRONG = (text: string) => `<strong style="color:#DDDDDD;">${escapeHtml(text)}</strong>`;
 const FOOTNOTE = 'Questions? Email <a href="mailto:support@openbookings.co" style="color:#AAAAAA;text-decoration:underline;">support@openbookings.co</a>.';
 
-function roomLines(rooms: MailRoom[]): string {
-  return rooms
-    .map((r) => {
-      const cancel = r.freeCancellationUntil ? `free cancellation until ${r.freeCancellationUntil}` : "non-refundable";
-      return `${STRONG(r.name)}<br />${escapeHtml(`${r.ratePlan}, ${r.guests}, ${cancel}`)}`;
-    })
-    .join("<br /><br />");
-}
+const cents = (euros: number) => Math.round(euros * 100);
+const euro = (amountCents: number) => formatEuro(amountCents / 100);
 
 const roomNames = (rooms: string[]) => rooms.map(STRONG).join(", ");
 
 const stay = (checkIn: string, checkOut: string) => `${escapeHtml(formatStayDate(checkIn))} to ${escapeHtml(formatStayDate(checkOut))}`;
+
+// ─── The breakdown table ───────────────────────────────────────────────
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif";
+const CELL = `font-family:${FONT};font-size:14px;line-height:1.5;color:#AAAAAA;padding:3px 0;text-align:left;vertical-align:top;`;
+const AMOUNT = `font-family:${FONT};font-size:14px;line-height:1.5;color:#AAAAAA;padding:3px 0 3px 16px;text-align:right;vertical-align:top;white-space:nowrap;`;
+const RULE = "border-top:1px solid rgba(255,255,255,0.08);";
+
+/** Everything passed in is already HTML: callers escape what came from people. */
+type Row = { label: string; amount?: string; kind?: "room" | "note" | "first-total" | "total" | "grand" };
+
+function row(r: Row): string {
+  const label =
+    r.kind === "room" ? `color:#DDDDDD;font-weight:600;padding-top:14px;`
+    : r.kind === "note" ? `font-size:13px;color:#777777;`
+    : r.kind === "first-total" ? `padding-top:12px;${RULE}`
+    : r.kind === "grand" ? `color:#F0F0F0;font-weight:600;`
+    : "";
+  const amount = r.kind === "first-total" ? `padding-top:12px;${RULE}` : r.kind === "grand" ? "color:#F0F0F0;font-weight:600;" : "";
+  if (r.amount === undefined) return `<tr><td colspan="2" style="${CELL}${label}">${r.label}</td></tr>`;
+  return `<tr><td style="${CELL}${label}">${r.label}</td><td style="${AMOUNT}${amount}">${r.amount}</td></tr>`;
+}
+
+function table(rows: Row[]): string {
+  return `<table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="margin:0 0 32px;background-color:#111111;border:1px solid rgba(255,255,255,0.06);border-radius:6px;"><tr><td style="padding:6px 18px 16px;"><table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation">${rows.map(row).join("")}</table></td></tr></table>`;
+}
+
+/**
+ * Consecutive nights at the same price, as one line each: "Fri 12 Mar 2027 ·
+ * 2 nights × €100.00". A discount spread over the stay can give every night
+ * its own price, and then every night gets its own line.
+ */
+export function nightRuns(nights: { date: string; price: number }[]): { label: string; amountCents: number }[] {
+  const runs: { from: string; count: number; priceCents: number }[] = [];
+  for (const n of nights) {
+    const last = runs[runs.length - 1];
+    if (last && last.priceCents === cents(n.price)) last.count += 1;
+    else runs.push({ from: n.date, count: 1, priceCents: cents(n.price) });
+  }
+  return runs.map((r) => ({
+    label: `${formatStayDate(r.from)} · ${r.count === 1 ? "1 night" : `${r.count} nights × ${euro(r.priceCents)}`}`,
+    amountCents: r.count * r.priceCents,
+  }));
+}
+
+function roomRows(rooms: MailRoom[]): Row[] {
+  return rooms.flatMap((r) => {
+    const cancel = r.freeCancellationUntil ? `free cancellation until ${r.freeCancellationUntil}` : "non-refundable";
+    return [
+      { label: escapeHtml(r.name), kind: "room" as const },
+      { label: escapeHtml(`${r.ratePlan}, ${r.guests}, ${cancel}`), kind: "note" as const },
+      ...nightRuns(r.nights).map((n) => ({ label: escapeHtml(n.label), amount: euro(n.amountCents) })),
+      ...r.touristTaxLines
+        .filter((t) => t.amount > 0)
+        .map((t) => ({ label: escapeHtml(`Tourist tax (${t.label})`), amount: euro(cents(t.amount)) })),
+    ];
+  });
+}
+
+function totalRows(m: MailMoney): Row[] {
+  const rows: Row[] = [{ label: "Rooms, incl. VAT", amount: euro(m.roomsCents), kind: "first-total" }];
+  if (m.touristTaxCents > 0) rows.push({ label: "Tourist tax", amount: euro(m.touristTaxCents) });
+  rows.push({ label: "Total paid", amount: euro(m.totalCents), kind: "grand" });
+  return rows;
+}
+
+function sellerLine(s: MailSeller): string {
+  const parts = [s.legalName && `Provided by ${STRONG(s.legalName)}`, s.vatNumber && `VAT number ${escapeHtml(s.vatNumber)}`].filter(Boolean);
+  return parts.length ? `<br /><br />${parts.join(", ")}.` : "";
+}
+
+// ─── The mails ─────────────────────────────────────────────────────────
 
 export function guestBookingConfirmed(i: {
   propertyName: string;
   checkIn: string;
   checkOut: string;
   rooms: MailRoom[];
-  total: string;
+  money: MailMoney;
+  seller: MailSeller;
+  /** The short booking reference the guest's booking page shows. */
+  reference: string;
   bookingUrl: string;
 }): ActionMail {
   return composeActionMail({
@@ -34,10 +120,11 @@ export function guestBookingConfirmed(i: {
     preheader: `Your stay at ${i.propertyName} is confirmed.`,
     eyebrow: "Booking",
     headline: "Your booking<br />is confirmed.",
-    body: `${STRONG(i.propertyName)}, ${stay(i.checkIn, i.checkOut)}.<br /><br />${roomLines(i.rooms)}<br /><br />Total paid: ${STRONG(i.total)}`,
+    body: `${STRONG(i.propertyName)}, ${stay(i.checkIn, i.checkOut)}.<br />Booking reference ${STRONG(i.reference)}${sellerLine(i.seller)}`,
+    details: table([...roomRows(i.rooms), ...totalRows(i.money)]),
     ctaUrl: i.bookingUrl,
     ctaLabel: "View your booking",
-    footnote: FOOTNOTE,
+    footnote: `Prices include VAT.${i.money.touristTaxCents > 0 ? " Tourist tax is collected for the local council." : ""} ${FOOTNOTE}`,
   });
 }
 
@@ -60,18 +147,26 @@ export function hostNewBooking(i: {
   checkIn: string;
   checkOut: string;
   rooms: MailRoom[];
-  total: string;
+  money: MailMoney;
+  /** OpenBookings' application fee on this booking; 0 while it is switched off. */
+  commissionCents: number;
+  reference: string;
   reservationsUrl: string;
 }): ActionMail {
+  const payout: Row[] = [
+    ...(i.commissionCents > 0 ? [{ label: "OpenBookings commission", amount: `−${euro(i.commissionCents)}` }] : []),
+    { label: "You receive", amount: euro(i.money.totalCents - i.commissionCents), kind: "grand" },
+  ];
   return composeActionMail({
     subject: `New booking at ${i.propertyName}`,
     preheader: `${i.guestName} booked ${i.propertyName}.`,
     eyebrow: "Reservations",
     headline: "You have a<br />new booking.",
-    body: `${STRONG(i.guestName)} booked ${STRONG(i.propertyName)}, ${stay(i.checkIn, i.checkOut)}.<br /><br />${roomLines(i.rooms)}<br /><br />Total paid: ${STRONG(i.total)}`,
+    body: `${STRONG(i.guestName)} booked ${STRONG(i.propertyName)}, ${stay(i.checkIn, i.checkOut)}.<br />Booking reference ${STRONG(i.reference)}`,
+    details: table([...roomRows(i.rooms), ...totalRows(i.money), ...payout]),
     ctaUrl: i.reservationsUrl,
     ctaLabel: "Open reservations",
-    footnote: FOOTNOTE,
+    footnote: `What you receive is before Stripe's processing fees. ${FOOTNOTE}`,
   });
 }
 

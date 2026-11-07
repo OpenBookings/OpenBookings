@@ -82,29 +82,44 @@ const hostsOf = (c: Ctx, propertyId: string, guestEmail: string) =>
 type BookingRow = {
   property_id: string;
   property_name: string;
+  legal_name: string | null;
+  vat_number: string | null;
   guestEmail: string;
   guestName: string;
   check_in_date: string;
   check_out_date: string;
-  total: number;
-  rooms: { name: string; rate_plan: string; adults: number; children: number; free_until: string | null }[];
+  rooms_total_cents: number;
+  tourist_tax_cents: number;
+  total_cents: number;
+  commission_cents: number;
+  rooms: {
+    name: string;
+    rate_plan: string;
+    adults: number;
+    children: number;
+    free_until: string | null;
+    nights: { date: string; price: number }[];
+    tax_lines: { label: string; amount: number }[];
+  }[];
 };
 
 async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null> {
   const rows = await rowsOf<BookingRow>(
     c.db,
     `SELECT p.id AS property_id, p.name AS property_name,
+            pc.legal_company_name AS legal_name, pc.vat_number,
             b.check_in_date::text AS check_in_date, b.check_out_date::text AS check_out_date,
             u.email AS "guestEmail", COALESCE(u.name, u.email) AS "guestName",
-            COALESCE((SELECT SUM((n->>'price')::numeric + (n->>'touristTax')::numeric)
-                        FROM reservations r, jsonb_array_elements(r.nights) n
-                       WHERE r.booking_id = b.id), 0)::float8 AS total,
+            b.rooms_total_cents::float8 AS rooms_total_cents, b.tourist_tax_cents::float8 AS tourist_tax_cents,
+            b.total_cents::float8 AS total_cents, b.commission_cents::float8 AS commission_cents,
             COALESCE((
               SELECT json_agg(json_build_object(
                 'name', rm.name, 'rate_plan', rp.name, 'adults', r.adults, 'children', r.children,
                 -- A deadline that has passed is no longer a free-cancellation promise.
                 'free_until', CASE WHEN r.full_refund_until > NOW()
-                  THEN to_char(r.full_refund_until AT TIME ZONE p.timezone, 'YYYY-MM-DD HH24:MI') END
+                  THEN to_char(r.full_refund_until AT TIME ZONE p.timezone, 'YYYY-MM-DD HH24:MI') END,
+                'nights', r.nights,
+                'tax_lines', r.tourist_tax_lines
               ) ORDER BY r.created_at, r.id)
               FROM reservations r
               JOIN rooms rm ON rm.id = r.room_id
@@ -113,6 +128,7 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
             ), '[]'::json) AS rooms
        FROM bookings b
        JOIN properties p ON p.id = b.hotel_id
+       LEFT JOIN property_content pc ON pc.property_id = p.id
        JOIN "user" u ON u.id = b.user_id
       WHERE b.id = $1::uuid`,
     [bookingId],
@@ -138,21 +154,34 @@ const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
     ratePlan: r.rate_plan,
     guests: guestsText(r.adults, r.children),
     freeCancellationUntil: deadline(r.free_until),
+    nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
+    touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amount: Number(t.amount) })),
   }));
+
+/** The short reference the guest's booking page shows. */
+const bookingReference = (bookingId: string) => bookingId.slice(0, 8).toUpperCase();
 
 /** The guest's confirmation and the host's new-booking notice. */
 export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {}): Promise<void> {
   const c = resolve(deps);
   const b = await loadBooking(c, bookingId);
   if (!b) throw new Error(`Booking ${bookingId} not found for its confirmation email`);
-  const shared = { propertyName: b.property_name, checkIn: b.check_in_date, checkOut: b.check_out_date, rooms: mailRooms(b.rooms), total: formatEuro(b.total) };
+  const shared = {
+    propertyName: b.property_name,
+    checkIn: b.check_in_date,
+    checkOut: b.check_out_date,
+    rooms: mailRooms(b.rooms),
+    money: { roomsCents: b.rooms_total_cents, touristTaxCents: b.tourist_tax_cents, totalCents: b.total_cents },
+    reference: bookingReference(bookingId),
+  };
+  const seller = { legalName: b.legal_name, vatNumber: b.vat_number };
   await deliverAll([
-    () => deliver(c, [b.guestEmail], guestBookingConfirmed({ ...shared, bookingUrl: bookingUrl(c, bookingId) })),
+    () => deliver(c, [b.guestEmail], guestBookingConfirmed({ ...shared, seller, bookingUrl: bookingUrl(c, bookingId) })),
     async () =>
       deliver(
         c,
         await hostsOf(c, b.property_id, b.guestEmail),
-        hostNewBooking({ ...shared, guestName: b.guestName, reservationsUrl: reservationsUrl(c) }),
+        hostNewBooking({ ...shared, guestName: b.guestName, commissionCents: b.commission_cents, reservationsUrl: reservationsUrl(c) }),
       ),
   ]);
 }

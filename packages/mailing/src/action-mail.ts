@@ -5,9 +5,10 @@ export type ActionMail = { subject: string; html: string };
 
 /**
  * Fills the shared "account-action" layout (headline, short body, one button).
- * `headline`, `body` and `footnote` are HTML written by the caller, who escapes
- * everything that came from a guest or host. Every other field is plain text,
- * escaped by loadTemplate.
+ * `details` is an optional block between the body and the button, such as a
+ * price breakdown. `headline`, `body`, `details` and `footnote` are HTML
+ * written by the caller, who escapes everything that came from a guest or
+ * host. Every other field is plain text, escaped by loadTemplate.
  */
 export function composeActionMail(input: {
   subject: string;
@@ -15,12 +16,13 @@ export function composeActionMail(input: {
   eyebrow: string;
   headline: string;
   body: string;
+  details?: string;
   ctaUrl: string;
   ctaLabel: string;
   footnote: string;
 }): ActionMail {
   return {
     subject: input.subject,
-    html: loadTemplate("account-action", input, { htmlSlots: ["headline", "body", "footnote"] }),
+    html: loadTemplate("account-action", { ...input, details: input.details ?? "" }, { htmlSlots: ["headline", "body", "details", "footnote"] }),
   };
 }

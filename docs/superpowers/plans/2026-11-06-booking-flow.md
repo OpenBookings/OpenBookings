@@ -455,7 +455,7 @@
 - [ ] **Step 2: Run** `cd apps/business && bun test lib/stripe-events.test.ts lib/booking-confirmation.test.ts` → FAIL.
 - [ ] **Step 3: Implement** handler cases, `confirmPaidCheckout`, route wiring, return page.
 - [ ] **Step 4: Run** → PASS; typecheck `apps/business`, `apps/web` → clean.
-- [ ] **Step 5: Manual end-to-end** (local, `TESTING=true` in both apps' env, `stripe listen --forward-connect-to localhost:<business port>/api/stripe/webhook`): search Lisbon → hotel `normal` → `POST /api/booking-intents` from the browser console with two rooms → `/checkout/<id>` → pay with `4242 4242 4242 4242` → return page links to `/bookings/<id>` showing two rooms. **No emails are expected yet**: the senders are no-ops until Task 13, so silence here is not a bug. Record the result in the commit message.
+- [ ] **Step 5: Manual end-to-end** (local, `TESTING=true` in both apps' env, `stripe listen --forward-connect-to localhost:3002/api/stripe/webhook` (the web app; booking checkouts moved there from the business app, see `apps/web/app/api/stripe/webhook/route.ts`)): search Lisbon → hotel `normal` → `POST /api/booking-intents` from the browser console with two rooms → `/checkout/<id>` → pay with `4242 4242 4242 4242` → return page links to `/bookings/<id>` showing two rooms. **No emails are expected yet**: the senders are no-ops until Task 13, so silence here is not a bug. Record the result in the commit message.
 - [ ] **Step 6: Commit** `Confirm bookings from the Stripe webhook`.
 
 ---

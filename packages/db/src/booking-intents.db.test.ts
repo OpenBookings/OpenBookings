@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import { loadStayAvailability } from "./availability";
 import type { LifecycleDb } from "./booking-lifecycle";
@@ -8,6 +8,8 @@ import {
   expireIntent,
   HOLD_MINUTES,
   IntentNotOpenError,
+  isCurrentPaymentSession,
+  listUnsettledPayments,
   loadIntent,
   loadIntentBySession,
   markIntentFailed,
@@ -118,6 +120,58 @@ describeWithDb("booking intents against Postgres", () => {
   const held = async () =>
     (await loadStayAvailability(db, { propertyId: ids.propertyId, checkIn: CHECK_IN, checkOut: CHECK_OUT, now: NOW }))[0]
       .nights.map((n) => n.held);
+
+  describe("payments the webhook may have missed", () => {
+    const realNow = new Date();
+    let n = 0;
+    /** An intent with a session, `ageMinutes` old, in `status`. Spaced in time so earlier holds never block later ones. */
+    const intent = async (status: string, ageMinutes: number, withSession = true) => {
+      const { intentId } = await created(`${guest}-${n}`, undefined, new Date(NOW.getTime() + n++ * 20 * MINUTE));
+      if (withSession) await attachPaymentSession(db, { intentId, sessionId: `cs_test_${intentId}`, accountId: "acct_test" });
+      await db.query(`UPDATE booking_intents SET status = $2, created_at = $3 WHERE id = $1`, [
+        intentId,
+        status,
+        new Date(realNow.getTime() - ageMinutes * MINUTE),
+      ]);
+      return intentId;
+    };
+    const list = async (ours: string[]) =>
+      (await listUnsettledPayments(db, { now: realNow, graceMinutes: 10, windowMinutes: 120, limit: 1000 }))
+        .filter((p) => ours.includes(p.intentId))
+        .map((p) => p.intentId);
+
+    test("open sessions until settled; expired and abandoned ones only while recent; oldest first", async () => {
+      const openOld = await intent("open", 600);
+      const open = await intent("open", 60);
+      const expired = await intent("expired", 30);
+      const abandoned = await intent("abandoned", 40);
+      const ours = [
+        openOld,
+        open,
+        expired,
+        abandoned,
+        await intent("open", 2), // the webhook still has time
+        await intent("expired", 300), // past anything Stripe could still do
+        await intent("failed", 30),
+        await intent("open", 60, false), // never reached checkout
+      ];
+      expect(await list(ours)).toEqual([openOld, open, abandoned, expired]);
+    });
+
+    test("each entry carries the session and the account to ask Stripe on", async () => {
+      const id = await intent("open", 60);
+      const [found] = (await listUnsettledPayments(db, { now: realNow, graceMinutes: 10, windowMinutes: 120, limit: 1000 }))
+        .filter((p) => p.intentId === id);
+      expect(found).toEqual({ intentId: id, sessionId: `cs_test_${id}`, accountId: "acct_test" });
+    });
+
+    test("only the session an intent is paying with is its current one", async () => {
+      const id = await intent("open", 60);
+      expect(await isCurrentPaymentSession(db, { intentId: id, sessionId: `cs_test_${id}` })).toBe(true);
+      expect(await isCurrentPaymentSession(db, { intentId: id, sessionId: "cs_test_replaced" })).toBe(false);
+      expect(await isCurrentPaymentSession(db, { intentId: "not-a-uuid", sessionId: `cs_test_${id}` })).toBe(false);
+    });
+  });
 
   test("hold length", async () => {
     const intent = await created(guest);

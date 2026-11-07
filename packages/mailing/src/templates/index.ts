@@ -274,6 +274,8 @@ export const templates: Record<string, string> = {
                   {{body}}
                 </p>
 
+                {{details}}
+
                 <!-- CTA -->
                 <table width="100%" cellspacing="0" cellpadding="0" border="0" role="presentation" style="margin-bottom:20px;">
                   <tr>

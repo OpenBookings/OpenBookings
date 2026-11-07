@@ -52,6 +52,14 @@ describeWithDb("booking emails against Postgres", () => {
     await db.query(`UPDATE rooms SET name = 'Deluxe Double' WHERE id = $1`, [ids.roomId]);
     // €100 a night + €3 tax, two nights, two rooms = €412.
     await db.query(`UPDATE reservations SET nights = $1::jsonb`, [JSON.stringify([{ date: "2027-03-12", price: 100, touristTax: 3 }, { date: "2027-03-13", price: 100, touristTax: 3 }])]);
+    await db.query(`UPDATE reservations SET tourist_tax_amount = 6, tourist_tax_lines = $2::jsonb WHERE booking_id = $1`, [
+      bookingId,
+      JSON.stringify([{ label: "€1.50 per person per night", amount: 6, effectiveFrom: "2026-01-01" }]),
+    ]);
+    await db.query(
+      `UPDATE bookings SET rooms_total_cents = 40000, tourist_tax_cents = 1200, total_cents = 41200, commission_cents = 1800 WHERE id = $1`,
+      [bookingId],
+    );
     guestEmail = (await one<{ email: string }>(`SELECT u.email FROM bookings b JOIN "user" u ON u.id = b.user_id WHERE b.id = $1`, [bookingId])).email;
   });
   afterEach(async () => {
@@ -72,6 +80,29 @@ describeWithDb("booking emails against Postgres", () => {
     expect(guestMail.html).toContain("Fri 12 Mar 2027");
     expect(guestMail.html).toContain(`https://web.test/bookings/${bookingId}`);
     expect(sent.find((m) => m.to !== guestEmail)!.html).toContain("https://biz.test/dashboard/bookings/reservations");
+  });
+
+  test("the confirmation itemises the stay from what the booking stored", async () => {
+    await db.query(
+      `INSERT INTO property_content (property_id, legal_company_name, vat_number) VALUES ($1, 'Test <Hotels> BV', 'NL001')
+       ON CONFLICT (property_id) DO UPDATE SET legal_company_name = EXCLUDED.legal_company_name, vat_number = EXCLUDED.vat_number`,
+      [propertyId],
+    );
+    await sendBookingConfirmed(bookingId, deps());
+    const guestMail = sent.find((m) => m.to === guestEmail)!.html;
+    expect(guestMail).toContain("Fri 12 Mar 2027 · 2 nights × €100.00");
+    expect(guestMail).toContain("Tourist tax (€1.50 per person per night)");
+    expect(guestMail).toContain("€400.00");
+    expect(guestMail).toContain("€12.00");
+    expect(guestMail).toContain("€412.00");
+    expect(guestMail).toContain(bookingId.slice(0, 8).toUpperCase());
+    expect(guestMail).toContain("Test &lt;Hotels&gt; BV");
+    expect(guestMail).toContain("NL001");
+    expect(guestMail.toLowerCase()).not.toContain("commission");
+
+    const hostMail = sent.find((m) => m.to !== guestEmail)!.html;
+    expect(hostMail).toContain("−€18.00");
+    expect(hostMail).toContain("€394.00");
   });
 
   test("a free-cancellation deadline shows with its time, and a past one shows as non-refundable", async () => {

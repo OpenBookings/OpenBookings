@@ -596,6 +596,15 @@ export const bookings = pgTable(
     status: bookingStatusEnum("status").notNull().default("pending"),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
     bookingFeeAmount: bigint("booking_fee_amount", { mode: "number" }).notNull().default(0),
+    // The exact money split, in cents (0035). `totalAmount` is whole euros; read these instead.
+    /** The stay, VAT included. Commission is taken on this. */
+    roomsTotalCents: bigint("rooms_total_cents", { mode: "number" }).notNull().default(0),
+    /** Passed through to the host for their town; never commissioned. */
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull().default(0),
+    /** What the guest paid: rooms plus tourist tax. */
+    totalCents: bigint("total_cents", { mode: "number" }).notNull().default(0),
+    /** OpenBookings' application fee. 0 while the fee is switched off. */
+    commissionCents: bigint("commission_cents", { mode: "number" }).notNull().default(0),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
     guestNotes: text("guest_notes"),
