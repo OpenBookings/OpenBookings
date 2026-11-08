@@ -13,7 +13,8 @@
     "./profiles": "./src/profiles.ts",
     "./vies": "./src/vies.ts",
     "./profile-backfill": "./src/profile-backfill.ts",
-    "./readiness": "./src/readiness.ts"
+    "./readiness": "./src/readiness.ts",
+    "./ledger": "./src/ledger/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

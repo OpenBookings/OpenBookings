@@ -30,11 +30,13 @@ export {
 } from './events';
 export {
   buildRefundParams,
+  buildReturnUnexplainedRequest,
   findRefundByMetadata,
   findRefundForRow,
   isDefiniteRefundFailure,
   matchRefund,
   matchRefundByMetadata,
   refundPayment,
+  returnUnexplainedPayment,
   type RefundPaymentInput,
 } from './payments/refund';
