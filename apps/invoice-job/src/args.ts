@@ -17,7 +17,9 @@ export const USAGE = `Usage: bun run src/main.ts --step=<step> [options]
 
 --period defaults to last month (Europe/Amsterdam) and must be a month that is over.
 --open-month (test mode only, any step but report) also allows the current month,
-so the whole flow can be tried before a month closes.`;
+so the whole flow can be tried before a month closes.
+--ignore-unknown-accounts (test mode only, draft and backfill) lists fees on
+accounts no organization owns without blocking.`;
 
 /** The command line could not be understood, or asks for something the step does not do. */
 export class ArgsError extends Error {
@@ -41,20 +43,22 @@ export type JobArgs = {
   preview: boolean;
   /** Test mode only: the current month counts as over (main refuses it in live mode). */
   openMonth: boolean;
+  /** Test mode only: fees on accounts no organization owns don't block reconciliation (main refuses it in live mode). */
+  ignoreUnknownAccounts: boolean;
 };
 
 /** Which flags each step accepts besides `--step`. */
 const ALLOWED: Record<Step, readonly string[]> = {
-  draft: ["period", "dry-run", "entity", "preview", "open-month"],
+  draft: ["period", "dry-run", "entity", "preview", "open-month", "ignore-unknown-accounts"],
   issue: ["period", "entity", "open-month"],
   store: ["period", "open-month"],
   deliver: ["period", "open-month"],
   report: ["quarter"],
-  backfill: ["from", "dry-run", "open-month"],
+  backfill: ["from", "dry-run", "open-month", "ignore-unknown-accounts"],
 };
 
 const VALUED = new Set(["step", "period", "from", "quarter", "entity"]);
-const BOOLEAN = new Set(["dry-run", "preview", "open-month"]);
+const BOOLEAN = new Set(["dry-run", "preview", "open-month", "ignore-unknown-accounts"]);
 
 function month(value: string, flag: string): Period {
   try {
@@ -114,6 +118,7 @@ export function parseArgs(argv: string[], now: Date): JobArgs {
     dryRun: flags.has("dry-run"),
     preview: flags.has("preview"),
     openMonth,
+    ignoreUnknownAccounts: flags.has("ignore-unknown-accounts"),
   };
 
   const entity = values.get("entity");

@@ -79,6 +79,7 @@ async function draft(ctx: Context): Promise<Outcome> {
         entity: args.entity,
         dryRun: args.dryRun,
         runId,
+        ignoreUnknownAccounts: args.ignoreUnknownAccounts,
       });
       const status: Outcome = report.reconcile.status === "blocked" || report.blocked.length > 0 ? "blocked" : "succeeded";
       return { status, report, value: report };
@@ -182,8 +183,13 @@ async function report(ctx: Context): Promise<Outcome> {
   return run.status;
 }
 
-const blockers = (r: ReconcileResult) =>
-  r.missingInStripe.length + r.amountMismatches.length + r.unknownAccounts.length + r.unsettled.length + r.missingProfiles.length + r.notYetReturned.length;
+const blockers = (r: ReconcileResult, ignoreUnknownAccounts = false) =>
+  r.missingInStripe.length +
+  r.amountMismatches.length +
+  (ignoreUnknownAccounts ? 0 : r.unknownAccounts.length) +
+  r.unsettled.length +
+  r.missingProfiles.length +
+  r.notYetReturned.length;
 
 /**
  * Reconciles every month from `--from` through last month, one run per month
@@ -199,11 +205,18 @@ async function backfill(ctx: Context): Promise<Outcome> {
   if (args.dryRun) console.log("DRY RUN: nothing is written and no money moves.");
   for (const period of backfillMonths(args.from!, ctx.now, args.openMonth)) {
     const run = await withRun(deps.pool, { periodStart: period.start, step: "backfill", dryRun: args.dryRun }, async () => {
-      const result = await reconcile(period, { db: deps.pool, stripe: source, ledger, dryRun: args.dryRun, inTransaction: deps.inTransaction });
+      const result = await reconcile(period, {
+        db: deps.pool,
+        stripe: source,
+        ledger,
+        dryRun: args.dryRun,
+        inTransaction: deps.inTransaction,
+        ignoreUnknownAccounts: args.ignoreUnknownAccounts,
+      });
       return { status: result.status, report: { dryRun: args.dryRun, reconcile: result }, value: result };
     });
     const r = run.value;
-    console.log(`${month(period)}: ${run.status}, backfilled ${r.backfilled.length}, returned ${r.returned.length}, blockers ${blockers(r)}`);
+    console.log(`${month(period)}: ${run.status}, backfilled ${r.backfilled.length}, returned ${r.returned.length}, blockers ${blockers(r, args.ignoreUnknownAccounts)}`);
     if (run.status === "blocked") {
       const detail = {
         unknownAccounts: r.unknownAccounts,
@@ -242,6 +255,9 @@ export async function main(argv: string[], env: Env, now = new Date()): Promise<
     const mode = assertModeMatch(env);
     Sentry.setTag("mode", mode);
     if (args.openMonth && mode !== "test") throw new Error("--open-month is for test mode only: a live month is invoiced once it is over");
+    if (args.ignoreUnknownAccounts && mode !== "test") {
+      throw new Error("--ignore-unknown-accounts is for test mode only: in live mode every fee must belong to a host");
+    }
     console.log(`invoice-job: --step=${args.step} ${args.quarter ?? month(args.from ?? args.period)}${args.dryRun ? " (dry run)" : ""}, ${mode} mode`);
     const outcome = await STEPS[args.step]({ args, env, mode, now, deps: jobDeps(env) });
     return outcome === "blocked" ? 2 : 0;

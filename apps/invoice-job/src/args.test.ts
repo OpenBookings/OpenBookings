@@ -102,3 +102,12 @@ describe("--open-month", () => {
     expect(backfillMonths(args.from!, NOW, true).map((p) => p.start.slice(0, 7))).toEqual(["2026-10", "2026-11"]);
   });
 });
+
+describe("--ignore-unknown-accounts", () => {
+  test("is read for draft and backfill only", () => {
+    expect(parseArgs(["--step=draft", "--ignore-unknown-accounts"], NOW).ignoreUnknownAccounts).toBe(true);
+    expect(parseArgs(["--step=backfill", "--from=2026-10", "--ignore-unknown-accounts"], NOW).ignoreUnknownAccounts).toBe(true);
+    expect(parseArgs(["--step=draft"], NOW).ignoreUnknownAccounts).toBe(false);
+    expect(() => parseArgs(["--step=issue", "--ignore-unknown-accounts"], NOW)).toThrow(ArgsError);
+  });
+});

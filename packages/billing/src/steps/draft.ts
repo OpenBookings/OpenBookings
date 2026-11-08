@@ -80,6 +80,8 @@ export type DraftDeps = {
   dryRun: boolean;
   /** The `invoice_runs` row of this run, which every draft it writes points to. */
   runId: string;
+  /** Passed to reconcile: test mode only, fees on unknown accounts don't block. */
+  ignoreUnknownAccounts?: boolean;
 };
 
 type Prepared = { entityId: string; totals: DraftTotals; refersTo: string[] };
@@ -108,6 +110,7 @@ export async function runDraft(period: Period, deps: DraftDeps): Promise<DraftRe
     ledger: deps.ledger,
     dryRun,
     inTransaction: deps.inTransaction,
+    ignoreUnknownAccounts: deps.ignoreUnknownAccounts,
   });
   const report: DraftReport = {
     period: period.start.slice(0, 7),

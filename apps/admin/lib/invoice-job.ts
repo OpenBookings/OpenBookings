@@ -30,6 +30,7 @@ export async function runInvoiceJob(_prev: JobRun | null, form: FormData): Promi
     entity: String(form.get("entity") ?? ""),
     dryRun: form.get("dryRun") === "on",
     openMonth: form.get("openMonth") === "on",
+    ignoreUnknownAccounts: form.get("ignoreUnknownAccounts") === "on",
   });
   if (!built.ok) return { kind: "refused", error: built.error };
 

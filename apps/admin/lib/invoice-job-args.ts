@@ -12,7 +12,14 @@ const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ENTITY_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const DRY_RUN_STEPS: readonly JobStep[] = ["backfill", "draft"];
 
-export type JobInput = { step: string; month: string; entity: string; dryRun: boolean; openMonth?: boolean };
+export type JobInput = {
+  step: string;
+  month: string;
+  entity: string;
+  dryRun: boolean;
+  openMonth?: boolean;
+  ignoreUnknownAccounts?: boolean;
+};
 
 export function jobArgs(input: JobInput): { ok: true; args: string[] } | { ok: false; error: string } {
   const step = input.step as JobStep;
@@ -26,6 +33,8 @@ export function jobArgs(input: JobInput): { ok: true; args: string[] } | { ok: f
   if (input.dryRun && DRY_RUN_STEPS.includes(step)) args.push("--dry-run");
   // Test mode only (the job refuses it with a live key): lets the current month run before it closes.
   if (input.openMonth) args.push("--open-month");
+  // Test mode only too: fees on throwaway test accounts are listed without blocking (backfill and draft reconcile).
+  if (input.ignoreUnknownAccounts && DRY_RUN_STEPS.includes(step)) args.push("--ignore-unknown-accounts");
   return { ok: true, args };
 }
 

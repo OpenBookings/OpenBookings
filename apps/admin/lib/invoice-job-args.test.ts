@@ -30,6 +30,17 @@ describe("jobArgs", () => {
     });
   });
 
+  test("passes --ignore-unknown-accounts only to the steps that reconcile", () => {
+    expect(jobArgs({ step: "draft", month: "2026-11", entity: "", dryRun: true, ignoreUnknownAccounts: true })).toEqual({
+      ok: true,
+      args: ["--step=draft", "--period=2026-11", "--dry-run", "--ignore-unknown-accounts"],
+    });
+    expect(jobArgs({ step: "issue", month: "2026-11", entity: "", dryRun: false, ignoreUnknownAccounts: true })).toEqual({
+      ok: true,
+      args: ["--step=issue", "--period=2026-11"],
+    });
+  });
+
   test("refuses an unknown step, a bad month and odd organization ids", () => {
     expect(jobArgs({ step: "report", month: "2026-10", entity: "", dryRun: false }).ok).toBe(false);
     expect(jobArgs({ step: "draft", month: "2026-13", entity: "", dryRun: false }).ok).toBe(false);

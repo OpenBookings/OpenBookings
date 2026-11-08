@@ -75,6 +75,12 @@ export type ReconcileDeps = {
    * `savepointTransaction(client)` for a connection already in a transaction.
    */
   inTransaction: TransactionRunner;
+  /**
+   * Test mode only (the job refuses it otherwise): fees on accounts no
+   * organization owns are still listed in `unknownAccounts` but do not block.
+   * For a Stripe test account cluttered by throwaway accounts.
+   */
+  ignoreUnknownAccounts?: boolean;
 };
 
 /** BEGIN / COMMIT on a client checked out of `pool`; ROLLBACK when the work throws; the client is always released. */
@@ -306,7 +312,7 @@ async function run(period: Period, deps: ReconcileDeps, baseLedger: LedgerDeps):
   const blocked =
     result.missingInStripe.length +
     result.amountMismatches.length +
-    result.unknownAccounts.length +
+    (deps.ignoreUnknownAccounts ? 0 : result.unknownAccounts.length) +
     result.unsettled.length +
     result.missingProfiles.length +
     result.notYetReturned.length;

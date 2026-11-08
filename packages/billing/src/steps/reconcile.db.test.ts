@@ -301,6 +301,17 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     expect(await rows()).toEqual([]);
   });
 
+  test.each([false, true])("with ignoreUnknownAccounts an unknown account is listed but does not block (dry run: %p)", async (dryRun) => {
+    const stranger = `acct_${crypto.randomUUID().slice(0, 12)}`;
+    stripeFee({ account: stranger });
+
+    const result = await reconcile(PERIOD, deps({ dryRun, ignoreUnknownAccounts: true }));
+
+    expect(result.status).toBe("succeeded");
+    expect(result.unknownAccounts).toEqual([stranger]);
+    expect(await rows()).toEqual([]);
+  });
+
   test.each([false, true])("a fee whose payment has not become a booking yet → blocked, listed as unsettled (dry run: %p)", async (dryRun) => {
     const intentId = await seedIntent("open");
     const f = stripeFee();

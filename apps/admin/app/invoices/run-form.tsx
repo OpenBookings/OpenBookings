@@ -49,6 +49,10 @@ export function RunForm({ defaultMonth }: { defaultMonth: string }) {
           <input type="checkbox" name="openMonth" />
           Allow the current month (test only)
         </label>
+        <label className="flex items-center gap-2 text-sm h-9">
+          <input type="checkbox" name="ignoreUnknownAccounts" />
+          Ignore unknown Stripe accounts (test only)
+        </label>
         <Button type="submit" disabled={pending}>
           {pending ? "Running…" : "Run"}
         </Button>

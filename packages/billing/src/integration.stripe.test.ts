@@ -5,6 +5,12 @@
  * steps run for real (reconcile and draft, issue, store, deliver) and the
  * ledger, the two documents, the stored files and the emails are checked.
  *
+ * Use a DEDICATED Stripe sandbox for STRIPE_TEST_SECRET_KEY, not the test key
+ * the apps run on: the connected accounts it creates are deleted afterwards,
+ * but Stripe keeps their fees in the platform's history, and every later
+ * reconciliation of that month would then meet fees on accounts no
+ * organization owns.
+ *
  * Skipped unless STRIPE_TEST_SECRET_KEY (a `sk_test_` key, anything else is
  * refused), DATABASE_URL AND the explicit flag BILLING_TEST_DATABASE=1 are
  * set. The flag says "DATABASE_URL is a throwaway test branch, not production":
