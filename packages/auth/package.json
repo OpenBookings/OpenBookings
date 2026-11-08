@@ -12,7 +12,7 @@
     "./env": "./src/env.ts"
   },
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

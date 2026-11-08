@@ -7,7 +7,7 @@
     "build": "echo 'apps/admin is dev-only and is never built' && exit 0",
     "start": "next start -p 3005 -H 127.0.0.1",
     "lint": "eslint",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

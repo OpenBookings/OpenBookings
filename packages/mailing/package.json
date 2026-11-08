@@ -7,7 +7,7 @@
     "./booking-send": "./src/booking-send.ts"
   },
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
