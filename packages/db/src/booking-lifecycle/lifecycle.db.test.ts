@@ -1,11 +1,14 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { loadBookingEvents, type BookingEventKind } from "../booking-events";
 import { confirmBookingPolicy } from "../reservation-policy";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import {
   cancelRooms,
   issueGoodwillRefund,
+  markCheckedIn,
   markNoShow,
+  recordEarlyDeparture,
   retryRefunds,
   type LifecycleDb,
   type LifecycleDeps,
@@ -200,5 +203,111 @@ describeWithDb("booking lifecycle against Postgres", () => {
       ok: false,
       error: "not_allowed",
     });
+  });
+  test("cancel writes rooms_cancelled and refund_succeeded", async () => {
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: null });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind !== "confirmed");
+    expect(events.map((e) => e.kind)).toEqual(["rooms_cancelled", ...reservationIds.map(() => "refund_succeeded")] as BookingEventKind[]);
+    expect(events[0].actorKind).toBe("guest");
+    expect(events[0].actorId).toBe("test-guest");
+    expect(events[0].data.cancelsBooking).toBe(true);
+    expect(events[1].actorKind).toBe("system");
+    expect(events.slice(1).map((e) => e.reservationId).sort()).toEqual([...reservationIds].sort());
+  });
+
+  test("no-show writes no_show with via admin", async () => {
+    const afterWindow = new Date(CHECK_IN_AT + 12 * 3_600_000);
+    await markNoShow(deps(afterWindow), { bookingId, actor: { ...host, via: "admin" } });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "no_show");
+    expect(events).toHaveLength(1);
+    expect(events[0].actorKind).toBe("host");
+    expect(events[0].data.via).toBe("admin");
+  });
+
+  test("check-in writes checked_in", async () => {
+    const during = new Date(CHECK_IN_AT + 3_600_000);
+    expect(await markCheckedIn(deps(during), { bookingId, actor: host })).toEqual({ ok: true, refunds: [] });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "checked_in");
+    expect(events).toHaveLength(1);
+    expect(events[0].actorKind).toBe("host");
+  });
+
+  test("early departure writes early_departure with the last night stayed", async () => {
+    const during = new Date(CHECK_IN_AT + 3_600_000);
+    await markCheckedIn(deps(during), { bookingId, actor: host });
+    const result = await recordEarlyDeparture(deps(during), { bookingId, actor: host, lastNightStayed: "2031-11-10" });
+    expect(result.ok).toBe(true);
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "early_departure");
+    expect(events).toHaveLength(1);
+    expect(events[0].data.lastNightStayed).toBe("2031-11-10");
+  });
+
+  test("goodwill writes goodwill_refund with the requested and capped amount", async () => {
+    await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 10_000 });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "goodwill_refund");
+    expect(events).toHaveLength(1);
+    expect(events[0].data.requested).toBe(10_000);
+    expect(events[0].data.amount).toBe(618);
+  });
+
+  test("a refund Stripe refuses writes refund_failed as the system", async () => {
+    refund = async () => {
+      throw new Error("card_declined");
+    };
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "refund_failed");
+    expect(events).toHaveLength(1);
+    expect(events[0].actorKind).toBe("system");
+    expect(events[0].reservationId).toBe(reservationIds[0]);
+    expect(String(events[0].data.error)).toContain("card_declined");
+  });
+
+  test("an admin retry stamps via admin on the refund outcome event", async () => {
+    refund = async () => {
+      throw new Error("card_declined");
+    };
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    refund = async () => ({ id: "re_retry", status: "succeeded" });
+    await retryRefunds(deps(), { bookingId, via: "admin" });
+    const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "refund_succeeded");
+    expect(events).toHaveLength(1);
+    expect(events[0].data.via).toBe("admin");
+  });
+
+  test("a refused action writes nothing", async () => {
+    const afterWindow = new Date(CHECK_IN_AT + 12 * 3_600_000);
+    expect(await markNoShow(deps(afterWindow), { bookingId, actor: guest })).toEqual({ ok: false, error: "not_allowed" });
+    expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind !== "confirmed")).toEqual([]);
+  });
+
+  test("confirming writes confirmed once", async () => {
+    await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
+    await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
+    expect((await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "confirmed")).toHaveLength(1);
+  });
+
+  test("a failing event insert after the refund never changes the refund outcome", async () => {
+    const base = lifecycleDb();
+    const failing: LifecycleDb = {
+      ...base,
+      query: (text, values) =>
+        text.includes("INSERT INTO booking_events") ? Promise.reject(new Error("events down")) : base.query(text, values),
+    };
+    const errors = console.error;
+    console.error = () => {};
+    try {
+      const result = await cancelRooms({ ...deps(), db: failing }, { bookingId, actor: guest, reservationIds: null });
+      expect(result.ok && result.refunds.map((r) => r.status)).toEqual(reservationIds.map(() => "succeeded"));
+    } finally {
+      console.error = errors;
+    }
+    expect(calls).toHaveLength(reservationIds.length);
+    const statuses = (await db.query(`SELECT status FROM refunds WHERE booking_id = $1`, [bookingId])).rows as { status: string }[];
+    expect(statuses.map((r) => r.status)).toEqual(reservationIds.map(() => "succeeded"));
+    const audit = await one<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM audit_log WHERE action IN ('refund.failed', 'refund.uncertain') AND detail->>'bookingId' = $1`,
+      [bookingId],
+    );
+    expect(audit.n).toBe(0);
   });
 });

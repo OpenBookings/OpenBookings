@@ -24,11 +24,20 @@ export const describeWithDb = connectionString ? describe : describe.skip;
  * `ALTER TABLE ... IF NOT EXISTS` holds an exclusive table lock until the
  * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
  * branch, so a long list here makes them queue behind each other's locks.
+ *
+ * Some of those locks are shared, not exclusive: a no-op `CREATE INDEX IF NOT
+ * EXISTS` still takes a SHARE lock on its table. Two suites can both hold it,
+ * then both insert into that table, and each waits on the other: a deadlock.
+ * So the replay first takes one advisory lock, held until the test's
+ * ROLLBACK, and suites take turns instead.
  */
-const PENDING: string[] = [];
+const PENDING: string[] = ["0032_booking_events.sql"];
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
+const PENDING_MIGRATIONS_LOCK = 7_301_032;
 
 export async function applyPendingMigrations(db: Client): Promise<void> {
+  if (PENDING.length === 0) return;
+  await db.query("SELECT pg_advisory_xact_lock($1)", [PENDING_MIGRATIONS_LOCK]);
   for (const file of PENDING) {
     await db.query(readFileSync(fileURLToPath(new URL(file, DRIZZLE_DIR)), "utf8"));
   }

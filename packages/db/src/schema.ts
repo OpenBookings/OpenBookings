@@ -721,6 +721,28 @@ export const transactions = pgTable(
   ],
 );
 
+/** Append-only log of what happened to a booking and who did it. */
+export const bookingEvents = pgTable(
+  "booking_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    reservationId: uuid("reservation_id").references(() => reservations.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    actorKind: text("actor_kind").notNull(),
+    actorId: text("actor_id"),
+    reason: text("reason"),
+    data: jsonb("data").notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_booking_events_booking").on(table.bookingId, table.createdAt),
+    check("booking_events_actor_kind", sql`${table.actorKind} IN ('guest','host','system','admin')`),
+  ],
+);
+
 export const messageThreads = pgTable(
   "message_threads",
   {
