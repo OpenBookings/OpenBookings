@@ -9,6 +9,7 @@
 import { parseBackdropManifest, type Backdrop } from "@openbookings/images";
 import type { Queryable } from "@openbookings/db";
 import manifest from "../../images/manifest.json";
+import { DEMO_LEGAL_COMPANY_NAME, DEMO_VAT_NUMBER } from "./organisation";
 import type { Rng } from "./random";
 
 export type DemoImages = { hero: string; gallery: string[] };
@@ -89,6 +90,14 @@ export async function insertDemoProperty(db: Queryable, p: DemoPropertyInput): P
              '15:00', '22:00', '11:00', true, true, $9::cancellation_tier, $10)
      RETURNING id`,
     [p.name, p.slug, `1 ${p.city} Street`, p.city, p.country, p.timezone, p.lon, p.lat, p.cancellationTier, p.organizationId],
+  );
+  // Legal details, so a demo hotel passes the readiness gate like any other.
+  await db.query(
+    `INSERT INTO property_content (property_id, legal_company_name, vat_number)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (property_id) DO UPDATE
+       SET legal_company_name = EXCLUDED.legal_company_name, vat_number = EXCLUDED.vat_number`,
+    [row.id, DEMO_LEGAL_COMPANY_NAME, DEMO_VAT_NUMBER],
   );
   const urls = [p.images.hero, ...p.images.gallery];
   for (const [i, url] of urls.entries()) {

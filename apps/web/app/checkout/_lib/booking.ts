@@ -53,6 +53,7 @@ export type StaySummary = {
   paymentSessionId: string | null;
   paymentAccountId: string | null;
 
+  propertyId: string;
   propertySlug: string;
   propertyName: string;
   /** The host's own one-liner, e.g. "A haven for regeneration and relaxation". */
@@ -278,6 +279,7 @@ export async function getBookingSummary(
     paymentSessionId: intent.paymentSessionId,
     paymentAccountId: intent.paymentAccountId,
 
+    propertyId: intent.propertyId,
     propertySlug: intent.propertySlug,
     propertyName: property.name,
     propertySubtitle: property.subtitle,

@@ -144,6 +144,13 @@ describe("interpretBookResponse", () => {
     expect(interpretBookResponse(201, {}).kind).toBe("error");
   });
 
+  test("409 not_ready tells the guest the property cannot take bookings", () => {
+    expect(interpretBookResponse(409, { error: "not_ready" })).toEqual({
+      kind: "error",
+      message: "This property can't take bookings right now.",
+    });
+  });
+
   test("401 asks to sign in", () => {
     expect(interpretBookResponse(401, { error: "auth_required" })).toEqual({ kind: "sign_in" });
   });

@@ -11,6 +11,8 @@ interface SectionRailProps<S extends string> {
   statuses: Record<S, SectionStatus>;
   active: S;
   completed: number;
+  /** Other things still needed before the listing can take bookings; shown beside the sections. */
+  readiness?: readonly string[];
   onSelect: (section: S) => void;
   publishSlot: React.ReactNode;
 }
@@ -25,6 +27,7 @@ export function SectionRail<S extends string>({
   statuses,
   active,
   completed,
+  readiness = [],
   onSelect,
   publishSlot,
 }: SectionRailProps<S>) {
@@ -76,6 +79,19 @@ export function SectionRail<S extends string>({
         <p className="px-3 text-muted-foreground text-xs tabular-nums">
           {completed} of {sections.length} sections done
         </p>
+        {readiness.length > 0 && (
+          <div className="px-3">
+            <p className="font-medium text-xs">Before you can take bookings</p>
+            <ul className="mt-1 flex flex-col gap-1 text-muted-foreground text-xs">
+              {readiness.map((label) => (
+                <li key={label} className="flex items-start gap-1.5">
+                  <CircleAlertIcon className="mt-0.5 size-3 shrink-0 text-destructive" aria-hidden />
+                  {label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="px-3">{publishSlot}</div>
       </div>
     </nav>

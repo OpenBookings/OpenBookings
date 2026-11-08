@@ -16,6 +16,7 @@
     "@maplibre/maplibre-gl-style-spec": "^26.4.4",
     "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
+    "@openbookings/billing": "workspace:*",
     "@openbookings/authz": "workspace:*",
     "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
