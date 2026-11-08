@@ -22,6 +22,9 @@ const EU_COUNTRIES: ReadonlySet<string> = Object.freeze(
   ]),
 );
 
+/** The 27 EU member states as ISO 3166-1 alpha-2 codes, sorted. */
+export const EU_COUNTRY_CODES: readonly string[] = [...EU_COUNTRIES].sort();
+
 /** VAT rate on the commission invoice in basis points (21% -> 2100). */
 export function vatRateBp(treatment: VatTreatment): 2100n | 0n {
   return treatment === "NL_DOMESTIC" ? 2100n : 0n;
