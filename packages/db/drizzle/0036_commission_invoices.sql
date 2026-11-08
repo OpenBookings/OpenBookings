@@ -23,6 +23,10 @@
 -- Apply by hand / CI. Additive: safe for the code running before this
 -- deploy. Re-runnable.
 
+-- Fail fast instead of queueing: ALTER TABLE bookings needs a brief exclusive
+-- lock, and waiting behind a long transaction would hold up every bookings query.
+SET lock_timeout = '5s';
+
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS commission_rate numeric(6,5) NULL;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS commission_vat_treatment text NULL
   CHECK (commission_vat_treatment IN ('NL_DOMESTIC', 'EU_REVERSE_CHARGE'));
@@ -206,3 +210,5 @@ DROP TRIGGER IF EXISTS invoices_immutable ON invoices;
 CREATE TRIGGER invoices_immutable
   BEFORE UPDATE OR DELETE ON invoices
   FOR EACH ROW EXECUTE FUNCTION invoices_immutable();
+
+RESET lock_timeout;
