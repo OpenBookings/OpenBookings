@@ -13,14 +13,14 @@ const HEADER = [
 ];
 
 /** Signed cents as a plain decimal: `10.80`, `-4.05`. */
-function decimal(cents: bigint): string {
+export function decimal(cents: bigint): string {
   const negative = cents < 0n;
   const abs = negative ? -cents : cents;
   return `${negative ? "-" : ""}${abs / 100n}.${String(abs % 100n).padStart(2, "0")}`;
 }
 
 /** Quotes a field only when it holds the separator, a quote or a line break. */
-function field(value: string): string {
+export function field(value: string): string {
   return /[;"\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
