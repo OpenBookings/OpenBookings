@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import { createR2Store } from "./r2";
 
 const ENV = {
-  INVOICES_R2_ENDPOINT: "https://acct.eu.r2.cloudflarestorage.com",
-  INVOICES_R2_ACCESS_KEY_ID: "AKIATEST",
-  INVOICES_R2_SECRET_ACCESS_KEY: "secret",
-  INVOICES_R2_BUCKET: "invoices-test",
+  R2_ENDPOINT: "https://acct.eu.r2.cloudflarestorage.com",
+  R2_ACCESS_KEY_ID: "AKIATEST",
+  R2_SECRET_ACCESS_KEY: "secret",
+  R2_INVOICES_BUCKET_NAME: "invoices-test",
 };
 
 /** A client whose `send` records commands and answers from `reply`. */
@@ -76,5 +76,5 @@ test("presign signs a download link that names the file and expires", async () =
 });
 
 test("missing configuration is named", () => {
-  expect(() => createR2Store({ ...ENV, INVOICES_R2_BUCKET: undefined })).toThrow("INVOICES_R2_BUCKET");
+  expect(() => createR2Store({ ...ENV, R2_INVOICES_BUCKET_NAME: undefined })).toThrow("R2_INVOICES_BUCKET_NAME");
 });

@@ -63,10 +63,10 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 | `SELLER_KVK` | issue, preview | KvK number. |
 | `SELLER_VAT_ID` | issue, preview | OpenBookings' VAT id. |
 | `SELLER_BILLING_EMAIL` | issue, preview | Contact email printed on the invoice. |
-| `INVOICES_R2_ENDPOINT` | store, deliver | The invoice bucket's S3 endpoint (the EU-jurisdiction host). |
-| `INVOICES_R2_BUCKET` | store, deliver | `ob-invoices` in production; the test bucket otherwise. |
-| `INVOICES_R2_ACCESS_KEY_ID` | store, deliver | An R2 token with **object read/write only**. Never a bucket-admin token: that one can remove the lock rule (spec decision 13). |
-| `INVOICES_R2_SECRET_ACCESS_KEY` | store, deliver | Its secret. |
+| `R2_ENDPOINT` | store, deliver | The same R2 endpoint the business app uses for images (the EU-jurisdiction host). |
+| `R2_ACCESS_KEY_ID` | store, deliver | The same R2 token as the business app. It needs **object read/write** on the invoice bucket too, and must never be a bucket-admin token: that one can remove the lock rule (spec decision 13). |
+| `R2_SECRET_ACCESS_KEY` | store, deliver | Its secret. |
+| `R2_INVOICES_BUCKET_NAME` | store, deliver | `ob-invoices` in production; the test bucket otherwise. The only R2 setting that differs from the image bucket. |
 
 ## Monthly runbook
 
@@ -126,7 +126,7 @@ From the spec; do these in order.
 - **Arguments:** `--step=draft`.
 - **Cron:** `0 6 1 * *`, time zone `Europe/Amsterdam`.
 - **Environment:** every variable above. Put the secrets (`DATABASE_URL`, `STRIPE_SECRET_KEY`,
-  `INVOICES_R2_SECRET_ACCESS_KEY`, `LETTERMINT_PROJECT_TOKEN`, `SLACK_WEBHOOK_URL`, `SENTRY_DSN`) in Secret
+  `R2_SECRET_ACCESS_KEY`, `LETTERMINT_PROJECT_TOKEN`, `SLACK_WEBHOOK_URL`, `SENTRY_DSN`) in Secret
   Manager and reference them. Set `INVOICE_DB_ENV=production` with the live key.
 - **Resources:** 1 vCPU and 1 GB are plenty; give it a timeout of 30 minutes (VIES retries back off up to
   21 s per host).

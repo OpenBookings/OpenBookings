@@ -15,24 +15,24 @@ function required(env: R2Env, name: string): string {
 const dispositionName = (filename: string) => filename.replace(/[^\w.\- ]/g, "_");
 
 /**
- * The invoice bucket on Cloudflare R2, through the S3 API. Separate from the
- * media bucket: its own endpoint (the EU-jurisdiction host), keys and name
- * (`INVOICES_R2_ENDPOINT`, `INVOICES_R2_ACCESS_KEY_ID`,
- * `INVOICES_R2_SECRET_ACCESS_KEY`, `INVOICES_R2_BUCKET`). The sha256 of each
+ * The invoice bucket on Cloudflare R2, through the S3 API. Shares the media
+ * bucket's endpoint and keys (`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`,
+ * `R2_SECRET_ACCESS_KEY`); only the bucket differs (`R2_INVOICES_BUCKET_NAME`).
+ * The sha256 of each
  * file is kept as object metadata (`sha256`, hex) and is what `head` returns,
  * because R2's own checksum support varies. Download links are presigned with
  * `Content-Disposition: attachment`. `client` is only for tests.
  */
 export function createR2Store(env: R2Env, client?: Pick<S3Client, "send">): ObjectStore {
-  const bucket = required(env, "INVOICES_R2_BUCKET");
+  const bucket = required(env, "R2_INVOICES_BUCKET_NAME");
   const s3 =
     client ??
     new S3Client({
       region: "auto",
-      endpoint: required(env, "INVOICES_R2_ENDPOINT"),
+      endpoint: required(env, "R2_ENDPOINT"),
       credentials: {
-        accessKeyId: required(env, "INVOICES_R2_ACCESS_KEY_ID"),
-        secretAccessKey: required(env, "INVOICES_R2_SECRET_ACCESS_KEY"),
+        accessKeyId: required(env, "R2_ACCESS_KEY_ID"),
+        secretAccessKey: required(env, "R2_SECRET_ACCESS_KEY"),
       },
     });
   // Presigning needs a real client; with an injected test double it is never asked for.
