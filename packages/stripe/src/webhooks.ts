@@ -23,6 +23,12 @@ export type WebhookRequestOptions = {
   name: string;
   /** Something a person must look at (Sentry). */
   report: (error: unknown) => void;
+  /**
+   * A failure that is expected to clear on its own (a fee that arrived before
+   * the payment it belongs to was confirmed). Answered with 503 so Stripe
+   * retries, and not reported: it is a wait, not a fault.
+   */
+  retryable?: (error: unknown) => boolean;
   /** Tests replace this; the app uses the real check. */
   verify?: (rawBody: string, signature: string, secret: string) => StripeEventLike;
 };
@@ -62,6 +68,10 @@ export async function handleWebhookRequest(req: Request, options: WebhookRequest
     const outcome = await handleStripeEvent(event, options.deps);
     return Response.json({ received: true, outcome });
   } catch (error) {
+    if (options.retryable?.(error)) {
+      console.warn(tag, event.type, event.id, 'not ready, Stripe will retry');
+      return Response.json({ error: 'Not ready, retry' }, { status: 503 });
+    }
     // A 500 makes Stripe retry; the event was not marked done, so the retry runs.
     // The event type and id only: never the body.
     console.error(tag, event.type, event.id, error instanceof Error ? error.message : 'unknown error');

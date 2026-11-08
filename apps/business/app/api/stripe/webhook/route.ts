@@ -5,6 +5,7 @@ import {
 } from "@openbookings/stripe";
 import { isStripeEventProcessed, markStripeEventProcessed, query } from "@openbookings/db";
 import * as Sentry from "@sentry/nextjs";
+import { recordStripeAudit } from "@/lib/stripe/audit";
 import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
 export const dynamic = "force-dynamic";
@@ -28,17 +29,7 @@ const deps: StripeEventDeps = {
   isProcessed: isStripeEventProcessed,
   markProcessed: markStripeEventProcessed,
   refundCommission: refundCommissionForCharge,
-  audit: async ({ action, stripeAccountId, detail, dedupeKey }) => {
-    // One row per fact: a retried event finds the row already there.
-    await query(
-      `INSERT INTO audit_log (action, organization_id, detail)
-       SELECT $1, (SELECT organization_id FROM org_profile WHERE stripe_account_id = $2), $3::jsonb
-       WHERE NOT EXISTS (
-         SELECT 1 FROM audit_log WHERE action = $1 AND detail->>'dedupeKey' = $4
-       )`,
-      [action, stripeAccountId, JSON.stringify({ ...detail, stripeAccountId, dedupeKey }), dedupeKey],
-    );
-  },
+  audit: recordStripeAudit,
 };
 
 /**

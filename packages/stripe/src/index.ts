@@ -22,6 +22,8 @@ export {
 export {
   handleStripeEvent,
   readPaidCheckout,
+  type ApplicationFeePayload,
+  type ApplicationFeeRefundPayload,
   type PaidCheckout,
   type StripeAuditEntry,
   type StripeEventDeps,
