@@ -6,7 +6,7 @@ Lettermint, Slack and Sentry into the steps in `@openbookings/billing`. In produ
 Scaleway Serverless Job.
 
 ```
-bun run apps/invoice-job/src/main.ts --step=<step> [options]
+INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step> [options]
 ```
 
 | Step | What it does | Options |
@@ -30,8 +30,9 @@ bun run apps/invoice-job/src/main.ts --step=<step> [options]
 ## Guards
 
 - **Live/test mode:** live when `STRIPE_SECRET_KEY` is a live key (`sk_live_…`, or a restricted `rk_live_…`).
-  The database counts as production only when `INVOICE_DB_ENV=production`. A live key against any other
-  database, or a test key against production, is refused before anything runs.
+  `INVOICE_DB_ENV` must say which database `DATABASE_URL` is: exactly `production` or `test`. Unset or anything
+  else is refused. A live key needs `production`, a test key needs `test`; any other pairing is refused
+  before any database or Stripe access.
 - **Seller:** in live mode `--step=issue` refuses to run until every `SELLER_*` variable is set. Test mode
   prints `[SELLER_…]` placeholders instead.
 - **Reconciliation:** `--step=issue` refuses unless the month's latest real (not dry-run) draft run reconciled
@@ -42,7 +43,7 @@ bun run apps/invoice-job/src/main.ts --step=<step> [options]
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | all | Postgres. Use Neon's **direct** endpoint (not `-pooler`): the job drives explicit transactions and needs its session timeouts, which the pooler drops. |
-| `INVOICE_DB_ENV` | all | `production` when `DATABASE_URL` is the production database; leave unset (or anything else) for dev and test branches. Must agree with the Stripe key. |
+| `INVOICE_DB_ENV` | all | Required, exactly `production` or `test`: which database `DATABASE_URL` is. Anything else, unset included, is refused. `production` goes with a live Stripe key, `test` with a test key. |
 | `STRIPE_SECRET_KEY` | all | The platform's Stripe secret key (`sk_live_…` / `sk_test_…`). Reads balance transactions, application fees and their refunds, and connected-account charges; refunds a payment that has no booking (spec decision 8). |
 | `PG_STATEMENT_TIMEOUT_MS` | all | Optional. Per-statement cap; the job defaults it to `120000` (the web apps use 15 s). |
 | `PG_IDLE_TX_TIMEOUT_MS` | all | Optional. Idle-in-transaction cap; the job defaults it to `300000`. |
@@ -74,7 +75,7 @@ Hard deadline: **everything issued by the 15th** of the month after the period.
      payment, missing profile, ledger ≠ Stripe), then run `--step=draft` again.
    - **Blocked hosts:** fix their billing details (or wait for VIES), then run `--step=draft` again, for all
      hosts or `--entity=<org id>` for one. A rerun replaces drafts and never touches issued documents.
-   - To see a host's document before issuing: `--step=draft --preview --entity=<org id>` (locally, writes
+   - To see a host's document before issuing: `INVOICE_DB_ENV=… bun run apps/invoice-job/src/main.ts --step=draft --preview --entity=<org id>` (locally, writes
      `out/DRAFT-….pdf`).
 3. **Issue:** run the job with `--step=issue`. It issues and then stores the PDFs and CSVs in R2. Exit `2`
    means a host was skipped (details changed since the draft: rerun the draft, then issue again) or a file
@@ -85,11 +86,11 @@ Hard deadline: **everything issued by the 15th** of the month after the period.
    invoice id is the email's idempotency key. Exit `2` lists failed sends and invoices without a billing
    email.
 
-**Each quarter:** `--step=report --quarter=2026Q4`, locally against production (read-only), for the VAT
+**Each quarter:** `INVOICE_DB_ENV=production bun run apps/invoice-job/src/main.ts --step=report --quarter=2026Q4`, locally against production (read-only; the live key and `INVOICE_DB_ENV=production` go together), for the VAT
 return, the ICP listing and DAC7. The CSVs land in `out/`.
 
 To run a step by hand in production, use the Scaleway console: *Run job* with contextual options, args
-`--step=issue` (or `--step=deliver`, …). The definition's environment and secrets apply.
+`--step=issue` (or `--step=deliver`, …). The definition's environment and secrets apply (including `INVOICE_DB_ENV=production`).
 
 ## Rollout order
 
