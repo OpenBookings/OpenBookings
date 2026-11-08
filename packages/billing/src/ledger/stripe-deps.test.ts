@@ -74,7 +74,7 @@ describe("stripeLedgerSource", () => {
       },
       applicationFees: {
         retrieve: async (id) => ({ id, amount: 1080, currency: "eur", created: 1, account: "acct_1", charge: { id: "ch_1" } }),
-        listRefunds: async () => ({ data: [{ id: "fr_9", amount: 5, created: 2 }], has_more: false }),
+        listRefunds: async () => ({ data: [{ id: "fr_9", amount: 5, created: 2, balance_transaction: "txn_7" }], has_more: false }),
       },
     };
     return { source: stripeLedgerSource(stripe), calls };
@@ -98,7 +98,11 @@ describe("stripeLedgerSource", () => {
             {
               id: "txn_3",
               type: "application_fee_refund",
-              source: { id: "fr_1", object: "fee_refund", amount: 270, created: gte + 2, fee: "fee_1" },
+              source: {
+                id: "fee_1",
+                object: "application_fee",
+                refunds: { data: [{ id: "fr_1", object: "fee_refund", amount: 270, created: gte + 2, fee: "fee_1", balance_transaction: "txn_3" }] },
+              },
               amount: -270,
               created: gte + 2,
             },
@@ -120,6 +124,19 @@ describe("stripeLedgerSource", () => {
       { type: "application_fee_refund", ...base },
     ]);
     expect(await source.retrieveFeeRefund("fr_1")).toEqual({ id: "fr_1", amount: 270, created: gte + 2, fee: "fee_1" });
+  });
+
+  test("finds the fee refund of a bare fee id (or one the fee does not embed) by paging the fee's refunds", async () => {
+    const { source } = fakeSource({
+      application_fee: [{ data: [], has_more: false }],
+      application_fee_refund: [
+        { data: [{ id: "txn_7", type: "application_fee_refund", source: "fee_1", amount: -5, created: gte }], has_more: false },
+      ],
+    });
+    expect(await collect(source.listBalanceTransactions(period))).toEqual([
+      { type: "application_fee_refund", source: "fr_9", amount: -5, created: gte },
+    ]);
+    expect(await source.retrieveFeeRefund("fr_9")).toEqual({ id: "fr_9", amount: 5, created: 2, fee: "fee_1" });
   });
 
   test("refuses an amount that is not a whole number of cents", async () => {

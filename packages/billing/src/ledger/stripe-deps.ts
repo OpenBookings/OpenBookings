@@ -152,6 +152,29 @@ export function stripeLedgerSource(stripe: LedgerSourceStripe): StripeLedgerSour
   const fees = stripeFeeReader(stripe);
   const refunds = new Map<string, FeeRefundLike>();
 
+  /** The fee refund a `application_fee_refund` balance transaction (`btId`) belongs to, from the fee it names (expanded or not). */
+  async function refundOf(feeSource: unknown, btId: string): Promise<FeeRefundLike> {
+    const feeId = idOf(feeSource);
+    const matches = (r: Record<string, unknown>) => r.balance_transaction !== null && r.balance_transaction !== undefined && idOf(r.balance_transaction) === btId;
+    const embedded = ((feeSource as { refunds?: { data?: unknown[] } } | null)?.refunds?.data ?? []) as Array<Record<string, unknown>>;
+    let found = embedded.find(matches);
+    // An expanded fee embeds only its first refunds; ask for all of them.
+    for (let startingAfter: string | undefined; !found; ) {
+      const page = await stripe.applicationFees.listRefunds(feeId, { limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) });
+      const data = page.data as Array<Record<string, unknown>>;
+      found = data.find(matches);
+      if (found || !page.has_more || data.length === 0) break;
+      startingAfter = idOf(data[data.length - 1]);
+    }
+    if (!found) throw new Error(`Balance transaction ${btId} is not the balance transaction of any refund of fee ${feeId}`);
+    return {
+      id: idOf(found),
+      amount: wholeCents(found.amount, `Fee refund ${idOf(found)} amount`),
+      created: wholeCents(found.created, `Fee refund ${idOf(found)} created`),
+      fee: feeId,
+    };
+  }
+
   async function* list(period: Period): AsyncIterable<BalanceTransactionLike> {
     const created = { gte: Math.floor(period.from.getTime() / 1000), lt: Math.floor(period.to.getTime() / 1000) };
     for (const type of ["application_fee", "application_fee_refund"] as const) {
@@ -165,15 +188,13 @@ export function stripeLedgerSource(stripe: LedgerSourceStripe): StripeLedgerSour
           ...(startingAfter ? { starting_after: startingAfter } : {}),
         });
         for (const bt of page.data as Array<Record<string, unknown>>) {
-          const source = idOf(bt.source);
-          const src = bt.source as Record<string, unknown>;
-          if (type === "application_fee_refund" && typeof src === "object" && src !== null) {
-            refunds.set(source, {
-              id: source,
-              amount: wholeCents(src.amount, `Fee refund ${source} amount`),
-              created: wholeCents(src.created, `Fee refund ${source} created`),
-              fee: idOf(src.fee),
-            });
+          let source = idOf(bt.source);
+          if (type === "application_fee_refund") {
+            // Stripe's balance transaction for a fee refund has the FEE as its source, not the refund:
+            // the refund is the one of that fee whose own balance transaction this is.
+            const refund = await refundOf(bt.source, idOf(bt.id));
+            refunds.set(refund.id, refund);
+            source = refund.id;
           }
           yield {
             type,
