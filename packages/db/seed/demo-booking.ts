@@ -130,8 +130,7 @@ async function main() {
       [PROPERTY_ID],
     );
     await pool.query(
-      `update org_profile op set stripe_account_id = coalesce(op.stripe_account_id, 'acct_demo')
-       from properties p where p.id = $1 and op.organization_id = p.organization_id`,
+      `update properties set stripe_account_id = coalesce(stripe_account_id, 'acct_demo_seed') where id = $1`,
       [PROPERTY_ID],
     );
 

@@ -10,8 +10,9 @@
  * demo organisation carries that confirmation, signed by the system.
  *
  * The same goes for the readiness gate (spec decision 9): the organisation
- * carries a placeholder Stripe account and a complete Dutch billing profile,
- * and every demo hotel carries legal details (see `insertDemoProperty`), so
+ * carries a complete Dutch billing profile,
+ * and every demo hotel carries a placeholder Stripe account and legal details (see
+ * `insertDemoProperty`), so
  * demo hotels pass the gate honestly rather than around it.
  */
 
@@ -25,8 +26,6 @@ const DEMO_ORG_NAME = "OpenBookings Demo";
 const DEMO_ORG_SLUG = "openbookings-demo";
 /** org_consent.signed_by_user_id has no foreign key; no real user signed this. */
 const SYSTEM_SIGNER_ID = "demo";
-/** Stands in for a connected account; checkout takes the real one from the environment in testing mode. */
-const DEMO_STRIPE_ACCOUNT_ID = "acct_demo";
 /** Legal details of the demo organisation, also copied onto every demo hotel. */
 export const DEMO_LEGAL_COMPANY_NAME = "OpenBookings Demo B.V.";
 export const DEMO_VAT_NUMBER = "NL000000000B01";
@@ -45,11 +44,10 @@ export async function ensureDemoOrganisation(db: Queryable): Promise<string> {
     [DEMO_ORG_ID, DEMO_ORG_NAME, DEMO_ORG_SLUG],
   );
   await db.query(
-    `INSERT INTO org_profile (organization_id, legal_entity_name, stripe_account_id)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (organization_id) DO UPDATE
-       SET stripe_account_id = COALESCE(org_profile.stripe_account_id, EXCLUDED.stripe_account_id)`,
-    [DEMO_ORG_ID, DEMO_ORG_NAME, DEMO_STRIPE_ACCOUNT_ID],
+    `INSERT INTO org_profile (organization_id, legal_entity_name)
+     VALUES ($1, $2)
+     ON CONFLICT (organization_id) DO NOTHING`,
+    [DEMO_ORG_ID, DEMO_ORG_NAME],
   );
   await db.query(
     `INSERT INTO billing_profiles

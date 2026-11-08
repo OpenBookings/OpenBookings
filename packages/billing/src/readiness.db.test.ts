@@ -40,10 +40,8 @@ describeWithDb("property readiness against Postgres", () => {
     orgId = `org-${crypto.randomUUID()}`;
     await db.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Org', $1, NOW())`, [orgId]);
     await db.query(`UPDATE properties SET organization_id = $2 WHERE id = $1`, [propertyId, orgId]);
-    await db.query(`INSERT INTO org_profile (organization_id, legal_entity_name, stripe_account_id) VALUES ($1, 'Hotel BV', $2)`, [
-      orgId,
-      `acct_${crypto.randomUUID().slice(0, 8)}`,
-    ]);
+    await db.query(`INSERT INTO org_profile (organization_id, legal_entity_name) VALUES ($1, 'Hotel BV')`, [orgId]);
+    await db.query(`UPDATE properties SET stripe_account_id = $2 WHERE id = $1`, [propertyId, `acct_${crypto.randomUUID().slice(0, 8)}`]);
     await db.query(
       `INSERT INTO org_consent (organization_id, doc_id, signed_by_user_id, signer_full_name, signed_at)
        VALUES ($1, $2, 'u', 'Owner', NOW())`,
@@ -76,8 +74,25 @@ describeWithDb("property readiness against Postgres", () => {
   });
 
   test("a missing Stripe account alone makes it not ready", async () => {
-    await db.query(`UPDATE org_profile SET stripe_account_id = NULL WHERE organization_id = $1`, [orgId]);
+    await db.query(`UPDATE properties SET stripe_account_id = NULL WHERE id = $1`, [propertyId]);
     expect(await propertyReadiness(db, propertyId)).toEqual({ ready: false, missing: ["stripe_account"] });
+  });
+
+  test("an account only on the organization profile does not count", async () => {
+    await db.query(`UPDATE properties SET stripe_account_id = NULL WHERE id = $1`, [propertyId]);
+    await db.query(`UPDATE org_profile SET stripe_account_id = 'acct_org_only' WHERE organization_id = $1`, [orgId]);
+    expect(await propertyReadiness(db, propertyId)).toEqual({ ready: false, missing: ["stripe_account"] });
+  });
+
+  test("the account checked for charges is the one checkout charges on", async () => {
+    await db.query(`UPDATE properties SET stripe_account_id = 'acct_prop' WHERE id = $1`, [propertyId]);
+    await db.query(`UPDATE org_profile SET stripe_account_id = 'acct_org' WHERE organization_id = $1`, [orgId]);
+    const asked: string[] = [];
+    await propertyReadiness(db, propertyId, { chargesEnabled: async (id) => (asked.push(id), true) });
+    expect(asked).toEqual(["acct_prop"]);
+    // checkout's summary query (apps/web/app/checkout/_lib/booking.ts) reads this same column
+    const { rows } = await db.query(`SELECT p.stripe_account_id FROM properties p WHERE p.id = $1`, [propertyId]);
+    expect(rows[0].stripe_account_id).toBe(asked[0]);
   });
 
   test("an account that cannot charge alone makes it not ready, only when asked", async () => {
@@ -160,7 +175,7 @@ describeWithDb("property readiness against Postgres", () => {
 
   test("items come back in a fixed order", async () => {
     await db.query(`DELETE FROM org_consent WHERE organization_id = $1`, [orgId]);
-    await db.query(`UPDATE org_profile SET stripe_account_id = NULL WHERE organization_id = $1`, [orgId]);
+    await db.query(`UPDATE properties SET stripe_account_id = NULL WHERE id = $1`, [propertyId]);
     await db.query(`DELETE FROM billing_profiles WHERE organization_id = $1`, [orgId]);
     expect((await propertyReadiness(db, propertyId)).missing).toEqual(["stripe_account", "rates_confirmed", "billing_profile"]);
   });

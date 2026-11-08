@@ -312,11 +312,17 @@ export async function getBookingSummary(
     // fallback exists for the seeded and demo properties in development only —
     // in production a property without an account is not chargeable, and must
     // never be charged on somebody else's.
-    stripeAccountId:
-      property.stripe_account_id ??
-      (process.env.NODE_ENV === 'production' ? '' : (process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '')),
+    // A demo hotel's own id is a placeholder (it passes the readiness gate), so
+    // the environment's account wins for it when there is one.
+    stripeAccountId: resolveStripeAccountId(property),
     ratesConfirmed: property.rates_confirmed === true,
   };
+}
+
+function resolveStripeAccountId(property: Pick<PropertyRow, 'stripe_account_id' | 'is_demo'>): string {
+  const fallback = process.env.NODE_ENV === 'production' ? '' : (process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '');
+  if (property.is_demo && fallback) return fallback;
+  return property.stripe_account_id ?? fallback;
 }
 
 /** Sum of every line, in minor units. The one place the total is derived. */

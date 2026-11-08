@@ -55,8 +55,9 @@ type ReadinessRow = {
  * What a property still needs before it can be published or booked (spec
  * decision 9), in the fixed order of `READINESS_ITEMS`.
  *
- * - `stripe_account`: a connected account, the property's own or its
- *   organization's.
+ * - `stripe_account`: the property's connected account, the one checkout
+ *   charges on (`properties.stripe_account_id`); the organization's is not a
+ *   substitute.
  * - `stripe_charges`: only when `chargesEnabled` is given, as it costs a call
  *   to Stripe. A Stripe error counts as "not enabled" rather than throwing.
  * - `rates_confirmed`: the organization confirmed its rates include VAT.
@@ -76,12 +77,11 @@ export async function propertyReadiness(
 ): Promise<{ ready: boolean; missing: ReadinessItem[] }> {
   const { rows } = await db.query(
     `SELECT p.organization_id,
-            COALESCE(NULLIF(btrim(p.stripe_account_id), ''), NULLIF(btrim(op.stripe_account_id), '')) AS stripe_account_id,
+            NULLIF(btrim(p.stripe_account_id), '') AS stripe_account_id,
             EXISTS (SELECT 1 FROM org_consent oc
                      WHERE oc.organization_id = p.organization_id AND oc.doc_id = $2) AS rates_confirmed,
             COALESCE(btrim(pc.legal_company_name) <> '' AND btrim(pc.vat_number) <> '', false) AS legal_ok
        FROM properties p
-       LEFT JOIN org_profile op ON op.organization_id = p.organization_id
        LEFT JOIN property_content pc ON pc.property_id = p.id
       WHERE p.id = $1`,
     [propertyId, RATES_TAX_INCLUSIVE_DOC_ID],

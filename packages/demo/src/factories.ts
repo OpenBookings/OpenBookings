@@ -85,13 +85,15 @@ export async function insertDemoProperty(db: Queryable, p: DemoPropertyInput): P
     `INSERT INTO properties
        (name, slug, address_line_1, city, country, timezone, location,
         check_in_time, check_in_until, check_out_time, is_active, is_demo,
-        cancellation_tier, organization_id)
+        cancellation_tier, organization_id, stripe_account_id)
      VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
-             '15:00', '22:00', '11:00', true, true, $9::cancellation_tier, $10)
+             '15:00', '22:00', '11:00', true, true, $9::cancellation_tier, $10, $11)
      RETURNING id`,
-    [p.name, p.slug, `1 ${p.city} Street`, p.city, p.country, p.timezone, p.lon, p.lat, p.cancellationTier, p.organizationId],
+    [p.name, p.slug, `1 ${p.city} Street`, p.city, p.country, p.timezone, p.lon, p.lat, p.cancellationTier, p.organizationId, `acct_demo_${p.slug}`.slice(0, 255)],
   );
-  // Legal details, so a demo hotel passes the readiness gate like any other.
+  // The account is a unique placeholder per hotel (the column is unique); checkout
+  // takes the real one from the environment for demo hotels. Legal details too,
+  // so a demo hotel passes the readiness gate like any other.
   await db.query(
     `INSERT INTO property_content (property_id, legal_company_name, vat_number)
      VALUES ($1, $2, $3)

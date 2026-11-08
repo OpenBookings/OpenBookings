@@ -79,7 +79,7 @@ describeWithDb("demo factories", () => {
     ).rows[0];
     expect(p.is_demo).toBe(true);
     expect(p.is_active).toBe(true);
-    expect(p.stripe_account_id).toBeNull();
+    expect(p.stripe_account_id).toStartWith("acct_demo_");
     expect(p.lat).toBeCloseTo(52.3676, 4);
     expect(p.lon).toBeCloseTo(4.9041, 4);
 
