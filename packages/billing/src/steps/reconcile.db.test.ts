@@ -435,6 +435,62 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     expect((await rows()).map((x) => x.fee)).toEqual([returned.id]);
   });
 
+  test("savepoint runners nested on one connection each undo only their own work", async () => {
+    const outer = savepointTransaction(db);
+    const inner = savepointTransaction(db);
+    await db.query("CREATE TEMP TABLE reconcile_sp_probe (x int) ON COMMIT DROP");
+    await expect(
+      outer(async () => {
+        await db.query("INSERT INTO reconcile_sp_probe VALUES (1)");
+        await expect(
+          inner(async () => {
+            await db.query("INSERT INTO reconcile_sp_probe VALUES (2)");
+            throw new Error("unit");
+          }),
+        ).rejects.toThrow("unit");
+        await db.query("INSERT INTO reconcile_sp_probe VALUES (3)");
+        throw new Error("outer");
+      }),
+    ).rejects.toThrow("outer");
+    expect((await db.query("SELECT x FROM reconcile_sp_probe")).rows).toEqual([]);
+  });
+
+  test("a savepoint that cannot be rolled back to surfaces the work's error", async () => {
+    const statements: string[] = [];
+    const broken = {
+      query: async (text: string) => {
+        statements.push(text);
+        if (text.startsWith("ROLLBACK TO")) throw new Error("connection lost");
+        return { rows: [] };
+      },
+    };
+    await expect(
+      savepointTransaction(broken)(async () => {
+        throw new Error("the real failure");
+      }),
+    ).rejects.toThrow("the real failure");
+    expect(statements[0]).toMatch(/^SAVEPOINT reconcile_sp_\d+$/);
+  });
+
+  test("a dry run keeps nothing when a refund unit fails after a fee was backfilled", async () => {
+    stripeFee(); // backfilled first
+    const intentId = await seedIntent("open");
+    const earlier = stripeFee({ created: CREATED - 40 * 86_400 }, false); // September, not listed
+    charges.set(earlier.charge, {
+      paymentIntentId: `pi_${crypto.randomUUID()}`,
+      metadata: { bookingIntentId: intentId },
+      amount: 25_000,
+      amountRefunded: 0,
+    });
+    stripeRefund(earlier, 100); // fails as unsettled inside its own unit
+
+    const result = await reconcile(PERIOD, deps({ dryRun: true }));
+
+    expect(result.unsettled).toEqual([expect.objectContaining({ feeId: earlier.id, intentId })]);
+    expect(result.backfilled).toHaveLength(1);
+    expect(await rows()).toEqual([]);
+  });
+
   test.each([false, true])("a payment the ledger returns while backfilling is listed as returned (dry run: %p)", async (dryRun) => {
     const f = stripeFee();
     charges.set(f.charge, { paymentIntentId: `pi_${crypto.randomUUID()}`, metadata: {}, amount: 25_000, amountRefunded: 0 });
@@ -494,6 +550,40 @@ describeWithDb("reconciliation transactions on a real pool", () => {
     expect(rows[0]).toEqual({ committed: true, rolled_back: false });
     expect(pool.idleCount).toBe(pool.totalCount);
     await pool.query("DROP TABLE reconcile_committed");
+  });
+
+  test("a dry run refuses a runner that does not open a transaction", async () => {
+    const fee = `fee_${crypto.randomUUID()}`;
+    let listed = false;
+    const stripe: StripeLedgerSource = {
+      async *listBalanceTransactions() {
+        listed = true;
+        yield { type: "application_fee", source: fee, amount: 1080, created: 1 };
+      },
+      retrieveFee: async (id) => {
+        throw new Error(`unexpected ${id}`);
+      },
+      retrieveFeeRefund: async (id) => {
+        throw new Error(`unexpected ${id}`);
+      },
+      listFeeRefunds: async () => [],
+    };
+    const ledger: LedgerDeps = {
+      db: pool,
+      chargeInfo: async () => {
+        throw new Error("unexpected chargeInfo");
+      },
+      returnPayment: async () => {
+        throw new Error("unexpected returnPayment");
+      },
+      audit: async () => {},
+      report: () => {},
+    };
+
+    await expect(
+      reconcile(periodFor("2031-03"), { db: pool, stripe, ledger, dryRun: true, inTransaction: (work) => work(pool) }),
+    ).rejects.toThrow(/dry run needs a transaction/i);
+    expect(listed).toBe(false);
   });
 
   test("a dry run on a pool keeps nothing and moves no money", async () => {

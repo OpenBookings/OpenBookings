@@ -95,22 +95,30 @@ export function poolTransaction(pool: Pool): TransactionRunner {
   };
 }
 
+/** Savepoint names are unique per process, so runners nested on one connection never address each other's. */
+let savepoints = 0;
+
 /**
  * A nested transaction on a connection that is already in one: a SAVEPOINT,
- * released when the work returns and rolled back to when it throws, so a
- * failed unit is undone and the outer transaction stays usable.
+ * released when the work returns, rolled back to and released when it throws,
+ * so a failed unit is undone, leaves nothing on the savepoint stack, and the
+ * outer transaction stays usable.
  */
 export function savepointTransaction(db: Queryable): TransactionRunner {
-  let depth = 0;
   return async (work) => {
-    const name = `reconcile_${++depth}`;
+    const name = `reconcile_sp_${++savepoints}`;
     await db.query(`SAVEPOINT ${name}`);
     try {
       const result = await work(db);
       await db.query(`RELEASE SAVEPOINT ${name}`);
       return result;
     } catch (error) {
-      await db.query(`ROLLBACK TO SAVEPOINT ${name}`);
+      try {
+        await db.query(`ROLLBACK TO SAVEPOINT ${name}`);
+        await db.query(`RELEASE SAVEPOINT ${name}`);
+      } catch {
+        // surface the work's error, not the rollback's
+      }
       throw error;
     }
   };
@@ -126,6 +134,8 @@ type Returns = Map<string, { refundedGross: string }>;
 const abs = (n: bigint) => (n < 0n ? -n : n);
 
 class DryRunRollback extends Error {}
+
+const DRY_RUN_SAVEPOINT = "reconcile_dry_run";
 
 /** The ledger for a dry run: reads Stripe as usual, but returns no payment, writes no audit row and reports nothing. */
 function dryRunLedger(ledger: LedgerDeps): LedgerDeps {
@@ -169,7 +179,21 @@ export async function reconcile(period: Period, deps: ReconcileDeps): Promise<Re
   let result: ReconcileResult | undefined;
   try {
     await deps.inTransaction(async (tx) => {
-      result = await run(period, { ...deps, db: tx, inTransaction: savepointTransaction(tx) }, dryRunLedger(deps.ledger));
+      // Our own savepoint: refused outside a transaction block, so a runner that
+      // opens none cannot let dry-run writes through; and undone here, whatever
+      // the runner then does.
+      try {
+        await tx.query(`SAVEPOINT ${DRY_RUN_SAVEPOINT}`);
+      } catch (error) {
+        throw new Error("A dry run needs a transaction: inTransaction must run its work inside one", { cause: error });
+      }
+      try {
+        result = await run(period, { ...deps, db: tx, inTransaction: savepointTransaction(tx) }, dryRunLedger(deps.ledger));
+      } catch (error) {
+        await tx.query(`ROLLBACK TO SAVEPOINT ${DRY_RUN_SAVEPOINT}`).catch(() => {});
+        throw error;
+      }
+      await tx.query(`ROLLBACK TO SAVEPOINT ${DRY_RUN_SAVEPOINT}`);
       throw new DryRunRollback("Dry run: rolling back");
     });
   } catch (error) {
