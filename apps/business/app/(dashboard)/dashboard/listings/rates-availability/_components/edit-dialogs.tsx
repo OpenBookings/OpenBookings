@@ -254,7 +254,7 @@ function EditAvailabilityDialog({
           <p className="text-muted-foreground text-xs">
             How many rooms exist on these nights. Bookings and guests who are
             paying come off it automatically. Clearing it goes back to the
-            room's normal count minus blocked rooms.
+            room&apos;s normal count minus blocked rooms.
           </p>
         </div>
 
