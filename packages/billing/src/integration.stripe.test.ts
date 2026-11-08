@@ -6,9 +6,15 @@
  * ledger, the two documents, the stored files and the emails are checked.
  *
  * Skipped unless STRIPE_TEST_SECRET_KEY (a `sk_test_` key, anything else is
- * refused) and DATABASE_URL are set. It COMMITS rows, so it must never run
- * against production: point DATABASE_URL at a test branch. Everything it
- * creates is removed afterwards, in the database and on Stripe.
+ * refused), DATABASE_URL AND the explicit flag BILLING_TEST_DATABASE=1 are
+ * set. The flag says "DATABASE_URL is a throwaway test branch, not production":
+ * the test COMMITS rows, so never set it against anything else. Everything it
+ * creates is removed afterwards, in the database and on Stripe, and nothing
+ * else is touched: invoices are issued into a private far-future series
+ * (OB-2100 and later, picked at random), and only the runs, entries, invoices
+ * and rows it created are deleted, by id. It refuses to start when the month
+ * already holds issued invoices it does not own, because store and deliver
+ * take the whole month.
  *
  * The month is the real current one, because Stripe stamps what it creates
  * with now. Reconciliation is narrowed to the fees this test made, so other
@@ -32,7 +38,7 @@ import { runStore, type ObjectStore } from "./steps/store";
 
 const stripeKey = process.env.STRIPE_TEST_SECRET_KEY;
 const databaseUrl = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL;
-const enabled = Boolean(stripeKey && process.env.DATABASE_URL);
+const enabled = Boolean(stripeKey && process.env.DATABASE_URL && process.env.BILLING_TEST_DATABASE === "1");
 // The shared Stripe client reads its key from here, lazily.
 if (enabled) process.env.STRIPE_SECRET_KEY = stripeKey;
 
@@ -62,7 +68,10 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
   const id = `it${Date.now().toString(36)}${crypto.randomUUID().slice(0, 6)}`;
   const startedAt = new Date();
   const period = periodFor(periodOf(startedAt));
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(startedAt);
+  // A far-future issue date puts the invoices in a series nothing real uses (OB-2100 … OB-2999).
+  const seriesYear = 2100 + Math.floor(Math.random() * 900);
+  const today = `${seriesYear}-01-15`;
+  const series = `OB-${seriesYear}`;
 
   let pool: Pool;
   const hosts: Host[] = [];
@@ -70,7 +79,8 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
   const accounts: string[] = [];
   const mine = new Set<string>();
   const mailed: InvoiceMail[] = [];
-  let sequenceBefore: { series: string; next: number }[] = [];
+  /** The `invoice_runs` rows this test wrote. */
+  const runIds: string[] = [];
 
   /** Stripe as the reconciliation reads it, narrowed to the fees and fee refunds this test made. */
   const source = (): StripeLedgerSource => {
@@ -104,6 +114,7 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
       audit: async () => {},
     });
     return withRun(pool, { periodStart: period.start, step: "draft" }, async (runId) => {
+      runIds.push(runId);
       const report = await runDraft(period, {
         db: pool,
         stripe: source(),
@@ -214,7 +225,8 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl, max: 4 });
-    sequenceBefore = (await pool.query(`SELECT series, next_value::int AS next FROM invoice_sequences`)).rows;
+    const foreign = (await pool.query(`SELECT number FROM invoices WHERE period_start = $1 AND status = 'issued'`, [period.start])).rows;
+    if (foreign.length) throw new Error(`The database already holds issued invoices for ${period.start} that this test does not own; refusing to store or deliver them`);
     for (const country of ["NL", "BE"] as const) hosts.push(await makeHost(country));
     for (const h of hosts) await seedHost(h);
   }, 120_000);
@@ -233,9 +245,9 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
         await c.query(`DELETE FROM invoices WHERE billing_entity_id = ANY($1)`, [orgs]);
         await c.query(`ALTER TABLE commission_entries ENABLE TRIGGER USER`);
         await c.query(`ALTER TABLE invoices ENABLE TRIGGER USER`);
-        await c.query(`DELETE FROM invoice_runs WHERE period_start = $1 AND started_at >= $2`, [period.start, startedAt]);
-        for (const s of sequenceBefore) await c.query(`UPDATE invoice_sequences SET next_value = $2 WHERE series = $1`, [s.series, s.next]);
-        await c.query(`DELETE FROM invoice_sequences WHERE series NOT IN (SELECT unnest($1::text[]))`, [sequenceBefore.map((s) => s.series)]);
+        await c.query(`DELETE FROM invoice_runs WHERE id = ANY($1)`, [runIds]);
+        // The private far-future series: nothing else can have numbers in it.
+        await c.query(`DELETE FROM invoice_sequences WHERE series = $1`, [series]);
         await c.query(`DELETE FROM billing_profiles WHERE organization_id = ANY($1)`, [orgs]);
         const bookings = hosts.flatMap((h) => h.payments.map((p) => p.bookingId).filter(Boolean));
         const users = (await c.query(`SELECT DISTINCT user_id FROM bookings WHERE id = ANY($1)`, [bookings])).rows.map((r) => r.user_id as string);
