@@ -152,8 +152,21 @@ export function stripeLedgerSource(stripe: LedgerSourceStripe): StripeLedgerSour
   const fees = stripeFeeReader(stripe);
   const refunds = new Map<string, FeeRefundLike>();
 
-  /** The fee refund a `application_fee_refund` balance transaction (`btId`) belongs to, from the fee it names (expanded or not). */
+  /**
+   * The fee refund an `application_fee_refund` balance transaction (`btId`) belongs to. Stripe test mode
+   * names the fee as the source, expanded or not, and the refund is found among that fee's refunds. A source
+   * that is itself a `fee_refund` (expanded) is used directly.
+   */
   async function refundOf(feeSource: unknown, btId: string): Promise<FeeRefundLike> {
+    if (typeof feeSource === "object" && feeSource !== null && (feeSource as { object?: unknown }).object === "fee_refund") {
+      const r = feeSource as Record<string, unknown>;
+      return {
+        id: idOf(r),
+        amount: wholeCents(r.amount, `Fee refund ${idOf(r)} amount`),
+        created: wholeCents(r.created, `Fee refund ${idOf(r)} created`),
+        fee: idOf(r.fee),
+      };
+    }
     const feeId = idOf(feeSource);
     const matches = (r: Record<string, unknown>) => r.balance_transaction !== null && r.balance_transaction !== undefined && idOf(r.balance_transaction) === btId;
     const embedded = ((feeSource as { refunds?: { data?: unknown[] } } | null)?.refunds?.data ?? []) as Array<Record<string, unknown>>;
@@ -190,8 +203,8 @@ export function stripeLedgerSource(stripe: LedgerSourceStripe): StripeLedgerSour
         for (const bt of page.data as Array<Record<string, unknown>>) {
           let source = idOf(bt.source);
           if (type === "application_fee_refund") {
-            // Stripe's balance transaction for a fee refund has the FEE as its source, not the refund:
-            // the refund is the one of that fee whose own balance transaction this is.
+            // Stripe's balance transaction for a fee refund has the FEE as its source, not the refund
+            // (or, tolerated, the refund itself): see `refundOf`.
             const refund = await refundOf(bt.source, idOf(bt.id));
             refunds.set(refund.id, refund);
             source = refund.id;

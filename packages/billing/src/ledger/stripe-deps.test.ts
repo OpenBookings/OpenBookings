@@ -139,6 +139,31 @@ describe("stripeLedgerSource", () => {
     expect(await source.retrieveFeeRefund("fr_9")).toEqual({ id: "fr_9", amount: 5, created: 2, fee: "fee_1" });
   });
 
+  test("uses a source that is itself the fee refund, without asking Stripe for the fee's refunds", async () => {
+    const { source } = fakeSource({
+      application_fee: [{ data: [], has_more: false }],
+      application_fee_refund: [
+        {
+          data: [
+            {
+              id: "txn_8",
+              type: "application_fee_refund",
+              source: { id: "fr_2", object: "fee_refund", amount: 40, created: gte + 3, fee: "fee_2" },
+              amount: -40,
+              created: gte + 3,
+            },
+          ],
+          has_more: false,
+        },
+      ],
+    });
+    expect(await collect(source.listBalanceTransactions(period))).toEqual([
+      { type: "application_fee_refund", source: "fr_2", amount: -40, created: gte + 3 },
+    ]);
+    // fakeSource's listRefunds would answer fr_9: getting fr_2 proves it was not asked.
+    expect(await source.retrieveFeeRefund("fr_2")).toEqual({ id: "fr_2", amount: 40, created: gte + 3, fee: "fee_2" });
+  });
+
   test("refuses an amount that is not a whole number of cents", async () => {
     const { source } = fakeSource({
       application_fee: [{ data: [{ id: "txn_1", type: "application_fee", source: "fee_1", amount: 10.5, created: gte }], has_more: false }],
