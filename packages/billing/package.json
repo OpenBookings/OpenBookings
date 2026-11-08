@@ -20,7 +20,10 @@
     "./steps/types": "./src/steps/types.ts",
     "./steps/draft": "./src/steps/draft.ts",
     "./runs": "./src/runs.ts",
-    "./notify": "./src/notify.ts"
+    "./notify": "./src/notify.ts",
+    "./render/document": "./src/render/document.ts",
+    "./render/pdf": "./src/render/pdf.ts",
+    "./render/csv": "./src/render/csv.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
