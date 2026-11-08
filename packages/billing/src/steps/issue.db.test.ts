@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:te
 import { Client, Pool } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb } from "@openbookings/db/testing";
 import { periodFor, type Period } from "../period";
-import { upsertBillingProfile } from "../profiles";
+import { recordViesResult, upsertBillingProfile } from "../profiles";
 import { loadInvoiceDocument, type PartySnapshot } from "../render/document";
 import { withRun } from "../runs";
 import { SellerConfigError } from "../seller";
@@ -312,6 +312,64 @@ describeWithDb("issuing the monthly commission invoices", () => {
     ]);
     expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[y.orgId, "OB-2026-0001"]]);
     expect(await linked(x)).toEqual([null]);
+  });
+
+  const CHANGED = "Billing details changed since the draft — rerun the draft step for this period";
+
+  test("a host whose country changed since the draft is skipped and the others are issued", async () => {
+    const [moved, stays] = [await seedHost(db, "NL"), await seedHost(db, "NL")].sort((p, q) => (p.orgId < q.orgId ? -1 : 1)) as [
+      Host,
+      Host,
+    ];
+    await entry(db, stripe, moved, { gross: 1080n });
+    await entry(db, stripe, stays, { gross: 1080n });
+    await draft();
+    await upsertBillingProfile(db, moved.orgId, { countryCode: "BE", vatId: "BE0123456789" });
+    await recordViesResult(db, moved.orgId, { valid: true, requestId: "vies-ok", checkedAt: new Date("2026-11-02T10:00:00Z") });
+
+    const report = await runIssue(PERIOD, deps());
+
+    expect(report.skipped).toEqual([{ entityId: moved.orgId, reason: "draft_stale", message: CHANGED }]);
+    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[stays.orgId, "OB-2026-0001"]]);
+    expect(await linked(moved)).toEqual([null]);
+    expect(await nextValue("OB-2026")).toBe(2);
+  });
+
+  test("a reverse-charge host whose VAT id is no longer VIES-valid is skipped", async () => {
+    const host = await seedHost(db, "BE");
+    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE" });
+    await draft();
+    await recordViesResult(db, host.orgId, { valid: false, requestId: "vies-no", checkedAt: new Date("2026-11-02T10:00:00Z") });
+
+    const report = await runIssue(PERIOD, deps());
+
+    expect(report).toEqual({ period: "2026-10", issued: [], skipped: [{ entityId: host.orgId, reason: "draft_stale", message: CHANGED }] });
+    expect(await linked(host)).toEqual([null]);
+    expect(await nextValue("OB-2026")).toBeNull();
+  });
+
+  test("a host now outside the EU is skipped", async () => {
+    const host = await seedHost(db, "NL");
+    await entry(db, stripe, host, { gross: 1080n });
+    await draft();
+    await upsertBillingProfile(db, host.orgId, { countryCode: "US", vatId: "US123456789" });
+
+    const report = await runIssue(PERIOD, deps());
+
+    expect(report.skipped).toEqual([{ entityId: host.orgId, reason: "draft_stale", message: CHANGED }]);
+    expect(report.issued).toEqual([]);
+    expect(await nextValue("OB-2026")).toBeNull();
+  });
+
+  test("a reverse-charge host with a valid VAT id is issued", async () => {
+    const host = await seedHost(db, "BE");
+    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE" });
+    await draft();
+
+    const report = await runIssue(PERIOD, deps());
+
+    expect(report.issued.map((i) => i.number)).toEqual(["OB-2026-0001"]);
+    expect(report.skipped).toEqual([]);
   });
 
   test("entity limits issuing to one host", async () => {

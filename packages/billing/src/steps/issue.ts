@@ -4,6 +4,7 @@ import { getBillingProfile, missingProfileFields, type BillingProfile } from "..
 import { countryNameOf, type PartySnapshot } from "../render/document";
 import { lastReconcileStatus } from "../runs";
 import { sellerFromEnv } from "../seller";
+import { vatTreatmentFor, type VatTreatment } from "../vat";
 import { savepointTransaction, type TransactionRunner } from "./reconcile";
 
 /** A draft's counts no longer match the entries it would link: the month changed after drafting. */
@@ -54,6 +55,22 @@ export function buyerFromProfile(p: BillingProfile): PartySnapshot {
     kvk: text(p.kvkNumber),
     email: text(p.billingEmail),
   };
+}
+
+/**
+ * Whether the host's billing profile still supports the draft's VAT treatment:
+ * the treatment its country gives now is the draft's, and a reverse-charge
+ * host's VAT id is VIES-valid. A country outside the EU never does.
+ */
+export function profileMatchesDraft(p: BillingProfile, draftTreatment: VatTreatment): boolean {
+  let treatment: VatTreatment;
+  try {
+    treatment = vatTreatmentFor(p.countryCode ?? "");
+  } catch {
+    return false;
+  }
+  if (treatment !== draftTreatment) return false;
+  return treatment === "NL_DOMESTIC" || p.vatIdValid === true;
 }
 
 type DraftRow = { status: string; billing_entity_id: string; period_start: string; fee_count: number; refund_count: number };
@@ -162,9 +179,11 @@ function refusal(period: string, status: "blocked" | "failed" | null): string {
  * draft run did not reconcile successfully (`IssueRefusedError`). Otherwise
  * issues every draft of the period in `billing_entity_id` order, each in its
  * own transaction, with the buyer taken from the host's billing profile as it
- * is now. A host whose profile is no longer complete, or whose draft no
- * longer matches its month's entries (a new entry since drafting), is skipped
- * without using a number and the others are still issued. `entity` limits the
+ * is now. A host is skipped without using a number, and the others are still
+ * issued, when its profile is no longer complete, when it no longer supports
+ * the draft's VAT treatment (`profileMatchesDraft`: country changed, left the
+ * EU, or a reverse-charge VAT id no longer VIES-valid), or when its draft no
+ * longer matches its month's entries (a new entry since drafting). `entity` limits the
  * run to one host. Rerunning issues nothing twice: issued documents are no
  * longer drafts.
  */
@@ -176,19 +195,21 @@ export async function runIssue(period: Period, deps: IssueDeps): Promise<IssueRe
   if (reconciled !== "succeeded") throw new IssueRefusedError(refusal(label, reconciled));
 
   const { rows } = await deps.db.query(
-    `SELECT id, billing_entity_id FROM invoices
+    `SELECT id, billing_entity_id, vat_treatment FROM invoices
       WHERE period_start = $1 AND status = 'draft' AND ($2::text IS NULL OR billing_entity_id = $2)
       ORDER BY billing_entity_id`,
     [period.start, deps.entity ?? null],
   );
   const report: IssueReport = { period: label, issued: [], skipped: [] };
-  for (const { id, billing_entity_id: entityId } of rows as { id: string; billing_entity_id: string }[]) {
-    let outcome: Awaited<ReturnType<typeof issueInvoice>> | { missing: string[] };
+  const drafts = rows as { id: string; billing_entity_id: string; vat_treatment: VatTreatment }[];
+  for (const { id, billing_entity_id: entityId, vat_treatment: treatment } of drafts) {
+    let outcome: Awaited<ReturnType<typeof issueInvoice>> | { missing: string[] } | { changed: true };
     try {
       outcome = await deps.inTransaction(async (tx) => {
         const profile = await getBillingProfile(tx, entityId);
         const missing = missingProfileFields(profile);
         if (!profile || missing.length) return { missing };
+        if (!profileMatchesDraft(profile, treatment)) return { changed: true as const };
         return issueInvoice(tx, id, { today: deps.today, seller, buyer: buyerFromProfile(profile) });
       });
     } catch (error) {
@@ -198,6 +219,12 @@ export async function runIssue(period: Period, deps: IssueDeps): Promise<IssueRe
     }
     if ("number" in outcome) {
       report.issued.push({ entityId, invoiceId: id, number: outcome.number });
+    } else if ("changed" in outcome) {
+      report.skipped.push({
+        entityId,
+        reason: "draft_stale",
+        message: "Billing details changed since the draft — rerun the draft step for this period",
+      });
     } else if ("missing" in outcome) {
       report.skipped.push({ entityId, reason: "missing_fields", message: `Billing profile is missing: ${outcome.missing.join(", ")}` });
     } else {
