@@ -41,16 +41,17 @@ describeWithDb("billing access", () => {
   test("an owner with no active organization and one membership may read billing and sees that organization's invoices", async () => {
     const user = await seedGuest(db);
     const orgId = await org(user, "owner");
+    // OB-2099: never a real series, and not the billing package's OB-2100 (see queries.db.test.ts).
     await db.query(
       `INSERT INTO invoices (billing_entity_id, period_start, period_end, doc_type, status, series, sequence_number, number, issued_on,
          seller, buyer, vat_treatment, vat_rate_bp, net_total, vat_total, gross_total, vat_collected, vat_rounding_diff)
-       VALUES ($1, '2100-10-01', '2100-10-31', 'invoice', 'issued', 'OB-2100', 1, 'OB-2100-0001', '2100-11-05', '{}'::jsonb, '{}'::jsonb,
+       VALUES ($1, '2099-10-01', '2099-10-31', 'invoice', 'issued', 'OB-2099', 1, 'OB-2099-0001', '2099-11-05', '{}'::jsonb, '{}'::jsonb,
                'NL_DOMESTIC', 2100, 893, 187, 1080, 187, 0)`,
       [orgId],
     );
     const access = await billingAccess(session(user), { billing: ["read"] }, deps());
     expect(access?.organizationId).toBe(orgId);
-    expect((await listInvoices(access!)).map((i) => i.number)).toEqual(["OB-2100-0001"]);
+    expect((await listInvoices(access!)).map((i) => i.number)).toEqual(["OB-2099-0001"]);
   });
 
   test("two memberships and no active organization is refused", async () => {

@@ -108,9 +108,11 @@ describeWithDb("billing queries", () => {
         `2026-${String(n).padStart(2, "0")}-01`,
         `2026-${String(n).padStart(2, "0")}-28`,
         status,
-        issued ? "OB-2100" : null,
+        // OB-2099: never a real series, and not the billing package's OB-2100. Both
+        // suites run at once, and an uncommitted equal number blocks on the unique index.
+        issued ? "OB-2099" : null,
         issued ? n : null,
-        issued ? `OB-2100-${String(n).padStart(4, "0")}` : null,
+        issued ? `OB-2099-${String(n).padStart(4, "0")}` : null,
         issued ? "2026-11-05" : null,
         issued ? "{}" : null,
         keys.pdf ?? null,
@@ -123,11 +125,11 @@ describeWithDb("billing queries", () => {
   test("drafts are not listed", async () => {
     const h = await host();
     await invoice(h, "draft", 9);
-    const issued = await invoice(h, "issued", 8, { pdf: "invoices/2100/OB-2100-0008.pdf" });
+    const issued = await invoice(h, "issued", 8, { pdf: "invoices/2099/OB-2099-0008.pdf" });
     const sent = await invoice(h, "sent", 7);
     const list = await listInvoices(h.scope);
     expect(list.map((r) => r.id)).toEqual([issued, sent]);
-    expect(list[0]).toMatchObject({ number: "OB-2100-0008", grossTotal: 1080n, netTotal: 893n, vatTotal: 187n, hasPdf: true, hasCsv: false });
+    expect(list[0]).toMatchObject({ number: "OB-2099-0008", grossTotal: 1080n, netTotal: 893n, vatTotal: 187n, hasPdf: true, hasCsv: false });
   });
 
   test("another organization's invoices are not listed", async () => {
@@ -142,8 +144,8 @@ describeWithDb("billing queries", () => {
     const theirs = await host();
     const id = await invoice(theirs, "issued", 8, { pdf: "k.pdf", csv: "k.csv" });
     expect(await findInvoiceFile(mine.scope, id, "pdf")).toBeNull();
-    expect(await findInvoiceFile(theirs.scope, id, "pdf")).toEqual({ key: "k.pdf", filename: "OB-2100-0008.pdf" });
-    expect(await findInvoiceFile(theirs.scope, id, "csv")).toEqual({ key: "k.csv", filename: "OB-2100-0008-specification.csv" });
+    expect(await findInvoiceFile(theirs.scope, id, "pdf")).toEqual({ key: "k.pdf", filename: "OB-2099-0008.pdf" });
+    expect(await findInvoiceFile(theirs.scope, id, "csv")).toEqual({ key: "k.csv", filename: "OB-2099-0008-specification.csv" });
   });
 
   test("a draft, an unstored file and a malformed id all find nothing", async () => {
