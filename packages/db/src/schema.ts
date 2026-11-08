@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   check,
   boolean,
@@ -22,6 +23,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { VatTreatment } from "./billing-types";
 
 /** PostGIS `geography(point, 4326)` — opaque here; geo predicates (ST_DWithin, ST_X/Y) go through raw sql. */
 const geographyPoint = customType<{ data: string }>({
@@ -605,6 +607,12 @@ export const bookings = pgTable(
     totalCents: bigint("total_cents", { mode: "number" }).notNull().default(0),
     /** OpenBookings' application fee. 0 while the fee is switched off. */
     commissionCents: bigint("commission_cents", { mode: "number" }).notNull().default(0),
+    // The commission split the guest was charged (0036). NULL on bookings from before it.
+    commissionRate: numeric("commission_rate", { precision: 6, scale: 5 }),
+    /** 'NL_DOMESTIC' | 'EU_REVERSE_CHARGE', enforced by a DB check constraint. */
+    commissionVatTreatment: text("commission_vat_treatment").$type<VatTreatment>(),
+    commissionNetCents: bigint("commission_net_cents", { mode: "bigint" }),
+    commissionVatCents: bigint("commission_vat_cents", { mode: "bigint" }),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
     guestNotes: text("guest_notes"),
@@ -1081,4 +1089,153 @@ export const guestRoomLikes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.roomId] })],
+);
+
+/**
+ * Commission invoicing (0036). Billing records are kept 7+ years: every FK is
+ * ON DELETE RESTRICT and none of these hold guest personal data. The
+ * `organization` FKs (`billing_entity_id`, `organization_id`) live in the SQL
+ * only, as for support_tickets. Money is signed integer cents, read as bigint.
+ *
+ * Mirrors packages/db/drizzle/0036_commission_invoices.sql; keep the two in sync.
+ */
+export const billingProfiles = pgTable("billing_profiles", {
+  // FK to "organization"(id) ON DELETE RESTRICT, in the SQL only.
+  organizationId: text("organization_id").primaryKey(),
+  legalName: text("legal_name"),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  postalCode: text("postal_code"),
+  city: text("city"),
+  countryCode: char("country_code", { length: 2 }),
+  vatId: text("vat_id"),
+  kvkNumber: text("kvk_number"),
+  vatIdCheckedAt: timestamp("vat_id_checked_at", { withTimezone: true }),
+  vatIdValid: boolean("vat_id_valid"),
+  viesRequestId: text("vies_request_id"),
+  billingEmail: text("billing_email"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceSequences = pgTable("invoice_sequences", {
+  series: text("series").primaryKey(),
+  nextValue: integer("next_value").notNull().default(1),
+});
+
+export const invoiceRuns = pgTable(
+  "invoice_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    periodStart: date("period_start").notNull(),
+    /** 'backfill' | 'draft' | 'issue' | 'store' | 'deliver' | 'report', enforced by a DB check. */
+    step: text("step").notNull(),
+    /** 'running' | 'succeeded' | 'blocked' | 'failed', enforced by a DB check. */
+    status: text("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    report: jsonb("report"),
+  },
+  (table) => [index("invoice_runs_period_idx").on(table.periodStart, table.step, table.startedAt.desc())],
+);
+
+/**
+ * Invoices and credit notes. Once `status` leaves 'draft' a trigger freezes
+ * everything but the delivery state (status issued to sent, the pdf/csv keys
+ * once, sent_at, email_message_id); only a draft can be deleted.
+ */
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id").references(() => invoiceRuns.id, { onDelete: "restrict" }),
+    // FK to "organization"(id) ON DELETE RESTRICT, in the SQL only.
+    billingEntityId: text("billing_entity_id").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    /** 'invoice' | 'credit_note' */
+    docType: text("doc_type").notNull(),
+    /** 'draft' | 'issued' | 'sent' */
+    status: text("status").notNull().default("draft"),
+    series: text("series"),
+    sequenceNumber: integer("sequence_number"),
+    number: text("number").unique(),
+    issuedOn: date("issued_on"),
+    seller: jsonb("seller"),
+    buyer: jsonb("buyer"),
+    vatTreatment: text("vat_treatment").$type<VatTreatment>().notNull(),
+    vatRateBp: integer("vat_rate_bp").notNull(),
+    feeCount: integer("fee_count").notNull().default(0),
+    feeBaseTotal: bigint("fee_base_total", { mode: "bigint" }).notNull().default(sql`0`),
+    feeGrossTotal: bigint("fee_gross_total", { mode: "bigint" }).notNull().default(sql`0`),
+    refundCount: integer("refund_count").notNull().default(0),
+    refundBaseTotal: bigint("refund_base_total", { mode: "bigint" }).notNull().default(sql`0`),
+    refundGrossTotal: bigint("refund_gross_total", { mode: "bigint" }).notNull().default(sql`0`),
+    refersToInvoiceNumbers: text("refers_to_invoice_numbers").array().notNull().default(sql`'{}'`),
+    netTotal: bigint("net_total", { mode: "bigint" }).notNull(),
+    vatTotal: bigint("vat_total", { mode: "bigint" }).notNull(),
+    grossTotal: bigint("gross_total", { mode: "bigint" }).notNull(),
+    vatCollected: bigint("vat_collected", { mode: "bigint" }).notNull(),
+    vatRoundingDiff: bigint("vat_rounding_diff", { mode: "bigint" }).notNull(),
+    pdfKey: text("pdf_key"),
+    pdfSha256: text("pdf_sha256"),
+    csvKey: text("csv_key"),
+    csvSha256: text("csv_sha256"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    emailMessageId: text("email_message_id"),
+  },
+  (table) => [
+    unique("invoices_entity_period_key").on(table.billingEntityId, table.periodStart),
+    index("invoices_run_idx").on(table.runId),
+  ],
+);
+
+/**
+ * The commission ledger: one row per Stripe application fee and per fee
+ * refund. Append-only; the only change a row takes is `invoiceId` going from
+ * NULL to a value. A 'returned' payment (never a booking) is never invoiced.
+ */
+export const commissionEntries = pgTable(
+  "commission_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** 'fee' | 'fee_refund' */
+    kind: text("kind").notNull(),
+    // FK to "organization"(id) ON DELETE RESTRICT, in the SQL only.
+    billingEntityId: text("billing_entity_id").notNull(),
+    propertyId: uuid("property_id").references(() => properties.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "restrict" }),
+    bookingIntentId: uuid("booking_intent_id").references(() => bookingIntents.id, { onDelete: "restrict" }),
+    bookingRef: text("booking_ref"),
+    stayStart: date("stay_start"),
+    stayEnd: date("stay_end"),
+    stripeAccountId: text("stripe_account_id").notNull(),
+    stripeApplicationFeeId: text("stripe_application_fee_id").notNull(),
+    stripeFeeRefundId: text("stripe_fee_refund_id"),
+    stripePaymentRef: text("stripe_payment_ref"),
+    baseAmount: bigint("base_amount", { mode: "bigint" }).notNull(),
+    commissionNet: bigint("commission_net", { mode: "bigint" }).notNull(),
+    vatRateBp: integer("vat_rate_bp").notNull(),
+    vatAmount: bigint("vat_amount", { mode: "bigint" }).notNull(),
+    grossAmount: bigint("gross_amount", { mode: "bigint" }).notNull(),
+    vatTreatment: text("vat_treatment").$type<VatTreatment>().notNull(),
+    currency: text("currency").notNull().default("eur"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
+    refundsEntryId: uuid("refunds_entry_id").references((): AnyPgColumn => commissionEntries.id, {
+      onDelete: "restrict",
+    }),
+    /** 'booked' | 'returned' */
+    disposition: text("disposition").notNull(),
+    amountMismatch: boolean("amount_mismatch").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("commission_entries_fee_uidx")
+      .on(table.stripeApplicationFeeId)
+      .where(sql`${table.kind} = 'fee'`),
+    uniqueIndex("commission_entries_fee_refund_uidx").on(table.stripeFeeRefundId),
+    index("commission_entries_entity_time_idx").on(table.billingEntityId, table.occurredAt),
+    index("commission_entries_invoice_idx").on(table.invoiceId),
+    index("commission_entries_booking_idx").on(table.bookingId),
+  ],
 );
