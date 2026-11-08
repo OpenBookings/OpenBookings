@@ -39,6 +39,10 @@ const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
   touristTaxTotal: 12 * rooms.length,
   total: 231.5 * rooms.length,
   commissionCents: 0,
+  commissionRate: 0.1,
+  commissionVatTreatment: null,
+  commissionNetCents: null,
+  commissionVatCents: null,
   currency: "EUR",
   rooms: rooms.map((r) => ({
     roomId: r.roomId,
@@ -150,6 +154,65 @@ describeWithDb("converting a paid booking intent", () => {
     expect(Number(booking.tourist_tax_cents)).toBe(2400);
     expect(Number(booking.total_cents)).toBe(46300);
     expect(Number(booking.commission_cents)).toBe(1976);
+  });
+
+  test("the booking keeps the commission split the intent recorded", async () => {
+    const rooms = [room(ids.roomId, ids.ratePlanId)];
+    const snap: IntentSnapshot = {
+      ...snapshot(rooms),
+      commissionCents: 1080,
+      commissionRate: 0.05,
+      commissionVatTreatment: "NL_DOMESTIC",
+      commissionNetCents: 893,
+      commissionVatCents: 187,
+    };
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: snap,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    const result = await convert(created.intentId);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+    const b = (
+      await db.query(
+        `SELECT commission_rate, commission_vat_treatment, commission_net_cents, commission_vat_cents FROM bookings WHERE id = $1`,
+        [result.bookingId],
+      )
+    ).rows[0];
+    expect(Number(b.commission_rate)).toBe(0.05);
+    expect(b.commission_vat_treatment).toBe("NL_DOMESTIC");
+    expect(Number(b.commission_net_cents)).toBe(893);
+    expect(Number(b.commission_vat_cents)).toBe(187);
+  });
+
+  test("an intent from before the split existed converts with NULL split columns", async () => {
+    const rooms = [room(ids.roomId, ids.ratePlanId)];
+    const { commissionRate, commissionVatTreatment, commissionNetCents, commissionVatCents, ...legacy } = snapshot(rooms);
+    void commissionRate; void commissionVatTreatment; void commissionNetCents; void commissionVatCents;
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: legacy as IntentSnapshot,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    const result = await convert(created.intentId);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+    const b = (
+      await db.query(
+        `SELECT commission_rate, commission_vat_treatment, commission_net_cents, commission_vat_cents FROM bookings WHERE id = $1`,
+        [result.bookingId],
+      )
+    ).rows[0];
+    expect(b).toEqual({ commission_rate: null, commission_vat_treatment: null, commission_net_cents: null, commission_vat_cents: null });
   });
 
   test("confirms a two-room intent", async () => {

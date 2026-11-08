@@ -67,6 +67,10 @@ describeWithDb("payment session of a booking intent", () => {
           touristTaxTotal: 0,
           total: 100,
           commissionCents: 0,
+          commissionRate: 0.1,
+          commissionVatTreatment: null,
+          commissionNetCents: null,
+          commissionVatCents: null,
           currency: "EUR",
           rooms: [
             { roomId: ids.roomId, ratePlanId: ids.ratePlanId, roomName: "Double", ratePlanName: "Room only", isRefundable: true, freeCancellationUntil: null },

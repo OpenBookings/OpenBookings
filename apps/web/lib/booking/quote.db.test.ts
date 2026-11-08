@@ -216,4 +216,33 @@ describeWithDb("stay quote against Postgres", () => {
     const off = await select([double(), double({ adults: 1 })]);
     expect(off.ok && off.snapshot.commissionCents).toBe(0);
   });
+  test("selection: the commission split follows the host's billing profile, never refusing without one", async () => {
+    process.env.STRIPE_APPLICATION_FEE_ENABLED = "true";
+    const none = await select([double()]);
+    expect(none.ok).toBe(true);
+    if (!none.ok) return;
+    expect(none.snapshot.commissionVatTreatment).toBeNull();
+    expect(none.snapshot.commissionNetCents).toBeNull();
+    expect(none.snapshot.commissionVatCents).toBeNull();
+    expect(none.snapshot.commissionRate).toBeGreaterThan(0);
+
+    const org = { organization_id: `org-${crypto.randomUUID()}` };
+    await db.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Org', $1, NOW())`, [
+      org.organization_id,
+    ]);
+    await db.query(`UPDATE properties SET organization_id = $2 WHERE id = $1`, [ids.propertyId, org.organization_id]);
+    await db.query(`INSERT INTO billing_profiles (organization_id, country_code) VALUES ($1, 'NL')`, [org.organization_id]);
+    const nl = await select([double()]);
+    if (!nl.ok) throw new Error(nl.error);
+    expect(nl.snapshot.commissionVatTreatment).toBe("NL_DOMESTIC");
+    expect(nl.snapshot.commissionNetCents! + nl.snapshot.commissionVatCents!).toBe(nl.snapshot.commissionCents);
+    expect(nl.snapshot.commissionVatCents).toBeGreaterThan(0);
+
+    await db.query(`UPDATE billing_profiles SET country_code = 'DE' WHERE organization_id = $1`, [org.organization_id]);
+    const de = await select([double()]);
+    if (!de.ok) throw new Error(de.error);
+    expect(de.snapshot.commissionVatTreatment).toBe("EU_REVERSE_CHARGE");
+    expect(de.snapshot.commissionNetCents).toBe(de.snapshot.commissionCents);
+    expect(de.snapshot.commissionVatCents).toBe(0);
+  });
 });

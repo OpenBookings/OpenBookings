@@ -29,6 +29,16 @@ describe("buildBookingCheckoutParams", () => {
     expect(buildBookingCheckoutParams(input).payment_intent_data?.application_fee_amount).toBe(2498);
   });
 
+  test("the PaymentIntent carries the booking intent id", () => {
+    expect(buildBookingCheckoutParams(input).payment_intent_data?.metadata).toEqual({ bookingIntentId: "b1" });
+    // Fee or not.
+    const noFee = buildBookingCheckoutParams({ ...input, applicationFeeCents: null });
+    expect(noFee.payment_intent_data).toEqual({ metadata: { bookingIntentId: "b1" } });
+    // No intent id to carry: no PaymentIntent metadata, and no throw.
+    const bare = buildBookingCheckoutParams({ ...input, applicationFeeCents: null, metadata: {} });
+    expect(bare.payment_intent_data).toBeUndefined();
+  });
+
   test("sends no fee field at all when there is no fee", () => {
     for (const fee of [null, 0]) {
       const params = buildBookingCheckoutParams({ ...input, applicationFeeCents: fee });

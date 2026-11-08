@@ -42,6 +42,10 @@ const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
   touristTaxTotal: 6.5 * rooms.length,
   total: 206.5 * rooms.length,
   commissionCents: 0,
+  commissionRate: 0.1,
+  commissionVatTreatment: null,
+  commissionNetCents: null,
+  commissionVatCents: null,
   currency: "EUR",
   rooms: rooms.map((r) => ({
     roomId: r.roomId,
