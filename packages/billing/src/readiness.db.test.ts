@@ -180,7 +180,8 @@ describeWithDb("property readiness against Postgres", () => {
     expect((await propertyReadiness(db, propertyId)).missing).toEqual(["stripe_account", "rates_confirmed", "billing_profile"]);
   });
 
-  test("generated demo hotels are ready, with no bypass", async () => {
+  // Generates demo hotels: a local testing-setup check, kept out of CI like the demo package's own tests.
+  test.skipIf(Boolean(process.env.CI))("generated demo hotels are ready, with no bypass", async () => {
     const { propertyIds } = await ensureDemoHotels(db, { lat: 50 + Math.random(), lon: 20 + Math.random() });
     expect(propertyIds.length).toBeGreaterThan(0);
     for (const id of propertyIds) expect(await propertyReadiness(db, id)).toEqual({ ready: true, missing: [] });

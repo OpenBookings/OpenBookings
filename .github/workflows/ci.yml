@@ -90,12 +90,19 @@ jobs:
 
       # The direct endpoint, not the pooled one: the pooler rewrites and
       # batches statements, and these tests drive explicit transactions.
+      #
+      # Not the demo package: its tests generate demo hotels (slow) and only
+      # check the local testing setup. Run them with `bun run test` locally.
+      #
+      # Four packages at a time, not turbo's default ten: the branch's compute
+      # starts at 0.25 CU, and every package opening its connections at once
+      # got them dropped ("Connection terminated unexpectedly").
       - name: Run tests
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
           DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
           PENDING_MIGRATIONS_APPLIED: "1"
-        run: bun run test
+        run: bun run test --filter='!@openbookings/demo' --concurrency=4
 
       # Always, including when the tests failed -- an abandoned branch keeps
       # billing. Skipped only if the branch was never created, where there is
