@@ -112,7 +112,8 @@ describeWithDb("demo hotels", () => {
     expect(await read(b.propertyIds)).toEqual(first);
     expect(await cities(b.propertyIds)).toEqual(["Celje"]);
     expect(new Set(first.map((r) => r.name)).size).toBe(8);
-  }, 30_000);
+    // Two full generations against a remote database: about 15 s each.
+  }, 60_000);
 
   test("each scenario answers search the way it is meant to", async () => {
     const { propertyIds } = await ensureDemoHotels(db, LISBON);

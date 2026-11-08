@@ -32,6 +32,7 @@ async function main(): Promise<void> {
       },
     });
     console.log(`Deleted ${counts.properties} demo properties, ${counts.bookings} bookings, ${counts.intents} booking intents.`);
+    if (counts.kept > 0) console.log(`Kept ${counts.kept} demo properties the commission ledger points at.`);
   } finally {
     client.release();
     await pool.end();

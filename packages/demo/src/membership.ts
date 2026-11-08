@@ -33,10 +33,23 @@ async function deleted(db: Queryable, deleteSql: string): Promise<number> {
  * cascading (refunds, transactions) go first; rooms, rate plans, inventory,
  * restrictions, images, tax rules, access rows and message threads go with
  * the properties through their cascades. Audit rows are not touched; they keep any booking ids in their jsonb detail.
+ *
+ * A demo property the commission ledger points at (through the property, one
+ * of its bookings or one of its intents) is kept whole, bookings included:
+ * the ledger is append-only billing history and must outlive the reset.
  */
-export async function resetDemoData(db: LifecycleDb): Promise<{ properties: number; bookings: number; intents: number }> {
+export async function resetDemoData(
+  db: LifecycleDb,
+): Promise<{ properties: number; bookings: number; intents: number; kept: number }> {
   return db.transaction(async (tx) => {
-    const demo = `SELECT id FROM properties WHERE is_demo`;
+    const billed = `EXISTS (SELECT 1 FROM commission_entries ce
+      WHERE ce.property_id = p.id
+         OR ce.booking_id IN (SELECT b.id FROM bookings b WHERE b.hotel_id = p.id)
+         OR ce.booking_intent_id IN (SELECT bi.id FROM booking_intents bi WHERE bi.property_id = p.id))`;
+    const kept = (await tx.query(`SELECT count(*)::int AS n FROM properties p WHERE p.is_demo AND ${billed}`)).rows[0] as {
+      n: number;
+    };
+    const demo = `SELECT p.id FROM properties p WHERE p.is_demo AND NOT ${billed}`;
     const demoBookings = `SELECT id FROM bookings WHERE hotel_id IN (${demo})`;
 
     // Intents first: they point at properties and bookings; their rooms cascade.
@@ -47,8 +60,8 @@ export async function resetDemoData(db: LifecycleDb): Promise<{ properties: numb
     await tx.query(`DELETE FROM message_threads WHERE booking_id IN (${demoBookings})`);
     await tx.query(`DELETE FROM reservations WHERE booking_id IN (${demoBookings})`);
     const bookings = await deleted(tx, `DELETE FROM bookings WHERE hotel_id IN (${demo})`);
-    const properties = await deleted(tx, `DELETE FROM properties WHERE is_demo`);
+    const properties = await deleted(tx, `DELETE FROM properties WHERE id IN (${demo})`);
 
-    return { properties, bookings, intents };
+    return { properties, bookings, intents, kept: kept.n };
   });
 }
