@@ -100,4 +100,26 @@ describe("checkVatId", () => {
     expect(r.valid).toBe(false);
     expect(calls).toHaveLength(1);
   });
+
+  test("a valid:false carrying a busy member state error is retried, not final", async () => {
+    const busy = json({ valid: false, userError: "MS_UNAVAILABLE" });
+    const { fn, calls } = fakeFetch(busy, json(valid));
+    const r = await checkVatId("BE0123456789", { fetch: fn, sleep, requester });
+    expect(r.valid).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("a call that hangs is aborted, retried and finally reported unavailable", async () => {
+    let calls = 0;
+    const hanging = ((_url: string, init?: RequestInit) => {
+      calls++;
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    }) as unknown as typeof fetch;
+    await expect(
+      checkVatId("BE0123456789", { fetch: hanging, sleep, requester, timeoutMs: 5 }),
+    ).rejects.toBeInstanceOf(ViesUnavailableError);
+    expect(calls).toBe(4);
+  });
 });

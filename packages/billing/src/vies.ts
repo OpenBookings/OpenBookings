@@ -22,6 +22,8 @@ export type ViesResult = { valid: boolean; requestId: string | null; checkedAt: 
 export type ViesDeps = {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** How long one call may take before it is aborted and retried (default 15s). */
+  timeoutMs?: number;
   /** OpenBookings' own VAT number: VIES only issues a request identifier (proof of the check) when it is given. */
   requester: { countryCode: "NL"; vatNumber: string };
 };
@@ -49,6 +51,7 @@ type ViesResponse = {
   valid?: boolean;
   requestIdentifier?: string;
   actionSucceed?: boolean;
+  userError?: string;
   errorWrappers?: { error?: string }[];
 };
 
@@ -79,6 +82,7 @@ export async function checkVatId(vatId: string, deps: ViesDeps): Promise<ViesRes
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body,
+        signal: AbortSignal.timeout(deps.timeoutMs ?? 15_000),
       });
     } catch (err) {
       lastProblem = `network error: ${err instanceof Error ? err.message : String(err)}`;
@@ -92,6 +96,7 @@ export async function checkVatId(vatId: string, deps: ViesDeps): Promise<ViesRes
       json = null;
     }
     const errors = (json?.errorWrappers ?? []).map((e) => e.error ?? "UNKNOWN");
+    if (json?.userError) errors.push(json.userError);
 
     if (errors.some((e) => RETRYABLE_ERRORS.has(e)) || (res.status >= 500 && typeof json?.valid !== "boolean")) {
       lastProblem = errors.length ? errors.join(", ") : `HTTP ${res.status}`;
