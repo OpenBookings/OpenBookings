@@ -25,7 +25,7 @@
       // declares. The ARI availability suite talks to the Postgres service
       // container CI provisions, and skips when DATABASE_URL is absent --
       // unless CI is set, where a missing database is a broken pipeline.
-      "env": ["CI"],
+      "env": ["CI", "PENDING_MIGRATIONS_APPLIED"],
       "passThroughEnv": ["DATABASE_URL", "DATABASE_URL_DIRECT"]
     }
   }

@@ -81,12 +81,20 @@ jobs:
           echo "::error::The database branch did not accept connections within about a minute."
           exit 1
 
+      # Once, so the tests need not replay them each (see
+      # packages/db/scripts/apply-pending-ci.ts).
+      - name: Apply this branch's pending migrations
+        env:
+          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+        run: bun run --cwd packages/db db:apply-pending:ci
+
       # The direct endpoint, not the pooled one: the pooler rewrites and
       # batches statements, and these tests drive explicit transactions.
       - name: Run tests
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
           DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+          PENDING_MIGRATIONS_APPLIED: "1"
         run: bun run test
 
       # Always, including when the tests failed -- an abandoned branch keeps
