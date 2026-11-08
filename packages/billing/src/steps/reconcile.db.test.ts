@@ -1,6 +1,6 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client, Pool, type PoolClient } from "pg";
-import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
+import { applyPendingMigrations, connectionString, describeWithDb, ensureCommittedMigrations, seedBooking, seedProperty } from "@openbookings/db/testing";
 import { upsertBillingProfile } from "../profiles";
 import { periodFor } from "../period";
 import { recordApplicationFee, recordApplicationFeeRefund, type ChargeInfo, type FeeLike, type FeeRefundLike, type LedgerDeps } from "../ledger";
@@ -524,7 +524,11 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
   });
 });
 
-describeWithDb("reconciliation transactions on a real pool", () => {
+// This suite commits, so it cannot replay the pending migrations in a rolled-back
+// transaction: it runs only where the schema is committed (applied in CI).
+const describeCommitting = (await ensureCommittedMigrations()) ? describeWithDb : describe.skip;
+
+describeCommitting("reconciliation transactions on a real pool", () => {
   let pool: Pool;
 
   beforeAll(() => {

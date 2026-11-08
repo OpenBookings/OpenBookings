@@ -117,6 +117,7 @@ jobs:
       business: ${{ steps.filter.outputs.business }}
       docs: ${{ steps.filter.outputs.docs }}
       support: ${{ steps.filter.outputs.support }}
+      invoice-job: ${{ steps.filter.outputs.invoice-job }}
       db: ${{ steps.filter.outputs.db }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -159,6 +160,14 @@ jobs:
               - 'turbo.json'
             support:
               - 'apps/support-bot/**'
+              - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
+            invoice-job:
+              - 'apps/invoice-job/**'
               - '.github/workflows/ci.yml'
               - '.github/scripts/**'
               - 'packages/**'
@@ -339,9 +348,40 @@ jobs:
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:main
 
+  # The monthly commission-invoice job. A Scaleway Serverless Job, not a
+  # container: built and pushed here, never rolled. The job definition points
+  # at the `main` tag, so each run picks up the latest image (see
+  # apps/invoice-job/README.md).
+  build-invoice-job:
+    needs: detect
+    if: needs.detect.outputs.invoice-job == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: github.event_name == 'push'
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: ./apps/invoice-job/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-invoice-job:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-invoice-job:main
+
   release:
     name: Release
-    needs: [detect, build-web, build-business, build-docs, build-support]
+    needs: [detect, build-web, build-business, build-docs, build-support, build-invoice-job]
     # `detect.result == 'success'` implies verify passed, since detect needs it.
     # `!failure()` stops a release when any build failed; `!cancelled()` still
     # lets *skipped* builds through, which is the normal case -- an app whose
@@ -503,4 +543,5 @@ jobs:
           .github/scripts/prune-registry.sh openbookings-business "$BUSINESS_CONTAINER_ID" || failed=1
           .github/scripts/prune-registry.sh openbookings-docs     "$DOCS_CONTAINER_ID"     || failed=1
           .github/scripts/prune-registry.sh openbookings-support                           || failed=1
+          .github/scripts/prune-registry.sh openbookings-invoice-job                       || failed=1
           exit "$failed"

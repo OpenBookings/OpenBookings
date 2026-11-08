@@ -1,6 +1,6 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client, Pool } from "pg";
-import { applyPendingMigrations, connectionString, describeWithDb } from "@openbookings/db/testing";
+import { applyPendingMigrations, connectionString, describeWithDb, ensureCommittedMigrations } from "@openbookings/db/testing";
 import { periodFor, type Period } from "../period";
 import { recordViesResult, upsertBillingProfile } from "../profiles";
 import { loadInvoiceDocument, type PartySnapshot } from "../render/document";
@@ -386,7 +386,11 @@ describeWithDb("issuing the monthly commission invoices", () => {
   });
 });
 
-describeWithDb("issuing on separate connections", () => {
+// This suite commits, so it cannot replay the pending migrations in a rolled-back
+// transaction: it runs only where the schema is committed (applied in CI).
+const describeCommitting = (await ensureCommittedMigrations()) ? describeWithDb : describe.skip;
+
+describeCommitting("issuing on separate connections", () => {
   // These issues commit, so everything they touch is private to this run: its
   // own organizations and a series in a year no other data reaches. Issued
   // invoices cannot be deleted through the immutability trigger, so the

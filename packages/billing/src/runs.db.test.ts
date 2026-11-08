@@ -92,4 +92,38 @@ describeWithDb("invoice runs against Postgres", () => {
     await dry("succeeded");
     expect(await lastReconcileStatus(db, period)).toBe("blocked");
   });
+
+  test("a dry run is marked as one from the start, so a running one never shadows a real draft", async () => {
+    await withRun(db, { periodStart: period, step: "draft" }, async () => ({
+      status: "succeeded",
+      report: { reconcile: { status: "succeeded" } },
+      value: null,
+    }));
+    const r = await withRun(db, { periodStart: period, step: "draft", dryRun: true }, async (runId) => {
+      expect(await row(runId)).toMatchObject({ status: "running", report: { dryRun: true } });
+      expect(await lastReconcileStatus(db, period)).toBe("succeeded");
+      return { status: "blocked", report: { reconcile: { status: "blocked" } }, value: null };
+    });
+    expect((await row(r.runId)).report).toEqual({ dryRun: true, reconcile: { status: "blocked" } });
+    expect(await lastReconcileStatus(db, period)).toBe("succeeded");
+  });
+
+  test("a failed dry run keeps its mark and never shadows a real draft", async () => {
+    await withRun(db, { periodStart: period, step: "draft" }, async () => ({
+      status: "succeeded",
+      report: { reconcile: { status: "succeeded" } },
+      value: null,
+    }));
+    let runId = "";
+    await expect(
+      withRun(db, { periodStart: period, step: "draft", dryRun: true }, async (id) => {
+        runId = id;
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    const saved = await row(runId);
+    expect(saved.status).toBe("failed");
+    expect(saved.report).toEqual({ dryRun: true, error: "boom" });
+    expect(await lastReconcileStatus(db, period)).toBe("succeeded");
+  });
 });
