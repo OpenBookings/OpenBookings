@@ -11,8 +11,8 @@ import { runDraft } from "./draft";
 import { IssueMismatchError, invoiceNumber, issueInvoice, runIssue, type IssueDeps } from "./issue";
 import { poolTransaction, savepointTransaction } from "./reconcile";
 
-const PERIOD = periodFor("2026-10");
-const TODAY = "2026-11-05";
+const PERIOD = periodFor("2100-10");
+const TODAY = "2100-11-05";
 
 const SELLER: PartySnapshot = {
   legalName: "OpenBookings B.V.",
@@ -75,7 +75,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
           throw new Error("unexpected VIES check");
         },
         viesDeps: { requester: { countryCode: "NL", vatNumber: "NL000000000B01" } },
-        now: () => new Date("2026-11-01T06:00:00Z"),
+        now: () => new Date("2100-11-01T06:00:00Z"),
         dryRun: false,
         runId,
       });
@@ -137,13 +137,13 @@ describeWithDb("issuing the monthly commission invoices", () => {
     await db.query("ROLLBACK");
   });
 
-  test("the first invoice of 2026 is OB-2026-0001", async () => {
+  test("the first invoice of 2100 is OB-2100-0001", async () => {
     const host = await seedHost(db, "NL");
     const fee = await entry(db, stripe, host, { gross: 1080n, base: 24_000n });
-    await entry(db, stripe, host, { gross: 1081n, base: 24_022n, occurredAt: "2026-10-31T22:30:00Z" });
-    await entry(db, stripe, host, { gross: -540n, base: -12_000n, refundsEntryId: fee.id, occurredAt: "2026-10-20T09:00:00Z" });
+    await entry(db, stripe, host, { gross: 1081n, base: 24_022n, occurredAt: "2100-10-31T22:30:00Z" });
+    await entry(db, stripe, host, { gross: -540n, base: -12_000n, refundsEntryId: fee.id, occurredAt: "2100-10-20T09:00:00Z" });
     // Not this month's, and returned: neither is linked.
-    await entry(db, stripe, host, { gross: 1080n, occurredAt: "2026-11-01T00:30:00Z", list: false });
+    await entry(db, stripe, host, { gross: 1080n, occurredAt: "2100-11-01T00:30:00Z", list: false });
     const returned = await entry(db, stripe, host, { gross: 1080n, disposition: "returned" });
     await entry(db, stripe, host, { gross: -1080n, disposition: "returned", refundsEntryId: returned.id });
     const { value: drafted } = await draft();
@@ -151,12 +151,12 @@ describeWithDb("issuing the monthly commission invoices", () => {
 
     const report = await runIssue(PERIOD, deps());
 
-    expect(report).toEqual({ period: "2026-10", issued: [{ entityId: host.orgId, invoiceId, number: "OB-2026-0001" }], skipped: [] });
+    expect(report).toEqual({ period: "2100-10", issued: [{ entityId: host.orgId, invoiceId, number: "OB-2100-0001" }], skipped: [] });
     expect(await invoiceOf(invoiceId)).toEqual({
       status: "issued",
-      series: "OB-2026",
+      series: "OB-2100",
       sequence_number: 1,
-      number: "OB-2026-0001",
+      number: "OB-2100-0001",
       issued_on: TODAY,
       seller: {
         legalName: "[SELLER_LEGAL_NAME]",
@@ -171,11 +171,11 @@ describeWithDb("issuing the monthly commission invoices", () => {
     const ids = await linked(host);
     expect(ids.filter((id) => id === invoiceId)).toHaveLength(3);
     expect(ids.filter((id) => id === null)).toHaveLength(3);
-    expect(await nextValue("OB-2026")).toBe(2);
+    expect(await nextValue("OB-2100")).toBe(2);
 
     // The stored snapshots are what the renderer reads.
     const doc = await loadInvoiceDocument(db, invoiceId);
-    expect(doc.number).toBe("OB-2026-0001");
+    expect(doc.number).toBe("OB-2100-0001");
     expect(doc.buyer).toEqual(BUYER);
     expect(doc.rows).toHaveLength(3);
   });
@@ -188,19 +188,19 @@ describeWithDb("issuing the monthly commission invoices", () => {
     const issue = async (host: Host, today: string) =>
       issueInvoice(db, await draftRow(db, host.orgId, PERIOD), { today, seller: SELLER, buyer: BUYER });
 
-    expect(await issue(a, "2026-11-05")).toEqual({ number: "OB-2026-0001" });
-    expect(await issue(b, "2026-12-31")).toEqual({ number: "OB-2026-0002" });
-    expect(await issue(c, "2027-01-01")).toEqual({ number: "OB-2027-0001" });
-    expect(await issue(d, "2026-12-31")).toEqual({ number: "OB-2026-0003" });
-    expect(await nextValue("OB-2026")).toBe(4);
-    expect(await nextValue("OB-2027")).toBe(2);
+    expect(await issue(a, "2100-11-05")).toEqual({ number: "OB-2100-0001" });
+    expect(await issue(b, "2100-12-31")).toEqual({ number: "OB-2100-0002" });
+    expect(await issue(c, "2101-01-01")).toEqual({ number: "OB-2101-0001" });
+    expect(await issue(d, "2100-12-31")).toEqual({ number: "OB-2100-0003" });
+    expect(await nextValue("OB-2100")).toBe(4);
+    expect(await nextValue("OB-2101")).toBe(2);
   });
 
   test("a mismatch in linked entries rolls back and leaves no gap", async () => {
     const stale = await seedHost(db);
     const other = await seedHost(db);
     await entry(db, stripe, stale, { gross: 1080n });
-    await entry(db, stripe, stale, { gross: 1080n, occurredAt: "2026-10-15T12:00:00Z" });
+    await entry(db, stripe, stale, { gross: 1080n, occurredAt: "2100-10-15T12:00:00Z" });
     // The draft counted one fee, but the month now holds two.
     const staleId = await draftRow(db, stale.orgId, PERIOD, { fees: 1 });
 
@@ -216,10 +216,10 @@ describeWithDb("issuing the monthly commission invoices", () => {
 
     expect(await invoiceOf(staleId)).toMatchObject({ status: "draft", number: null, series: null, sequence_number: null });
     expect(await linked(stale)).toEqual([null, null]);
-    expect(await nextValue("OB-2026")).toBeNull();
+    expect(await nextValue("OB-2100")).toBeNull();
 
     const otherId = await draftRow(db, other.orgId, PERIOD);
-    expect(await issueInvoice(db, otherId, { today: TODAY, seller: SELLER, buyer: BUYER })).toEqual({ number: "OB-2026-0001" });
+    expect(await issueInvoice(db, otherId, { today: TODAY, seller: SELLER, buyer: BUYER })).toEqual({ number: "OB-2100-0001" });
   });
 
   test("issuing twice changes nothing", async () => {
@@ -228,32 +228,32 @@ describeWithDb("issuing the monthly commission invoices", () => {
     await draft();
 
     const first = await runIssue(PERIOD, deps());
-    expect(first.issued.map((i) => i.number)).toEqual(["OB-2026-0001"]);
+    expect(first.issued.map((i) => i.number)).toEqual(["OB-2100-0001"]);
     const invoiceId = first.issued[0]!.invoiceId;
     const before = await invoiceOf(invoiceId);
 
-    expect(await runIssue(PERIOD, deps({ today: "2026-11-06" }))).toEqual({ period: "2026-10", issued: [], skipped: [] });
-    expect(await issueInvoice(db, invoiceId, { today: "2026-11-06", seller: SELLER, buyer: BUYER })).toEqual({
+    expect(await runIssue(PERIOD, deps({ today: "2100-11-06" }))).toEqual({ period: "2100-10", issued: [], skipped: [] });
+    expect(await issueInvoice(db, invoiceId, { today: "2100-11-06", seller: SELLER, buyer: BUYER })).toEqual({
       skipped: "not_draft",
     });
     expect(await invoiceOf(invoiceId)).toEqual(before);
     expect(await linked(host)).toEqual([invoiceId]);
-    expect(await nextValue("OB-2026")).toBe(2);
+    expect(await nextValue("OB-2100")).toBe(2);
   });
 
   test("refuses when reconcile did not succeed", async () => {
     const host = await seedHost(db);
     const invoiceId = await draftRow(db, host.orgId, PERIOD);
 
-    await expect(runIssue(PERIOD, deps())).rejects.toThrow("No completed draft run for 2026-10 — run the draft step first");
+    await expect(runIssue(PERIOD, deps())).rejects.toThrow("No completed draft run for 2100-10 — run the draft step first");
 
     await recordDraftRun("blocked", "blocked");
     await expect(runIssue(PERIOD, deps())).rejects.toThrow(
-      "Reconciliation for 2026-10 is blocked — resolve it and rerun the draft step first",
+      "Reconciliation for 2100-10 is blocked — resolve it and rerun the draft step first",
     );
 
     await recordDraftRun("failed", null);
-    await expect(runIssue(PERIOD, deps())).rejects.toThrow("The last draft run for 2026-10 failed — rerun the draft step first");
+    await expect(runIssue(PERIOD, deps())).rejects.toThrow("The last draft run for 2100-10 failed — rerun the draft step first");
 
     // A dry run never unlocks issuing.
     await db.query(
@@ -264,7 +264,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
     await expect(runIssue(PERIOD, deps())).rejects.toThrow(/failed/);
 
     expect(await invoiceOf(invoiceId)).toMatchObject({ status: "draft", number: null });
-    expect(await nextValue("OB-2026")).toBeNull();
+    expect(await nextValue("OB-2100")).toBeNull();
   });
 
   test("live mode refuses to issue without the seller's details", async () => {
@@ -284,13 +284,13 @@ describeWithDb("issuing the monthly commission invoices", () => {
     for (const host of hosts) await entry(db, stripe, host, { gross: 1080n });
     await draft();
     // Recorded after the draft: the stale host's draft no longer covers its month.
-    await entry(db, stripe, stale, { gross: 1080n, occurredAt: "2026-10-16T12:00:00Z" });
+    await entry(db, stripe, stale, { gross: 1080n, occurredAt: "2100-10-16T12:00:00Z" });
 
     const report = await runIssue(PERIOD, deps());
 
     expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([
-      [first.orgId, "OB-2026-0001"],
-      [last.orgId, "OB-2026-0002"],
+      [first.orgId, "OB-2100-0001"],
+      [last.orgId, "OB-2100-0002"],
     ]);
     expect(report.skipped).toEqual([
       { entityId: stale.orgId, reason: "draft_stale", message: "Draft is stale — rerun the draft step for this period" },
@@ -310,7 +310,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
     expect(report.skipped).toEqual([
       { entityId: x.orgId, reason: "missing_fields", message: "Billing profile is missing: city, billingEmail" },
     ]);
-    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[y.orgId, "OB-2026-0001"]]);
+    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[y.orgId, "OB-2100-0001"]]);
     expect(await linked(x)).toEqual([null]);
   });
 
@@ -325,27 +325,27 @@ describeWithDb("issuing the monthly commission invoices", () => {
     await entry(db, stripe, stays, { gross: 1080n });
     await draft();
     await upsertBillingProfile(db, moved.orgId, { countryCode: "BE", vatId: "BE0123456789" });
-    await recordViesResult(db, moved.orgId, { valid: true, requestId: "vies-ok", checkedAt: new Date("2026-11-02T10:00:00Z") });
+    await recordViesResult(db, moved.orgId, { valid: true, requestId: "vies-ok", checkedAt: new Date("2100-11-02T10:00:00Z") });
 
     const report = await runIssue(PERIOD, deps());
 
     expect(report.skipped).toEqual([{ entityId: moved.orgId, reason: "draft_stale", message: CHANGED }]);
-    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[stays.orgId, "OB-2026-0001"]]);
+    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[stays.orgId, "OB-2100-0001"]]);
     expect(await linked(moved)).toEqual([null]);
-    expect(await nextValue("OB-2026")).toBe(2);
+    expect(await nextValue("OB-2100")).toBe(2);
   });
 
   test("a reverse-charge host whose VAT id is no longer VIES-valid is skipped", async () => {
     const host = await seedHost(db, "BE");
     await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE" });
     await draft();
-    await recordViesResult(db, host.orgId, { valid: false, requestId: "vies-no", checkedAt: new Date("2026-11-02T10:00:00Z") });
+    await recordViesResult(db, host.orgId, { valid: false, requestId: "vies-no", checkedAt: new Date("2100-11-02T10:00:00Z") });
 
     const report = await runIssue(PERIOD, deps());
 
-    expect(report).toEqual({ period: "2026-10", issued: [], skipped: [{ entityId: host.orgId, reason: "draft_stale", message: CHANGED }] });
+    expect(report).toEqual({ period: "2100-10", issued: [], skipped: [{ entityId: host.orgId, reason: "draft_stale", message: CHANGED }] });
     expect(await linked(host)).toEqual([null]);
-    expect(await nextValue("OB-2026")).toBeNull();
+    expect(await nextValue("OB-2100")).toBeNull();
   });
 
   test("a host now outside the EU is skipped", async () => {
@@ -358,7 +358,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
 
     expect(report.skipped).toEqual([{ entityId: host.orgId, reason: "draft_stale", message: CHANGED }]);
     expect(report.issued).toEqual([]);
-    expect(await nextValue("OB-2026")).toBeNull();
+    expect(await nextValue("OB-2100")).toBeNull();
   });
 
   test("a reverse-charge host with a valid VAT id is issued", async () => {
@@ -368,7 +368,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
 
     const report = await runIssue(PERIOD, deps());
 
-    expect(report.issued.map((i) => i.number)).toEqual(["OB-2026-0001"]);
+    expect(report.issued.map((i) => i.number)).toEqual(["OB-2100-0001"]);
     expect(report.skipped).toEqual([]);
   });
 
@@ -381,7 +381,7 @@ describeWithDb("issuing the monthly commission invoices", () => {
 
     const report = await runIssue(PERIOD, deps({ entity: y.orgId }));
 
-    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[y.orgId, "OB-2026-0001"]]);
+    expect(report.issued.map((i) => [i.entityId, i.number])).toEqual([[y.orgId, "OB-2100-0001"]]);
     expect(await linked(x)).toEqual([null]);
   });
 });

@@ -5,7 +5,7 @@ import { lastReconcileStatus, withRun } from "./runs";
 
 describeWithDb("invoice runs against Postgres", () => {
   let db: Client;
-  const period = "2026-10-01";
+  const period = "2100-10-01";
 
   beforeAll(async () => {
     db = new Client({ connectionString });

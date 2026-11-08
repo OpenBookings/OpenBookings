@@ -13,8 +13,8 @@ import {
   type StripeLedgerSource,
 } from "./reconcile";
 
-const PERIOD = periodFor("2026-10");
-const CREATED = 1_792_000_000; // 2026-10-14T17:46:40Z
+const PERIOD = periodFor("2100-10");
+const CREATED = 4_127_219_200; // 2100-10-14T17:46:40Z
 const NEXT_MONTH = Math.floor(PERIOD.to.getTime() / 1000) + 60; // 1 November, just after midnight
 
 type Calls = {
@@ -133,7 +133,7 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
         `INSERT INTO booking_intents
            (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot,
             total_amount, commission_cents)
-         VALUES ('u', $1, '2026-12-01', '2026-12-04', $2, now(), '{"roomsTotal": 240}'::jsonb, 240, 1080)
+         VALUES ('u', $1, '2100-12-01', '2100-12-04', $2, now(), '{"roomsTotal": 240}'::jsonb, 240, 1080)
          RETURNING id`,
         [propertyId, status],
       )
@@ -175,7 +175,7 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
       account,
     ]);
     await upsertBillingProfile(db, orgId, { legalName: "Hotel BV", countryCode: "NL", vatId: "NL123456789B01" });
-    ({ bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2026-11-20", nights: 2 }));
+    ({ bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2100-11-20", nights: 2 }));
     await db.query(
       `UPDATE bookings
           SET status = 'confirmed', stripe_payment_intent_id = $2,

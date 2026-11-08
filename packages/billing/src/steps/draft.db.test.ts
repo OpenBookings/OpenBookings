@@ -8,8 +8,8 @@ import { entry, issuedInvoice, quietLedger, seedHost, stripeSource, type Host, t
 import { runDraft, type DraftDeps } from "./draft";
 import { savepointTransaction } from "./reconcile";
 
-const PERIOD = periodFor("2026-10");
-const NOW = new Date("2026-11-01T06:00:00Z");
+const PERIOD = periodFor("2100-10");
+const NOW = new Date("2100-11-01T06:00:00Z");
 
 type InvoiceRow = {
   id: string;
@@ -101,13 +101,13 @@ describeWithDb("drafting the monthly commission invoices", () => {
     const incomplete = await seedHost(db, "NL");
     await upsertBillingProfile(db, incomplete.orgId, { billingEmail: null });
     await entry(db, stripe, nl, { gross: 1080n, base: 24_000n });
-    await entry(db, stripe, nl, { gross: 1081n, base: 24_022n, occurredAt: "2026-10-31T22:30:00Z" }); // 31 Oct 23:30 Amsterdam
+    await entry(db, stripe, nl, { gross: 1081n, base: 24_022n, occurredAt: "2100-10-31T22:30:00Z" }); // 31 Oct 23:30 Amsterdam
     await entry(db, stripe, be, { gross: 1080n, base: 24_000n, treatment: "EU_REVERSE_CHARGE" });
     await entry(db, stripe, incomplete, { gross: 1080n });
 
     const { runId, report } = await draft();
 
-    expect(report.period).toBe("2026-10");
+    expect(report.period).toBe("2100-10");
     expect(report.dryRun).toBe(false);
     expect(report.reconcile.status).toBe("succeeded");
     expect(report.blocked).toEqual([{ entityId: incomplete.orgId, reasons: ["missing_fields"], missing: ["billingEmail"] }]);
@@ -120,8 +120,8 @@ describeWithDb("drafting the monthly commission invoices", () => {
       run_id: runId,
       status: "draft",
       number: null,
-      period_start: "2026-10-01",
-      period_end: "2026-10-31",
+      period_start: "2100-10-01",
+      period_end: "2100-10-31",
       doc_type: "invoice",
       vat_treatment: "NL_DOMESTIC",
       vat_rate_bp: 2100,
@@ -168,7 +168,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
   test("a confirmed booking fully refunded in the same month gets a €0.00 invoice", async () => {
     const host = await seedHost(db);
     const fee = await entry(db, stripe, host, { gross: 1080n, base: 24_000n });
-    await entry(db, stripe, host, { gross: -1080n, base: -24_000n, refundsEntryId: fee.id, occurredAt: "2026-10-20T12:00:00Z" });
+    await entry(db, stripe, host, { gross: -1080n, base: -24_000n, refundsEntryId: fee.id, occurredAt: "2100-10-20T12:00:00Z" });
 
     await draft();
 
@@ -225,7 +225,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
     const first = await draft();
     const before = await octoberInvoice(host);
 
-    await entry(db, stripe, host, { gross: 540n, occurredAt: "2026-10-30T12:00:00Z" });
+    await entry(db, stripe, host, { gross: 540n, occurredAt: "2100-10-30T12:00:00Z" });
     const second = await draft();
 
     const after = await invoices(host);
@@ -237,7 +237,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
 
   test("an issued invoice is left untouched by a rerun", async () => {
     const host = await seedHost(db);
-    const issuedId = await issuedInvoice(db, host, PERIOD.start, PERIOD.end, "OB-2026-0042");
+    const issuedId = await issuedInvoice(db, host, PERIOD.start, PERIOD.end, "OB-2100-0042");
     await entry(db, stripe, host, { gross: 540n }); // a late entry after the month was issued
     const before = await octoberInvoice(host);
 
@@ -247,7 +247,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
     expect(report.drafts.filter((d) => d.entityId === host.orgId)).toEqual([]);
     const after = await invoices(host);
     expect(after).toEqual([before!]);
-    expect(after[0]).toMatchObject({ id: issuedId, status: "issued", number: "OB-2026-0042", gross_total: "1080" });
+    expect(after[0]).toMatchObject({ id: issuedId, status: "issued", number: "OB-2100-0042", gross_total: "1080" });
   });
 
   test("a blocked reconcile creates no drafts", async () => {
@@ -271,7 +271,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
 
   test("refund of a not-yet-issued fee", async () => {
     const host = await seedHost(db);
-    const september = await entry(db, stripe, host, { gross: 1080n, occurredAt: "2026-09-12T12:00:00Z", list: false });
+    const september = await entry(db, stripe, host, { gross: 1080n, occurredAt: "2100-09-12T12:00:00Z", list: false });
     await entry(db, stripe, host, { gross: -540n, refundsEntryId: september.id });
 
     await draft();
@@ -288,10 +288,10 @@ describeWithDb("drafting the monthly commission invoices", () => {
 
   test("referenced invoice numbers come from the refunded fees' invoices", async () => {
     const host = await seedHost(db);
-    const augustInvoice = await issuedInvoice(db, host, "2026-08-01", "2026-08-31", "OB-2026-0007");
-    const septemberInvoice = await issuedInvoice(db, host, "2026-09-01", "2026-09-30", "OB-2026-0003");
-    const inAugust = { occurredAt: "2026-08-12T12:00:00Z", list: false };
-    const inSeptember = { occurredAt: "2026-09-12T12:00:00Z", list: false };
+    const augustInvoice = await issuedInvoice(db, host, "2100-08-01", "2100-08-31", "OB-2100-0007");
+    const septemberInvoice = await issuedInvoice(db, host, "2100-09-01", "2100-09-30", "OB-2100-0003");
+    const inAugust = { occurredAt: "2100-08-12T12:00:00Z", list: false };
+    const inSeptember = { occurredAt: "2100-09-12T12:00:00Z", list: false };
     const a = await entry(db, stripe, host, { gross: 1080n, invoiceId: augustInvoice, ...inAugust });
     const b = await entry(db, stripe, host, { gross: 1080n, invoiceId: septemberInvoice, ...inSeptember });
     const c = await entry(db, stripe, host, { gross: 1080n, invoiceId: septemberInvoice, ...inSeptember });
@@ -310,7 +310,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
       refund_count: 4,
       refund_gross_total: "-1720",
       gross_total: "280",
-      refers_to_invoice_numbers: ["OB-2026-0003", "OB-2026-0007"],
+      refers_to_invoice_numbers: ["OB-2100-0003", "OB-2100-0007"],
     });
   });
 
@@ -321,7 +321,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
     await entry(db, stripe, other, { gross: 1080n });
     await draft({ entity: other.orgId });
     const otherBefore = await octoberInvoice(other);
-    await entry(db, stripe, other, { gross: 540n, occurredAt: "2026-10-29T12:00:00Z" });
+    await entry(db, stripe, other, { gross: 540n, occurredAt: "2100-10-29T12:00:00Z" });
 
     const { report } = await draft({ entity: one.orgId });
 
@@ -364,7 +364,7 @@ describeWithDb("drafting the monthly commission invoices", () => {
     await entry(db, stripe, host, { gross: 1080n });
     await draft();
     const before = await octoberInvoice(host);
-    await entry(db, stripe, host, { gross: 540n, occurredAt: "2026-10-29T12:00:00Z" });
+    await entry(db, stripe, host, { gross: 540n, occurredAt: "2100-10-29T12:00:00Z" });
     await entry(db, stripe, fresh, { gross: 1080n });
 
     const { report } = await draft({ dryRun: true });

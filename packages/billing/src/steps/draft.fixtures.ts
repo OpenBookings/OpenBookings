@@ -19,7 +19,7 @@ export type StripeSide = { listed: BalanceTransactionLike[] };
 const VAT_IDS: Record<string, string> = { NL: "NL123456789B01", BE: "BE0123456789", US: "US123456789" };
 
 /** A host with one confirmed booking and a complete billing profile in `country`; a non-NL VAT id is VIES-valid as of `viesCheckedAt`. */
-export async function seedHost(db: Client, country = "NL", viesCheckedAt: Date | null = new Date("2026-10-20T10:00:00Z")): Promise<Host> {
+export async function seedHost(db: Client, country = "NL", viesCheckedAt: Date | null = new Date("2100-10-20T10:00:00Z")): Promise<Host> {
   const { propertyId, roomId, ratePlanId } = await seedProperty(db);
   const orgId = `org-${crypto.randomUUID()}`;
   const account = `acct_${crypto.randomUUID().slice(0, 12)}`;
@@ -37,7 +37,7 @@ export async function seedHost(db: Client, country = "NL", viesCheckedAt: Date |
   if (country !== "NL" && viesCheckedAt) {
     await recordViesResult(db, orgId, { valid: true, requestId: "vies-ok", checkedAt: viesCheckedAt });
   }
-  const { bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2026-11-20", nights: 2 });
+  const { bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2100-11-20", nights: 2 });
   await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [bookingId]);
   return { orgId, propertyId, bookingId, account };
 }
@@ -72,7 +72,7 @@ export async function entry(
     ? ((await db.query(`SELECT stripe_application_fee_id AS id FROM commission_entries WHERE id = $1`, [input.refundsEntryId])).rows[0].id as string)
     : `fee_${crypto.randomUUID()}`;
   const refundId = kind === "fee_refund" ? `fr_${crypto.randomUUID()}` : null;
-  const occurredAt = input.occurredAt ?? "2026-10-14T12:00:00Z";
+  const occurredAt = input.occurredAt ?? "2100-10-14T12:00:00Z";
   const booked = disposition === "booked";
   const { rows } = await db.query(
     `INSERT INTO commission_entries
@@ -88,8 +88,8 @@ export async function entry(
       booked ? host.propertyId : null,
       booked ? host.bookingId : null,
       booked ? host.bookingId.slice(0, 8).toUpperCase() : null,
-      booked ? "2026-11-20" : null,
-      booked ? "2026-11-22" : null,
+      booked ? "2100-11-20" : null,
+      booked ? "2100-11-22" : null,
       host.account,
       feeId,
       refundId,
@@ -123,7 +123,7 @@ export async function issuedInvoice(db: Client, host: Host, periodStart: string,
     `INSERT INTO invoices
        (billing_entity_id, period_start, period_end, doc_type, status, series, sequence_number, number, issued_on,
         seller, buyer, vat_treatment, vat_rate_bp, net_total, vat_total, gross_total, vat_collected, vat_rounding_diff)
-     VALUES ($1, $2, $3, 'invoice', 'issued', 'OB-2026', $4, $5, '2026-10-05', '{}'::jsonb, '{}'::jsonb,
+     VALUES ($1, $2, $3, 'invoice', 'issued', 'OB-2100', $4, $5, '2100-10-05', '{}'::jsonb, '{}'::jsonb,
              'NL_DOMESTIC', 2100, 893, 187, 1080, 187, 0)
      RETURNING id`,
     [host.orgId, periodStart, periodEnd, Number(number.slice(-4)), number],

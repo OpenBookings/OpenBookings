@@ -13,7 +13,7 @@ import {
   type LedgerDeps,
 } from ".";
 
-const CREATED = 1_794_000_000; // 2026-11-07T21:20:00Z
+const CREATED = 4_129_305_600; // 2100-11-07T21:20:00Z
 
 type Calls = {
   returnPayment: [string, string, string][];
@@ -81,7 +81,7 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
         `INSERT INTO booking_intents
            (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot,
             total_amount, commission_cents, booking_id, payment_reference)
-         VALUES ('u', $1, '2026-12-01', '2026-12-04', $2, now(), '{"roomsTotal": 240}'::jsonb, 240, 1080, $3, $4)
+         VALUES ('u', $1, '2100-12-01', '2100-12-04', $2, now(), '{"roomsTotal": 240}'::jsonb, 240, 1080, $3, $4)
          RETURNING id`,
         [propertyId, opts.status, opts.bookingId ?? null, opts.paymentReference ?? null],
       )
@@ -112,7 +112,7 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       account,
     ]);
     await upsertBillingProfile(db, orgId, { legalName: "Hotel BV", countryCode: "NL", vatId: "NL123456789B01" });
-    ({ bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2026-11-20", nights: 2 }));
+    ({ bookingId } = await seedBooking(db, { propertyId, roomId, ratePlanId }, { checkIn: "2100-11-20", nights: 2 }));
     await db.query(
       `UPDATE bookings
           SET status = 'confirmed', stripe_payment_intent_id = $2,
@@ -139,8 +139,8 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       property_id: propertyId,
       booking_id: bookingId,
       booking_ref: bookingId.slice(0, 8).toUpperCase(),
-      stay_start: "2026-11-20",
-      stay_end: "2026-11-22",
+      stay_start: "2100-11-20",
+      stay_end: "2100-11-22",
       stripe_account_id: account,
       stripe_application_fee_id: f.id,
       stripe_fee_refund_id: null,
@@ -232,8 +232,8 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       booking_ref: null,
       property_id: propertyId,
       booking_intent_id: intentId,
-      stay_start: "2026-12-01",
-      stay_end: "2026-12-04",
+      stay_start: "2100-12-01",
+      stay_end: "2100-12-04",
       base: "0",
       net: "893",
       vat: "187",
@@ -323,8 +323,8 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       property_id: propertyId,
       booking_id: bookingId,
       booking_ref: bookingId.slice(0, 8).toUpperCase(),
-      stay_start: "2026-11-20",
-      stay_end: "2026-11-22",
+      stay_start: "2100-11-20",
+      stay_end: "2100-11-22",
       stripe_application_fee_id: f.id,
       stripe_fee_refund_id: refund.id,
       stripe_payment_ref: f.charge,

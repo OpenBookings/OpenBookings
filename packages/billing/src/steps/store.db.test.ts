@@ -7,7 +7,7 @@ import type { InvoiceDocument, PartySnapshot } from "../render/document";
 import { entry, seedHost, type Host, type StripeSide } from "./draft.fixtures";
 import { StoredObjectConflictError, runStore, storeInvoice, type ObjectStore } from "./store";
 
-const PERIOD = periodFor("2026-10");
+const PERIOD = periodFor("2100-10");
 const PARTY: PartySnapshot = {
   legalName: "Hotel BV",
   addressLines: ["1 Canal Street", "1011 AA Amsterdam"],
@@ -66,7 +66,7 @@ describeWithDb("storing issued invoices", () => {
          (billing_entity_id, period_start, period_end, doc_type, status, series, sequence_number, number, issued_on,
           seller, buyer, vat_treatment, vat_rate_bp, fee_count, fee_base_total, fee_gross_total,
           net_total, vat_total, gross_total, vat_collected, vat_rounding_diff)
-       VALUES ($1, $2, $3, 'invoice', $4, 'OB-2026', $5, $6, '2026-11-05', $7::jsonb, $7::jsonb,
+       VALUES ($1, $2, $3, 'invoice', $4, 'OB-2100', $5, $6, '2100-11-05', $7::jsonb, $7::jsonb,
                'NL_DOMESTIC', 2100, 1, 24000, 1080, 893, 187, 1080, 187, 0)
        RETURNING id`,
       [host.orgId, PERIOD.start, PERIOD.end, status, Number(number.slice(-4)), number, JSON.stringify(PARTY)],
@@ -104,66 +104,66 @@ describeWithDb("storing issued invoices", () => {
 
   test("uploads pdf and csv and records keys and hashes", async () => {
     const mem = memoryStore();
-    const id = await issued(await seedHost(db), "OB-2026-0042");
+    const id = await issued(await seedHost(db), "OB-2100-0042");
 
     expect(await storeInvoice(db, id, { store: mem.store, render })).toBe("stored");
 
-    const pdf = text("pdf of OB-2026-0042");
-    const csv = text("csv of OB-2026-0042");
+    const pdf = text("pdf of OB-2100-0042");
+    const csv = text("csv of OB-2100-0042");
     expect(await keysOf(id)).toEqual({
-      pdf_key: "invoices/2026/OB-2026-0042.pdf",
+      pdf_key: "invoices/2100/OB-2100-0042.pdf",
       pdf_sha256: sha(pdf),
-      csv_key: "invoices/2026/OB-2026-0042-specification.csv",
+      csv_key: "invoices/2100/OB-2100-0042-specification.csv",
       csv_sha256: sha(csv),
     });
-    expect(mem.objects.get("invoices/2026/OB-2026-0042.pdf")).toEqual({ body: pdf, sha256: sha(pdf), contentType: "application/pdf" });
-    expect(mem.objects.get("invoices/2026/OB-2026-0042-specification.csv")?.contentType).toBe("text/csv; charset=utf-8");
+    expect(mem.objects.get("invoices/2100/OB-2100-0042.pdf")).toEqual({ body: pdf, sha256: sha(pdf), contentType: "application/pdf" });
+    expect(mem.objects.get("invoices/2100/OB-2100-0042-specification.csv")?.contentType).toBe("text/csv; charset=utf-8");
   });
 
   test("issued invoice without pdf_key is rendered on the next run", async () => {
     const mem = memoryStore();
     const host = await seedHost(db);
-    const a = await issued(host, "OB-2026-0042");
+    const a = await issued(host, "OB-2100-0042");
     const hostB = await seedHost(db);
-    const b = await issued(hostB, "OB-2026-0043", "sent");
-    await issued(await seedHost(db), "OB-2026-0044", "draft");
+    const b = await issued(hostB, "OB-2100-0043", "sent");
+    await issued(await seedHost(db), "OB-2100-0044", "draft");
 
     const report = await runStore(PERIOD, { db, store: mem.store, render });
 
-    expect(report).toEqual({ stored: ["OB-2026-0042", "OB-2026-0043"], alreadyStored: [], conflicts: [] });
+    expect(report).toEqual({ stored: ["OB-2100-0042", "OB-2100-0043"], alreadyStored: [], conflicts: [] });
     expect((await keysOf(a)).pdf_key).not.toBeNull();
     expect((await keysOf(b)).csv_key).not.toBeNull();
   });
 
   test("an object already there with the same hash is just recorded", async () => {
     const mem = memoryStore();
-    const id = await issued(await seedHost(db), "OB-2026-0042");
-    const pdf = text("pdf of OB-2026-0042");
-    mem.objects.set("invoices/2026/OB-2026-0042.pdf", { body: pdf, sha256: sha(pdf), contentType: "application/pdf" });
+    const id = await issued(await seedHost(db), "OB-2100-0042");
+    const pdf = text("pdf of OB-2100-0042");
+    mem.objects.set("invoices/2100/OB-2100-0042.pdf", { body: pdf, sha256: sha(pdf), contentType: "application/pdf" });
 
     await storeInvoice(db, id, { store: mem.store, render });
 
-    expect(mem.puts).toEqual(["invoices/2026/OB-2026-0042-specification.csv"]);
+    expect(mem.puts).toEqual(["invoices/2100/OB-2100-0042-specification.csv"]);
     expect((await keysOf(id)).pdf_sha256).toBe(sha(pdf));
   });
 
   test("an object there with a different hash stops with an alert", async () => {
     const mem = memoryStore();
-    const id = await issued(await seedHost(db), "OB-2026-0042");
-    mem.objects.set("invoices/2026/OB-2026-0042.pdf", { body: text("other"), sha256: sha(text("other")), contentType: "application/pdf" });
+    const id = await issued(await seedHost(db), "OB-2100-0042");
+    mem.objects.set("invoices/2100/OB-2100-0042.pdf", { body: text("other"), sha256: sha(text("other")), contentType: "application/pdf" });
 
     await expect(storeInvoice(db, id, { store: mem.store, render })).rejects.toBeInstanceOf(StoredObjectConflictError);
     expect(mem.puts).toEqual([]);
     expect(await keysOf(id)).toEqual({ pdf_key: null, pdf_sha256: null, csv_key: null, csv_sha256: null });
 
     const report = await runStore(PERIOD, { db, store: mem.store, render });
-    expect(report.conflicts).toEqual(["OB-2026-0042"]);
+    expect(report.conflicts).toEqual(["OB-2100-0042"]);
     expect(report.stored).toEqual([]);
   });
 
   test("a stored invoice is never rendered again", async () => {
     const mem = memoryStore();
-    const id = await issued(await seedHost(db), "OB-2026-0042");
+    const id = await issued(await seedHost(db), "OB-2100-0042");
     await storeInvoice(db, id, { store: mem.store, render });
     expect(renders).toEqual({ pdf: 1, csv: 1 });
 

@@ -7,8 +7,8 @@ import { ViesUnavailableError, type ViesDeps, type ViesResult } from "../vies";
 import { entry, seedHost, type StripeSide } from "./draft.fixtures";
 import { checkEligibility, type EligibilityDeps } from "./eligibility";
 
-const PERIOD = periodFor("2026-10");
-const NOW = new Date("2026-11-01T06:00:00Z");
+const PERIOD = periodFor("2100-10");
+const NOW = new Date("2100-11-01T06:00:00Z");
 const VIES_DEPS: ViesDeps = { requester: { countryCode: "NL", vatNumber: "NL000000000B01" } };
 
 describeWithDb("checking which hosts can be invoiced", () => {
@@ -91,7 +91,7 @@ describeWithDb("checking which hosts can be invoiced", () => {
   test("mixed treatments in the month block the entity", async () => {
     const host = await seedHost(db, "NL");
     await entry(db, stripe, host, { gross: 1080n, treatment: "NL_DOMESTIC" });
-    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE", occurredAt: "2026-10-28T09:00:00Z" });
+    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE", occurredAt: "2100-10-28T09:00:00Z" });
 
     expect(await checkEligibility([host.orgId], PERIOD, deps())).toEqual({
       eligible: [],
@@ -113,13 +113,13 @@ describeWithDb("checking which hosts can be invoiced", () => {
     await entry(db, stripe, host, { gross: 1080n });
     const returned = await entry(db, stripe, host, { gross: 2000n, treatment: "EU_REVERSE_CHARGE", disposition: "returned" });
     await entry(db, stripe, host, { gross: -2000n, treatment: "EU_REVERSE_CHARGE", disposition: "returned", refundsEntryId: returned.id });
-    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE", occurredAt: "2026-09-10T12:00:00Z" });
+    await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE", occurredAt: "2100-09-10T12:00:00Z" });
 
     expect((await checkEligibility([host.orgId], PERIOD, deps())).eligible).toEqual([host.orgId]);
   });
 
   test("invalid VIES blocks", async () => {
-    const host = await seedHost(db, "BE", new Date("2026-09-01T10:00:00Z"));
+    const host = await seedHost(db, "BE", new Date("2100-09-01T10:00:00Z"));
     await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE" });
     viesAnswer = async () => ({ valid: false, requestId: "vies-no", checkedAt: NOW });
 
@@ -134,7 +134,7 @@ describeWithDb("checking which hosts can be invoiced", () => {
 
   test("a recent VIES check that found the VAT id invalid blocks without asking again", async () => {
     const host = await seedHost(db, "BE");
-    await recordViesResult(db, host.orgId, { valid: false, requestId: "vies-no", checkedAt: new Date("2026-10-25T10:00:00Z") });
+    await recordViesResult(db, host.orgId, { valid: false, requestId: "vies-no", checkedAt: new Date("2100-10-25T10:00:00Z") });
     await entry(db, stripe, host, { gross: 1080n, treatment: "EU_REVERSE_CHARGE" });
 
     expect((await checkEligibility([host.orgId], PERIOD, deps())).blocked).toEqual([{ entityId: host.orgId, reasons: ["vies_invalid"] }]);
