@@ -16,7 +16,10 @@
     "./readiness": "./src/readiness.ts",
     "./ledger": "./src/ledger/index.ts",
     "./ledger/stripe-deps": "./src/ledger/stripe-deps.ts",
-    "./steps/reconcile": "./src/steps/reconcile.ts"
+    "./steps/reconcile": "./src/steps/reconcile.ts",
+    "./steps/types": "./src/steps/types.ts",
+    "./runs": "./src/runs.ts",
+    "./notify": "./src/notify.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
