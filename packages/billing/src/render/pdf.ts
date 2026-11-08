@@ -12,6 +12,7 @@ import { formatDay, formatLongDate, formatMonth, formatPeriod, formatStay, type 
  */
 
 const PT = 0.75;
+const SELLER_BLOCK_W = 340;
 const PAGE_W = 794;
 const PAGE_H = 1123;
 const MARGIN_X = 64;
@@ -107,13 +108,13 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   };
 
   /** Wrapped text; returns its height in px. */
-  const paragraph = (s: string, x: number, y: number, width: number, st: Style, lhFactor: number, draw = true) => {
+  const paragraph = (s: string, x: number, y: number, width: number, st: Style, lhFactor: number, draw = true, align: "left" | "right" = "left") => {
     const lh = st.size * lhFactor;
     const lineGap = (lh - natural(st.size, st.weight)) * PT;
     pdf.font(st.weight ?? "regular").fontSize(st.size * PT);
     const h = pdf.heightOfString(s, { width: width * PT, lineGap }) / PT;
     if (draw) {
-      pdf.fillColor(st.color ?? INK).text(s, x * PT, (y + (lineGap / PT) / 2) * PT, { width: width * PT, lineGap });
+      pdf.fillColor(st.color ?? INK).text(s, x * PT, (y + (lineGap / PT) / 2) * PT, { width: width * PT, lineGap, align });
     }
     return h;
   };
@@ -179,10 +180,8 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   text("OpenBookings", MARGIN_X, y, { size: 22, weight: "bold", color: ACCENT });
   let leftY = y + natural(22, "bold") + 4;
   const sellerLines = [doc.seller.legalName, ...addressWithCountry(doc.seller)];
-  for (const line of sellerLines) {
-    text(line, MARGIN_X, leftY, { size: 12, color: GREY }, 12 * 1.55);
-    leftY += 12 * 1.55;
-  }
+  // Free-form party text wraps inside its block and pushes what follows down; nothing is cut off.
+  for (const line of sellerLines) leftY += paragraph(line, MARGIN_X, leftY, SELLER_BLOCK_W, { size: 12, color: GREY }, 1.55);
 
   text(noun, RIGHT, y, { size: 34, weight: "semi", right: true });
   let rightY = y + natural(34, "semi") + 14;
@@ -205,6 +204,7 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   y += 1 + 24;
   const colW = (CONTENT_W - 32) / 2;
   const billed = [doc.buyer.legalName, ...addressWithCountry(doc.buyer), ...vatLines(doc.buyer)];
+  let blockEnd = y;
   const from = [doc.seller.legalName, ...vatLines(doc.seller), ...(doc.seller.email ? [doc.seller.email] : [])];
   for (const [i, [label, lines]] of (
     [
@@ -214,9 +214,11 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   ).entries()) {
     const x = MARGIN_X + i * (colW + 32);
     text(label.toUpperCase(), x, y, { size: 11, weight: "semi", color: GREY, tracking: 0.88 });
-    lines.forEach((line, n) => text(line, x, y + natural(11, "semi") + 6 + n * 13 * 1.6, { size: 13 }, 13 * 1.6));
+    let ly = y + natural(11, "semi") + 6;
+    for (const line of lines) ly += paragraph(line, x, ly, colW, { size: 13 }, 1.6);
+    blockEnd = Math.max(blockEnd, ly);
   }
-  y += natural(11, "semi") + 6 + Math.max(billed.length, from.length) * 13 * 1.6 + 36;
+  y = blockEnd + 36;
 
   // Lines.
   const AMOUNT_RIGHT = RIGHT;
@@ -324,24 +326,38 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   const totalsLines = 5;
   const totalsH = natural(12) * totalsLines + 7 * (totalsLines - 1) + 8;
 
-  const specTop = () => {
-    let top = 64;
-    text("OpenBookings", MARGIN_X, top, { size: 13, weight: "bold", color: ACCENT });
+  /** The specification header: title on the left, a block of facts on the right that wraps a long host name. */
+  const specHeader = () => {
     const leftH = natural(13, "bold") + 6 + natural(26, "semi");
     const metaRows: [string, string][] = [
       [noun, number],
       ["Host", doc.buyer.legalName],
       ["Period", formatMonth(doc.period.start)],
     ];
-    const rightH = natural(12) * 3 + 4 * 2;
-    const h = Math.max(leftH, rightH);
-    text("Specification per booking", MARGIN_X, top + h - natural(26, "semi"), { size: 26, weight: "semi" });
-    const vW = Math.max(...metaRows.map(([, v], i) => widthOf(v, 12, i === 0 ? "semi" : "regular")));
     const lW = Math.max(...metaRows.map(([l]) => widthOf(l, 12)));
+    const titleW = widthOf("Specification per booking", 26, "semi");
+    const maxBlockW = CONTENT_W - titleW - 24;
+    const vW = Math.min(
+      Math.max(...metaRows.map(([, v], i) => widthOf(v, 12, i === 0 ? "semi" : "regular"))),
+      maxBlockW - lW - 16,
+    );
+    const heights = metaRows.map(([, v], i) =>
+      Math.max(natural(12), paragraph(v, 0, 0, vW, { size: 12, weight: i === 0 ? "semi" : "regular" }, natural(12) / 12, false)),
+    );
+    const rightH = heights.reduce((a, b) => a + b, 0) + 4 * (metaRows.length - 1);
+    return { leftH, metaRows, lW, vW, heights, rightH, h: Math.max(leftH, rightH) };
+  };
+
+  const specTop = () => {
+    let top = 64;
+    text("OpenBookings", MARGIN_X, top, { size: 13, weight: "bold", color: ACCENT });
+    const { metaRows, lW, vW, heights, rightH, h } = specHeader();
+    text("Specification per booking", MARGIN_X, top + h - natural(26, "semi"), { size: 26, weight: "semi" });
+    let ry = top + h - rightH;
     metaRows.forEach(([label, value], i) => {
-      const ry = top + h - rightH + i * (natural(12) + 4);
       text(label, RIGHT - vW - 16 - lW, ry, { size: 12, color: GREY });
-      text(value, RIGHT, ry, { size: 12, weight: i === 0 ? "semi" : "regular", right: true });
+      paragraph(value, RIGHT - vW, ry, vW, { size: 12, weight: i === 0 ? "semi" : "regular" }, natural(12) / 12, true, "right");
+      ry += heights[i]! + 4;
     });
     top += h + 20;
     hline(top, MARGIN_X, RIGHT, RULE);
@@ -364,10 +380,7 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   const noteH = paragraph(SPEC_NOTE, 0, 0, CONTENT_W, { size: 12 }, 1.55, false);
   const shortFooterTop = FOOTER_BOTTOM - (1 + 18 + ROW_LH);
   const longFooterTop = FOOTER_BOTTOM - (1 + 18 + noteH + 10 + ROW_LH);
-  const headerEnd = (() => {
-    const base = 64 + Math.max(natural(13, "bold") + 6 + natural(26, "semi"), natural(12) * 3 + 8) + 20 + 1 + 28;
-    return base + HEAD_H + 1;
-  })();
+  const headerEnd = 64 + specHeader().h + 20 + 1 + 28 + HEAD_H + 1;
   const pages: SpecRow[][] = [[]];
   let used = headerEnd;
   for (const r of rows) {

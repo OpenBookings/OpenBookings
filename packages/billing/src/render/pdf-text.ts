@@ -44,11 +44,22 @@ function toUnicode(cmap: string): Map<number, string> {
   return map;
 }
 
+/** One run of text: its page (0-based), the text, the left edge and the baseline in pt (y from the page bottom). */
+export type TextRun = { page: number; text: string; x: number; y: number };
+
 /** The text of every page, one string per page, runs separated by a newline. */
 export function pdfPageTexts(bytes: Uint8Array): string[] {
+  const runs = pdfTextRuns(bytes);
+  const count = pdfPageCount(bytes);
+  return Array.from({ length: count }, (_, i) => runs.filter((r) => r.page === i).map((r) => r.text).join("\n"));
+}
+
+/** Every text run with its position, in drawing order. */
+export function pdfTextRuns(bytes: Uint8Array): TextRun[] {
   const pdf = Buffer.from(bytes).toString("latin1");
   const objects = objectsOf(pdf);
-  const pages: string[] = [];
+  const all: TextRun[] = [];
+  const pageOrder: number[] = [];
   for (const [, body] of objects) {
     if (!/\/Type \/Page\b(?!s)/.test(body)) continue;
     const contents = refOf(body, "Contents");
@@ -64,15 +75,18 @@ export function pdfPageTexts(bytes: Uint8Array): string[] {
     const content = streamOf(objects.get(contents!)!);
     let current = new Map<number, string>();
     const decode = (hex: string) => (hex.match(/.{4}/g) ?? []).map((h) => current.get(parseInt(h, 16)) ?? "").join("");
-    const runs: string[] = [];
-    for (const m of content.matchAll(/\/(F\d+) [\d.]+ Tf|\[([^\]]*)\]\s*TJ|<([0-9a-fA-F]+)>\s*Tj/g)) {
-      if (m[1]) current = fonts.get(m[1]) ?? new Map();
-      else if (m[2] !== undefined) runs.push([...m[2].matchAll(/<([0-9a-fA-F]+)>/g)].map((h) => decode(h[1]!)).join(""));
-      else if (m[3]) runs.push(decode(m[3]));
+    const page = all.length === 0 && pageOrder.length === 0 ? 0 : pageOrder.length;
+    pageOrder.push(page);
+    let pos = { x: 0, y: 0 };
+    const add = (t: string) => all.push({ page, text: t, ...pos });
+    for (const m of content.matchAll(/1 0 0 -?1 ([\d.-]+) ([\d.-]+) Tm|\/(F\d+) [\d.]+ Tf|\[([^\]]*)\]\s*TJ|<([0-9a-fA-F]+)>\s*Tj/g)) {
+      if (m[1] !== undefined) pos = { x: Number(m[1]), y: Number(m[2]) };
+      else if (m[3]) current = fonts.get(m[3]) ?? new Map();
+      else if (m[4] !== undefined) add([...m[4].matchAll(/<([0-9a-fA-F]+)>/g)].map((h) => decode(h[1]!)).join(""));
+      else if (m[5]) add(decode(m[5]));
     }
-    pages.push(runs.join("\n"));
   }
-  return pages;
+  return all;
 }
 
 /** How many pages the PDF has. */
