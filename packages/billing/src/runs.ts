@@ -50,12 +50,15 @@ export async function withRun<T>(
 /**
  * How reconciliation went in the latest draft run of the period: the run's
  * recorded reconcile status, `failed` when that run failed, null when there
- * is no draft run (or it is still running). Backfill runs never count.
+ * is no draft run (or it is still running). Backfill runs and dry runs
+ * (`report.dryRun` true) never count: a run that wrote nothing must never
+ * unlock issuing.
  */
 export async function lastReconcileStatus(db: Queryable, periodStart: string): Promise<"succeeded" | "blocked" | "failed" | null> {
   const { rows } = await db.query(
     `SELECT status, report->'reconcile'->>'status' AS reconcile
-       FROM invoice_runs WHERE period_start = $1 AND step = 'draft'
+       FROM invoice_runs
+      WHERE period_start = $1 AND step = 'draft' AND (report->>'dryRun') IS DISTINCT FROM 'true'
       ORDER BY started_at DESC LIMIT 1`,
     [periodStart],
   );

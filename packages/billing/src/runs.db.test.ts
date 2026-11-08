@@ -76,4 +76,20 @@ describeWithDb("invoice runs against Postgres", () => {
     }).catch(() => {});
     expect(await lastReconcileStatus(db, period)).toBe("failed");
   });
+
+  test("lastReconcileStatus ignores dry-run draft runs", async () => {
+    const dry = (status: "succeeded" | "blocked") =>
+      withRun(db, { periodStart: period, step: "draft" }, async () => ({ status, report: { dryRun: true, reconcile: { status } }, value: null }));
+
+    await dry("succeeded");
+    expect(await lastReconcileStatus(db, period)).toBeNull();
+
+    await withRun(db, { periodStart: period, step: "draft" }, async () => ({
+      status: "blocked",
+      report: { dryRun: false, reconcile: { status: "blocked" } },
+      value: null,
+    }));
+    await dry("succeeded");
+    expect(await lastReconcileStatus(db, period)).toBe("blocked");
+  });
 });
