@@ -29,6 +29,7 @@ export async function runInvoiceJob(_prev: JobRun | null, form: FormData): Promi
     month: String(form.get("month") ?? ""),
     entity: String(form.get("entity") ?? ""),
     dryRun: form.get("dryRun") === "on",
+    openMonth: form.get("openMonth") === "on",
   });
   if (!built.ok) return { kind: "refused", error: built.error };
 

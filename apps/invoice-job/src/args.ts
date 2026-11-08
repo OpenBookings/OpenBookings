@@ -15,7 +15,9 @@ export const USAGE = `Usage: bun run src/main.ts --step=<step> [options]
   --step=report    --quarter=YYYYQn
   --step=backfill  --from=YYYY-MM [--dry-run]
 
---period defaults to last month (Europe/Amsterdam) and must be a month that is over.`;
+--period defaults to last month (Europe/Amsterdam) and must be a month that is over.
+--open-month (test mode only, any step but report) also allows the current month,
+so the whole flow can be tried before a month closes.`;
 
 /** The command line could not be understood, or asks for something the step does not do. */
 export class ArgsError extends Error {
@@ -37,20 +39,22 @@ export type JobArgs = {
   entity?: string;
   /** Render the entity's draft to a local PDF instead of running the step. */
   preview: boolean;
+  /** Test mode only: the current month counts as over (main refuses it in live mode). */
+  openMonth: boolean;
 };
 
 /** Which flags each step accepts besides `--step`. */
 const ALLOWED: Record<Step, readonly string[]> = {
-  draft: ["period", "dry-run", "entity", "preview"],
-  issue: ["period", "entity"],
-  store: ["period"],
-  deliver: ["period"],
+  draft: ["period", "dry-run", "entity", "preview", "open-month"],
+  issue: ["period", "entity", "open-month"],
+  store: ["period", "open-month"],
+  deliver: ["period", "open-month"],
   report: ["quarter"],
-  backfill: ["from", "dry-run"],
+  backfill: ["from", "dry-run", "open-month"],
 };
 
 const VALUED = new Set(["step", "period", "from", "quarter", "entity"]);
-const BOOLEAN = new Set(["dry-run", "preview"]);
+const BOOLEAN = new Set(["dry-run", "preview", "open-month"]);
 
 function month(value: string, flag: string): Period {
   try {
@@ -96,8 +100,10 @@ export function parseArgs(argv: string[], now: Date): JobArgs {
   }
 
   const current = periodOf(now);
+  const openMonth = flags.has("open-month");
   const over = (p: Period, flag: string) => {
-    if (p.start.slice(0, 7) >= current) throw new ArgsError(`--${flag}=${p.start.slice(0, 7)} is not over yet`);
+    const m = p.start.slice(0, 7);
+    if (m > current || (m === current && !openMonth)) throw new ArgsError(`--${flag}=${m} is not over yet`);
     return p;
   };
 
@@ -107,6 +113,7 @@ export function parseArgs(argv: string[], now: Date): JobArgs {
     period: periodValue ? over(month(periodValue, "period"), "period") : previousPeriod(now),
     dryRun: flags.has("dry-run"),
     preview: flags.has("preview"),
+    openMonth,
   };
 
   const entity = values.get("entity");
@@ -129,9 +136,9 @@ export function parseArgs(argv: string[], now: Date): JobArgs {
   return args;
 }
 
-/** Every month from `from` through the month before `now` (Amsterdam), oldest first: what a backfill reconciles. */
-export function backfillMonths(from: Period, now: Date): Period[] {
-  const last = previousPeriod(now).start;
+/** Every month from `from` through the month before `now` (Amsterdam), oldest first: what a backfill reconciles. With `openMonth`, through the current month. */
+export function backfillMonths(from: Period, now: Date, openMonth = false): Period[] {
+  const last = openMonth ? periodFor(periodOf(now)).start : previousPeriod(now).start;
   const out: Period[] = [];
   for (let p = from; p.start <= last; ) {
     out.push(p);

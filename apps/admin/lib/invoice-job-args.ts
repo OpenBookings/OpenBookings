@@ -12,7 +12,7 @@ const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ENTITY_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const DRY_RUN_STEPS: readonly JobStep[] = ["backfill", "draft"];
 
-export type JobInput = { step: string; month: string; entity: string; dryRun: boolean };
+export type JobInput = { step: string; month: string; entity: string; dryRun: boolean; openMonth?: boolean };
 
 export function jobArgs(input: JobInput): { ok: true; args: string[] } | { ok: false; error: string } {
   const step = input.step as JobStep;
@@ -24,6 +24,8 @@ export function jobArgs(input: JobInput): { ok: true; args: string[] } | { ok: f
   const args = [`--step=${step}`, step === "backfill" ? `--from=${input.month}` : `--period=${input.month}`];
   if (entity && step !== "backfill") args.push(`--entity=${entity}`);
   if (input.dryRun && DRY_RUN_STEPS.includes(step)) args.push("--dry-run");
+  // Test mode only (the job refuses it with a live key): lets the current month run before it closes.
+  if (input.openMonth) args.push("--open-month");
   return { ok: true, args };
 }
 

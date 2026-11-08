@@ -78,3 +78,27 @@ describe("amsterdamDate", () => {
     expect(amsterdamDate(new Date("2026-07-14T22:30:00Z"))).toBe("2026-07-15");
   });
 });
+
+describe("--open-month", () => {
+  test("lets every step but report take the current month", () => {
+    for (const step of ["draft", "issue", "store", "deliver"]) {
+      const args = parseArgs([`--step=${step}`, "--period=2026-11", "--open-month"], NOW);
+      expect(args.period.start).toBe("2026-11-01");
+      expect(args.openMonth).toBe(true);
+    }
+    expect(() => parseArgs(["--step=report", "--quarter=2026Q4", "--open-month"], NOW)).toThrow(ArgsError);
+  });
+
+  test("still refuses a month that has not started", () => {
+    expect(() => parseArgs(["--step=draft", "--period=2026-12", "--open-month"], NOW)).toThrow(ArgsError);
+  });
+
+  test("without it the current month is refused, as before", () => {
+    expect(() => parseArgs(["--step=draft", "--period=2026-11"], NOW)).toThrow(/not over yet/);
+  });
+
+  test("a backfill with it runs through the current month", () => {
+    const args = parseArgs(["--step=backfill", "--from=2026-10", "--open-month"], NOW);
+    expect(backfillMonths(args.from!, NOW, true).map((p) => p.start.slice(0, 7))).toEqual(["2026-10", "2026-11"]);
+  });
+});

@@ -23,6 +23,13 @@ describe("jobArgs", () => {
     });
   });
 
+  test("passes --open-month when asked", () => {
+    expect(jobArgs({ step: "issue", month: "2026-11", entity: "", dryRun: false, openMonth: true })).toEqual({
+      ok: true,
+      args: ["--step=issue", "--period=2026-11", "--open-month"],
+    });
+  });
+
   test("refuses an unknown step, a bad month and odd organization ids", () => {
     expect(jobArgs({ step: "report", month: "2026-10", entity: "", dryRun: false }).ok).toBe(false);
     expect(jobArgs({ step: "draft", month: "2026-13", entity: "", dryRun: false }).ok).toBe(false);

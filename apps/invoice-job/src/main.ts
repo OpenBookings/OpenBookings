@@ -197,7 +197,7 @@ async function backfill(ctx: Context): Promise<Outcome> {
   const ledger = deps.ledger();
   const outcomes: Outcome[] = [];
   if (args.dryRun) console.log("DRY RUN: nothing is written and no money moves.");
-  for (const period of backfillMonths(args.from!, ctx.now)) {
+  for (const period of backfillMonths(args.from!, ctx.now, args.openMonth)) {
     const run = await withRun(deps.pool, { periodStart: period.start, step: "backfill", dryRun: args.dryRun }, async () => {
       const result = await reconcile(period, { db: deps.pool, stripe: source, ledger, dryRun: args.dryRun, inTransaction: deps.inTransaction });
       return { status: result.status, report: { dryRun: args.dryRun, reconcile: result }, value: result };
@@ -241,6 +241,7 @@ export async function main(argv: string[], env: Env, now = new Date()): Promise<
   try {
     const mode = assertModeMatch(env);
     Sentry.setTag("mode", mode);
+    if (args.openMonth && mode !== "test") throw new Error("--open-month is for test mode only: a live month is invoiced once it is over");
     console.log(`invoice-job: --step=${args.step} ${args.quarter ?? month(args.from ?? args.period)}${args.dryRun ? " (dry run)" : ""}, ${mode} mode`);
     const outcome = await STEPS[args.step]({ args, env, mode, now, deps: jobDeps(env) });
     return outcome === "blocked" ? 2 : 0;
