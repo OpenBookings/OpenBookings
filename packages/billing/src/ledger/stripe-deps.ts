@@ -1,5 +1,7 @@
 import type { Queryable } from "@openbookings/db";
 import { returnUnexplainedPayment } from "@openbookings/stripe";
+import type { Period } from "../period";
+import type { BalanceTransactionLike, StripeLedgerSource } from "../steps/reconcile";
 import type { ChargeInfo, FeeLike, FeeRefundLike, LedgerDeps } from "./ingest";
 
 /**
@@ -116,5 +118,84 @@ export function stripeFeeReader(stripe: FeeStripe): {
         startingAfter = idOf(page.data[page.data.length - 1]);
       }
     },
+  };
+}
+
+/** The slice of the Stripe client the reconciliation reads: platform balance transactions, fees and fee refunds. */
+export type LedgerSourceStripe = FeeStripe & {
+  balanceTransactions: {
+    list(params: {
+      type: BalanceTransactionLike["type"];
+      created: { gte: number; lt: number };
+      limit: number;
+      expand: string[];
+      starting_after?: string;
+    }): Promise<{ data: unknown[]; has_more: boolean }>;
+  };
+};
+
+const wholeCents = (value: unknown, what: string): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`${what} is not a whole number: ${String(value)}`);
+  return value;
+};
+
+/**
+ * Stripe as the reconciliation reads it (`StripeLedgerSource`). Lists the
+ * platform's `application_fee` and `application_fee_refund` balance
+ * transactions created in the period, 100 a page, one type after the other.
+ *
+ * Stripe cannot retrieve a fee refund by its own id (it needs the fee's), so
+ * the listing expands each transaction's source and keeps the fee refunds it
+ * sees; `retrieveFeeRefund` answers from those and throws for any other.
+ */
+export function stripeLedgerSource(stripe: LedgerSourceStripe): StripeLedgerSource {
+  const fees = stripeFeeReader(stripe);
+  const refunds = new Map<string, FeeRefundLike>();
+
+  async function* list(period: Period): AsyncIterable<BalanceTransactionLike> {
+    const created = { gte: Math.floor(period.from.getTime() / 1000), lt: Math.floor(period.to.getTime() / 1000) };
+    for (const type of ["application_fee", "application_fee_refund"] as const) {
+      let startingAfter: string | undefined;
+      for (;;) {
+        const page = await stripe.balanceTransactions.list({
+          type,
+          created,
+          limit: 100,
+          expand: ["data.source"],
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        for (const bt of page.data as Array<Record<string, unknown>>) {
+          const source = idOf(bt.source);
+          const src = bt.source as Record<string, unknown>;
+          if (type === "application_fee_refund" && typeof src === "object" && src !== null) {
+            refunds.set(source, {
+              id: source,
+              amount: wholeCents(src.amount, `Fee refund ${source} amount`),
+              created: wholeCents(src.created, `Fee refund ${source} created`),
+              fee: idOf(src.fee),
+            });
+          }
+          yield {
+            type,
+            source,
+            amount: wholeCents(bt.amount, `Balance transaction ${String(bt.id)} amount`),
+            created: wholeCents(bt.created, `Balance transaction ${String(bt.id)} created`),
+          };
+        }
+        if (!page.has_more || page.data.length === 0) break;
+        startingAfter = idOf(page.data[page.data.length - 1]);
+      }
+    }
+  }
+
+  return {
+    listBalanceTransactions: list,
+    retrieveFee: fees.fetchFee,
+    retrieveFeeRefund: async (id) => {
+      const refund = refunds.get(id);
+      if (!refund) throw new Error(`Fee refund ${id} was not in the balance transactions listed`);
+      return refund;
+    },
+    listFeeRefunds: fees.listRefunds,
   };
 }

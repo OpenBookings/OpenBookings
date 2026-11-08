@@ -15,7 +15,8 @@
     "./profile-backfill": "./src/profile-backfill.ts",
     "./readiness": "./src/readiness.ts",
     "./ledger": "./src/ledger/index.ts",
-    "./ledger/stripe-deps": "./src/ledger/stripe-deps.ts"
+    "./ledger/stripe-deps": "./src/ledger/stripe-deps.ts",
+    "./steps/reconcile": "./src/steps/reconcile.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
