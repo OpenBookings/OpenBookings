@@ -1,6 +1,7 @@
 import { getPool } from "@openbookings/db";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { getEmailClient } from "./client";
+import { fromAddress } from "./from-address";
 import {
   guestBookingCancelled,
   guestBookingConfirmed,
@@ -18,8 +19,6 @@ import type { ActionMail } from "./action-mail";
  * by the three apps that can cancel a booking (web, business, admin).
  */
 
-const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
-const fromAddress = () => process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
 
 export type BookingMailUrls = { webUrl: string; businessUrl: string };
 

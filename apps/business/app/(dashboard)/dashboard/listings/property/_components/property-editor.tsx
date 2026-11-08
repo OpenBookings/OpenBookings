@@ -35,9 +35,11 @@ const LocationSection = dynamic(() => import("./sections/location").then((m) => 
 interface PropertyEditorProps {
   data: PropertyEditorData;
   amenities: AmenityCatalogEntry[];
+  /** What the property still needs, besides its sections, before it can take bookings. */
+  readiness: { item: string; label: string }[];
 }
 
-export function PropertyEditor({ data, amenities }: PropertyEditorProps) {
+export function PropertyEditor({ data, amenities, readiness }: PropertyEditorProps) {
   const [active, setActive] = React.useState<SectionId>("identity");
   const [dirty, setDirty] = React.useState(false);
   const [pendingSection, setPendingSection] = React.useState<SectionId | null>(null);
@@ -78,6 +80,7 @@ export function PropertyEditor({ data, amenities }: PropertyEditorProps) {
         statuses={statuses}
         active={active}
         completed={completed}
+        readiness={readiness.map((r) => r.label)}
         onSelect={requestSection}
         publishSlot={
           <PublishToggle

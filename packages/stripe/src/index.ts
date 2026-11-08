@@ -22,6 +22,8 @@ export {
 export {
   handleStripeEvent,
   readPaidCheckout,
+  type ApplicationFeePayload,
+  type ApplicationFeeRefundPayload,
   type PaidCheckout,
   type StripeAuditEntry,
   type StripeEventDeps,
@@ -30,11 +32,13 @@ export {
 } from './events';
 export {
   buildRefundParams,
+  buildReturnUnexplainedRequest,
   findRefundByMetadata,
   findRefundForRow,
   isDefiniteRefundFailure,
   matchRefund,
   matchRefundByMetadata,
   refundPayment,
+  returnUnexplainedPayment,
   type RefundPaymentInput,
 } from './payments/refund';

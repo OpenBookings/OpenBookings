@@ -1,6 +1,7 @@
 import type { TouristTaxLine } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import { recordBookingEvent } from "./booking-events";
+import type { VatTreatment } from "./billing-types";
 // Type only: booking-lifecycle imports the package root at runtime, so a value import would be circular.
 import type { LifecycleDb } from "./booking-lifecycle";
 import { confirmBookingPolicy, type Queryable } from "./reservation-policy";
@@ -30,6 +31,15 @@ export type IntentSnapshot = {
   touristTaxTotal: number;
   total: number;
   commissionCents: number;
+  /**
+   * The split of `commissionCents` into net and VAT, fixed when the intent was
+   * made. The treatment and parts are null while the host has no billing
+   * profile. Intents made before the split existed have none of these fields.
+   */
+  commissionRate: number;
+  commissionVatTreatment: VatTreatment | null;
+  commissionNetCents: number | null;
+  commissionVatCents: number | null;
   currency: "EUR";
   rooms: {
     roomId: string;
@@ -496,8 +506,10 @@ export async function convertIntentToBooking(
       `INSERT INTO bookings
          (hotel_id, user_id, check_in_date, check_out_date, status, confirmed_at,
           total_amount, booking_fee_amount, currency, stripe_payment_intent_id,
-          rooms_total_cents, tourist_tax_cents, total_cents, commission_cents)
-       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8, $9::bigint, $10::bigint, $9::bigint + $10::bigint, $11)
+          rooms_total_cents, tourist_tax_cents, total_cents, commission_cents,
+          commission_rate, commission_vat_treatment, commission_net_cents, commission_vat_cents)
+       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8, $9::bigint, $10::bigint, $9::bigint + $10::bigint, $11,
+               $12::numeric, $13, $14::bigint, $15::bigint)
        RETURNING id`,
       [
         intent.propertyId,
@@ -511,6 +523,11 @@ export async function convertIntentToBooking(
         Math.round(intent.snapshot.roomsTotal * 100),
         Math.round(intent.snapshot.touristTaxTotal * 100),
         intent.snapshot.commissionCents,
+        // Read defensively: intents made before the split existed lack these.
+        intent.snapshot.commissionRate ?? null,
+        intent.snapshot.commissionVatTreatment ?? null,
+        intent.snapshot.commissionNetCents ?? null,
+        intent.snapshot.commissionVatCents ?? null,
       ],
     );
     const bookingId = (bookingRows[0] as { id: string }).id;

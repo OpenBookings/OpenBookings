@@ -75,4 +75,31 @@ describe("handleWebhookRequest", () => {
     expect((await handleWebhookRequest(request("good"), options)).status).toBe(500);
     error.mockRestore();
   });
+
+  test("a retryable failure answers 503 so Stripe retries, and is not reported", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const marked: string[] = [];
+    const { options, reported } = setup({ retryable: (e) => e instanceof RangeError });
+    options.deps.markProcessed = async (id) => void marked.push(id);
+    options.deps.refundCommission = async () => {
+      throw new RangeError("not settled yet");
+    };
+    const res = await handleWebhookRequest(request("good"), options);
+    expect(res.status).toBe(503);
+    expect(reported).toEqual([]);
+    expect(marked).toEqual([]);
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  test("a failure the predicate does not accept is still a 500", async () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const { options } = setup({ retryable: () => false });
+    options.deps.refundCommission = async () => {
+      throw new Error("boom");
+    };
+    expect((await handleWebhookRequest(request("good"), options)).status).toBe(500);
+    error.mockRestore();
+  });
 });

@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { userOwnsProperty } from "@openbookings/authz";
-import { query, queryOne } from "@openbookings/db";
+import { query, queryOne, type Queryable } from "@openbookings/db";
+import { retrieveConnectAccount } from "@openbookings/stripe";
 import type { z } from "zod";
 import { getServerSession } from "@/lib/auth";
 import { purgePropertyPageBySlug } from "@/lib/purge-property-page";
 import { canPublish } from "./completion";
+import { publishBlocker } from "./publish-readiness";
 import { loadEditorData } from "./query";
 import * as touristTax from "./tourist-tax-mutations";
 import {
@@ -325,10 +327,16 @@ export async function saveHighlights(
   return { ok: true };
 }
 
+const globalDb: Queryable = {
+  query: async (text, values) => ({ rows: await query(text, values) }),
+};
+
 /**
  * Publishing is gated on the same completeness rule the rail shows, re-checked
  * here against freshly loaded data: the client's view of completeness is a
- * convenience, not an authority.
+ * convenience, not an authority. It also needs the property to be ready to be
+ * paid for: a Stripe account that can charge, confirmed rates, legal details
+ * and a billing profile.
  */
 export async function setPublished(
   propertyId: string,
@@ -341,6 +349,12 @@ export async function setPublished(
     if (!data || !canPublish(data)) {
       return { ok: false, error: "Finish every section before publishing." };
     }
+    const blocker = await publishBlocker(
+      globalDb,
+      propertyId,
+      async (accountId) => (await retrieveConnectAccount(accountId)).charges_enabled === true,
+    );
+    if (blocker) return { ok: false, error: blocker };
   }
 
   await query(`UPDATE properties SET is_active = $1, updated_at = NOW() WHERE id = $2`, [

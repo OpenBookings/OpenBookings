@@ -8,6 +8,12 @@
  * Checkout only sells a property whose organisation confirmed that its rates
  * include VAT (an `org_consent` row for RATES_TAX_INCLUSIVE_DOC_ID), so the
  * demo organisation carries that confirmation, signed by the system.
+ *
+ * The same goes for the readiness gate (spec decision 9): the organisation
+ * carries a complete Dutch billing profile,
+ * and every demo hotel carries a placeholder Stripe account and legal details (see
+ * `insertDemoProperty`), so
+ * demo hotels pass the gate honestly rather than around it.
  */
 
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
@@ -20,6 +26,9 @@ const DEMO_ORG_NAME = "OpenBookings Demo";
 const DEMO_ORG_SLUG = "openbookings-demo";
 /** org_consent.signed_by_user_id has no foreign key; no real user signed this. */
 const SYSTEM_SIGNER_ID = "demo";
+/** Legal details of the demo organisation, also copied onto every demo hotel. */
+export const DEMO_LEGAL_COMPANY_NAME = "OpenBookings Demo B.V.";
+export const DEMO_VAT_NUMBER = "NL000000000B01";
 
 /**
  * Creates the organisation, its profile and its rates confirmation, each only
@@ -39,6 +48,26 @@ export async function ensureDemoOrganisation(db: Queryable): Promise<string> {
      VALUES ($1, $2)
      ON CONFLICT (organization_id) DO NOTHING`,
     [DEMO_ORG_ID, DEMO_ORG_NAME],
+  );
+  await db.query(
+    `INSERT INTO billing_profiles
+       (organization_id, legal_name, address_line1, postal_code, city, country_code, vat_id, billing_email)
+     VALUES ($1, $2, 'Demostraat 1', '1011 AA', 'Amsterdam', 'NL', $3, 'billing@demo.openbookings.test')
+     -- A stub left by the profile backfill would keep demo hotels from being
+     -- ready: fill its empty fields, never overwrite one that is set.
+     ON CONFLICT (organization_id) DO UPDATE SET
+       legal_name    = COALESCE(NULLIF(billing_profiles.legal_name, ''), EXCLUDED.legal_name),
+       address_line1 = COALESCE(NULLIF(billing_profiles.address_line1, ''), EXCLUDED.address_line1),
+       postal_code   = COALESCE(NULLIF(billing_profiles.postal_code, ''), EXCLUDED.postal_code),
+       city          = COALESCE(NULLIF(billing_profiles.city, ''), EXCLUDED.city),
+       country_code  = COALESCE(NULLIF(billing_profiles.country_code, ''), EXCLUDED.country_code),
+       vat_id        = COALESCE(NULLIF(billing_profiles.vat_id, ''), EXCLUDED.vat_id),
+       billing_email = COALESCE(NULLIF(billing_profiles.billing_email, ''), EXCLUDED.billing_email)
+     WHERE billing_profiles.legal_name IS NULL OR billing_profiles.address_line1 IS NULL
+        OR billing_profiles.postal_code IS NULL OR billing_profiles.city IS NULL
+        OR billing_profiles.country_code IS NULL OR billing_profiles.vat_id IS NULL
+        OR billing_profiles.billing_email IS NULL`,
+    [DEMO_ORG_ID, DEMO_LEGAL_COMPANY_NAME, DEMO_VAT_NUMBER],
   );
   await db.query(
     `INSERT INTO org_consent (organization_id, doc_id, signed_by_user_id, signer_full_name, signed_at)

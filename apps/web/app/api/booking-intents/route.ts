@@ -6,6 +6,7 @@ import { expireBookingCheckout } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
 import { parseIntentRequest } from '@/lib/booking/intent-request';
 import { loadVisibleProperty, priceSelection } from '@/lib/booking/quote';
+import { propertyBookable } from '@/lib/booking/readiness-gate';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 /**
@@ -16,6 +17,7 @@ import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
  * → 201 { intentId, holdExpiresAt, checkoutUrl }
  * → 409 { error: 'price_changed', quote } when the total moved since the guest saw it
  * → 409 { error: 'unavailable', ... } when the rooms are gone
+ * → 409 { error: 'not_ready' } when the property cannot take bookings yet (Stripe, legal or billing details missing)
  */
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +55,10 @@ export async function POST(request: Request) {
     if (!(await loadVisibleProperty(db, { id: body.propertyId }, testing))) {
       return json({ error: 'not_found' }, 404);
     }
+
+    // Nothing is held for a property that could not be paid: the gate is here
+    // rather than in the quote, so browsing prices stays open.
+    if (!(await propertyBookable(db, body.propertyId))) return json({ error: 'not_ready' }, 409);
 
     const priced = await priceSelection(db, {
       propertyId: body.propertyId,

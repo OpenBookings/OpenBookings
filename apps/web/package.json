@@ -18,6 +18,7 @@
     "@openbookings/analytics": "workspace:*",
     "@openbookings/auth": "workspace:*",
     "@openbookings/authz": "workspace:*",
+    "@openbookings/billing": "workspace:*",
     "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/demo": "workspace:*",

@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { withTransaction } from '@openbookings/db';
+import { getPool, withTransaction } from '@openbookings/db';
 import { createBookingCheckout, expireBookingCheckout, retrieveBookingCheckout } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
 import {
@@ -16,6 +16,7 @@ import {
   type CheckoutErrorCode,
 } from '@/app/checkout/_lib/errors';
 import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
+import { propertyBookable } from '@/lib/booking/readiness-gate';
 import { getClientIP } from '@/lib/rateLimit';
 
 /**
@@ -251,6 +252,12 @@ export async function POST(request: Request) {
     // lapsed hold ("nothing has been charged").
     if (booking.status !== 'open') return failure(refusalFor(booking.status), 409);
     if (booking.holdExpiresAt.getTime() <= Date.now()) return failure('hold_expired', 409);
+
+    // A second line of defence behind the hold: the property may have lost
+    // its readiness since the guest held the rooms. Not retryable by the guest.
+    if (!(await propertyBookable(getPool(), booking.propertyId))) {
+      throw new CheckoutError('config_error', 'Property is not ready to take bookings', 'warning');
+    }
 
     const total = assertChargeable(booking);
     const appUrl = resolveAppUrl();

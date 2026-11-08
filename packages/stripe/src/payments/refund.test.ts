@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildRefundParams, isDefiniteRefundFailure, matchRefund, matchRefundByMetadata } from "./refund";
+import {
+  buildRefundParams,
+  buildReturnUnexplainedRequest,
+  isDefiniteRefundFailure,
+  matchRefund,
+  matchRefundByMetadata,
+} from "./refund";
 
 describe("buildRefundParams", () => {
   test("refunds the payment on the host's account and returns our fee in proportion", () => {
@@ -19,6 +25,25 @@ describe("buildRefundParams", () => {
   test("refuses a refund of nothing or of part of a cent", () => {
     expect(() => buildRefundParams({ paymentIntentId: "pi_1", amountCents: 0, metadata: {} })).toThrow();
     expect(() => buildRefundParams({ paymentIntentId: "pi_1", amountCents: 10.5, metadata: {} })).toThrow();
+  });
+});
+
+describe("buildReturnUnexplainedRequest", () => {
+  test("refunds the whole charge on the host's account and hands back our fee", () => {
+    expect(buildReturnUnexplainedRequest("ch_1", "acct_1")).toEqual({
+      params: {
+        charge: "ch_1",
+        refund_application_fee: true,
+        metadata: { reason: "unexplained", chargeId: "ch_1" },
+      },
+      options: { stripeAccount: "acct_1", idempotencyKey: "return-unexplained:ch_1" },
+    });
+  });
+
+  test("names no amount, so the whole charge goes back, and never reverses a transfer", () => {
+    const { params } = buildReturnUnexplainedRequest("ch_1", "acct_1");
+    expect("amount" in params).toBe(false);
+    expect("reverse_transfer" in params).toBe(false);
   });
 });
 

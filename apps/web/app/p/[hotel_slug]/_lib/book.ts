@@ -163,5 +163,9 @@ export function interpretBookResponse(status: number, body: unknown): BookOutcom
       message: roomIds.length > 0 ? "Sorry, that room was just booked." : "Sorry, those rooms are no longer available.",
     };
   }
+  if (status === 409 && b.error === "not_ready") {
+    // The same words as the checkout page's config_error.
+    return { kind: "error", message: "This property can't take bookings right now." };
+  }
   return SOMETHING_WENT_WRONG;
 }

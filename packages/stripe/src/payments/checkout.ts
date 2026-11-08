@@ -41,6 +41,7 @@ export function buildBookingCheckoutParams(
   }
 
   const fee = input.applicationFeeCents;
+  const intentId = input.metadata.bookingIntentId;
 
   return {
     mode: 'payment',
@@ -66,7 +67,16 @@ export function buildBookingCheckoutParams(
       : {}),
     // Absent rather than zero when there is no fee: a present-but-zero fee is
     // still an application fee object on Stripe's side.
-    ...(fee && fee > 0 ? { payment_intent_data: { application_fee_amount: fee } } : {}),
+    // The PaymentIntent carries the intent id too, so a payment can be traced
+    // to its booking intent from the PaymentIntent alone.
+    ...((fee && fee > 0) || intentId
+      ? {
+          payment_intent_data: {
+            ...(fee && fee > 0 ? { application_fee_amount: fee } : {}),
+            ...(intentId ? { metadata: { bookingIntentId: intentId } } : {}),
+          },
+        }
+      : {}),
     metadata: input.metadata,
     return_url: input.returnUrl,
     expires_at: input.expiresAt,

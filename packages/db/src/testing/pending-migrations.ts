@@ -19,6 +19,8 @@ export const PENDING_MIGRATIONS: string[] = [
   "0033_booking_intents.sql",
   "0034_booking_intents_dates_not_null.sql",
   "0035_booking_money_cents.sql",
+  "0036_commission_invoices.sql",
+  "0037_billing_report_views.sql",
 ];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);

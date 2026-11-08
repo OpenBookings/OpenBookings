@@ -213,6 +213,49 @@ describe("handleStripeEvent: one endpoint per app", () => {
   });
 });
 
+describe("application fee events (platform webhook)", () => {
+  const fee = { id: "fee_1", amount: 1250, currency: "eur", created: 1_700_000_000, account: "acct_1", charge: "ch_1" };
+  const refund = (id: string, amount: number) => ({ id, amount, created: 1_700_000_100, fee: "fee_1" });
+
+  test("application_fee.created calls onApplicationFee with the fee", async () => {
+    const seen: unknown[] = [];
+    const t = setup({ onApplicationFee: async (input) => void seen.push(input) });
+    const outcome = await handleStripeEvent(event("application_fee.created", fee, null), t.deps);
+    expect(outcome).toBe("handled");
+    expect(seen).toEqual([{ ...fee, eventId: "evt_1" }]);
+    expect(t.processed.has("evt_1")).toBe(true);
+  });
+
+  test("application_fee.refunded passes every refund on the fee", async () => {
+    const seen: unknown[] = [];
+    const t = setup({ onApplicationFeeRefunded: async (input) => void seen.push(input) });
+    const object = { ...fee, refunds: { data: [refund("fr_1", 300), refund("fr_2", 200)], has_more: true } };
+    await handleStripeEvent(event("application_fee.refunded", object, null), t.deps);
+    expect(seen).toEqual([
+      { eventId: "evt_1", fee, refunds: [refund("fr_1", 300), refund("fr_2", 200)], hasMoreRefunds: true },
+    ]);
+  });
+
+  test("a connected-account event of these types is ignored", async () => {
+    const seen: unknown[] = [];
+    const t = setup({
+      onApplicationFee: async (i) => void seen.push(i),
+      onApplicationFeeRefunded: async (i) => void seen.push(i),
+    });
+    expect(await handleStripeEvent(event("application_fee.created", fee, "acct_1"), t.deps)).toBe("ignored");
+    expect(await handleStripeEvent(event("application_fee.refunded", { ...fee, refunds: { data: [] } }, "acct_1"), t.deps)).toBe("ignored");
+    expect(seen).toEqual([]);
+    expect(t.processed.size).toBe(0);
+  });
+
+  test("a malformed fee is ignored, never recorded", async () => {
+    const seen: unknown[] = [];
+    const t = setup({ onApplicationFee: async (i) => void seen.push(i) });
+    expect(await handleStripeEvent(event("application_fee.created", { ...fee, charge: null }, null), t.deps)).toBe("ignored");
+    expect(seen).toEqual([]);
+  });
+});
+
 describe("readPaidCheckout", () => {
   const session = (over: Record<string, unknown> = {}) => ({
     id: "cs_1",

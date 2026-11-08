@@ -4,7 +4,7 @@
  * transaction that is rolled back, skipped locally without DATABASE_URL.
  */
 import { describe } from "bun:test";
-import type { Client } from "pg";
+import { Client } from "pg";
 import { PENDING_MIGRATIONS, pendingMigrationSql } from "./pending-migrations";
 
 export const connectionString = process.env.DATABASE_URL;
@@ -35,6 +35,45 @@ export async function applyPendingMigrations(db: Client): Promise<void> {
   await db.query("SELECT pg_advisory_xact_lock($1)", [PENDING_MIGRATIONS_LOCK]);
   for (const file of PENDING_MIGRATIONS) {
     await db.query(pendingMigrationSql(file));
+  }
+}
+
+/**
+ * For suites that COMMIT (separate connections, a real pool), which cannot
+ * replay the pending migrations inside a transaction that is rolled back:
+ * whether the database has this branch's schema, so the suite can run.
+ *
+ * In CI the database is a throwaway branch, so the pending migrations are
+ * applied there for good (one transaction, under the replay lock) unless the
+ * Verify job already did (`PENDING_MIGRATIONS_APPLIED=1`) and the newest
+ * table is there; the answer is then always true. Outside CI nothing is ever
+ * applied: the answer is false when the newest table (`invoices`) is missing,
+ * so the suite skips itself (`describe.skip`) instead of failing on it.
+ * Uses `db` when given, else a connection of its own; false without a database.
+ */
+export async function ensureCommittedMigrations(db?: Pick<Client, "query">): Promise<boolean> {
+  const url = process.env.DATABASE_URL_DIRECT ?? connectionString;
+  if (!db && !url) return false;
+  const own = db ? null : new Client({ connectionString: url });
+  const conn = db ?? own!;
+  try {
+    if (own) await own.connect();
+    const ready = async () =>
+      ((await conn.query(`SELECT to_regclass('public.invoices') IS NOT NULL AS ready`)).rows[0] as { ready: boolean }).ready;
+    if (!process.env.CI) return await ready();
+    if (process.env.PENDING_MIGRATIONS_APPLIED === "1" && (await ready())) return true;
+    await conn.query("BEGIN");
+    try {
+      await conn.query("SELECT pg_advisory_xact_lock($1)", [PENDING_MIGRATIONS_LOCK]);
+      for (const file of PENDING_MIGRATIONS) await conn.query(pendingMigrationSql(file));
+      await conn.query("COMMIT");
+    } catch (error) {
+      await conn.query("ROLLBACK").catch(() => {});
+      throw error;
+    }
+    return true;
+  } finally {
+    await own?.end();
   }
 }
 

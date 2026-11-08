@@ -15,9 +15,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             isStripeTestMode() ? "Stripe: test mode" : "Stripe: NOT test mode — real actions disabled"
           }`}
         </div>
-        <header className="border-b px-4 py-3">
+        <header className="flex gap-4 border-b px-4 py-3">
           <Link href="/" className="font-medium">
             Bookings
+          </Link>
+          <Link href="/invoices" className="font-medium">
+            Invoices
           </Link>
         </header>
         <main className="p-4">{children}</main>

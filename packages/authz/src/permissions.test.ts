@@ -57,6 +57,23 @@ describe("role grants", () => {
   });
 });
 
+describe("billing grants", () => {
+  test("finance can read and update billing but not update the org", () => {
+    expect(roles.finance.authorize({ billing: ["read", "update"] }).success).toBe(true);
+    expect(roles.finance.authorize({ org: ["update"] }).success).toBe(false);
+  });
+
+  test("manager has no billing access", () => {
+    expect(roles.manager.authorize({ billing: ["read"] }).success).toBe(false);
+    expect(roleAllows("manager", { billing: ["read"] }, true)).toBe(false);
+  });
+
+  test("only owner, general manager and back office hold billing", () => {
+    expect(rolesWith({ billing: ["read"] })).toEqual(["owner", "admin", "finance"]);
+    expect(rolesWith({ billing: ["update"] })).toEqual(["owner", "admin", "finance"]);
+  });
+});
+
 describe("memberHasPropertyAccess", () => {
   const neverQuery = async () => {
     throw new Error("org-wide roles must not hit the database");
@@ -171,6 +188,14 @@ describe("role guide", () => {
   test("only owners and general managers change payout details", () => {
     const allowed = ROLE_ORDER.filter((role) => roleAbilities(role).can.includes("Change payout details"));
     expect(allowed).toEqual(["owner", "admin"]);
+  });
+
+  test("billing abilities follow the billing grant", () => {
+    for (const role of ROLE_ORDER) {
+      const held = ["owner", "admin", "finance"].includes(role);
+      expect(roleAbilities(role).can.includes("View commission invoices")).toBe(held);
+      expect(roleAbilities(role).can.includes("Change billing details")).toBe(held);
+    }
   });
 
   test("every ability belongs to a listed group", () => {

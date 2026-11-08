@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { BuildingIcon } from "lucide-react";
+import { query } from "@openbookings/db";
+import { propertyReadiness, readinessCopy, readinessEnforced } from "@openbookings/billing/readiness";
 import { getServerSession } from "@/lib/auth";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,7 +37,18 @@ async function EditorContent({ searchParams }: PageProps) {
 
   if (!data) return <NoProperty />;
 
-  return <PropertyEditor data={data} amenities={amenities} />;
+  // Stripe's own "can this account charge" is left out: the page should not
+  // wait on a network call. Publishing makes it.
+  const readiness = readinessEnforced()
+    ? (
+        await propertyReadiness(
+          { query: async (text, values) => ({ rows: await query(text, values) }) },
+          data.property.id,
+        )
+      ).missing.map((item) => ({ item, label: readinessCopy(item) }))
+    : [];
+
+  return <PropertyEditor data={data} amenities={amenities} readiness={readiness} />;
 }
 
 /**

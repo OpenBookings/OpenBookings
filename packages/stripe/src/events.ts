@@ -71,9 +71,43 @@ export type StripeEventDeps = {
   onCheckoutFailed?: (input: { intentId: string; sessionId: string }) => Promise<void>;
   /** The checkout lapsed unpaid: the intent's hold ends now. */
   onCheckoutExpired?: (input: { intentId: string; sessionId: string }) => Promise<void>;
+  /**
+   * OpenBookings took a commission: a Stripe application fee was created.
+   * Platform events, so they carry no `event.account`.
+   */
+  onApplicationFee?: (input: ApplicationFeePayload & { eventId: string }) => Promise<void>;
+  /**
+   * Some of a commission went back to the host. `refunds` is what the event
+   * carries; `hasMoreRefunds` means Stripe left some off and the handler must
+   * list the rest.
+   */
+  onApplicationFeeRefunded?: (input: {
+    eventId: string;
+    fee: ApplicationFeePayload;
+    refunds: ApplicationFeeRefundPayload[];
+    hasMoreRefunds: boolean;
+  }) => Promise<void>;
 };
 
 export type StripeEventOutcome = "handled" | "ignored" | "duplicate";
+
+/**
+ * The fields of a Stripe application fee that OpenBookings records. Declared
+ * here, structurally, so the billing package's own type accepts it without
+ * this package importing billing.
+ */
+export type ApplicationFeePayload = {
+  id: string;
+  amount: number;
+  currency: string;
+  created: number;
+  /** The connected account the fee was taken from. */
+  account: string;
+  charge: string;
+};
+
+/** The fields of a Stripe fee refund that OpenBookings records. */
+export type ApplicationFeeRefundPayload = { id: string; amount: number; created: number; fee: string };
 
 /** A booking checkout Stripe has taken the money for. Amounts in cents, as charged. */
 export type PaidCheckout = {
@@ -87,6 +121,21 @@ export type PaidCheckout = {
 type Obj = Record<string, unknown>;
 const str = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
 const asObj = (value: unknown): Obj => (value && typeof value === "object" ? (value as Obj) : {});
+
+function readFee(value: unknown): ApplicationFeePayload | null {
+  const o = asObj(value);
+  const { id, currency, account, charge } = { id: str(o.id), currency: str(o.currency), account: str(o.account), charge: str(o.charge) };
+  if (!id || !currency || !account || !charge) return null;
+  if (typeof o.amount !== "number" || typeof o.created !== "number") return null;
+  return { id, amount: o.amount, currency, created: o.created, account, charge };
+}
+
+function readFeeRefund(value: unknown, feeId: string): ApplicationFeeRefundPayload | null {
+  const o = asObj(value);
+  const id = str(o.id);
+  if (!id || typeof o.amount !== "number" || typeof o.created !== "number") return null;
+  return { id, amount: o.amount, created: o.created, fee: str(o.fee) ?? feeId };
+}
 
 /**
  * The paid booking checkout in a Checkout Session, or null when it is not one:
@@ -175,6 +224,27 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
       const sessionId = str(object.id);
       if (!release || !intentId || !sessionId) return null;
       return () => release({ intentId, sessionId });
+    }
+
+    // Platform events: Stripe sends them without `event.account`. One that
+    // does carry it was delivered for a connected account, not for OpenBookings'
+    // own commission, and is none of the ledger's business.
+    case "application_fee.created": {
+      const record = deps.onApplicationFee;
+      const fee = readFee(object);
+      if (!record || !fee || account) return null;
+      return () => record({ ...fee, eventId: event.id });
+    }
+
+    case "application_fee.refunded": {
+      const record = deps.onApplicationFeeRefunded;
+      const fee = readFee(object);
+      if (!record || !fee || account) return null;
+      const list = asObj(object.refunds);
+      const refunds = (Array.isArray(list.data) ? list.data : [])
+        .map((refund) => readFeeRefund(refund, fee.id))
+        .filter((refund): refund is ApplicationFeeRefundPayload => refund !== null);
+      return () => record({ eventId: event.id, fee, refunds, hasMoreRefunds: list.has_more === true });
     }
 
     case "charge.refunded": {

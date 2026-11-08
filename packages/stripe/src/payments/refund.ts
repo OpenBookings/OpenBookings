@@ -42,6 +42,39 @@ export async function refundPayment(i: RefundPaymentInput): Promise<{ id: string
 }
 
 /**
+ * The refund for a payment the commission ledger cannot explain (spec
+ * decision 8): the whole charge back to the guest, on the host's account, with
+ * OpenBookings' application fee handed back too. No amount is named, so
+ * whatever is left of the charge goes back. The idempotency key is the charge,
+ * so a retry within Stripe's key window (about a day) never pays out twice;
+ * after that the ledger only calls this while the charge is not fully refunded.
+ */
+export function buildReturnUnexplainedRequest(
+  chargeId: string,
+  stripeAccountId: string,
+): { params: Stripe.RefundCreateParams; options: { stripeAccount: string; idempotencyKey: string } } {
+  return {
+    params: {
+      charge: chargeId,
+      refund_application_fee: true,
+      metadata: { reason: 'unexplained', chargeId },
+    },
+    options: { stripeAccount: stripeAccountId, idempotencyKey: `return-unexplained:${chargeId}` },
+  };
+}
+
+/** Refunds an unexplained payment in full (see `buildReturnUnexplainedRequest`). */
+export async function returnUnexplainedPayment(
+  chargeId: string,
+  stripeAccountId: string,
+  _reason: 'unexplained',
+): Promise<{ refundId: string }> {
+  const { params, options } = buildReturnUnexplainedRequest(chargeId, stripeAccountId);
+  const refund = await stripe.refunds.create(params, options);
+  return { refundId: refund.id };
+}
+
+/**
  * Stripe errors that mean the refund was refused, so no money moved. Anything
  * else (a dropped connection, a timeout, a Stripe-side 5xx, a rate limit)
  * might have gone through, and must be checked before it is sent again.

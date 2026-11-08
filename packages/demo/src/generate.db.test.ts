@@ -112,7 +112,8 @@ describeWithDb("demo hotels", () => {
     expect(await read(b.propertyIds)).toEqual(first);
     expect(await cities(b.propertyIds)).toEqual(["Celje"]);
     expect(new Set(first.map((r) => r.name)).size).toBe(8);
-  }, 30_000);
+    // Two full generations against a remote database: about 15 s each.
+  }, 60_000);
 
   test("each scenario answers search the way it is meant to", async () => {
     const { propertyIds } = await ensureDemoHotels(db, LISBON);
@@ -236,5 +237,34 @@ describeWithDb("demo hotels", () => {
       [DEMO_ORG_ID, RATES_TAX_INCLUSIVE_DOC_ID],
     );
     expect(rows[0]).toEqual({ orgs: 1, profiles: 1, consents: 1 });
+  });
+
+  test("a stub billing profile on the demo organisation is completed, keeping what it has", async () => {
+    await ensureDemoOrganisation(db);
+    // What the billing-profile backfill leaves behind: a legal name and nothing else.
+    await db.query(
+      `UPDATE billing_profiles
+          SET legal_name = 'Kept Name', address_line1 = NULL, postal_code = NULL, city = NULL,
+              country_code = NULL, vat_id = NULL, billing_email = NULL
+        WHERE organization_id = $1`,
+      [DEMO_ORG_ID],
+    );
+
+    await ensureDemoOrganisation(db);
+
+    const { rows } = await db.query(
+      `SELECT legal_name, address_line1, postal_code, city, country_code, vat_id, billing_email
+         FROM billing_profiles WHERE organization_id = $1`,
+      [DEMO_ORG_ID],
+    );
+    expect(rows[0]).toEqual({
+      legal_name: "Kept Name",
+      address_line1: "Demostraat 1",
+      postal_code: "1011 AA",
+      city: "Amsterdam",
+      country_code: "NL",
+      vat_id: "NL000000000B01",
+      billing_email: "billing@demo.openbookings.test",
+    });
   });
 });

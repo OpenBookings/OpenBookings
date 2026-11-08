@@ -54,7 +54,8 @@ export const ROLE_INFO: Record<HostRole, RoleInfo> = {
   finance: {
     role: "finance",
     label: "Back office",
-    summary: "Keeps the books: sees bookings, rates and payout status, but changes nothing.",
+    summary:
+      "Keeps the books: sees bookings, rates, payout status and the commission invoices, and keeps the billing details up to date.",
     scope: "All properties",
   },
 };
@@ -105,6 +106,18 @@ export const ABILITIES: ReadonlyArray<{
   { label: "Edit property and rooms", group: "Rates & property", permission: { property: ["update"] } },
   { label: "View payouts", group: "Finance", permission: { payout: ["read"] } },
   { label: "Change payout details", group: "Finance", permission: { payout: ["update"] } },
+  {
+    label: "View commission invoices",
+    hint: "Download the monthly invoices and see the upcoming one",
+    group: "Finance",
+    permission: { billing: ["read"] },
+  },
+  {
+    label: "Change billing details",
+    hint: "Company name, address and VAT number on the invoices",
+    group: "Finance",
+    permission: { billing: ["update"] },
+  },
   {
     label: "Manage team",
     hint: "Invite and remove people, change roles",

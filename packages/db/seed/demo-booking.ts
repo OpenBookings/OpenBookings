@@ -109,6 +109,31 @@ async function main() {
       );
     }
 
+    // The readiness gate also wants a Stripe account, legal details and a
+    // billing profile (spec decision 9). Fill in what is missing, never over
+    // what a host entered.
+    await pool.query(
+      `insert into property_content (property_id, legal_company_name, vat_number)
+       values ($1, 'Demo Hotel B.V.', 'NL000000000B01')
+       on conflict (property_id) do update set
+         legal_company_name = coalesce(nullif(btrim(property_content.legal_company_name), ''), excluded.legal_company_name),
+         vat_number = coalesce(nullif(btrim(property_content.vat_number), ''), excluded.vat_number)`,
+      [PROPERTY_ID],
+    );
+    await pool.query(
+      `insert into billing_profiles
+         (organization_id, legal_name, address_line1, postal_code, city, country_code, vat_id, billing_email)
+       select p.organization_id, 'Demo Hotel B.V.', 'Demostraat 1', '1011 AA', 'Amsterdam', 'NL',
+              'NL000000000B01', 'billing@demo.openbookings.test'
+       from properties p where p.id = $1 and p.organization_id is not null
+       on conflict (organization_id) do nothing`,
+      [PROPERTY_ID],
+    );
+    await pool.query(
+      `update properties set stripe_account_id = coalesce(stripe_account_id, 'acct_demo_seed') where id = $1`,
+      [PROPERTY_ID],
+    );
+
     await seedConfirmedBooking(pool, userId);
     console.log(
       `Seeded confirmed booking ${DEMO_CONFIRMED_BOOKING_ID}: 2 rooms × ${CONFIRMED_NIGHTS} nights, 30 days out.`,

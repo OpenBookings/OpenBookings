@@ -1,6 +1,6 @@
 # OpenBookings: personal data map
 
-**Date:** 24 October 2026; revised 3 November 2026 (see "Revision notes")
+**Date:** 24 October 2026; revised 3 November 2026 (see "Revision notes"); commission-invoice tables added 8 November 2026
 **Scope:** this monorepo (`apps/web`, `apps/business`, `apps/support-bot`, `packages/*`, `scripts/`), plus what the code sends to outside systems. First written against `7e1eeb3`; revised against `75f6b2b`. The original pass was read-only; the revision changes only this file.
 **Status:** a proposal for human and legal review. Every outcome below is a suggestion, not a decision.
 
@@ -15,6 +15,7 @@ This map was written at `7e1eeb3`. Since then the code changed in ways that touc
 - **Added between the audit and the revision:** guest account deletion and "download my data" (`apps/web/lib/account/`), the `guest_profile` and `guest_room_likes` tables (`0028`, `0029`), the `refunds` table and the booking lifecycle code that writes it (`0027`). The PostHog erasure script and the onboarding backfill script were deleted in #143.
 - **Changed by the security remediation:** Microsoft sign-in was removed; `saveStepData` accepts two steps only; uploads are bound to the host and checked in the bucket; `properties.owner_user_id` no longer grants access and follows the current owner; message threads follow it; a deleted guest's messages are redacted; Connect accounts are stamped with the creating user's id; support attributes and escalation notes are validated; the support bot lists bookings by email only for emails Chatwoot verified.
 - **Citations.** Every `file:line` was remapped through `git diff 7e1eeb3..HEAD` and kept only where the cited line's text is identical at the new position. About a dozen citations pointed past the end of their file even at the time (probably numbered against the local DDL dump) and were corrected where the target could be found. `ddl.sql` citations refer to `apps/web/sql/ddl.sql`, a gitignored local dump that is not in the repo, and could **not** be re-checked.
+- **8 November 2026:** Section 2.4a and one row in 2.6 were added for the commission-invoice tables and their R2 bucket, and the counts below were raised by those six rows. Nothing else was re-checked.
 - **Counts** in Section 1 were recomputed from the table. Anything about live data, vendors or settings (the UNCLEAR items) was not re-checked.
 
 ---
@@ -36,26 +37,26 @@ The questions were applied in order; the first "yes" wins.
 
 **Subjects:** `guest`, `host` (the business owner; for a B&B or sole trader, a natural person), `staff` (other members of a host organisation, and OpenBookings platform staff where noted), `third party` (people who are neither, e.g. invitees, people in photos), `none`.
 
-### Counts (main table, 187 rows)
+### Counts (main table, 193 rows)
 
 A row is one field or a group of closely related fields, so these are counts of rows, not of database columns.
 
 | Kind | Rows |
 |---|---|
-| Direct identifier | 47 |
-| Quasi-identifier | 28 |
-| Linkable ID | 68 |
+| Direct identifier | 50 |
+| Quasi-identifier | 29 |
+| Linkable ID | 69 |
 | Special category (Art. 9) | 0 dedicated fields; 4 free-text rows carry Art. 9 risk (`bookings.guest_notes`, `messages.body`, `support_context_cache.turns`, Chatwoot messages) |
 | Free text | 21 |
-| Non-personal | 14 |
+| Non-personal | 15 |
 | UNCLEAR | 9 |
 
 | Proposed outcome (final, after any hold) | Rows |
 |---|---|
 | `delete` | 113 |
-| `retain-restricted` | 32 |
+| `retain-restricted` | 37 |
 | `coarsen` | 1 |
-| `keep` | 9 |
+| `keep` | 10 |
 | `n/a` | 22 |
 | `UNCLEAR` | 10 |
 | Rows marked `hold →` first | 36 |
@@ -225,6 +226,18 @@ Nothing creates `bookings` or `reservations` yet; only `packages/db/seed/demo-bo
 | Postgres | `refunds` | `created_by` | guest / host | Linkable | hold → retain-restricted | The guest or host user id that triggered the refund (NULL = the system). No FK. Part of the fiscal record of the refund (A1). | `drizzle/0027_cancellation_tiers.sql:81-101`; `packages/db/src/booking-lifecycle/index.ts:218` |
 | Postgres | `refunds` | `booking_id`, `reservation_id`, `reason`, `accommodation_amount`, `tourist_tax_amount`, `amount`, `breakdown`, `status`, `stripe_refund_id`, `idempotency_key`, `created_at` | guest | Quasi | hold → retain-restricted | Money record of a refund on the host's Stripe account. `breakdown` is the calculator output (per-night amounts). `refunds_amounts_finite` rejects NaN amounts (`0030`). | `drizzle/0027_cancellation_tiers.sql:81-101`; `drizzle/0030_refunds_reject_nan.sql:14` |
 
+### 2.4a Postgres: commission invoices (billing)
+
+Added 8 November 2026 with the monthly commission invoices (`drizzle/0036_commission_invoices.sql`, `0037_billing_report_views.sql`). These are fiscal records of OpenBookings' own sales to its hosts: **retain-restricted, Dutch fiscal 7 years**, and **excluded from every deletion run** (guest account deletion, host erasure, `pii-retention`) as a legal obligation (GDPR Art. 17(3)(b)). Every foreign key into them is `ON DELETE RESTRICT`, so an organization that has billing records cannot be deleted by accident. They hold **no guest personal data**: a booking is identified by its reference (the first 8 characters of the booking id) and the stay dates only, never a name, email or address. The data subjects are hosts (the invoiced business); for a sole trader the business contact data is personal data.
+
+| System | Table/location | Field | Subject | Kind | Proposed outcome | Notes | Source |
+|---|---|---|---|---|---|---|---|
+| Postgres | `billing_profiles` | `legal_name`, `address_line1`, `address_line2`, `postal_code`, `city`, `country_code`, `vat_id`, `kvk_number`, `billing_email` | host | Direct | retain-restricted | The host's business contact data, copied onto each invoice at issue. For an eenmanszaak or B&B the legal name and address are the owner's, and **`billing_email` may be a personal address**. A host edits it on Finance → Billing; the issued invoices keep the snapshot they were issued with. Dutch fiscal 7 years from the last invoice, then delete. DUP: `org_profile`, `property_content`. | `packages/db/drizzle/0036_commission_invoices.sql`; `packages/billing/src/profiles.ts` |
+| Postgres | `billing_profiles` | `vat_id_checked_at`, `vat_id_valid`, `vies_request_id` | host | Linkable | retain-restricted | The VIES answer that justifies a reverse-charge invoice; the request identifier is the proof the check was made. | `packages/billing/src/vies.ts` |
+| Postgres | `invoices` | `seller`, `buyer` (JSONB snapshots: legal name, address, VAT id, KvK, email), `number`, `issued_on`, amounts, `pdf_key`, `pdf_sha256`, `csv_key`, `csv_sha256`, `sent_at`, `email_message_id` | host | Direct | retain-restricted | The buyer snapshot is the invoice as issued and is immutable once issued (trigger). Same host-contact caveat as `billing_profiles`. | `packages/db/drizzle/0036_commission_invoices.sql`; `packages/billing/src/steps/issue.ts` |
+| Postgres | `commission_entries` | `booking_id`, `booking_ref`, `stay_start`, `stay_end`, `stripe_account_id`, `stripe_application_fee_id`, `stripe_fee_refund_id`, `stripe_payment_ref`, amounts, `occurred_at` | host / guest | Quasi | retain-restricted | The ledger of Stripe application fees and their refunds. Names no guest, but a booking reference plus stay dates at a small property can identify a stay, so access is limited to billing. Append-only (trigger). Returned payments (decision 8) are recorded with no booking and never invoiced. | `packages/billing/src/ledger/ingest.ts` |
+| Postgres | `invoice_sequences`, `invoice_runs` | series counters; run step, status, `report` (JSONB) | none | Non-personal | keep | Run reports hold counts, amounts and organization ids, no names. Needed to prove the numbering is gapless. | `packages/billing/src/runs.ts` |
+
 ### 2.5 Postgres: messaging, support, consent
 
 | System | Table/location | Field | Subject | Kind | Proposed outcome | Notes | Source |
@@ -254,6 +267,7 @@ Nothing creates `bookings` or `reservations` yet; only `packages/db/seed/demo-bo
 | System | Table/location | Field | Subject | Kind | Proposed outcome | Notes | Source |
 |---|---|---|---|---|---|---|---|
 | Cloudflare R2 | bucket `R2_BUCKET_NAME`, key `uploads/<owner tag>/<uuid>.{jpg,png,webp}` | image object (property, room, logo) | host / third party | Direct | delete | **Public, unsigned** via `cdn.openbookings.co`. The key carries a tag derived from the uploading host's user id (not reversible; shared by all of that host's uploads), so objects are found through `property_images` / `room_images.url`. **Never deleted** (row delete keeps the object; abandoned presigned uploads also remain). Original bytes, no EXIF stripping (GPS, device, U24). | `apps/business/lib/s3.ts:61-67`; `apps/business/lib/upload-policy.ts:29`; `apps/business/app/api/upload/presign/route.ts:36-52`; `apps/business/app/api/upload/confirm/route.ts:45-50`; `apps/business/app/api/property-images/[id]/route.ts:66-68` |
+| Cloudflare R2 | bucket `ob-invoices` (EU jurisdiction), keys `invoices/<yyyy>/OB-<yyyy>-<nnnn>.pdf` and `…-specification.csv` | issued invoice PDF and its CSV specification | host | Direct | retain-restricted | Private (read through 5-minute presigned links in Finance → Billing). Contains the host's business name, address, VAT id and the booking references with stay dates; no guest data. A bucket lock rule on `invoices/` keeps every object **8 years** (the 7-year fiscal period plus a year) and refuses overwrite and delete, so these are not removed by any deletion run. | `packages/billing/src/storage/r2.ts`; `packages/billing/src/steps/store.ts` |
 | Cloudflare Durable Objects | `ob-durableobjects`, storage `pending:<messageId>` | `{messageId, threadId, recipientId, deadline}` | guest / host | Linkable | UNCLEAR | Per prior audit: 5-min TTL, deleted on alarm, EU jurisdiction. Source not in repo; not re-verified (U1). | `docs/compliance/COMPLIANCE_AUDIT.md:115`; `packages/messaging/src/realtime.ts:27-58` |
 | Cloudflare Durable Objects | `/deliver` request body, WebSocket push | full message row (incl. `body`), `recipientId`, `threadId` | guest / host | Free text | n/a | In transit only, per prior audit. | `packages/messaging/src/realtime.ts:50-58` |
 | Cloudflare Durable Objects | WebSocket URL query `?token=` | `<userId>.<expiresAt>.<signature>` | guest / host | Linkable | n/a | User id in a URL; could appear in Cloudflare request logs (U19). | `packages/messaging/src/realtime.ts:20-25`; `packages/messaging/src/client.ts:141` |

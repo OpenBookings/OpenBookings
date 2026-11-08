@@ -18,6 +18,8 @@ import {
   type TouristTaxResult,
   type UnavailableReason,
 } from "@openbookings/pricing";
+import { commissionSplit } from "@openbookings/billing/commission";
+import { billingTreatmentForProperty } from "@openbookings/billing/profiles";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
 import { toCents } from "@/app/checkout/_lib/booking-lines";
 import { stayBoundErrors } from "@/app/api/query/search-bounds";
@@ -417,6 +419,14 @@ export async function priceSelection(
   const roomsTotal = round2(rooms.reduce((sum, r) => sum + r.stayTotal, 0));
   const touristTaxTotal = round2(rooms.reduce((sum, r) => sum + r.touristTax, 0));
 
+  // The fee is VAT-inclusive; its net/VAT split is fixed here, from the host's
+  // billing profile. No profile yet: the split stays empty rather than refusing
+  // the quote (readiness is gated elsewhere).
+  const commissionRate = Number(property.commissionRate);
+  const commissionCents = applicationFeeEnabled() ? applicationFeeCents(toCents(roomsTotal), commissionRate) : 0;
+  const treatment = await billingTreatmentForProperty(property.id, db);
+  const split = treatment ? commissionSplit({ feeCents: commissionCents, treatment }) : null;
+
   return {
     ok: true,
     rooms,
@@ -425,7 +435,11 @@ export async function priceSelection(
       touristTaxTotal,
       total: round2(roomsTotal + touristTaxTotal),
       // The stay only: tourist tax passes through to the host untouched.
-      commissionCents: applicationFeeEnabled() ? applicationFeeCents(toCents(roomsTotal), Number(property.commissionRate)) : 0,
+      commissionCents,
+      commissionRate,
+      commissionVatTreatment: treatment,
+      commissionNetCents: split ? split.netCents : null,
+      commissionVatCents: split ? split.vatCents : null,
       currency: "EUR",
       rooms: picked.map(({ s, room, plan }) => ({
         roomId: s.roomId,

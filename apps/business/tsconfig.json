@@ -2,6 +2,7 @@
   "extends": "@openbookings/config/tsconfig.base.json",
   "compilerOptions": {
     "incremental": true,
+    "target": "ES2020",
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"]

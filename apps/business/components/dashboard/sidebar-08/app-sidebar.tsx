@@ -66,8 +66,12 @@ const navMain: NavItem[] = [
   },
   {
     title: "Finance",
-    url: "/dashboard/finance",
+    url: "#",
     icon: HandCoins,
+    items: [
+      { title: "Payouts", url: "/dashboard/finance" },
+      { title: "Billing", url: "/dashboard/finance/billing" },
+    ],
   },
   {
     title: "About",

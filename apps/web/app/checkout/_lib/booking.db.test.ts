@@ -104,6 +104,10 @@ describeWithDb("checkout summary of a booking intent", () => {
       touristTaxTotal: 26,
       total: 506,
       commissionCents,
+      commissionRate: 0.1,
+      commissionVatTreatment: null,
+      commissionNetCents: null,
+      commissionVatCents: null,
       currency: "EUR",
       rooms: [
         { roomId: ids.roomId, ratePlanId: ids.ratePlanId, roomName: "Double", ratePlanName: "Room only", isRefundable: true, freeCancellationUntil: null },

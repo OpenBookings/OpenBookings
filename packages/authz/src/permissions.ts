@@ -33,6 +33,7 @@ export const statement = {
   rate: ["read", "update"],
   booking: ["read", "operate", "cancel", "refund"],
   payout: ["read", "update"],
+  billing: ["read", "update"],
   member: ["invite", "remove", "update-role", ...defaultStatements.member],
   org: ["update", "delete"],
 } as const;
@@ -64,6 +65,7 @@ export const roles = {
     rate: ["read", "update"],
     booking: [...ALL_BOOKING],
     payout: ["read", "update"],
+    billing: ["read", "update"],
     member: ["invite", "remove", "update-role", ...ownerAc.statements.member],
     org: ["update", "delete"],
   }),
@@ -73,6 +75,7 @@ export const roles = {
     rate: ["read", "update"],
     booking: [...ALL_BOOKING],
     payout: ["read", "update"],
+    billing: ["read", "update"],
     member: ["invite", "remove", "update-role", ...adminAc.statements.member],
     // org update yes, delete is owner-only.
     org: ["update"],
@@ -92,6 +95,7 @@ export const roles = {
   }),
   finance: ac.newRole({
     payout: ["read"],
+    billing: ["read", "update"],
     booking: ["read"],
     rate: ["read"],
   }),

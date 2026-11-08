@@ -8,6 +8,7 @@ export * from "./support";
 export * from "./support-tickets";
 export * from "./consent";
 export * from "./booking-events";
+export type { VatTreatment } from "./billing-types";
 export { sql } from "drizzle-orm";
 
 const connectionType = process.env.ENV_TYPE;
