@@ -19,6 +19,8 @@
     "./steps/reconcile": "./src/steps/reconcile.ts",
     "./steps/types": "./src/steps/types.ts",
     "./steps/draft": "./src/steps/draft.ts",
+    "./steps/issue": "./src/steps/issue.ts",
+    "./seller": "./src/seller.ts",
     "./runs": "./src/runs.ts",
     "./notify": "./src/notify.ts",
     "./render/document": "./src/render/document.ts",
