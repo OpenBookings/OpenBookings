@@ -34,3 +34,16 @@ export function assertModeMatch(env: Record<string, string | undefined>): "live"
   }
   return live ? "live" : "test";
 }
+
+/**
+ * Where `--step=deliver` must send every invoice email instead of to the
+ * hosts: `undefined` in live mode (the billing email on the invoice), the
+ * `INVOICE_TEST_RECIPIENT` address in test mode. Test databases are clones of
+ * production, so test mode without a recipient throws before anything is sent.
+ */
+export function deliverTestRecipient(mode: "live" | "test", env: Record<string, string | undefined>): string | undefined {
+  if (mode === "live") return undefined;
+  const to = env.INVOICE_TEST_RECIPIENT?.trim();
+  if (!to) throw new Error("Refusing to deliver in test mode without INVOICE_TEST_RECIPIENT: test databases hold real hosts' billing emails");
+  return to;
+}

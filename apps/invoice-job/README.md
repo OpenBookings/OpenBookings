@@ -15,7 +15,7 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 | `draft --preview` | Renders one host's current draft to `out/DRAFT-{entity}-{period}.pdf`, watermarked DRAFT. Seller from `SELLER_*` (placeholders when missing), buyer from the host's billing profile as it is now. Writes nothing to the database or R2. | `--entity` (required), `--period` |
 | `issue` | Issues the month's drafts (gapless `OB-YYYY-NNNN` numbers, seller and buyer snapshots), then runs `store`. Refused unless the month's last real draft run reconciled successfully. | `--period`, `--entity` |
 | `store` | Renders and uploads the PDF and CSV of every issued invoice that is not stored yet. Retry this on its own after a failed upload. | `--period` |
-| `deliver` | Emails every stored, issued invoice that is not sent yet (PDF and CSV attached, invoice id as idempotency key). | `--period` |
+| `deliver` | Emails every stored, issued invoice that is not sent yet (PDF and CSV attached, invoice id as idempotency key). In test mode it needs `INVOICE_TEST_RECIPIENT` and sends everything there. | `--period` |
 | `report` | Writes the quarter's VAT-return, ICP, DAC7, returned-payments and Stripe-reconciliation CSVs to `out/`. | `--quarter=YYYYQn` (required) |
 | `backfill` | Reconciles every month from `--from` through last month, one run per month, and prints `backfilled / returned / blockers` per month. Drafts nothing, and never counts as a draft run. | `--from=YYYY-MM` (required), `--dry-run` |
 
@@ -33,6 +33,10 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
   `INVOICE_DB_ENV` must say which database `DATABASE_URL` is: exactly `production` or `test`. Unset or anything
   else is refused. A live key needs `production`, a test key needs `test`; any other pairing is refused
   before any database or Stripe access.
+- **Deliver in test mode:** test databases are clones of production with real billing emails, so
+  `--step=deliver` in test mode refuses unless `INVOICE_TEST_RECIPIENT` is set. Every invoice email then goes to
+  that address with subject prefixed `[TEST] `, and its body says which host (legal name only) it would have
+  gone to. Live mode sends to the billing email on the invoice.
 - **Seller:** in live mode `--step=issue` refuses to run until every `SELLER_*` variable is set. Test mode
   prints `[SELLER_…]` placeholders instead.
 - **Reconciliation:** `--step=issue` refuses unless the month's latest real (not dry-run) draft run reconciled
@@ -53,6 +57,7 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 | `SLACK_WEBHOOK_URL` | draft, store, deliver | Optional Slack incoming webhook: the run report summary, and alerts for file conflicts and failed sends. |
 | `LETTERMINT_PROJECT_TOKEN` | draft, deliver | Lettermint project token: the run report and the invoice emails. |
 | `EMAIL_FROM_ADDRESS` | draft, deliver | Optional sender, as for the other apps (`@openbookings/mailing`). |
+| `INVOICE_TEST_RECIPIENT` | deliver | Required in test mode, ignored in live mode. The one address every invoice email goes to, marked `[TEST]`. |
 | `SELLER_LEGAL_NAME` | issue, preview | OpenBookings' legal name on every invoice. |
 | `SELLER_ADDRESS` | issue, preview | Address lines separated by newlines (or a literal `\n`), ending with "postcode city". The country is always the Netherlands. |
 | `SELLER_KVK` | issue, preview | KvK number. |

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assertModeMatch, ModeMismatchError } from "./guards";
+import { assertModeMatch, deliverTestRecipient, ModeMismatchError } from "./guards";
 
 const LIVE = "sk_live_" + "x".repeat(24);
 const TEST = "sk_test_" + "x".repeat(24);
@@ -33,5 +33,20 @@ describe("assertModeMatch", () => {
   test("a missing or unrecognised key is refused", () => {
     expect(() => assertModeMatch({})).toThrow(/STRIPE_SECRET_KEY/);
     expect(() => assertModeMatch({ STRIPE_SECRET_KEY: "pk_live_abc", INVOICE_DB_ENV: "production" })).toThrow(/STRIPE_SECRET_KEY/);
+  });
+});
+
+describe("deliverTestRecipient", () => {
+  test("test mode without a recipient is refused", () => {
+    expect(() => deliverTestRecipient("test", {})).toThrow(/INVOICE_TEST_RECIPIENT/);
+    expect(() => deliverTestRecipient("test", { INVOICE_TEST_RECIPIENT: "  " })).toThrow(/INVOICE_TEST_RECIPIENT/);
+  });
+
+  test("test mode with a recipient sends there", () => {
+    expect(deliverTestRecipient("test", { INVOICE_TEST_RECIPIENT: " me@example.test " })).toBe("me@example.test");
+  });
+
+  test("live mode has no override, even when the variable is set", () => {
+    expect(deliverTestRecipient("live", { INVOICE_TEST_RECIPIENT: "me@example.test" })).toBeUndefined();
   });
 });

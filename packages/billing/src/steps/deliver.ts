@@ -67,7 +67,18 @@ type Row = {
   pdf_key: string;
   csv_key: string;
   email: string | null;
+  legal_name: string | null;
 };
+
+/** The test version of an email: `[TEST] ` subject and a first line naming the host it would have gone to. */
+function asTest(email: { subject: string; html: string; text: string }, legalName: string | null) {
+  const note = `TEST SEND: this would have gone to ${legalName?.trim() || "the host"}.`;
+  return {
+    subject: `[TEST] ${email.subject}`,
+    text: `${note}\n\n${email.text}`,
+    html: `<p>${escapeHtml(note)}</p>\n${email.html}`,
+  };
+}
 
 const toBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
@@ -81,10 +92,20 @@ const toBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
  * `sent_at` and the message id, in one update. A failed send leaves the
  * invoice `issued` for the next run and the others still go out; an invoice
  * with no billing email is skipped.
+ *
+ * With `testRecipient` every email goes to that address instead, its subject
+ * starts with `[TEST] ` and its body says which host it would have gone to
+ * (the host's legal name, nothing else). Test databases are clones of
+ * production, so their billing emails belong to real hosts. The caller (the
+ * job) decides when this is required; this function never reads the
+ * environment.
  */
-export async function runDeliver(period: Period, deps: { db: Queryable; store: ObjectStore; mail: InvoiceMailer }): Promise<DeliverReport> {
+export async function runDeliver(
+  period: Period,
+  deps: { db: Queryable; store: ObjectStore; mail: InvoiceMailer; testRecipient?: string },
+): Promise<DeliverReport> {
   const { rows } = await deps.db.query(
-    `SELECT id, number, doc_type, period_start::text AS period_start, pdf_key, csv_key, buyer->>'email' AS email
+    `SELECT id, number, doc_type, period_start::text AS period_start, pdf_key, csv_key, buyer->>'email' AS email, buyer->>'legalName' AS legal_name
        FROM invoices
       WHERE period_start = $1 AND status = 'issued' AND sent_at IS NULL AND pdf_key IS NOT NULL AND csv_key IS NOT NULL
       ORDER BY number`,
@@ -99,9 +120,10 @@ export async function runDeliver(period: Period, deps: { db: Queryable; store: O
     }
     try {
       const [pdf, csv] = await Promise.all([deps.store.get(inv.pdf_key), deps.store.get(inv.csv_key)]);
+      const email = invoiceEmail({ number: inv.number, docType: inv.doc_type, periodStart: inv.period_start });
       const { messageId } = await deps.mail({
-        to,
-        ...invoiceEmail({ number: inv.number, docType: inv.doc_type, periodStart: inv.period_start }),
+        to: deps.testRecipient ?? to,
+        ...(deps.testRecipient ? asTest(email, inv.legal_name) : email),
         attachments: [
           { filename: `${inv.number}.pdf`, base64: toBase64(pdf), contentType: "application/pdf" },
           { filename: `${inv.number}-specification.csv`, base64: toBase64(csv), contentType: "text/csv" },

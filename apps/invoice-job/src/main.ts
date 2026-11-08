@@ -30,7 +30,7 @@ import { createR2Store } from "@openbookings/billing/storage/r2";
 import { lettermintInvoiceMailer } from "@openbookings/billing/deliver/lettermint";
 import { amsterdamDate, ArgsError, backfillMonths, parseArgs, quarterStart, USAGE, type JobArgs } from "./args";
 import { jobDeps, type Env, type JobDeps } from "./deps";
-import { assertModeMatch } from "./guards";
+import { assertModeMatch, deliverTestRecipient } from "./guards";
 
 type Outcome = "succeeded" | "blocked";
 
@@ -151,12 +151,13 @@ async function store(ctx: Context): Promise<Outcome> {
   return run.status;
 }
 
-/** Emails every stored, issued invoice of the period that is not sent yet. Blocked when a send failed or an invoice has no billing email. */
+/** Emails every stored, issued invoice of the period that is not sent yet (in test mode all to `INVOICE_TEST_RECIPIENT`, which is required there). Blocked when a send failed or an invoice has no billing email. */
 async function deliver(ctx: Context): Promise<Outcome> {
   const { args, deps } = ctx;
+  const testRecipient = deliverTestRecipient(ctx.mode, ctx.env);
   const objects = createR2Store(ctx.env);
   const run = await withRun(deps.pool, { periodStart: args.period.start, step: "deliver" }, async () => {
-    const report = await runDeliver(args.period, { db: deps.pool, store: objects, mail: lettermintInvoiceMailer() });
+    const report = await runDeliver(args.period, { db: deps.pool, store: objects, mail: lettermintInvoiceMailer(), testRecipient });
     return { status: report.failed.length || report.skipped.length ? "blocked" : "succeeded", report, value: report };
   });
   print(`Deliver ${month(args.period)}: ${run.status}`, run.report);

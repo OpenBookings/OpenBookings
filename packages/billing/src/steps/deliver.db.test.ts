@@ -173,4 +173,19 @@ describeWithDb("emailing issued invoices", () => {
     expect(report.sent).toEqual(["OB-2026-0043"]);
     expect(report.skipped).toEqual([{ number: "OB-2026-0042", reason: "no_recipient" }]);
   });
+
+  test("with a test recipient every email goes there, marked [TEST], naming the host it would have gone to", async () => {
+    const id = await issued(await seedHost(db), "OB-2026-0042");
+
+    const report = await runDeliver(PERIOD, { db, store, mail, testRecipient: "me@openbookings.test" });
+
+    expect(report.sent).toEqual(["OB-2026-0042"]);
+    const m = sent[0]!;
+    expect(m.to).toBe("me@openbookings.test");
+    expect(m.subject).toBe("[TEST] Your OpenBookings commission invoice OB-2026-0042 (October 2026)");
+    expect(m.text).toContain("this would have gone to Hotel BV");
+    expect(m.html).toContain("this would have gone to Hotel BV");
+    expect(m.text).not.toContain("billing@hotel.test");
+    expect(m.idempotencyKey).toBe(id);
+  });
 });
