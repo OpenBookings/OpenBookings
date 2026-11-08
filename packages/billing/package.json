@@ -10,7 +10,9 @@
     "./vat": "./src/vat.ts",
     "./period": "./src/period.ts",
     "./commission": "./src/commission.ts",
-    "./profiles": "./src/profiles.ts"
+    "./profiles": "./src/profiles.ts",
+    "./vies": "./src/vies.ts",
+    "./profile-backfill": "./src/profile-backfill.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -22,12 +24,14 @@
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
-    "pdfkit": "^0.17.2"
+    "pdfkit": "^0.17.2",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@types/bun": "^1.3.14",
     "@types/pdfkit": "^0.17.7",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.9.3"
   }
 }

@@ -290,11 +290,13 @@
         "@openbookings/mailing": "workspace:*",
         "@openbookings/stripe": "workspace:*",
         "pdfkit": "^0.17.2",
+        "pg": "^8.23.1",
       },
       "devDependencies": {
         "@openbookings/config": "workspace:*",
         "@types/bun": "^1.3.14",
         "@types/pdfkit": "^0.17.7",
+        "@types/pg": "^8.23.1",
         "typescript": "^5.9.3",
       },
     },

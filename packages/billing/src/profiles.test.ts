@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { billingTreatmentForProperty } from "./profiles";
+import { billingTreatmentForProperty, missingProfileFields } from "./profiles";
 import { NonEuCountryError } from "./vat";
 
 const dbReturning = (rows: unknown[]) => {
@@ -33,5 +33,38 @@ describe("billingTreatmentForProperty", () => {
     await expect(billingTreatmentForProperty("p", dbReturning([{ country_code: "US" }]).db)).rejects.toBeInstanceOf(
       NonEuCountryError,
     );
+  });
+});
+
+describe("missingProfileFields", () => {
+  const full = {
+    organizationId: "o",
+    legalName: "Hotel BV",
+    addressLine1: "Dam 1",
+    addressLine2: null,
+    postalCode: "1012",
+    city: "Amsterdam",
+    countryCode: "NL",
+    vatId: "NL123456789B01",
+    kvkNumber: null,
+    vatIdCheckedAt: null,
+    vatIdValid: null,
+    viesRequestId: null,
+    billingEmail: "a@b.test",
+    updatedAt: new Date(),
+  };
+
+  test("a complete profile misses nothing", () => {
+    expect(missingProfileFields(full)).toEqual([]);
+  });
+
+  test("no profile misses everything required", () => {
+    expect(missingProfileFields(null)).toEqual([
+      "legalName", "addressLine1", "postalCode", "city", "countryCode", "vatId", "billingEmail",
+    ]);
+  });
+
+  test("blank strings count as missing", () => {
+    expect(missingProfileFields({ ...full, city: "  ", billingEmail: null })).toEqual(["city", "billingEmail"]);
   });
 });
