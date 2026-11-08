@@ -184,5 +184,6 @@ describeWithDb("property readiness against Postgres", () => {
     const { propertyIds } = await ensureDemoHotels(db, { lat: 50 + Math.random(), lon: 20 + Math.random() });
     expect(propertyIds.length).toBeGreaterThan(0);
     for (const id of propertyIds) expect(await propertyReadiness(db, id)).toEqual({ ready: true, missing: [] });
-  });
+    // Generating eight hotels against a remote database takes 6-15 s.
+  }, 30_000);
 });

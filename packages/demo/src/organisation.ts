@@ -53,7 +53,20 @@ export async function ensureDemoOrganisation(db: Queryable): Promise<string> {
     `INSERT INTO billing_profiles
        (organization_id, legal_name, address_line1, postal_code, city, country_code, vat_id, billing_email)
      VALUES ($1, $2, 'Demostraat 1', '1011 AA', 'Amsterdam', 'NL', $3, 'billing@demo.openbookings.test')
-     ON CONFLICT (organization_id) DO NOTHING`,
+     -- A stub left by the profile backfill would keep demo hotels from being
+     -- ready: fill its empty fields, never overwrite one that is set.
+     ON CONFLICT (organization_id) DO UPDATE SET
+       legal_name    = COALESCE(NULLIF(billing_profiles.legal_name, ''), EXCLUDED.legal_name),
+       address_line1 = COALESCE(NULLIF(billing_profiles.address_line1, ''), EXCLUDED.address_line1),
+       postal_code   = COALESCE(NULLIF(billing_profiles.postal_code, ''), EXCLUDED.postal_code),
+       city          = COALESCE(NULLIF(billing_profiles.city, ''), EXCLUDED.city),
+       country_code  = COALESCE(NULLIF(billing_profiles.country_code, ''), EXCLUDED.country_code),
+       vat_id        = COALESCE(NULLIF(billing_profiles.vat_id, ''), EXCLUDED.vat_id),
+       billing_email = COALESCE(NULLIF(billing_profiles.billing_email, ''), EXCLUDED.billing_email)
+     WHERE billing_profiles.legal_name IS NULL OR billing_profiles.address_line1 IS NULL
+        OR billing_profiles.postal_code IS NULL OR billing_profiles.city IS NULL
+        OR billing_profiles.country_code IS NULL OR billing_profiles.vat_id IS NULL
+        OR billing_profiles.billing_email IS NULL`,
     [DEMO_ORG_ID, DEMO_LEGAL_COMPANY_NAME, DEMO_VAT_NUMBER],
   );
   await db.query(
