@@ -117,7 +117,7 @@ async function preview(ctx: Context): Promise<Outcome> {
  * Issues the period's drafts (numbers, snapshots, linked entries), then
  * stores their files as a run of its own, so a store that fails can be
  * retried with `--step=store` without issuing again. Blocked when any draft
- * was skipped or a file conflicts.
+ * was skipped (which also alerts) or a file conflicts.
  */
 async function issue(ctx: Context): Promise<Outcome> {
   const { args, deps } = ctx;
@@ -133,6 +133,9 @@ async function issue(ctx: Context): Promise<Outcome> {
     return { status: report.skipped.length ? "blocked" : "succeeded", report, value: report };
   });
   print(`Issue ${month(args.period)}: ${run.status}`, run.report);
+  if (run.value.skipped.length) {
+    await alert(ctx, `${run.value.skipped.length} draft(s) skipped at issue — rerun draft for those hosts`, run.value);
+  }
   return worst(run.status, await store(ctx));
 }
 
