@@ -1,0 +1,4 @@
+{
+  "extends": "@openbookings/config/tsconfig.base.json",
+  "include": ["src"]
+}
