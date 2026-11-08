@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import type { Pool } from "pg";
 import type { Queryable } from "@openbookings/db";
 import {
   MissingBillingProfileError,
@@ -38,7 +38,7 @@ type Totals = { fees: number; refunds: number; gross: string };
 
 export type ReconcileResult = {
   status: "succeeded" | "blocked";
-  /** Stripe ids recorded by this run (in a dry run: that would be). */
+  /** Stripe ids this run recorded in the ledger (in a dry run: would record). */
   backfilled: string[];
   /** Ledger entries of the period Stripe did not list. */
   missingInStripe: string[];
@@ -50,7 +50,7 @@ export type ReconcileResult = {
   unsettled: { feeId: string; paymentIntentId: string; intentId: string | null }[];
   /** Fees on legacy bookings whose organization has no billing country. */
   missingProfiles: { feeId: string; organizationId: string }[];
-  /** Returned fees this run gave back (in a dry run: would), with what the ledger held as refunded before. */
+  /** Payments this run returned to the guest (in a dry run: would), as their fees, with what the ledger held as refunded before. */
   returned: { feeId: string; chargeRef: string; gross: string; refundedGross: string }[];
   /** Returned fees still not refunded in full. */
   notYetReturned: string[];
@@ -58,33 +58,29 @@ export type ReconcileResult = {
   totals: { booked: Totals; returned: Totals };
 };
 
+/** Runs `work` in one transaction on one connection: committed when it returns, rolled back when it throws. */
+export type TransactionRunner = <T>(work: (db: Queryable) => Promise<T>) => Promise<T>;
+
 export type ReconcileDeps = {
   /** Where the ledger lives; the ledger functions run on it too (`ledger.db` is not used). */
   db: Queryable;
   stripe: StripeLedgerSource;
   ledger: LedgerDeps;
+  /** Runs everything as for real inside one transaction that is rolled back, with no money moved and nothing reported. */
   dryRun: boolean;
   /**
-   * Runs `work` in one transaction. Defaults to a BEGIN/COMMIT on a client of
-   * `db` when it is a pool; any other `db` is used as it is, so a caller
-   * passing one connection owns its transaction.
+   * Transactions on `db`. Each fee refund is recorded in its own; a dry run
+   * runs entirely in one and throws to roll it back, so this must roll back
+   * when its work throws. `poolTransaction(pool)` for a pool,
+   * `savepointTransaction(client)` for a connection already in a transaction.
    */
-  inTransaction?: <T>(work: (db: Queryable) => Promise<T>) => Promise<T>;
+  inTransaction: TransactionRunner;
 };
 
-type LedgerRow = { kind: "fee" | "fee_refund"; stripe_id: string; gross: string; in_period: boolean };
-
-type ReturnedFee = { fee_id: string; charge: string | null; account: string; gross: string; refunded: string };
-
-/** The instant as Stripe's whole seconds. */
-const unixSeconds = (at: Date) => Math.floor(at.getTime() / 1000);
-
-const abs = (n: bigint) => (n < 0n ? -n : n);
-
-function defaultInTransaction(db: Queryable) {
-  return async <T>(work: (db: Queryable) => Promise<T>): Promise<T> => {
-    if (!(db instanceof Pool)) return work(db);
-    const client = await db.connect();
+/** BEGIN / COMMIT on a client checked out of `pool`; ROLLBACK when the work throws; the client is always released. */
+export function poolTransaction(pool: Pool): TransactionRunner {
+  return async (work) => {
+    const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const result = await work(client);
@@ -96,6 +92,48 @@ function defaultInTransaction(db: Queryable) {
     } finally {
       client.release();
     }
+  };
+}
+
+/**
+ * A nested transaction on a connection that is already in one: a SAVEPOINT,
+ * released when the work returns and rolled back to when it throws, so a
+ * failed unit is undone and the outer transaction stays usable.
+ */
+export function savepointTransaction(db: Queryable): TransactionRunner {
+  let depth = 0;
+  return async (work) => {
+    const name = `reconcile_${++depth}`;
+    await db.query(`SAVEPOINT ${name}`);
+    try {
+      const result = await work(db);
+      await db.query(`RELEASE SAVEPOINT ${name}`);
+      return result;
+    } catch (error) {
+      await db.query(`ROLLBACK TO SAVEPOINT ${name}`);
+      throw error;
+    }
+  };
+}
+
+type LedgerRow = { kind: "fee" | "fee_refund"; stripe_id: string; gross: string; in_period: boolean };
+
+type ReturnedFee = { fee_id: string; charge: string | null; account: string; gross: string; refunded: string };
+
+/** Payments this run returned to the guest, by charge, with what the ledger held as refunded before. */
+type Returns = Map<string, { refundedGross: string }>;
+
+const abs = (n: bigint) => (n < 0n ? -n : n);
+
+class DryRunRollback extends Error {}
+
+/** The ledger for a dry run: reads Stripe as usual, but returns no payment, writes no audit row and reports nothing. */
+function dryRunLedger(ledger: LedgerDeps): LedgerDeps {
+  return {
+    ...ledger,
+    returnPayment: async (chargeId) => ({ refundId: `dry-run:${chargeId}` }),
+    audit: async () => {},
+    report: () => {},
   };
 }
 
@@ -117,15 +155,44 @@ function defaultInTransaction(db: Queryable) {
  * in full, counting its fee refunds in any month. One that is short has its
  * Stripe refunds recorded first; still short, its payment is returned to the
  * guest (`ledger.returnPayment`), audited and reported, and its refund
- * recorded. One that is still short after that blocks the run.
+ * recorded. One that is still short after that blocks the run. Every payment
+ * returned by this run, here or by the ledger while backfilling, is listed in
+ * `returned`.
  *
- * `dryRun` records nothing and moves no money: it lists what it would
- * backfill and return. Each fee refund is recorded in its own transaction.
+ * `dryRun` runs all of this for real inside one transaction that is rolled
+ * back, with `returnPayment`, `audit` and `report` replaced by stand-ins, so
+ * its result is what a real run would produce, with nothing kept and no money
+ * moved. A payment the dry run would return counts as returned.
  */
 export async function reconcile(period: Period, deps: ReconcileDeps): Promise<ReconcileResult> {
-  const { db, stripe, dryRun } = deps;
-  const inTransaction = deps.inTransaction ?? defaultInTransaction(db);
-  const ledger = (on: Queryable): LedgerDeps => ({ ...deps.ledger, db: on });
+  if (!deps.dryRun) return run(period, deps, deps.ledger);
+  let result: ReconcileResult | undefined;
+  try {
+    await deps.inTransaction(async (tx) => {
+      result = await run(period, { ...deps, db: tx, inTransaction: savepointTransaction(tx) }, dryRunLedger(deps.ledger));
+      throw new DryRunRollback("Dry run: rolling back");
+    });
+  } catch (error) {
+    if (!(error instanceof DryRunRollback)) throw error;
+  }
+  if (!result) throw new Error("Dry run produced no result");
+  return result;
+}
+
+async function run(period: Period, deps: ReconcileDeps, baseLedger: LedgerDeps): Promise<ReconcileResult> {
+  const { db, stripe, inTransaction } = deps;
+
+  // Every payment returned by this run, whether by the ledger while backfilling or by the settling below.
+  const returns: Returns = new Map();
+  const tracked: LedgerDeps = {
+    ...baseLedger,
+    returnPayment: async (chargeId, accountId, reason) => {
+      const r = await baseLedger.returnPayment(chargeId, accountId, reason);
+      if (!returns.has(chargeId)) returns.set(chargeId, { refundedGross: "0" });
+      return r;
+    },
+  };
+  const ledger = (on: Queryable): LedgerDeps => ({ ...tracked, db: on });
 
   const result: ReconcileResult = {
     status: "succeeded",
@@ -189,20 +256,15 @@ export async function reconcile(period: Period, deps: ReconcileDeps): Promise<Re
   const before = await readLedger();
   const missing = [...listed.values()].filter((bt) => !before.has(bt.source));
   for (const bt of missing.filter((m) => m.type === "application_fee")) {
-    if (dryRun) result.backfilled.push(bt.source);
-    else await backfill(bt.source, bt.source, async () => recordApplicationFee(await stripe.retrieveFee(bt.source), ledger(db)));
+    await backfill(bt.source, bt.source, async () => recordApplicationFee(await stripe.retrieveFee(bt.source), ledger(db)));
   }
   for (const bt of missing.filter((m) => m.type === "application_fee_refund")) {
-    if (dryRun) {
-      result.backfilled.push(bt.source);
-      continue;
-    }
     const refund = await stripe.retrieveFeeRefund(bt.source);
     await backfill(bt.source, refund.fee, () => recordRefund(refund));
   }
 
   // Compare again.
-  const after = dryRun ? before : await readLedger();
+  const after = await readLedger();
   for (const bt of listed.values()) {
     const row = after.get(bt.source);
     if (row && abs(BigInt(bt.amount)) !== abs(BigInt(row.gross))) {
@@ -213,7 +275,8 @@ export async function reconcile(period: Period, deps: ReconcileDeps): Promise<Re
     if (row.in_period && !listed.has(row.stripe_id)) result.missingInStripe.push(row.stripe_id);
   }
 
-  await settleReturnedFees(period, deps, recordRefund, result);
+  await settleReturnedFees(period, { ...deps, ledger: ledger(db) }, recordRefund, returns, result);
+  result.returned = await returnedByThisRun(db, returns, result.notYetReturned);
   result.totals = await totals(db, period);
 
   const blocked =
@@ -250,39 +313,37 @@ const short = (fee: ReturnedFee) => BigInt(fee.refunded) < BigInt(fee.gross);
  * records any refunds Stripe already has; then, if the payment itself is still
  * with the host, returns it in full (a returned payment normally goes back
  * through the booking confirmation, so one still here at month end is
- * reported) and records its refund. Whatever is still short is listed in
- * `notYetReturned`.
+ * reported) and records its refund. A payment this run already returned is
+ * not returned again. Whatever is still short is listed in `notYetReturned`;
+ * in a dry run, a payment it would return counts as returned.
  */
 async function settleReturnedFees(
   period: Period,
   deps: ReconcileDeps,
   recordRefund: (refund: FeeRefundLike) => Promise<{ inserted: boolean }>,
+  returns: Returns,
   result: ReconcileResult,
 ): Promise<void> {
   const { db, stripe, ledger, dryRun } = deps;
 
-  /** Records the fee's refunds Stripe has and the ledger lacks; in a dry run, only counts them. */
-  const syncRefunds = async (fee: ReturnedFee): Promise<bigint> => {
-    let pending = 0n;
+  /** Records the fee's refunds Stripe has and the ledger lacks. */
+  const syncRefunds = async (fee: ReturnedFee) => {
     for (const refund of await stripe.listFeeRefunds(fee.fee_id)) {
       const { rows } = await db.query(`SELECT 1 FROM commission_entries WHERE stripe_fee_refund_id = $1`, [refund.id]);
-      if (rows.length > 0) continue;
-      if (dryRun) {
-        pending += BigInt(refund.amount);
-        result.backfilled.push(refund.id);
-      } else if ((await recordRefund(refund)).inserted) {
-        result.backfilled.push(refund.id);
-      }
+      if (rows.length === 0 && (await recordRefund(refund)).inserted) result.backfilled.push(refund.id);
     }
-    return pending;
   };
 
-  const refundedNow = async (fee: ReturnedFee) => BigInt((await returnedFees(db, period, fee.fee_id))[0]?.refunded ?? fee.refunded);
+  /** Refunded in full in the ledger; in a dry run, also a payment the run would have returned (Stripe holds no refund for it). */
+  const covered = async (fee: ReturnedFee) => {
+    if (dryRun && fee.charge && returns.has(fee.charge)) return true;
+    const now = (await returnedFees(db, period, fee.fee_id))[0]?.refunded ?? fee.refunded;
+    return BigInt(now) >= BigInt(fee.gross);
+  };
 
   for (const fee of (await returnedFees(db, period)).filter(short)) {
-    const gross = BigInt(fee.gross);
-    const pending = await syncRefunds(fee);
-    if ((dryRun ? BigInt(fee.refunded) + pending : await refundedNow(fee)) >= gross) continue;
+    await syncRefunds(fee);
+    if (await covered(fee)) continue;
 
     const extra = { applicationFeeId: fee.fee_id, chargeId: fee.charge, stripeAccountId: fee.account, gross: fee.gross, refunded: fee.refunded };
     if (!fee.charge) {
@@ -300,17 +361,13 @@ async function settleReturnedFees(
       continue;
     }
 
-    const entry = { feeId: fee.fee_id, chargeRef: fee.charge, gross: fee.gross, refundedGross: fee.refunded };
-    if (dryRun) {
-      result.returned.push(entry);
-      continue;
-    }
     ledger.report(new Error(`Returned fee ${fee.fee_id} was still not refunded at month end; returning payment ${fee.charge} now`), {
       level: "warning",
       extra,
     });
     try {
       const { refundId } = await ledger.returnPayment(fee.charge, fee.account, "unexplained");
+      returns.set(fee.charge, { refundedGross: fee.refunded });
       await ledger.audit({
         action: "payment.unexplained-returned",
         stripeAccountId: fee.account,
@@ -323,9 +380,23 @@ async function settleReturnedFees(
       result.notYetReturned.push(fee.fee_id);
       continue;
     }
-    if ((await refundedNow(fee)) >= gross) result.returned.push(entry);
-    else result.notYetReturned.push(fee.fee_id);
+    if (!(await covered(fee))) result.notYetReturned.push(fee.fee_id);
   }
+}
+
+/** The payments this run returned, as their fees, leaving out any fee still not refunded in full. */
+async function returnedByThisRun(db: Queryable, returns: Returns, notYetReturned: string[]): Promise<ReconcileResult["returned"]> {
+  const out: ReconcileResult["returned"] = [];
+  for (const [chargeRef, { refundedGross }] of returns) {
+    const { rows } = await db.query(
+      `SELECT stripe_application_fee_id AS fee_id, gross_amount::text AS gross
+         FROM commission_entries WHERE kind = 'fee' AND stripe_payment_ref = $1 ORDER BY occurred_at LIMIT 1`,
+      [chargeRef],
+    );
+    const fee = rows[0] as { fee_id: string; gross: string } | undefined;
+    if (fee && !notYetReturned.includes(fee.fee_id)) out.push({ feeId: fee.fee_id, chargeRef, gross: fee.gross, refundedGross });
+  }
+  return out;
 }
 
 /** The period's ledger by disposition: fee and refund counts and their gross (exact, as a decimal string). */

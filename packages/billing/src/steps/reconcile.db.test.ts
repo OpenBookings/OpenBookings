@@ -1,10 +1,17 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
-import { Client } from "pg";
+import { Client, Pool, type PoolClient } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import { upsertBillingProfile } from "../profiles";
 import { periodFor } from "../period";
 import { recordApplicationFee, recordApplicationFeeRefund, type ChargeInfo, type FeeLike, type FeeRefundLike, type LedgerDeps } from "../ledger";
-import { reconcile, type BalanceTransactionLike, type ReconcileDeps, type StripeLedgerSource } from "./reconcile";
+import {
+  poolTransaction,
+  reconcile,
+  savepointTransaction,
+  type BalanceTransactionLike,
+  type ReconcileDeps,
+  type StripeLedgerSource,
+} from "./reconcile";
 
 const PERIOD = periodFor("2026-10");
 const CREATED = 1_792_000_000; // 2026-10-14T17:46:40Z
@@ -80,6 +87,7 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     stripe: source(),
     ledger: ledger(),
     dryRun: false,
+    inTransaction: savepointTransaction(db),
     ...over,
   });
 
@@ -109,11 +117,13 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
   const record = (f: FeeLike) => recordApplicationFee(f, ledger());
   const recordRefund = (r: FeeRefundLike) => recordApplicationFeeRefund(r, ledger(), async (id) => stripeFees.get(id)!);
 
+  /** This test's ledger rows: those of the fees it put on Stripe. */
   const rows = async () =>
     (
       await db.query(
         `SELECT kind, stripe_application_fee_id AS fee, stripe_fee_refund_id AS refund, gross_amount::text AS gross, disposition
-           FROM commission_entries ORDER BY occurred_at, kind`,
+           FROM commission_entries WHERE stripe_application_fee_id = ANY($1::text[]) ORDER BY occurred_at, kind`,
+        [[...stripeFees.keys()]],
       )
     ).rows;
 
@@ -279,11 +289,11 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     expect(result.missingInStripe).toEqual([]);
   });
 
-  test("a fee on an unknown account → blocked, listed", async () => {
+  test.each([false, true])("a fee on an unknown account → blocked, listed (dry run: %p)", async (dryRun) => {
     const stranger = `acct_${crypto.randomUUID().slice(0, 12)}`;
     stripeFee({ account: stranger });
 
-    const result = await reconcile(PERIOD, deps());
+    const result = await reconcile(PERIOD, deps({ dryRun }));
 
     expect(result.status).toBe("blocked");
     expect(result.unknownAccounts).toEqual([stranger]);
@@ -291,21 +301,21 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     expect(await rows()).toEqual([]);
   });
 
-  test("a fee whose payment has not become a booking yet → blocked, listed as unsettled", async () => {
+  test.each([false, true])("a fee whose payment has not become a booking yet → blocked, listed as unsettled (dry run: %p)", async (dryRun) => {
     const intentId = await seedIntent("open");
     const f = stripeFee();
     const otherPi = `pi_${crypto.randomUUID()}`;
     charges.set(f.charge, { paymentIntentId: otherPi, metadata: { bookingIntentId: intentId }, amount: 25_000, amountRefunded: 0 });
     stripeRefund(f, 100); // its refund fails on the same cause; the fee is listed once
 
-    const result = await reconcile(PERIOD, deps());
+    const result = await reconcile(PERIOD, deps({ dryRun }));
 
     expect(result.status).toBe("blocked");
     expect(result.unsettled).toEqual([{ feeId: f.id, paymentIntentId: otherPi, intentId }]);
     expect(await rows()).toEqual([]);
   });
 
-  test("a fee whose organization has no billing profile → blocked, listed", async () => {
+  test.each([false, true])("a fee whose organization has no billing profile → blocked, listed (dry run: %p)", async (dryRun) => {
     await db.query(`DELETE FROM billing_profiles WHERE organization_id = $1`, [orgId]);
     await db.query(
       `UPDATE bookings SET commission_vat_treatment = NULL, commission_net_cents = NULL, commission_vat_cents = NULL WHERE id = $1`,
@@ -313,7 +323,7 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     );
     const f = stripeFee();
 
-    const result = await reconcile(PERIOD, deps());
+    const result = await reconcile(PERIOD, deps({ dryRun }));
 
     expect(result.status).toBe("blocked");
     expect(result.missingProfiles).toEqual([{ feeId: f.id, organizationId: orgId }]);
@@ -399,17 +409,44 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
 
   test("dry run backfills and returns nothing", async () => {
     const missing = stripeFee();
+    const missingRefund = stripeRefund(missing, 1080);
     const returned = await oversoldFee();
     await record(returned);
+    calls.report = [];
 
     const result = await reconcile(PERIOD, deps({ dryRun: true }));
 
-    expect(result.status).toBe("succeeded");
-    expect(result.backfilled).toEqual([missing.id]);
-    expect(result.returned).toEqual([{ feeId: returned.id, chargeRef: returned.charge, gross: "1080", refundedGross: "0" }]);
+    expect(result).toEqual({
+      status: "succeeded",
+      backfilled: [missing.id, missingRefund.id],
+      missingInStripe: [],
+      amountMismatches: [],
+      unknownAccounts: [],
+      unsettled: [],
+      missingProfiles: [],
+      returned: [{ feeId: returned.id, chargeRef: returned.charge, gross: "1080", refundedGross: "0" }],
+      notYetReturned: [],
+      // What the real run would leave: the backfilled fee and refund are counted, then rolled back.
+      totals: { booked: { fees: 1, refunds: 1, gross: "0" }, returned: { fees: 1, refunds: 0, gross: "1080" } },
+    });
     expect(calls.returnPayment).toEqual([]);
     expect(calls.audit).toEqual([]);
+    expect(calls.report).toEqual([]);
     expect((await rows()).map((x) => x.fee)).toEqual([returned.id]);
+  });
+
+  test.each([false, true])("a payment the ledger returns while backfilling is listed as returned (dry run: %p)", async (dryRun) => {
+    const f = stripeFee();
+    charges.set(f.charge, { paymentIntentId: `pi_${crypto.randomUUID()}`, metadata: {}, amount: 25_000, amountRefunded: 0 });
+
+    const result = await reconcile(PERIOD, deps({ dryRun }));
+
+    expect(result.status).toBe("succeeded");
+    expect(result.returned).toEqual([{ feeId: f.id, chargeRef: f.charge, gross: "1080", refundedGross: "0" }]);
+    expect(result.notYetReturned).toEqual([]);
+    // Returned once, by the ledger; the settling step does not return it again.
+    expect(calls.returnPayment).toEqual(dryRun ? [] : [[f.charge, account, "unexplained"]]);
+    expect(await rows()).toHaveLength(dryRun ? 0 : 2);
   });
 
   test("runs each fee refund through the transaction wrapper", async () => {
@@ -428,5 +465,113 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     );
 
     expect(wrapped).toBe(1);
+  });
+});
+
+describeWithDb("reconciliation transactions on a real pool", () => {
+  let pool: Pool;
+
+  beforeAll(() => {
+    pool = new Pool({ connectionString: process.env.DATABASE_URL_DIRECT ?? connectionString, max: 1 });
+  });
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  test("poolTransaction commits, rolls back on a throw, and releases its client", async () => {
+    const tx = poolTransaction(pool);
+    await tx((c) => c.query("CREATE TEMP TABLE reconcile_committed (x int)"));
+    await expect(
+      tx(async (c) => {
+        await c.query("CREATE TEMP TABLE reconcile_rolled_back (x int)");
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    const { rows } = await pool.query(
+      `SELECT to_regclass('pg_temp.reconcile_committed') IS NOT NULL AS committed,
+              to_regclass('pg_temp.reconcile_rolled_back') IS NOT NULL AS rolled_back`,
+    );
+    expect(rows[0]).toEqual({ committed: true, rolled_back: false });
+    expect(pool.idleCount).toBe(pool.totalCount);
+    await pool.query("DROP TABLE reconcile_committed");
+  });
+
+  test("a dry run on a pool keeps nothing and moves no money", async () => {
+    // The ledger is append-only, so a dry run that wrongly committed would leave
+    // rows on the shared test database for good: this pool turns COMMIT into
+    // ROLLBACK and counts it.
+    const dryPool = new Pool({ connectionString: process.env.DATABASE_URL_DIRECT ?? connectionString, max: 1 });
+    let commits = 0;
+    const connect = dryPool.connect.bind(dryPool) as () => Promise<PoolClient>;
+    dryPool.connect = (async () => {
+      const client = await connect();
+      const query = client.query.bind(client) as (text: string, values?: unknown[]) => Promise<unknown>;
+      client.query = ((text: string, values?: unknown[]) => {
+        if (text === "COMMIT") {
+          commits += 1;
+          return query("ROLLBACK");
+        }
+        return query(text, values);
+      }) as never;
+      return client;
+    }) as never;
+
+    // Committed, so the dry run's own connection sees it; removed again below.
+    const orgId = `org-${crypto.randomUUID()}`;
+    const account = `acct_${crypto.randomUUID().slice(0, 12)}`;
+    await pool.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Org', $1, NOW())`, [orgId]);
+    await pool.query(`INSERT INTO org_profile (organization_id, legal_entity_name, stripe_account_id) VALUES ($1, 'Hotel BV', $2)`, [
+      orgId,
+      account,
+    ]);
+    try {
+      const period = periodFor("2031-03"); // a month no other data reaches
+      const fee: FeeLike = {
+        id: `fee_${crypto.randomUUID()}`,
+        amount: 1080,
+        currency: "eur",
+        created: Math.floor(period.from.getTime() / 1000) + 86_400,
+        account,
+        charge: `ch_${crypto.randomUUID()}`,
+      };
+      const moved: unknown[] = [];
+      const ledger: LedgerDeps = {
+        db: dryPool,
+        // A payment nothing explains: the ledger returns it while recording the fee.
+        chargeInfo: async () => ({ paymentIntentId: `pi_${crypto.randomUUID()}`, metadata: {}, amount: 25_000, amountRefunded: 0 }),
+        returnPayment: async (...args) => {
+          moved.push(["returnPayment", ...args]);
+          return { refundId: "re_real" };
+        },
+        audit: async (entry) => void moved.push(["audit", entry]),
+        report: (error) => void moved.push(["report", error]),
+      };
+      const stripe: StripeLedgerSource = {
+        async *listBalanceTransactions() {
+          yield { type: "application_fee", source: fee.id, amount: fee.amount, created: fee.created };
+        },
+        retrieveFee: async () => fee,
+        retrieveFeeRefund: async (id) => {
+          throw new Error(`unexpected ${id}`);
+        },
+        listFeeRefunds: async () => [],
+      };
+
+      const result = await reconcile(period, { db: dryPool, stripe, ledger, dryRun: true, inTransaction: poolTransaction(dryPool) });
+
+      expect(result.status).toBe("succeeded");
+      expect(result.backfilled).toEqual([fee.id]);
+      expect(result.returned).toEqual([{ feeId: fee.id, chargeRef: fee.charge, gross: "1080", refundedGross: "0" }]);
+      expect(result.totals.returned).toEqual({ fees: 1, refunds: 0, gross: "1080" });
+      expect(moved).toEqual([]);
+      expect(commits).toBe(0);
+      const kept = await pool.query(`SELECT 1 FROM commission_entries WHERE stripe_application_fee_id = $1`, [fee.id]);
+      expect(kept.rows).toEqual([]);
+      expect(dryPool.idleCount).toBe(dryPool.totalCount);
+    } finally {
+      await dryPool.end();
+      await pool.query(`DELETE FROM org_profile WHERE organization_id = $1`, [orgId]);
+      await pool.query(`DELETE FROM "organization" WHERE id = $1`, [orgId]);
+    }
   });
 });
