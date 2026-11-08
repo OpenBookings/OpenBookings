@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { getOrgScopedDb } from "@openbookings/authz";
 import { roleAllows } from "@openbookings/authz/permissions";
 import { getBillingProfile } from "@openbookings/billing/profiles";
 import { countryNameOf } from "@openbookings/billing/render/document";
 import { EU_COUNTRY_CODES, vatTreatmentFor } from "@openbookings/billing/vat";
 import { getServerSession } from "@/lib/auth";
-import { billingScope, listInvoices, organizationReadiness, upcomingInvoice } from "@/lib/billing/queries";
+import { billingAccess } from "@/lib/billing/scope";
+import { listInvoices, organizationReadiness, upcomingInvoice } from "@/lib/billing/queries";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { BillingDetailsForm, type VatStatus } from "./_components/billing-details-form";
@@ -39,8 +39,8 @@ export default async function BillingPage() {
   if (!session) redirect("/login");
 
   // Access is decided here on every request, not by the layout.
-  const scoped = await getOrgScopedDb(session);
-  if (!scoped || !roleAllows(scoped.memberRole, { billing: ["read"] }, false)) {
+  const scope = await billingAccess(session, { billing: ["read"] });
+  if (!scope) {
     return (
       <Shell>
         <div className="px-4 lg:px-6">
@@ -54,8 +54,7 @@ export default async function BillingPage() {
     );
   }
 
-  const canUpdate = roleAllows(scoped.memberRole, { billing: ["update"] }, false);
-  const scope = billingScope(scoped);
+  const canUpdate = roleAllows(scope.memberRole, { billing: ["update"] }, false);
   const [profile, invoices, upcoming, properties] = await Promise.all([
     getBillingProfile(scope.db, scope.organizationId),
     listInvoices(scope),

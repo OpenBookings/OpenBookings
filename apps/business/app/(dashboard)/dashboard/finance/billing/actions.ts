@@ -1,12 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getOrgScopedDb } from "@openbookings/authz";
-import { roleAllows } from "@openbookings/authz/permissions";
 import { getBillingProfile } from "@openbookings/billing/profiles";
 import { getServerSession } from "@/lib/auth";
 import { billingDetailsSchema, runVatCheck, storeBillingDetails, type VatCheckOutcome } from "@/lib/billing/details";
-import { billingScope } from "@/lib/billing/queries";
+import { billingAccess } from "@/lib/billing/scope";
 
 export type BillingFormState = {
   ok: boolean;
@@ -27,10 +25,7 @@ const fail = (message: string, fieldErrors: Record<string, string> = {}): Billin
 
 /** The caller's organization, when their role may update billing. Checked on every call, never taken from the page. */
 async function updater() {
-  const session = await getServerSession();
-  const scoped = await getOrgScopedDb(session);
-  if (!scoped || !roleAllows(scoped.memberRole, { billing: ["update"] }, false)) return null;
-  return billingScope(scoped);
+  return billingAccess(await getServerSession(), { billing: ["update"] });
 }
 
 /**

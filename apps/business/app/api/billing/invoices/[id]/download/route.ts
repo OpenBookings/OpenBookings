@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { getOrgScopedDb } from "@openbookings/authz";
 import { createR2Store } from "@openbookings/billing/storage/r2";
 import { getServerSession } from "@/lib/auth";
 import { handleDownload } from "@/lib/billing/download";
-import { billingScope, findInvoiceFile } from "@/lib/billing/queries";
+import { findInvoiceFile } from "@/lib/billing/queries";
+import { billingAccess } from "@/lib/billing/scope";
 
 /**
  * Downloads one invoice file: a redirect to a five-minute signed link. The
@@ -14,11 +14,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const { id } = await ctx.params;
   return handleDownload(
     {
-      scope: async () => {
-        const session = await getServerSession();
-        const scoped = await getOrgScopedDb(session);
-        return scoped ? { ...billingScope(scoped), memberRole: scoped.memberRole } : null;
-      },
+      scope: async () => billingAccess(await getServerSession(), null), // handleDownload checks billing:read and answers 404
       find: findInvoiceFile,
       presign: (key, ttl, filename) => createR2Store(process.env).presign(key, ttl, filename),
     },
