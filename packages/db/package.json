@@ -11,11 +11,12 @@
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env.local drizzle-kit migrate",
     "db:migrate:ci": "bun scripts/migrate-ci.ts",
+    "db:apply-pending:ci": "bun scripts/apply-pending-ci.ts",
     "db:push": "bun --env-file=../../.env.local drizzle-kit push",
     "db:setup:ci": "bun scripts/apply-schema-ci.ts",
     "db:studio": "bun --env-file=../../.env.local drizzle-kit studio",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test --timeout 30000"
   },
   "dependencies": {
     "@openbookings/pricing": "workspace:*",

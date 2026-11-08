@@ -571,11 +571,11 @@ function AvailabilityCellView({
   active: boolean;
   staged: boolean;
 }) {
-  const level = availabilityLevel(cell.effective, cell.totalUnits);
+  const level = availabilityLevel(cell.left, cell.total);
   const soldOut = level === "sold_out";
   // Zero-capacity dates would divide by zero, and are sold out anyway.
   const fraction =
-    cell.totalUnits > 0 ? Math.min(1, cell.effective / cell.totalUnits) : 0;
+    cell.total > 0 ? Math.min(1, cell.left / cell.total) : 0;
 
   return (
     <button
@@ -588,7 +588,7 @@ function AvailabilityCellView({
       aria-label={`${room.name}, ${formatFullDate(cell.date)}: ${
         soldOut
           ? "sold out"
-          : `${cell.effective} of ${cell.totalUnits} available${
+          : `${cell.left} of ${cell.total} available${
               level === "low" ? ", running low" : ""
             }`
       }${cell.source === "override" ? ", set by hand" : ""}${
@@ -608,8 +608,8 @@ function AvailabilityCellView({
       ) : (
         <>
           <span className="text-sm leading-none tabular-nums">
-            <span className="font-semibold">{cell.effective}</span>
-            <span className="text-muted-foreground"> / {cell.totalUnits}</span>
+            <span className="font-semibold">{cell.left}</span>
+            <span className="text-muted-foreground"> / {cell.total}</span>
             {cell.source === "override" && (
               <span
                 className="ml-1 text-[10px] text-muted-foreground"

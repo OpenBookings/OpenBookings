@@ -17,14 +17,15 @@
  * leaves nothing behind and the cases cannot see each other. That matters more
  * than usual here: the branch is cloned from a database with real rows in it.
  *
- * Scope note: this covers what the SQL itself decides. The precedence rule —
- * `available_override ?? computed` — lives in `loadAriGrid`, not in the query;
- * the query only has to surface the column faithfully, which is asserted here.
+ * Scope note: this covers what the SQL itself decides. The rule —
+ * the host's number is the night's total, and bookings and holds come off it —
+ * lives in `buildAvailabilityCell`, not in the query; the query only has to
+ * surface the columns faithfully, which is asserted here.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import { applyPendingMigrations } from "../../_lib/pending-migrations";
-import { AVAILABILITY_SQL } from "./ari-query";
+import { AVAILABILITY_SQL, buildAvailabilityCell } from "./ari-query";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -56,6 +57,7 @@ interface AvailabilityRow {
   date: string;
   effective_total: number;
   booked: number;
+  held: number;
   blocked: number;
   available_override: number | null;
   note: string | null;
@@ -244,6 +246,34 @@ describeWithDb("AVAILABILITY_SQL", () => {
     expect(on(all, "2031-03-10").available_override).toBeNull();
   });
 
+  async function hold(checkIn: string, checkOut: string, units: number, expiresIn: string, status = "open") {
+    const intent = await db.query<{ id: string }>(
+      `INSERT INTO booking_intents
+         (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_amount)
+       VALUES ($1, $2, $3, $4, $5, now() + $6::interval, '{}'::jsonb, 100)
+       RETURNING id`,
+      [guestUserId, propertyId, checkIn, checkOut, status, expiresIn],
+    );
+    for (let i = 0; i < units; i += 1) {
+      await db.query(
+        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total)
+         VALUES ($1, $2, $3, 2, '[]'::jsonb, 100)`,
+        [intent.rows[0].id, roomId, ratePlanId],
+      );
+    }
+  }
+
+  test("counts open, unexpired holds per night, and nothing else", async () => {
+    await hold("2031-03-10", "2031-03-12", 2, "10 minutes");
+    await hold("2031-03-10", "2031-03-12", 1, "-1 minutes"); // expired
+    await hold("2031-03-10", "2031-03-12", 1, "10 minutes", "expired"); // not open
+    const all = await rows();
+    expect(on(all, "2031-03-09").held).toBe(0);
+    expect(on(all, "2031-03-10").held).toBe(2);
+    expect(on(all, "2031-03-11").held).toBe(2);
+    expect(on(all, "2031-03-12").held).toBe(0); // departure night
+  });
+
   test("counts a booking on its arrival night but not its departure night", async () => {
     // The half-open range: `d >= check_in AND d < check_out`. A guest arriving
     // the 10th and leaving the 12th occupies the 10th and 11th. Counting the
@@ -411,5 +441,43 @@ describeWithDb("AVAILABILITY_SQL", () => {
     expect(row.closure_id).not.toBeNull();
     expect(row.effective_total).toBe(5);
     expect(row.booked).toBe(2);
+  });
+});
+
+describe("buildAvailabilityCell", () => {
+  const row = {
+    date: "2031-03-10",
+    total_units: 5,
+    effective_total: 5,
+    booked: 0,
+    held: 0,
+    blocked: 0,
+    available_override: null as number | null,
+    note: null,
+    updated_by: null,
+    updated_by_name: null,
+    updated_at: null,
+  };
+
+  test("the host's number is the night total; bookings come off it", () => {
+    const cell = buildAvailabilityCell({ ...row, available_override: 8, booked: 3 }, null);
+    expect(cell.total).toBe(8);
+    expect(cell.left).toBe(5);
+    expect(cell.effective).toBe(5);
+    expect(cell.override).toBe(8);
+    expect(cell.source).toBe("override");
+  });
+
+  test("without a host number, blocked rooms come off the total, then booked and held", () => {
+    const cell = buildAvailabilityCell({ ...row, effective_total: 4, blocked: 1, booked: 1, held: 1 }, null);
+    expect(cell.total).toBe(3);
+    expect(cell.left).toBe(1);
+    expect(cell.effective).toBe(1);
+    expect(cell.held).toBe(1);
+    expect(cell.totalUnits).toBe(4);
+  });
+
+  test("never goes below zero", () => {
+    expect(buildAvailabilityCell({ ...row, available_override: 2, booked: 3, held: 1 }, null).left).toBe(0);
   });
 });

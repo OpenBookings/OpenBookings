@@ -17,6 +17,7 @@ import {
 } from "@openbookings/db/booking-lifecycle";
 import type { BookingAction } from "@openbookings/pricing";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
+import { sendBookingCancelled as sendCancellation } from "@openbookings/mailing/booking-send";
 import { actorFor, type ActAs } from "./actor";
 import { UUID_RE } from "./search";
 import { isStripeTestMode, requireSuperAdmin } from "./super-admin";
@@ -79,7 +80,11 @@ export async function adminPreviewRefund(bookingId: string, reservationIds: stri
 export async function adminCancelRooms(bookingId: string, as: ActAs, reservationIds: string[] | null) {
   requireSuperAdmin();
   if (badIds(bookingId, reservationIds)) return invalid;
-  return run(bookingId, as, (actor) => cancelRooms(deps, { bookingId, actor, reservationIds }));
+  return run(bookingId, as, async (actor) => {
+    const result = await cancelRooms(deps, { bookingId, actor, reservationIds });
+    if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
+    return result;
+  });
 }
 
 export async function adminMarkCheckedIn(bookingId: string, as: ActAs) {

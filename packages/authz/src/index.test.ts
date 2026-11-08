@@ -3,6 +3,8 @@ import {
   PROPERTY_EDIT_ACCESS_SQL,
   propertyReadAccessSql,
   getHostScopedDb,
+  getOrgScopedDb,
+  userCan,
   getThreadForParticipant,
   userOwnsProperty,
   userOwnsRatePlan,
@@ -254,5 +256,37 @@ describe("getThreadForParticipant — the host side needs current access", () =>
     // legacy ownership of an org-less row), not merely be the stamped host_id.
     expect(sql).toContain("p.id = t.property_id");
     expect(sql).toContain(propertyReadAccessSql("$2"));
+  });
+});
+
+describe("getOrgScopedDb org guard", () => {
+  test("refuses the demo organisation outside testing mode, before looking at membership", async () => {
+    let looked = false;
+    const db = await getOrgScopedDb(
+      { user: { id: "u1", account_type: "business" }, session: { activeOrganizationId: "demo-organisation" } },
+      { testing: false, queryOne: async () => ((looked = true), { role: "owner" } as never) },
+    );
+    expect(db).toBeNull();
+    expect(looked).toBe(false);
+  });
+});
+
+describe("demo organisation in testing mode", () => {
+  const session = { user: { id: "u1", account_type: "business" }, session: { activeOrganizationId: "demo-organisation" } };
+
+  test("getOrgScopedDb allows it when testing is on", async () => {
+    const db = await getOrgScopedDb(session, { testing: true, queryOne: async () => ({ role: "owner" }) as never });
+    expect(db?.organizationId).toBe("demo-organisation");
+  });
+
+  test("userCan binds the testing decision as the third parameter", async () => {
+    for (const testing of [true, false]) {
+      let values: unknown[] = [];
+      await userCan(session, "p1", "property:update" as never, {
+        testing,
+        queryOne: async (_sql: string, v?: unknown[]) => ((values = v ?? []), null) as never,
+      });
+      expect(values).toEqual(["p1", "u1", testing]);
+    }
   });
 });

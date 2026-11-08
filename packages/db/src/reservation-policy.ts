@@ -6,6 +6,22 @@ export type Queryable = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[] }>;
 };
 
+/**
+ * Scale the nights' tax to `total`, keeping their proportions. Each night is
+ * rounded down to the cent and the leftover goes on the first night (always
+ * stayed, as in `touristTaxByNight`), so no night goes negative and the nights
+ * add up to `total` exactly. No tax on any night: all of it on the first.
+ */
+function fitTouristTax<N extends { touristTax: number }>(nights: N[], total: number): N[] {
+  if (nights.length === 0) return nights;
+  const cents = nights.map((n) => Math.round(n.touristTax * 100));
+  const ruledCents = cents.reduce((sum, c) => sum + c, 0);
+  const totalCents = Math.round(total * 100);
+  const fitted = ruledCents === 0 ? cents.map(() => 0) : cents.map((c) => Math.floor((c * totalCents) / ruledCents));
+  fitted[0] += totalCents - fitted.reduce((sum, c) => sum + c, 0);
+  return nights.map((n, i) => ({ ...n, touristTax: fitted[i] / 100 }));
+}
+
 type ReservationRow = {
   reservation_id: string;
   check_in_date: string;
@@ -26,10 +42,16 @@ const DAY = 86_400_000;
  * Confirm a paid booking and fix the cancellation policy each room was booked
  * under (Annex B B.1.3: a later tier change never touches an existing booking).
  *
- * The code that turns a Stripe payment into a booking calls this; until that
- * exists, the seed does. `nightPrices` is the price per night the guest was
+ * `convertIntentToBooking` calls this when a payment succeeds; so does the
+ * seed. `nightPrices` is the price per night the guest was
  * charged, per reservation id; a reservation without an entry is valued at its
  * flat `price_per_night`.
+ *
+ * `touristTax` is the tax the guest was charged, per reservation id. Without
+ * it the tax comes from the property's rules as they are now; with it the
+ * reservation keeps the charged amount (the rules may have changed since the
+ * guest paid), split over the nights as the rules would split it. Refunds read
+ * that split, so they never return more or less tax than was paid.
  *
  * Idempotent: a reservation that already has a snapshot is left alone, and
  * `confirmed_at` is only set once.
@@ -40,6 +62,7 @@ export async function confirmBookingPolicy(
     bookingId: string;
     confirmedAt: Date;
     nightPrices?: Record<string, { date: string; price: number }[]>;
+    touristTax?: Record<string, number>;
   },
 ): Promise<void> {
   const { rows } = await db.query(
@@ -73,7 +96,7 @@ export async function confirmBookingPolicy(
         price: Number(row.price_per_night),
       }));
 
-    const { snapshot, nights } = reservationPolicy({
+    const { snapshot, nights: ruled } = reservationPolicy({
       propertyTier: row.cancellation_tier,
       isRefundable: row.is_refundable,
       timeZone: row.timezone,
@@ -85,6 +108,8 @@ export async function confirmBookingPolicy(
       adults: row.adults,
       children: row.children,
     });
+    const charged = input.touristTax?.[row.reservation_id];
+    const nights = charged === undefined ? ruled : fitTouristTax(ruled, charged);
     const touristTax = nights.reduce((sum, n) => sum + Math.round(n.touristTax * 100), 0) / 100;
 
     await db.query(

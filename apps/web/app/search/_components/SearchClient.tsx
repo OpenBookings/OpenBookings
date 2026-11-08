@@ -15,8 +15,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { GlassBackdrop } from "@/components/GlassBackdrop";
 import type { Backdrop } from "@openbookings/images";
 import { useBackdrop } from "@openbookings/images/react";
-import { getDemoSearchResults, isDemoMode } from "@/lib/demo-data";
-import { mapSearchResult, nightsBetween, type HotelSearchApiResult } from "@/lib/search-results";
+import { mapSearchResult, type HotelSearchApiResult } from "@/lib/search-results";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Suspense } from "react";
 
@@ -28,6 +27,9 @@ const PRICE_MODES: { mode: PriceMode; label: string }[] = [
   { mode: "total", label: "Total" },
   { mode: "night", label: "Per night" },
 ];
+
+const hasDestination = (c: { destination: string; lat: string | null; lon: string | null }) =>
+  Boolean(c.destination.trim() || (c.lat && c.lon));
 
 function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   const backdrop = useBackdrop(backdrops);
@@ -65,25 +67,17 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   // Starts true when the URL holds a full search, so the first paint shows the
   // skeletons rather than a flash of "No hotels matched".
   const [isLoading, setIsLoading] = useState(
-    () => !isDemoMode() && Boolean(committed.lat && committed.lon && committed.checkIn && committed.checkOut),
+    () => Boolean(hasDestination(committed) && committed.checkIn && committed.checkOut),
   );
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Demo mode: any search shows the demo properties, no API call.
-  const demoHotels = useMemo(
-    () => (isDemoMode() ? getDemoSearchResults(nightsBetween(committed.checkIn, committed.checkOut)) : null),
-    [committed.checkIn, committed.checkOut],
-  );
-
   useEffect(() => {
-    if (isDemoMode()) return;
-
     const clearResults = () => {
       setHotels([]);
       setSearchError(null);
     };
 
-    if (!committed.lat || !committed.lon || !committed.checkIn || !committed.checkOut) {
+    if (!hasDestination(committed) || !committed.checkIn || !committed.checkOut) {
       clearResults();
       return;
     }
@@ -95,18 +89,23 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
       setSearchError(null);
       try {
         const params = new URLSearchParams({
-          lat: committed.lat as string,
-          lon: committed.lon as string,
           checkin: committed.checkIn,
           checkout: committed.checkOut,
           adults: String(committed.adults),
           children: String(committed.children),
           rooms: String(committed.rooms),
         });
+        // The server resolves the name; coordinates only if the URL carries them.
+        if (committed.destination) params.set("destination", committed.destination);
+        if (committed.lat && committed.lon) {
+          params.set("lat", committed.lat);
+          params.set("lon", committed.lon);
+        }
         const res = await fetch(`/api/query?${params.toString()}`, { signal: controller.signal });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          throw new Error(body?.error ?? `Search failed (${res.status})`);
+          // A 400 lists what was wrong in `errors`; other failures say it in `error`.
+          throw new Error(body?.errors?.[0] ?? body?.error ?? `Search failed (${res.status})`);
         }
         const results: HotelSearchApiResult[] = await res.json();
         setHotels(results.map(mapSearchResult));
@@ -121,14 +120,27 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
 
     runSearch();
     return () => controller.abort();
-  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms]);
+  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms, committed.destination]);
+
+  // The property page reads the stay under the same names as /api/query.
+  const stayQuery = useMemo(() => {
+    if (!committed.checkIn || !committed.checkOut) return "";
+    const params = new URLSearchParams({
+      checkin: committed.checkIn,
+      checkout: committed.checkOut,
+      adults: String(committed.adults),
+      children: String(committed.children),
+      rooms: String(committed.rooms),
+    });
+    return `?${params.toString()}`;
+  }, [committed]);
 
   const sortedHotels = useMemo(() => {
-    const list = [...(demoHotels ?? hotels)];
+    const list = [...hotels];
     if (sortBy === "price_asc") return list.sort((a, b) => comparePrice(a, b, "asc"));
     if (sortBy === "price_desc") return list.sort((a, b) => comparePrice(a, b, "desc"));
     return list;
-  }, [demoHotels, hotels, sortBy]);
+  }, [hotels, sortBy]);
 
   const isDirty =
     destination !== committed.destination ||
@@ -147,12 +159,6 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
     if (adults) params.set("adults", adults.toString());
     if (childCount) params.set("children", childCount.toString());
     if (rooms) params.set("rooms", rooms.toString());
-    // No destination geocoding UI yet — carry the previously resolved
-    // coordinates through so an unchanged destination keeps returning results.
-    if (destination === committed.destination && committed.lat && committed.lon) {
-      params.set("lat", committed.lat);
-      params.set("lon", committed.lon);
-    }
 
     const searchUrl = `/search?${params.toString()}`;
     router.push(searchUrl);
@@ -258,7 +264,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
             // A failed search already shows its error in the results bar.
             searchError ? null : (
               <p className="text-center font-sans text-sm text-white/60">
-                {committed.lat && committed.lon
+                {hasDestination(committed)
                   ? "No hotels matched your search. Try different dates or guest counts."
                   : "Search for a destination to see available hotels."}
               </p>
@@ -268,7 +274,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
               {sortedHotels.map((stay, index) => (
                 <li key={stay.id}>
                   {/* The first row is above the fold at every width. */}
-                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}`} priority={index < 3} />
+                  <StayPosterCard stay={stay} priceMode={priceMode} href={`/p/${stay.slug}${stayQuery}`} priority={index < 3} />
                 </li>
               ))}
             </ul>

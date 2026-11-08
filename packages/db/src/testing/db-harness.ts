@@ -3,10 +3,9 @@
  * business app's: a throwaway Neon branch in CI, every test inside a
  * transaction that is rolled back, skipped locally without DATABASE_URL.
  */
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe } from "bun:test";
 import type { Client } from "pg";
+import { PENDING_MIGRATIONS, pendingMigrationSql } from "./pending-migrations";
 
 export const connectionString = process.env.DATABASE_URL;
 
@@ -16,30 +15,26 @@ if (!connectionString && process.env.CI) {
 
 export const describeWithDb = connectionString ? describe : describe.skip;
 
-/**
- * Migrations this branch reads that may not be on the CI database yet. Idempotent.
- * Remove an entry once that migration is on the dev database.
- *
- * Each file replays inside every test's transaction, and even a no-op
- * `ALTER TABLE ... IF NOT EXISTS` holds an exclusive table lock until the
- * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
- * branch, so a long list here makes them queue behind each other's locks.
- *
- * Some of those locks are shared, not exclusive: a no-op `CREATE INDEX IF NOT
- * EXISTS` still takes a SHARE lock on its table. Two suites can both hold it,
- * then both insert into that table, and each waits on the other: a deadlock.
- * So the replay first takes one advisory lock, held until the test's
- * ROLLBACK, and suites take turns instead.
- */
-const PENDING: string[] = ["0032_booking_events.sql"];
-const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 const PENDING_MIGRATIONS_LOCK = 7_301_032;
 
+/**
+ * Replay the pending migrations (see pending-migrations.ts) inside the
+ * caller's transaction. A no-op in CI, which applies them once up front.
+ *
+ * Each file holds its table locks until the test's ROLLBACK: even a no-op
+ * `ALTER TABLE ... IF NOT EXISTS` takes an exclusive one, and a no-op
+ * `CREATE INDEX IF NOT EXISTS` a SHARE lock. Two suites can both hold the
+ * SHARE lock, then both insert into that table, and each waits on the
+ * other: a deadlock. So the replay first takes one advisory lock and suites
+ * take turns. That queueing is slow, which is why CI skips it: a test whose
+ * setup passes bun's 5-second hook limit keeps running in the background and
+ * spills its statements into the next test's transaction.
+ */
 export async function applyPendingMigrations(db: Client): Promise<void> {
-  if (PENDING.length === 0) return;
+  if (PENDING_MIGRATIONS.length === 0 || process.env.PENDING_MIGRATIONS_APPLIED === "1") return;
   await db.query("SELECT pg_advisory_xact_lock($1)", [PENDING_MIGRATIONS_LOCK]);
-  for (const file of PENDING) {
-    await db.query(readFileSync(fileURLToPath(new URL(file, DRIZZLE_DIR)), "utf8"));
+  for (const file of PENDING_MIGRATIONS) {
+    await db.query(pendingMigrationSql(file));
   }
 }
 

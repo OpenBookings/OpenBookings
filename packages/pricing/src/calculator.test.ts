@@ -183,3 +183,21 @@ describe("hasStayLengthDiscount", () => {
     expect(hasStayLengthDiscount([weekendSurcharge])).toBe(false);
   });
 });
+
+describe("resolveRoom priced_nights", () => {
+  test("a weekend-modified stay's nights sum to room_price to the cent", () => {
+    const r = resolveRoom(
+      {
+        base_occupancy: 2,
+        nights: nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 99.99),
+        modifiers: [weekendSurcharge, threeNightDiscount],
+      } as unknown as RoomRow,
+      { adults: 2, children: 0, arrivalDate: "2026-07-03" },
+      "2026-06-01",
+    );
+    expect(r.priced_nights.map((n) => n.date)).toEqual(["2026-07-03", "2026-07-04", "2026-07-05"]);
+    const sumCents = r.priced_nights.reduce((s, n) => s + Math.round(n.price * 100), 0);
+    expect(sumCents).toBe(Math.round(r.room_price * 100));
+    for (const n of r.priced_nights) expect(n.price).toBe(Math.round(n.price * 100) / 100);
+  });
+});

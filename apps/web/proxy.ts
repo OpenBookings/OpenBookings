@@ -41,7 +41,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Explicit allowlist of protected prefixes. /bookings is currently a dead
-  // stub; it is gated here so it is protected from the moment it goes live.
+  // Explicit allowlist of protected prefixes. /bookings holds the guest's
+  // booking pages, which are signed-in only.
   matcher: ["/bookings/:path*"],
 };

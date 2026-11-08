@@ -6,6 +6,7 @@ import { cancelRooms, previewRefund, type LifecycleResult } from '@openbookings/
 import * as Sentry from '@sentry/nextjs';
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
+import { sendCancellation } from '@/lib/mailing/booking-mail';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -50,6 +51,7 @@ export async function guestCancelRooms(bookingId: string, reservationIds: string
     },
     { bookingId, actor: { kind: 'guest', userId }, reservationIds },
   );
+  if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }

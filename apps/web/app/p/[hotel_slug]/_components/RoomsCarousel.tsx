@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   motion, AnimatePresence, MotionConfig, useAnimate, useReducedMotion,
   type Transition, type Variants,
@@ -12,6 +13,13 @@ import {
 import type { DbRoom, DbRatePlan } from "./constants";
 import { TIER_SUMMARIES } from "@openbookings/pricing";
 import { useRoomLikes } from "./use-room-likes";
+import { todayInZone } from "@/lib/booking/stay-input";
+import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, withStay, type Stay, type StayDraft } from "../_lib/stay";
+import { mergeQuote, pruneQuantities, type PricedRate, type QuoteState, type RoomView } from "../_lib/merge-quote";
+import { useStayQuote } from "../_lib/useStayQuote";
+import { StayPickers, type StayPanel } from "./StayPickers";
+import { BookSignIn } from "./BookSignIn";
+import { useBookNow } from "./useBookNow";
 
 type ViewMode = "images" | "rates";
 
@@ -57,16 +65,6 @@ const rowVariants: Variants = {
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-function formatDate(d: Date) {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-const BASE_DATE = new Date();
-const CHECK_IN  = formatDate(BASE_DATE);
-/** Placeholder stay until the date picker works: tonight plus this many nights. */
-const NIGHTS: number = 3;
-const CHECK_OUT = formatDate(new Date(BASE_DATE.getFullYear(), BASE_DATE.getMonth(), BASE_DATE.getDate() + NIGHTS));
-
 const EURO_WHOLE = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const EURO_CENTS = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
 
@@ -91,6 +89,15 @@ function tierOf(rate: DbRatePlan) {
 function cancellationLine(rate: DbRatePlan): string {
   return TIER_SUMMARIES[tierOf(rate)].split(". ")[0].replace(/\.$/, "");
 }
+
+/** The stay as the room panel's date and guest fields show it. */
+type StayFields = {
+  hasStay: boolean;
+  datesLabel: string;
+  guestsLabel: string;
+  onOpenDates: () => void;
+  onOpenGuests: () => void;
+};
 
 // Panel geometry, shared by the panel itself and the rates area beside it.
 const PANEL_WIDTH = "min(28%, 296px)";
@@ -152,6 +159,8 @@ function RoomNav({ activeIndex, count, onNavigate }: { activeIndex: number; coun
 
 type RoomPanelProps = {
   room: DbRoom;
+  view: RoomView;
+  stayFields: StayFields;
   viewMode: ViewMode;
   /** How far left the panel travels in rates mode, in px. */
   ratesOffset: number;
@@ -160,10 +169,14 @@ type RoomPanelProps = {
   onViewRates: () => void;
 };
 
-function RoomPanel({ room, viewMode, ratesOffset, liked, onToggleLike, onViewRates }: RoomPanelProps) {
-  const fromPrice = room.rate_plans.length > 0
-    ? Math.min(...room.rate_plans.map(nightlyPrice))
-    : null;
+function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onToggleLike, onViewRates }: RoomPanelProps) {
+  // With dates, the cheapest quoted night; without, today's prices as before.
+  const quoted = Object.values(view.rates).filter((r): r is PricedRate => r !== null);
+  const fromPrice = stayFields.hasStay
+    ? (quoted.length > 0 ? Math.min(...quoted.map((r) => r.perNight)) : null)
+    : room.rate_plans.length > 0
+      ? Math.min(...room.rate_plans.map(nightlyPrice))
+      : null;
 
   return (
     <motion.div
@@ -254,16 +267,18 @@ function RoomPanel({ room, viewMode, ratesOffset, liked, onToggleLike, onViewRat
             >
               <button
                 type="button"
+                onClick={stayFields.onOpenDates}
                 className="w-full h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 flex items-center justify-between text-sm text-white/90 hover:bg-white/10 transition-colors"
               >
-                <span>{CHECK_IN} – {CHECK_OUT}</span>
+                <span>{stayFields.datesLabel}</span>
                 <Calendar className="size-3.5 shrink-0 text-white/60" strokeWidth={1.8} />
               </button>
               <button
                 type="button"
+                onClick={stayFields.onOpenGuests}
                 className="w-full h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 flex items-center justify-between text-sm text-white/90 hover:bg-white/10 transition-colors"
               >
-                <span>2 Adults</span>
+                <span>{stayFields.guestsLabel}</span>
                 <Users className="size-3.5 shrink-0 text-white/60" strokeWidth={1.8} />
               </button>
             </motion.div>
@@ -278,15 +293,22 @@ function RoomPanel({ room, viewMode, ratesOffset, liked, onToggleLike, onViewRat
 
 type RateRowProps = {
   rate: DbRatePlan;
+  /** The stay's price, or null: today's price without a stay, "—" while a stay's price is missing. */
+  priced: PricedRate | null;
+  hasStay: boolean;
+  leftCaption: string | null;
+  /** False once the room's picks, all its rates together, reach the rooms left. */
+  canAdd: boolean;
   maxOccupancy: number | null;
   qty: number;
   onQtyChange: (v: number) => void;
   ratesConfirmed: boolean;
 };
 
-function RateRow({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
+function RateRow({ rate, priced, hasStay, leftCaption, canAdd, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
   const tier = tierOf(rate);
-  const saving = rate.saving_vs_refundable ?? 0;
+  const saving = priced ? priced.saving : hasStay ? 0 : (rate.saving_vs_refundable ?? 0);
+  const price = priced ? euro(priced.perNight) : hasStay ? "—" : euro(nightlyPrice(rate));
 
   return (
     <motion.div
@@ -334,12 +356,13 @@ function RateRow({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateR
       {/* What it costs */}
       <div className="flex items-center gap-5 shrink-0 ml-auto">
         <div className="text-right">
-          <p className="font-serif text-3xl text-white leading-none">{euro(nightlyPrice(rate))}</p>
+          <p className="font-serif text-3xl text-white leading-none">{price}</p>
           {/* Only claimed once the host has confirmed, on record, that their
               rates include tax. Until then the property cannot be booked. */}
           <p className="text-xs text-white/60 mt-1.5">
             {ratesConfirmed ? "per night · incl. tax & fees" : "per night · not bookable yet"}
           </p>
+          {leftCaption && <p className="text-xs text-white/60 mt-1.5">{leftCaption}</p>}
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -356,7 +379,8 @@ function RateRow({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateR
             type="button"
             aria-label={`One more ${rate.name}`}
             onClick={() => onQtyChange(qty + 1)}
-            className="size-8 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/90 hover:bg-white/15 transition-colors"
+            disabled={!canAdd}
+            className="size-8 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/90 hover:bg-white/15 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Plus className="size-3.5" strokeWidth={2} />
           </button>
@@ -372,6 +396,10 @@ function RateRow({ rate, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateR
 
 type RoomSlideProps = {
   room: DbRoom;
+  view: RoomView;
+  stayFields: StayFields;
+  /** The stay's prices could not be loaded. */
+  quoteFailed: boolean;
   imageIndex: number;
   onImageIndex: (i: number) => void;
   viewMode: ViewMode;
@@ -385,10 +413,13 @@ type RoomSlideProps = {
 };
 
 function RoomSlide({
-  room, imageIndex, onImageIndex, viewMode, ratesOffset, liked, onToggleLike, onViewRates,
+  room, view, stayFields, quoteFailed, imageIndex, onImageIndex, viewMode, ratesOffset, liked, onToggleLike, onViewRates,
   quantities, onQtyChange, ratesConfirmed,
 }: RoomSlideProps) {
   const imageCount = room.images.length;
+  const shownRates = room.rate_plans.filter((rate) => rate.id in view.rates);
+  const picked = room.rate_plans.reduce((n, rate) => n + (quantities[rate.id] ?? 0), 0);
+  const canAdd = view.unitsLeft === null || picked < view.unitsLeft;
 
   return (
     <>
@@ -478,6 +509,8 @@ function RoomSlide({
 
       <RoomPanel
         room={room}
+        view={view}
+        stayFields={stayFields}
         viewMode={viewMode}
         ratesOffset={ratesOffset}
         liked={liked}
@@ -513,16 +546,28 @@ function RoomSlide({
               No rates available for this room yet.
             </motion.p>
           )}
-          {room.rate_plans.map((rate) => (
+          {shownRates.map((rate) => (
             <RateRow
               key={rate.id}
               rate={rate}
+              priced={view.rates[rate.id] ?? null}
+              hasStay={stayFields.hasStay}
+              leftCaption={view.leftCaption}
+              canAdd={canAdd}
               maxOccupancy={room.max_occupancy}
               qty={quantities[rate.id] ?? 0}
               onQtyChange={(v) => onQtyChange(rate.id, v)}
               ratesConfirmed={ratesConfirmed}
             />
           ))}
+          {quoteFailed && (
+            <motion.p
+              variants={rowVariants}
+              className="self-center px-5 py-3 rounded-2xl bg-black/50 backdrop-blur-2xl border border-white/15 text-sm text-white/90"
+            >
+              We couldn&apos;t load prices for these dates.
+            </motion.p>
+          )}
         </motion.div>
       </div>
     </>
@@ -543,8 +588,27 @@ type Selection = {
 
 type RoomPicks = { roomIndex: number; picks: Selection[] };
 
-function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIndex }: {
+/** Book now's state, worked out by the section. */
+type BookBar = {
+  /** Per rate picked: who sleeps in those rooms, "2 adults". */
+  pickGuests: Record<string, string>;
+  /** One line in place of the total's caption, or null. */
+  message: string | null;
+  /** The total to show instead of the summed one, once the price changed. */
+  totalOverride: number | null;
+  /** Keeps the bar up with nothing picked, so its message is still seen. */
+  keepOpen: boolean;
+  canBook: boolean;
+  pending: boolean;
+  onBook: () => void;
+};
+
+function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ratesConfirmed, activeIndex }: {
+  /** The rooms shown, and their views in the same order. */
   rooms: DbRoom[];
+  views: RoomView[];
+  stay: Stay | null;
+  bookBar: BookBar;
   quantities: Record<string, number>;
   visible: boolean;
   ratesConfirmed: boolean;
@@ -554,6 +618,8 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
   // changes with the room on screen, so tags don't swap places.
   const groups: RoomPicks[] = [];
   let nightlyTotal = 0;
+  let quotedTotal = 0;
+  let allQuoted = true;
   rooms.forEach((room, roomIndex) => {
     const picks: Selection[] = [];
     for (const rate of room.rate_plans) {
@@ -561,10 +627,16 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
       if (qty === 0) continue;
       picks.push({ rateId: rate.id, roomIndex, roomName: room.name, rateName: rate.name, qty });
       nightlyTotal += qty * nightlyPrice(rate);
+      const priced = views[roomIndex]?.rates[rate.id];
+      if (priced) quotedTotal += qty * priced.total;
+      else allQuoted = false;
     }
     if (picks.length > 0) groups.push({ roomIndex, picks });
   });
-  const stayTotal = Math.round(nightlyTotal * NIGHTS * 100) / 100;
+  // With dates, the stay's quoted total; without, today's price for one night.
+  const shownTotal = bookBar.totalOverride ?? (stay
+    ? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null)
+    : Math.round(nightlyTotal * 100) / 100);
   const groupsKey = groups.map((g) => g.roomIndex).join(",");
 
   // If the tags overflow, the room on screen is scrolled into view.
@@ -617,7 +689,7 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
 
   return (
     <AnimatePresence>
-      {visible && groups.length > 0 && (
+      {visible && (groups.length > 0 || bookBar.keepOpen) && (
         <motion.div
           key="summary"
           initial={{ opacity: 0, y: BAR_DROP_PX }}
@@ -664,7 +736,10 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
                             <p className="text-sm font-semibold text-white leading-none">
                               <span className="tabular-nums">{p.qty}×</span> {p.roomName}
                             </p>
-                            <p className="text-[11px] text-white/60 mt-1 leading-none">{p.rateName}</p>
+                            <p className="text-[11px] text-white/60 mt-1 leading-none">
+                              {p.rateName}
+                              {bookBar.pickGuests[p.rateId] ? ` · ${bookBar.pickGuests[p.rateId]}` : ""}
+                            </p>
                           </div>
                         ))}
                       </motion.li>
@@ -675,22 +750,26 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
 
               {/* What the stay costs */}
               <div className="shrink-0 text-right" aria-live="polite">
-                <p className="text-base font-semibold text-white tabular-nums leading-none">{euro(stayTotal)}</p>
+                <p className="text-base font-semibold text-white tabular-nums leading-none">
+                  {shownTotal != null ? euro(shownTotal) : "—"}
+                </p>
                 <p className="text-[11px] text-white/60 mt-1 leading-none">
-                  {ratesConfirmed
-                    ? `total · ${NIGHTS} ${NIGHTS === 1 ? "night" : "nights"} · incl. tax`
-                    : "Not bookable yet"}
+                  {!ratesConfirmed
+                    ? "Not bookable yet"
+                    : bookBar.message ?? (stay
+                      ? `total · ${stay.nights} ${stay.nights === 1 ? "night" : "nights"} · incl. tax`
+                      : "Pick your dates")}
                 </p>
               </div>
             </div>
 
             {/* Inset 1px top and bottom: solid white reads taller than the dark
-                glass beside it, so this makes the two look the same height.
-                Not wired yet: checkout still reads one fixed, seeded booking
-                rather than a selection made here. */}
+                glass beside it, so this makes the two look the same height. */}
             <button
               type="button"
-              disabled={!ratesConfirmed}
+              onClick={bookBar.onBook}
+              disabled={!ratesConfirmed || shownTotal == null || !bookBar.canBook || bookBar.pending}
+              aria-busy={bookBar.pending || undefined}
               className="group shrink-0 my-px pl-6 pr-5 rounded-[15px] bg-white text-black text-sm font-semibold flex items-center gap-2 transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Book now
@@ -709,7 +788,13 @@ function SelectionSummary({ rooms, quantities, visible, ratesConfirmed, activeIn
 // ── Stage ─────────────────────────────────────────────────────────────────────
 
 type StageProps = {
+  /** The rooms shown, and their views in the same order. */
   rooms: DbRoom[];
+  views: RoomView[];
+  stay: Stay | null;
+  stayFields: StayFields;
+  quoteFailed: boolean;
+  bookBar: BookBar;
   activeIndex: number;
   dir: number;
   onNavigate: (i: number) => void;
@@ -723,7 +808,7 @@ type StageProps = {
 };
 
 function RoomsStage({
-  rooms, activeIndex, dir, onNavigate, viewMode, liked, onToggleLike, onViewRates,
+  rooms, views, stay, stayFields, quoteFailed, bookBar, activeIndex, dir, onNavigate, viewMode, liked, onToggleLike, onViewRates,
   quantities, onQtyChange, ratesConfirmed,
 }: StageProps) {
   const count = rooms.length;
@@ -809,6 +894,9 @@ function RoomsStage({
             >
               <RoomSlide
                 room={room}
+                view={views[activeIndex]}
+                stayFields={stayFields}
+                quoteFailed={quoteFailed}
                 imageIndex={imageIndex}
                 onImageIndex={setImageIndex}
                 viewMode={viewMode}
@@ -825,6 +913,9 @@ function RoomsStage({
 
           <SelectionSummary
             rooms={rooms}
+            views={views}
+            stay={stay}
+            bookBar={bookBar}
             quantities={quantities}
             visible={viewMode === "rates"}
             ratesConfirmed={ratesConfirmed}
@@ -840,21 +931,94 @@ function RoomsStage({
 
 // ── Section export ────────────────────────────────────────────────────────────
 
-export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; ratesConfirmed: boolean }) {
+type RoomsSectionProps = {
+  rooms: DbRoom[];
+  ratesConfirmed: boolean;
+  slug: string;
+  propertyId: string;
+  /** The property's zone: "today" for its dates. */
+  timeZone: string;
+};
+
+/**
+ * The page HTML is cached and the same for everyone, so the stay (dates and
+ * guests from the URL) is read in the browser. Reading the URL makes
+ * everything under the nearest Suspense boundary render in the browser; the
+ * fallback is the same section without a stay, so the cached HTML still
+ * carries the rooms at today's prices.
+ */
+export function RoomsSection(props: RoomsSectionProps) {
+  if (props.rooms.length === 0) return null;
+  return (
+    <Suspense fallback={<RoomsSectionView {...props} search={null} />}>
+      <RoomsSectionWithStay {...props} />
+    </Suspense>
+  );
+}
+
+function RoomsSectionWithStay(props: RoomsSectionProps) {
+  const search = useSearchParams();
+  return <RoomsSectionView {...props} search={search} />;
+}
+
+function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, search }: RoomsSectionProps & {
+  search: URLSearchParams | null;
+}) {
   const [viewMode, setViewMode] = useState<ViewMode>("images");
   const [activeIndex, setActiveIndex] = useState(0);
   const [dir, setDir] = useState(1);
   const likes = useRoomLikes(rooms.map((r) => r.id));
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+  const searchKey = search?.toString() ?? "";
+  const stay = useMemo(
+    () => (searchKey ? stayFromParams(new URLSearchParams(searchKey), todayInZone(timeZone)) : null),
+    [searchKey, timeZone],
+  );
+  // The guest picker's starting point: the stay's party, or the URL's without dates.
+  const party = useMemo(() => {
+    if (stay) return { adults: stay.adults, children: stay.children, rooms: stay.rooms };
+    return partyFromParams(new URLSearchParams(searchKey));
+  }, [stay, searchKey]);
+  const [reload, setReload] = useState(0);
+  const quote: QuoteState = useStayQuote(slug, stay, reload);
+  const allViews = useMemo(() => mergeQuote(rooms, quote), [rooms, quote]);
+
+  // Only rooms that can be booked for the stay are shown; the carousel counts those.
+  const shown = rooms.map((room, i) => ({ room, view: allViews[i] })).filter((r) => r.view.visible);
+  const shownRooms = shown.map((r) => r.room);
+  const shownViews = shown.map((r) => r.view);
+  const current = Math.min(activeIndex, Math.max(0, shownRooms.length - 1));
+
+  // Picks of rates the stay hides, or beyond the rooms left, are dropped.
+  const pruned = pruneQuantities(rooms, allViews, quantities);
+  if (pruned !== quantities) setQuantities(pruned);
+
+  // A picked stay goes into the URL, which re-runs the quote.
+  const router = useRouter();
+  const pathname = usePathname();
+  const [panel, setPanel] = useState<StayPanel>(null);
+  const closePanel = useCallback(() => setPanel(null), []);
+  const applyStay = useCallback((next: StayDraft) => {
+    router.replace(`${pathname}?${withStay(new URLSearchParams(searchKey), next).toString()}`, { scroll: false });
+  }, [router, pathname, searchKey]);
+
+  const stayFields: StayFields = {
+    hasStay: stay !== null,
+    datesLabel: stay ? stayDatesLabel(stay) : "Pick dates",
+    guestsLabel: guestsLabel(party),
+    onOpenDates: () => setPanel("dates"),
+    onOpenGuests: () => setPanel("guests"),
+  };
+
   const navigate = useCallback((i: number) => {
-    if (i === activeIndex || i < 0 || i >= rooms.length) return;
-    setDir(i > activeIndex ? 1 : -1);
+    if (i === current || i < 0 || i >= shownRooms.length) return;
+    setDir(i > current ? 1 : -1);
     setActiveIndex(i);
-  }, [activeIndex, rooms.length]);
+  }, [current, shownRooms.length]);
 
   const { toggle } = likes;
-  const activeRoomId = rooms[activeIndex]?.id;
+  const activeRoomId = shownRooms[current]?.id;
   const toggleLike = useCallback(() => {
     if (activeRoomId) toggle(activeRoomId);
   }, [activeRoomId, toggle]);
@@ -864,7 +1028,22 @@ export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; rates
     setQuantities((q) => ({ ...q, [id]: val }));
   }, []);
 
-  if (rooms.length === 0) return null;
+  const bookNow = useBookNow({
+    propertyId,
+    stay,
+    quote,
+    rooms,
+    views: allViews,
+    shownRooms,
+    shownViews,
+    quantities,
+    setQuantities,
+    searchKey,
+    pathname,
+    askDates: useCallback(() => setPanel("dates"), []),
+    showRates: useCallback(() => setViewMode("rates"), []),
+    reloadQuote: useCallback(() => setReload((n) => n + 1), []),
+  });
 
   return (
     // Guests who ask for reduced motion get the fades but none of the sliding.
@@ -901,19 +1080,40 @@ export function RoomsSection({ rooms, ratesConfirmed }: { rooms: DbRoom[]; rates
           </div>
         </div>
 
-        <RoomsStage
-          rooms={rooms}
-          activeIndex={activeIndex}
-          dir={dir}
-          onNavigate={navigate}
-          viewMode={viewMode}
-          liked={likes.liked}
-          onToggleLike={toggleLike}
-          onViewRates={() => setViewMode("rates")}
-          quantities={quantities}
-          onQtyChange={setQty}
-          ratesConfirmed={ratesConfirmed}
-        />
+        {shownRooms.length === 0 ? (
+          // Only once the quote is in: until then every room shows.
+          <div className="px-4 py-10 flex flex-col items-center gap-3">
+            <p className="text-sm text-white/90">Nothing is available for these dates.</p>
+            <button
+              type="button"
+              onClick={stayFields.onOpenDates}
+              className="h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
+            >
+              Change dates
+            </button>
+          </div>
+        ) : (
+          <RoomsStage
+            rooms={shownRooms}
+            views={shownViews}
+            stay={stay}
+            stayFields={stayFields}
+            quoteFailed={stay !== null && quote.status === "error"}
+            bookBar={bookNow.bar}
+            activeIndex={current}
+            dir={dir}
+            onNavigate={navigate}
+            viewMode={viewMode}
+            liked={likes.liked}
+            onToggleLike={toggleLike}
+            onViewRates={() => setViewMode("rates")}
+            quantities={quantities}
+            onQtyChange={setQty}
+            ratesConfirmed={ratesConfirmed}
+          />
+        )}
+        <StayPickers stay={stay} party={party} openPanel={panel} onClose={closePanel} onChange={applyStay} />
+        <BookSignIn callbackURL={bookNow.signInURL} onClose={bookNow.closeSignIn} />
         {likes.signIn}
       </section>
     </MotionConfig>

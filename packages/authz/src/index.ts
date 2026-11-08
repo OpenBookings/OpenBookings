@@ -1,4 +1,5 @@
 import { query as dbQuery, queryOne as dbQueryOne } from "@openbookings/db";
+import { DEMO_ORG_ID, isTestingMode } from "@openbookings/mode";
 import {
   PROPERTY_SCOPED_ROLES,
   roleAllows,
@@ -42,7 +43,7 @@ export type SessionLike = {
 type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
 
 /** Test seam: pass a fake queryOne. Defaults to the shared pg pool. */
-export type AuthzDeps = { queryOne?: QueryOneFn };
+export type AuthzDeps = { queryOne?: QueryOneFn; testing?: boolean };
 
 function ownerId(session: SessionLike | null | undefined): string | null {
   const id = session?.user?.id;
@@ -68,7 +69,7 @@ function sqlRoleList(names: readonly string[]): string {
  * role matches nothing (fails closed). Cross-org access fails structurally:
  * the member row must belong to THIS property's organization_id.
  */
-function propertyAccessSql(userParam: string, holders: readonly HostRole[]): string {
+function propertyAccessSql(userParam: string, holders: readonly HostRole[], testing: boolean = isTestingMode()): string {
   if (!/^\$\d+$/.test(userParam)) throw new Error(`Not a bind parameter: ${userParam}`);
   const orgWide = holders.filter((role) => !PROPERTY_SCOPED_ROLES.includes(role));
   const scoped = holders.filter((role) => PROPERTY_SCOPED_ROLES.includes(role));
@@ -81,12 +82,16 @@ function propertyAccessSql(userParam: string, holders: readonly HostRole[]): str
         ))`
       : null,
   ].filter(Boolean);
+  // A leftover demo membership grants nothing outside testing mode. The
+  // decision is a fixed literal from our own constant, never input, and adds
+  // no bind parameter, so every caller's parameter numbering stays as it was.
+  const demoExclusion = testing ? "" : `\n      AND m."organizationId" <> '${DEMO_ORG_ID}'`;
   return `(
   (p.organization_id IS NULL AND p.owner_user_id = ${userParam})
   OR EXISTS (
     SELECT 1 FROM "member" m
     WHERE m."organizationId" = p.organization_id
-      AND m."userId" = ${userParam}
+      AND m."userId" = ${userParam}${demoExclusion}
       AND (${clauses.length ? clauses.join("\n        OR ") : "FALSE"})
   )
 )`;
@@ -99,7 +104,10 @@ function propertyAccessSql(userParam: string, holders: readonly HostRole[]): str
  * edit access through this predicate — their narrower grants go through
  * userCan per action.
  */
-export const PROPERTY_EDIT_ACCESS_SQL = propertyAccessSql("$2", rolesWith({ property: ["update"] }));
+export function propertyEditAccessSql(testing: boolean = isTestingMode()): string {
+  return propertyAccessSql("$2", rolesWith({ property: ["update"] }), testing);
+}
+export const PROPERTY_EDIT_ACCESS_SQL = propertyEditAccessSql();
 
 /**
  * Read access to a property `p` for the user bound at `userParam` (e.g.
@@ -110,8 +118,8 @@ export const PROPERTY_EDIT_ACCESS_SQL = propertyAccessSql("$2", rolesWith({ prop
  * member only looks things up — the support panel's booking picker and the
  * support bot's host tools — never to authorize a write.
  */
-export function propertyReadAccessSql(userParam: string): string {
-  return propertyAccessSql(userParam, Object.keys(roles) as HostRole[]);
+export function propertyReadAccessSql(userParam: string, testing: boolean = isTestingMode()): string {
+  return propertyAccessSql(userParam, Object.keys(roles) as HostRole[], testing);
 }
 
 /**
@@ -143,8 +151,9 @@ export async function userCan(
             ) AS has_access
      FROM properties p
      LEFT JOIN "member" m ON m."organizationId" = p.organization_id AND m."userId" = $2
+       AND ($3::boolean OR m."organizationId" <> '${DEMO_ORG_ID}')
      WHERE p.id = $1`,
-    [propertyId, userId],
+    [propertyId, userId, deps.testing ?? isTestingMode()],
   );
   if (!row) return false;
   if (row.legacy_owner === true) return roleAllows("owner", permission, true);
@@ -161,7 +170,7 @@ export async function userOwnsProperty(
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
     `SELECT TRUE AS ok FROM properties p
-     WHERE p.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
+     WHERE p.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
     [propertyId, userId],
   );
   return row?.ok === true;
@@ -180,7 +189,7 @@ export async function userOwnsRoom(
     `SELECT TRUE AS ok
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE r.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
+     WHERE r.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
     [roomId, userId],
   );
   return row?.ok === true;
@@ -200,7 +209,7 @@ export async function userOwnsRatePlan(
      FROM rate_plans rp
      JOIN rooms r      ON r.id = rp.room_id
      JOIN properties p ON p.id = r.property_id
-     WHERE rp.id = $1 AND ${PROPERTY_EDIT_ACCESS_SQL}`,
+     WHERE rp.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
     [ratePlanId, userId],
   );
   return row?.ok === true;
@@ -318,6 +327,7 @@ export async function getOrgScopedDb(
   const orgId = session?.session?.activeOrganizationId;
   if (!userId || !orgId) return null;
   if (session?.user?.account_type !== "business") return null;
+  if (orgId === DEMO_ORG_ID && !(deps.testing ?? isTestingMode())) return null;
 
   const queryOne = deps.queryOne ?? dbQueryOne;
   const membership = await queryOne<{ role: string }>(

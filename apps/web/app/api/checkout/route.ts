@@ -1,13 +1,15 @@
 import * as Sentry from '@sentry/nextjs';
-import { createBookingCheckout } from '@openbookings/stripe';
+import { withTransaction } from '@openbookings/db';
+import { createBookingCheckout, expireBookingCheckout, retrieveBookingCheckout } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
 import {
   BookingNotFoundError,
   getBookingSummary,
-  recordTouristTax,
   totalCents,
   type BookingSummary,
 } from '@/app/checkout/_lib/booking';
+import { stayCents, toCents } from '@/app/checkout/_lib/booking-lines';
+import { openIntentSession, refusalFor } from '@/app/checkout/_lib/intent-session';
 import {
   checkoutErrorCopy,
   classifyStripeError,
@@ -17,7 +19,15 @@ import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
 import { getClientIP } from '@/lib/rateLimit';
 
 /**
- * Creates the Checkout Session backing the embedded checkout page.
+ * The Checkout Session backing the embedded checkout page, for one of the
+ * guest's own booking intents.
+ *
+ * POST /api/checkout { intentId, 'cf-turnstile-response' }
+ * → 200 { clientSecret, expiresAt }
+ * → 409 { error: { code: 'hold_expired' | 'already_paid' | 'oversold' } } when the intent can no longer be paid
+ *
+ * An intent has at most one payable session: one Stripe still has open is
+ * handed back rather than a second made beside it.
  *
  * `ui_mode: 'form'` returns a client secret instead of a hosted URL: the page
  * mounts Stripe's embedded form against it and confirms client-side, so the
@@ -29,13 +39,15 @@ import { getClientIP } from '@/lib/rateLimit';
  * so the guest cannot be shown a split that differs from what is charged.
  */
 
-/** Stripe rejects sessions expiring sooner than this or later than 24 hours. */
-const MIN_HOLD_MS = 30 * 60 * 1000;
-const MAX_HOLD_MS = 24 * 60 * 60 * 1000;
 /**
- * Shaves the round trip off both ends. Without it a 30-minute hold computed
- * here can reach Stripe at 29:59 and be rejected outright, which is a failure
- * that only shows up under latency.
+ * Stripe rejects sessions expiring sooner than this. The rooms are held for
+ * less (HOLD_MINUTES); the page's countdown, not the session, ends the hold,
+ * and a payment that lands after it is re-checked when it is confirmed.
+ */
+const MIN_HOLD_MS = 30 * 60 * 1000;
+/**
+ * Without it a 30-minute expiry computed here can reach Stripe at 29:59 and be
+ * rejected outright, which is a failure that only shows up under latency.
  */
 const HOLD_MARGIN_MS = 60 * 1000;
 
@@ -106,6 +118,15 @@ function assertChargeable(summary: BookingSummary): number {
   }
 
   const total = totalCents(summary.lines);
+  // The lines are rebuilt from the intent's rooms; the guest agreed to the
+  // intent's total. Should the two ever part, nothing is charged at all.
+  if (total !== toCents(summary.intentTotal)) {
+    throw new CheckoutError(
+      'booking_invalid',
+      `Lines total ${total} differs from the intent total ${toCents(summary.intentTotal)}`
+    );
+  }
+
   const minimum = MINIMUM_CHARGE[summary.currency.toLowerCase()] ?? 50;
   if (total < minimum) {
     throw new CheckoutError(
@@ -167,14 +188,9 @@ function resolvePaymentMethodConfiguration(): string | undefined {
   return process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim() || undefined;
 }
 
-/** Clamped into Stripe's accepted window so a bad `holdMinutes` can't 400. */
-function resolveExpiry(holdMinutes: number): number {
-  const requested = Number.isFinite(holdMinutes) ? holdMinutes * 60 * 1000 : 0;
-  const clamped = Math.min(
-    Math.max(requested, MIN_HOLD_MS + HOLD_MARGIN_MS),
-    MAX_HOLD_MS - HOLD_MARGIN_MS
-  );
-  return Math.floor((Date.now() + clamped) / 1000);
+/** As soon as Stripe allows, in unix seconds. */
+function resolveExpiry(): number {
+  return Math.floor((Date.now() + MIN_HOLD_MS + HOLD_MARGIN_MS) / 1000);
 }
 
 function failure(code: CheckoutErrorCode, status: number): Response {
@@ -198,11 +214,13 @@ export async function POST(request: Request) {
   // a session row stamped for the other portal, must not be able to start a
   // guest checkout.
   const authSession = await getServerSession().catch(() => null);
-  if (!authSession?.user?.email) {
+  if (!authSession?.user?.email || !authSession.user.id) {
     return failure('auth_required', 401);
   }
+  const user = { id: authSession.user.id, email: authSession.user.email };
 
   const payload = (await request.json().catch(() => null)) as {
+    intentId?: unknown;
     'cf-turnstile-response'?: unknown;
   } | null;
 
@@ -214,8 +232,10 @@ export async function POST(request: Request) {
     return failure('verification_failed', 403);
   }
 
-  // Declared outside the try only so the catch can name the booking in Sentry;
-  // the read itself is inside it, because a booking that cannot be loaded is a
+  const intentId = typeof payload?.intentId === 'string' ? payload.intentId : '';
+
+  // Declared outside the try only so the catch can name the intent in Sentry;
+  // the read itself is inside it, because an intent that cannot be loaded is a
   // checkout failure like any other rather than an unhandled 500.
   let summary: BookingSummary | null = null;
 
@@ -223,11 +243,18 @@ export async function POST(request: Request) {
   try {
     // Bound to a const as well: the line-item map below is a closure, and TS
     // will not keep a narrowing on the outer `let` across one.
-    const booking = (summary = await getBookingSummary());
+    const booking = (summary = await getBookingSummary({ intentId, userId: user.id }));
+
+    // Checked again under a lock in `openIntentSession`; this early answer
+    // spares Stripe a request for an intent that is plainly over.
+    // A paid or oversold intent was charged, so it is never answered as a
+    // lapsed hold ("nothing has been charged").
+    if (booking.status !== 'open') return failure(refusalFor(booking.status), 409);
+    if (booking.holdExpiresAt.getTime() <= Date.now()) return failure('hold_expired', 409);
+
     const total = assertChargeable(booking);
     const appUrl = resolveAppUrl();
     const paymentMethodConfiguration = resolvePaymentMethodConfiguration();
-    const expiresAt = resolveExpiry(booking.holdMinutes);
 
     // A direct charge: created on the host's own Stripe account, with
     // OpenBookings' commission as an application fee. Without an account
@@ -236,42 +263,59 @@ export async function POST(request: Request) {
     if (!booking.stripeAccountId) {
       throw new CheckoutError('config_error', 'Property has no connected Stripe account');
     }
+    const stripeAccountId = booking.stripeAccountId;
 
-    await recordTouristTax(booking);
-
-    session = await createBookingCheckout({
-      stripeAccountId: booking.stripeAccountId,
-      // Prefilled and locked: the booking is attached to this account, so the
-      // confirmation must not go somewhere the account holder cannot see.
-      customerEmail: authSession.user.email,
-      currency: booking.currency,
-      // Every priced row goes across as its own line item; the page renders
-      // the breakdown back out of the session, so the guest cannot be shown a
-      // split that differs from what is charged.
-      lines: booking.lines.map((line) => ({
-        name: line.name,
-        description: `${booking.propertyName} — ${booking.roomName}`,
-        unitAmountCents: line.unitAmountCents,
-        quantity: line.quantity,
-      })),
-      applicationFeeCents: booking.platformFeeCents,
-      paymentMethodConfiguration,
-      metadata: {
-        bookingIntentId: booking.intentId,
-        roomId: booking.roomId,
-        // Who the booking belongs to. `customer_details` still carries what
-        // the guest types into the form; this is the account the webhook
-        // should attach the booking to.
-        //
-        // TODO: once booking intents are real rows, the intent should carry
-        // this and the webhook should read it from there.
-        userId: authSession.user.id,
-        totalCents: String(total),
-        touristTaxCents: String(Math.round(booking.touristTax.total * 100)),
+    const opened = await openIntentSession(
+      {
+        transaction: (fn) => withTransaction((client) => fn(client)),
+        retrieve: async (sessionId, accountId) => {
+          const existing = await retrieveBookingCheckout(sessionId, accountId);
+          return { status: existing.status, clientSecret: existing.client_secret, expiresAt: existing.expires_at };
+        },
+        create: () =>
+          createBookingCheckout({
+            stripeAccountId,
+            // Prefilled and locked: the booking is attached to this account, so
+            // the confirmation must not go somewhere the account holder cannot see.
+            customerEmail: user.email,
+            currency: booking.currency,
+            // Every priced row goes across as its own line item; the page
+            // renders the breakdown back out of the session, so the guest
+            // cannot be shown a split that differs from what is charged.
+            lines: booking.lines.map((line) => ({
+              name: line.name,
+              description: booking.propertyName,
+              unitAmountCents: line.unitAmountCents,
+              quantity: line.quantity,
+            })),
+            applicationFeeCents: booking.platformFeeCents,
+            paymentMethodConfiguration,
+            // The intent carries the guest, the rooms and the prices; the
+            // webhook finds it through `bookingIntentId`.
+            metadata: {
+              bookingIntentId: booking.intentId,
+              totalCents: String(total),
+              touristTaxCents: String(total - stayCents(booking.lines)),
+            },
+            returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+            expiresAt: resolveExpiry(),
+          }),
+        expire: expireBookingCheckout,
+        // An orphaned session that could not be expired: logged, not the
+        // guest's problem. It lapses on its own, and a payment on an intent
+        // that is not open is caught when it is confirmed.
+        report: (err, { sessionId }) => {
+          Sentry.captureException(err, { tags: { area: 'checkout' }, extra: { intentId: booking.intentId, sessionId } });
+          console.error('[checkout] expire orphaned session', sessionId, err instanceof Error ? err.message : String(err));
+        },
       },
-      returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
-      expiresAt,
-    });
+      { intentId: booking.intentId, userId: user.id, accountId: stripeAccountId, now: new Date() }
+    );
+    if (!opened.ok) {
+      if (opened.code === 'not_found') throw new BookingNotFoundError(booking.intentId, 'gone while opening its session');
+      return failure(opened.code, 409);
+    }
+    session = opened.session;
 
     // Typed as nullable, and a session without one is unusable client-side.
     // Better to fail here than to hand the browser `null` and watch Stripe.js
@@ -289,27 +333,33 @@ export async function POST(request: Request) {
 
     // The full error only ever goes here. `config_error` and `booking_invalid`
     // both mean the deployment is broken rather than the guest, so they are
-    // worth a louder level than a transient Stripe blip.
+    // worth a louder level than a transient Stripe blip. A link to an intent
+    // that is not the guest's is neither: it is answered as not found.
     Sentry.captureException(err, {
       level:
         err instanceof CheckoutError && err.level
           ? err.level
-          : code === 'config_error' || code === 'booking_invalid'
-            ? 'fatal'
-            : 'error',
+          : err instanceof BookingNotFoundError
+            ? 'warning'
+            : code === 'config_error' || code === 'booking_invalid'
+              ? 'fatal'
+              : 'error',
       tags: { area: 'checkout', checkoutErrorCode: code },
-      extra: { intentId: summary?.intentId, roomId: summary?.roomId },
+      extra: { intentId: summary?.intentId ?? intentId },
     });
     console.error('[checkout]', code, err instanceof Error ? err.message : String(err));
 
-    return failure(code, code === 'rate_limited' ? 503 : 500);
+    return failure(
+      code,
+      err instanceof BookingNotFoundError ? 404 : code === 'rate_limited' ? 503 : 500
+    );
   }
 
   return Response.json(
     {
       clientSecret: session.clientSecret,
-      // Drives the client-side hold countdown, so a guest who leaves the tab
-      // open is told the hold lapsed instead of being declined by Stripe.
+      // When Stripe stops taking payment. The page's countdown runs to the
+      // intent's own, earlier, hold instead.
       expiresAt: session.expiresAt,
     },
     // A cached client secret would hand a second guest someone else's session.

@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth"; // from packages/auth
 import { getOnboardingFacts, wizardInProgress } from "@/lib/onboarding-facts";
 import { onboardingWallDecision } from "@/lib/onboarding-wall";
 import { headers } from "next/headers";
+import { withTransaction } from "@openbookings/db";
+import { ensureDemoMembership, isTestingMode } from "@openbookings/demo";
 
 const env = readAuthEnv();
 const secureCookies = env.AUTH_BASE_URL.startsWith("https://");
@@ -58,9 +60,19 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   if (path.startsWith("/dashboard") || path.startsWith("/onboarding")) {
     const facts = await getOnboardingFacts(session.user.id);
+    // Testing mode: every host owns the demo organisation. Added here, ahead
+    // of the wall, so a host's first dashboard request already counts it.
+    // Outside testing mode a leftover membership has no effect.
+    const testing = isTestingMode();
+    let ensured = false;
+    if (testing && !facts.hasDemoMembership) {
+      await withTransaction((tx) => ensureDemoMembership(tx, { userId: session.user.id }));
+      ensured = true;
+    }
     const decision = onboardingWallDecision({
       path,
       hasCompletedOrg: facts.hasCompletedOrg,
+      hasDemoMembership: testing && (facts.hasDemoMembership || ensured),
       wizardInProgress: wizardInProgress(facts),
     });
     if (decision !== "allow") {

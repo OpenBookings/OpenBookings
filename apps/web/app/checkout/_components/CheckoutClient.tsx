@@ -1,16 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { loadStripe } from '@stripe/stripe-js';
 import type { Appearance, Stripe } from '@stripe/stripe-js';
 import { CheckoutFormProvider } from '@stripe/react-stripe-js/checkout';
 import { buildAppearance } from '../_lib/appearance';
 import {
+  CHECKOUT_ALREADY_PAID,
+  CHECKOUT_EXPIRED,
+  CHECKOUT_OVERSOLD,
   checkoutErrorCopy,
   STRIPE_JS_UNAVAILABLE,
   type CheckoutErrorCopy,
 } from '../_lib/errors';
+import { useHoldCountdown } from '../_lib/useHoldCountdown';
 import { useTurnstileToken } from '../_lib/useTurnstileToken';
 import { Backdrop } from './Backdrop';
 import { CheckoutGate, type GateViewer } from './CheckoutGate';
@@ -51,6 +55,17 @@ export type CheckoutClientProps = TripSummaryProps & {
   viewer: GateViewer | null;
   /** The host's connected account the booking is charged on. Empty = not chargeable. */
   stripeAccountId: string;
+  /** The booking intent being paid for. */
+  intentId: string;
+  /** Unix milliseconds the intent stops holding its rooms. */
+  holdExpiresAt: number;
+  /**
+   * `paid` and `oversold` were charged (oversold is refunded in full);
+   * `expired` covers any other intent that can no longer be paid.
+   */
+  intentStatus: 'open' | 'expired' | 'paid' | 'oversold';
+  /** The property page: where a lapsed hold starts again. */
+  backHref: string;
 };
 
 function Shell({ heroImageUrl, children }: { heroImageUrl: string; children: React.ReactNode }) {
@@ -91,16 +106,18 @@ function NoticeShell({
   heroImageUrl,
   copy,
   onRetry,
+  backHref,
 }: {
   heroImageUrl: string;
   copy: CheckoutErrorCopy;
   onRetry?: () => void;
+  backHref?: string;
 }) {
   return (
     <>
       <Backdrop heroImageUrl={heroImageUrl} />
       <main className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6">
-        <CheckoutNotice copy={copy} onRetry={onRetry} />
+        <CheckoutNotice copy={copy} onRetry={onRetry} backHref={backHref} />
       </main>
     </>
   );
@@ -120,6 +137,15 @@ export function CheckoutClient(props: CheckoutClientProps) {
     return <NoticeShell heroImageUrl={props.heroImageUrl} copy={checkoutErrorCopy('config_error')} />;
   }
 
+  // Already paid: the form must never come back for a second payment.
+  if (props.intentStatus === 'paid') {
+    return <NoticeShell heroImageUrl={props.heroImageUrl} copy={CHECKOUT_ALREADY_PAID} backHref={props.backHref} />;
+  }
+  // Charged, then refunded: neither "nothing has been charged" nor a way to pay again.
+  if (props.intentStatus === 'oversold') {
+    return <NoticeShell heroImageUrl={props.heroImageUrl} copy={CHECKOUT_OVERSOLD} backHref={props.backHref} />;
+  }
+
   if (!appearance) {
     // Server render and the first client frame. The gate lives inside
     // `CheckoutSession`, which has not mounted yet, so this paints the
@@ -133,9 +159,29 @@ export function CheckoutClient(props: CheckoutClientProps) {
 
 const NO_OP_SUBSCRIBE = () => () => {};
 
+/**
+ * Checkout for a visitor who is not signed in. The intent is the guest's own,
+ * so nothing of it can be shown yet: only the gate's sign-in step, which comes
+ * back to this checkout. No Turnstile token is minted before sign-in, so its
+ * slot stays empty.
+ */
+export function CheckoutSignIn({ intentId }: { intentId: string }) {
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
+  return (
+    <CheckoutGate
+      heroImageUrl=""
+      visible
+      viewer={null}
+      verified={false}
+      turnstileRef={turnstileRef}
+      callbackURL={`/checkout/${intentId}`}
+    />
+  );
+}
+
 type SessionState =
   | { status: 'loading' }
-  | { status: 'ready'; clientSecret: string; expiresAt: number | null }
+  | { status: 'ready'; clientSecret: string }
   | { status: 'error'; copy: CheckoutErrorCopy };
 
 /** A failure already translated into guest-facing copy. */
@@ -147,9 +193,10 @@ class SessionFailure extends Error {
 }
 
 async function createSession(
+  intentId: string,
   turnstileToken: string,
   signal: AbortSignal
-): Promise<{ clientSecret: string; expiresAt: number | null }> {
+): Promise<{ clientSecret: string }> {
   let response: Response;
   try {
     response = await fetch('/api/checkout', {
@@ -158,7 +205,7 @@ async function createSession(
       // The route verifies this with Cloudflare before it touches Stripe. The
       // field name is Turnstile's own, so the server reads it exactly as the
       // canonical siteverify flow expects.
-      body: JSON.stringify({ 'cf-turnstile-response': turnstileToken }),
+      body: JSON.stringify({ intentId, 'cf-turnstile-response': turnstileToken }),
       signal,
     });
   } catch (err) {
@@ -172,7 +219,6 @@ async function createSession(
   // <") would otherwise be shown to the guest as if it explained something.
   const body = (await response.json().catch(() => null)) as {
     clientSecret?: unknown;
-    expiresAt?: unknown;
     error?: { code?: unknown };
   } | null;
 
@@ -188,10 +234,7 @@ async function createSession(
     throw new SessionFailure(checkoutErrorCopy('session_failed'));
   }
 
-  return {
-    clientSecret: body.clientSecret,
-    expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : null,
-  };
+  return { clientSecret: body.clientSecret };
 }
 
 /**
@@ -223,6 +266,11 @@ function CheckoutSession({
     chargeable ? { status: 'loading' } : { status: 'error', copy: checkoutErrorCopy('config_error') }
   );
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  const holdLapsed = useHoldCountdown({
+    intentId: props.intentId,
+    holdExpiresAt: props.holdExpiresAt,
+    open: props.intentStatus === 'open',
+  });
   const {
     token: turnstileToken,
     failed: turnstileFailed,
@@ -249,7 +297,7 @@ function CheckoutSession({
     // No token yet — either the gate is still waiting on sign-in, or the
     // challenge is running. Neither is a failure; the effect re-runs as soon
     // as a token is issued.
-    if (!turnstileToken || !chargeable) return;
+    if (!turnstileToken || !chargeable || holdLapsed) return;
 
     // Aborting on cleanup keeps React's development double-mount from leaving
     // a second, orphaned Session holding the same room.
@@ -260,7 +308,7 @@ function CheckoutSession({
     // delay the request that puts the room on hold.
     Promise.all([
       loadStripeOrFail(props.stripeAccountId),
-      createSession(turnstileToken, controller.signal),
+      createSession(props.intentId, turnstileToken, controller.signal),
     ])
       .then(([loaded, session]) => {
         if (!active) return;
@@ -281,15 +329,21 @@ function CheckoutSession({
       active = false;
       controller.abort();
     };
-  }, [attempt, turnstileToken, props.stripeAccountId, chargeable]);
+  }, [attempt, turnstileToken, props.stripeAccountId, props.intentId, chargeable, holdLapsed]);
 
   // A blocked script or a failed challenge is terminal for this attempt: there
   // is no token to send, so the Session is never requested. Derived rather than
   // pushed into state from an effect — it is a fact about this render, and
   // mirroring it into `state` would only add a cascading re-render.
-  const resolved: SessionState = turnstileFailed
-    ? { status: 'error', copy: checkoutErrorCopy('verification_failed') }
-    : state;
+  //
+  // A lapsed hold ends the attempt too, unless the form is already up: then
+  // the payment card shows it in place, beside the summary.
+  const resolved: SessionState =
+    holdLapsed && state.status !== 'ready'
+      ? { status: 'error', copy: CHECKOUT_EXPIRED }
+      : turnstileFailed
+        ? { status: 'error', copy: checkoutErrorCopy('verification_failed') }
+        : state;
 
   // The gate is up for exactly as long as the Session is still being prepared.
   //
@@ -317,6 +371,7 @@ function CheckoutSession({
       viewer={props.viewer}
       verified={turnstileToken !== null}
       turnstileRef={turnstileRef}
+      callbackURL={`/checkout/${props.intentId}`}
     />
   );
 
@@ -324,7 +379,7 @@ function CheckoutSession({
     return (
       <>
         {gate}
-        <NoticeShell heroImageUrl={props.heroImageUrl} copy={resolved.copy} onRetry={retry} />
+        <NoticeShell heroImageUrl={props.heroImageUrl} copy={resolved.copy} onRetry={retry} backHref={props.backHref} />
       </>
     );
   }
@@ -353,8 +408,9 @@ function CheckoutSession({
         <TripSummary {...props} />
         <PaymentCardBoundary onRestart={retry}>
           <PaymentCard
-            expiresAt={resolved.expiresAt}
+            holdLapsed={holdLapsed}
             onRestart={retry}
+            backHref={props.backHref}
             requiresNonRefundableConsent={props.requiresNonRefundableConsent}
           />
         </PaymentCardBoundary>

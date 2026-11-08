@@ -131,10 +131,13 @@ export const properties = pgTable(
     subtitle: varchar("subtitle", { length: 255 }),
     /** Better Auth user id of the owning host. NULL = unowned; authz fails closed. */
     ownerUserId: text("owner_user_id"),
+    /** Generated demo hotel (0033). Invisible everywhere unless testing mode is on. */
+    isDemo: boolean("is_demo").notNull().default(false),
   },
   (table) => [
     index("idx_hotels_is_active").on(table.isActive),
     index("idx_hotels_owner_user_id").on(table.ownerUserId),
+    index("idx_properties_is_demo").on(table.isDemo).where(sql`${table.isDemo}`),
   ],
 );
 
@@ -593,6 +596,15 @@ export const bookings = pgTable(
     status: bookingStatusEnum("status").notNull().default("pending"),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
     bookingFeeAmount: bigint("booking_fee_amount", { mode: "number" }).notNull().default(0),
+    // The exact money split, in cents (0035). `totalAmount` is whole euros; read these instead.
+    /** The stay, VAT included. Commission is taken on this. */
+    roomsTotalCents: bigint("rooms_total_cents", { mode: "number" }).notNull().default(0),
+    /** Passed through to the host for their town; never commissioned. */
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull().default(0),
+    /** What the guest paid: rooms plus tourist tax. */
+    totalCents: bigint("total_cents", { mode: "number" }).notNull().default(0),
+    /** OpenBookings' application fee. 0 while the fee is switched off. */
+    commissionCents: bigint("commission_cents", { mode: "number" }).notNull().default(0),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
     guestNotes: text("guest_notes"),
@@ -718,6 +730,73 @@ export const transactions = pgTable(
     index("idx_transactions_provider_payment").on(table.providerPaymentId),
     index("idx_transactions_status").on(table.status),
     index("idx_transactions_type").on(table.type),
+  ],
+);
+
+/** A 15-minute hold on rooms while the guest pays (0033). Becomes a booking once paid. */
+export const bookingIntents = pgTable(
+  "booking_intents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull(),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id),
+    checkInDate: date("check_in_date").notNull(),
+    checkOutDate: date("check_out_date").notNull(),
+    status: text("status").notNull().default("open"),
+    holdExpiresAt: timestamp("hold_expires_at", { withTimezone: true }).notNull(),
+    snapshot: jsonb("snapshot").notNull(),
+    totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+    touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    commissionCents: integer("commission_cents").notNull().default(0),
+    currency: char("currency", { length: 3 }).notNull().default("EUR"),
+    paymentProvider: text("payment_provider").notNull().default("stripe"),
+    paymentSessionId: text("payment_session_id").unique(),
+    paymentAccountId: text("payment_account_id"),
+    paymentReference: text("payment_reference"),
+    refundReference: text("refund_reference"),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_booking_intents_status_hold").on(table.status, table.holdExpiresAt),
+    index("idx_booking_intents_user_status").on(table.userId, table.status),
+    index("idx_booking_intents_property").on(table.propertyId),
+    check(
+      "booking_intents_status",
+      sql`${table.status} IN ('open','paid','expired','failed','abandoned','oversold','refunded_oversold')`,
+    ),
+    check("booking_intents_dates", sql`${table.checkOutDate} > ${table.checkInDate}`),
+  ],
+);
+
+export const bookingIntentRooms = pgTable(
+  "booking_intent_rooms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    intentId: uuid("intent_id")
+      .notNull()
+      .references(() => bookingIntents.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id),
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id),
+    adults: integer("adults").notNull(),
+    children: integer("children").notNull().default(0),
+    nights: jsonb("nights").notNull(),
+    stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
+    touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("idx_booking_intent_rooms_room").on(table.roomId),
+    index("idx_booking_intent_rooms_intent").on(table.intentId),
+    check("booking_intent_rooms_nights_array", sql`jsonb_typeof(${table.nights}) = 'array'`),
   ],
 );
 

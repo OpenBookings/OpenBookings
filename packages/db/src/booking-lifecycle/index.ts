@@ -86,8 +86,16 @@ function eventData(a: Actor, data: Record<string, unknown>): Record<string, unkn
 
 export type RefundStatus = "pending" | "succeeded" | "failed";
 
+/** What a cancelRooms call itself cancelled, so a caller can tell the guest exactly that. */
+export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+
 export type LifecycleResult =
-  | { ok: true; refunds: { reservationId: string | null; amount: number; status: RefundStatus }[] }
+  | {
+      ok: true;
+      refunds: { reservationId: string | null; amount: number; status: RefundStatus }[];
+      /** Set by cancelRooms only. */
+      cancelled?: CancelledRooms;
+    }
   | { ok: false; error: PlanError };
 
 const defaultDb: LifecycleDb = {
@@ -109,6 +117,7 @@ type BookingRow = {
   timezone: string;
   check_in_time: string | null;
   check_in_until: string | null;
+  /** The account the booking was charged on (its intent's), else the property's. */
   stripe_account_id: string | null;
   organization_id: string | null;
 };
@@ -154,7 +163,16 @@ export async function loadBookingState(
             b.check_out_date::text AS check_out_date, b.confirmed_at,
             b.departed_early_on::text AS departed_early_on, b.stripe_payment_intent_id,
             p.timezone, to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
-            to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.stripe_account_id, p.organization_id
+            to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.organization_id,
+            -- Refund on the account that was charged: the intent's, when the booking came
+            -- from one (demo hotels charge on the platform's fallback and have none of their
+            -- own; a host may switch accounts later), else the property's.
+            COALESCE(
+              (SELECT i.payment_account_id FROM booking_intents i
+                WHERE i.booking_id = b.id AND i.payment_account_id IS NOT NULL
+                ORDER BY i.created_at DESC LIMIT 1),
+              p.stripe_account_id
+            ) AS stripe_account_id
      FROM bookings b JOIN properties p ON p.id = b.hotel_id
      WHERE b.id = $1 ${lock ? "FOR UPDATE OF b" : ""}`,
     [bookingId],
@@ -449,10 +467,19 @@ export async function cancelRooms(
         refundTotal: plan.totalCents / 100,
       }),
     });
-    return { ok: true as const, booking: state.booking, rows };
+    return {
+      ok: true as const,
+      booking: state.booking,
+      rows,
+      cancelled: { reservationIds, refundTotal: plan.totalCents / 100, cancelsBooking: plan.cancelsBooking },
+    };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
+  return {
+    ok: true,
+    refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor),
+    cancelled: done.cancelled,
+  };
 }
 
 async function setStatus(

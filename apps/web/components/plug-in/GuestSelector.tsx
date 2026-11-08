@@ -4,6 +4,7 @@ import * as React from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PlusIcon, MinusIcon } from "lucide-react"
+import { clampGuests } from "./guest-limits"
 
 interface GuestSelectorProps {
   /**
@@ -26,23 +27,23 @@ function parseGuestValue(
   defaultRooms: number
 ) {
   if (!value) {
-    return { adults: defaultAdults, children: defaultChildren, rooms: defaultRooms }
+    return clampGuests({ adults: defaultAdults, children: defaultChildren, rooms: defaultRooms })
   }
 
   const matches = value.match(/\d+/g)
   if (!matches || matches.length === 0) {
-    return { adults: defaultAdults, children: defaultChildren, rooms: defaultRooms }
+    return clampGuests({ adults: defaultAdults, children: defaultChildren, rooms: defaultRooms })
   }
 
   const adults = Number.parseInt(matches[0] ?? "", 10)
   const children = matches[1] != null ? Number.parseInt(matches[1], 10) : defaultChildren
   const rooms = matches[2] != null ? Number.parseInt(matches[2], 10) : defaultRooms
 
-  return {
+  return clampGuests({
     adults: Number.isFinite(adults) ? adults : defaultAdults,
     children: Number.isFinite(children) ? children : defaultChildren,
     rooms: Number.isFinite(rooms) ? rooms : defaultRooms,
-  }
+  })
 }
 
 export function GuestSelector({
@@ -61,33 +62,16 @@ export function GuestSelector({
     onChange(adults, children, rooms)
   }, [adults, children, rooms, onChange])
 
-  const updateAdults = (delta: number) => {
-    setGuests((prev) => {
-      const nextAdults = Math.max(0, prev.adults + delta)
-      const nextChildren = prev.children
-      const nextRooms = prev.rooms
-      return { adults: nextAdults, children: nextChildren, rooms: nextRooms }
-    })
-  }
+  // Every change goes through clampGuests, so the party is always one search accepts.
+  const updateAdults = (delta: number) =>
+    setGuests((prev) => clampGuests({ ...prev, adults: prev.adults + delta }))
 
-  const updateChildren = (delta: number) => {
-    setGuests((prev) => {
-      const nextChildren = Math.max(0, prev.children + delta)
-      const nextAdults = prev.adults
-      const nextRooms = prev.rooms
-      return { adults: nextAdults, children: nextChildren, rooms: nextRooms }
-    })
-  }
+  const updateChildren = (delta: number) =>
+    setGuests((prev) => clampGuests({ ...prev, children: prev.children + delta }))
 
-  const updateRooms = (delta: number) => {
-    setGuests((prev) => {
-      const nextRooms = Math.max(1, prev.rooms + delta)
-      const nextAdults = prev.adults
-      const nextChildren = prev.children
-      return { adults: nextAdults, children: nextChildren, rooms: nextRooms }
-    })
-  }
-  
+  const updateRooms = (delta: number) =>
+    setGuests((prev) => clampGuests({ ...prev, rooms: prev.rooms + delta }))
+
   return (
     <div className="w-full min-w-0 max-w-lg mx-auto space-y-3 text-white">
       <CardTitle className="pl-4 text-xl font-semibold tracking-[0.16em] text-white/60 uppercase">

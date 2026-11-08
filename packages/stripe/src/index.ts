@@ -6,18 +6,35 @@ export { getPaymentSummary, type PaymentSummary, type PaymentRefund } from './pa
 export {
   buildBookingCheckoutParams,
   createBookingCheckout,
+  expireBookingCheckout,
   retrieveBookingCheckout,
   type BookingCheckoutInput,
   type BookingCheckoutLine,
 } from './payments/checkout';
 export { applicationFeeCents, bookingSplitCents, commissionRefundDue } from './payments/fees';
 export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
-export { constructWebhookEvent, type StripeEvent } from './webhooks';
+export {
+  constructWebhookEvent,
+  handleWebhookRequest,
+  type StripeEvent,
+  type WebhookRequestOptions,
+} from './webhooks';
+export {
+  handleStripeEvent,
+  readPaidCheckout,
+  type PaidCheckout,
+  type StripeAuditEntry,
+  type StripeEventDeps,
+  type StripeEventLike,
+  type StripeEventOutcome,
+} from './events';
 export {
   buildRefundParams,
+  findRefundByMetadata,
   findRefundForRow,
   isDefiniteRefundFailure,
   matchRefund,
+  matchRefundByMetadata,
   refundPayment,
   type RefundPaymentInput,
 } from './payments/refund';

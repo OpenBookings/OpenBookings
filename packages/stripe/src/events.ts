@@ -1,13 +1,21 @@
 /**
- * What this app does with each Stripe event.
+ * What OpenBookings does with each Stripe event.
  *
- * Kept apart from the route so it can be tested without Stripe or a database:
- * the route verifies the signature and supplies the real dependencies.
+ * Kept apart from the routes so it can be tested without Stripe or a database:
+ * each route verifies the signature and supplies the real dependencies.
+ *
+ * Two apps take Stripe events, each on its own endpoint and secret: `web`
+ * handles the guest's booking checkouts, `business` the host's account and the
+ * money that moves after a booking (refunds, disputes). Each passes only the
+ * handlers it owns; an event without one is ignored and left unrecorded, so it
+ * never reads as done to the app that does handle it. The two endpoints must
+ * still subscribe to different event types: both record handled events in the
+ * same `processed_events` table under the same id.
  *
  * Bookings are direct charges, so payment events arrive for the host's
  * connected account (`event.account`). Handlers here record and notify. The
- * only money they ever move is OpenBookings' own commission, back to the host
- * — never the host's funds.
+ * money they move is OpenBookings' own commission, back to the host, and a
+ * guest's payment that could not become a booking, back to the guest.
  */
 
 export type StripeEventLike = {
@@ -38,13 +46,13 @@ export type StripeEventDeps = {
   isProcessed: (eventId: string) => Promise<boolean>;
   /** Called only after the event's work has succeeded. */
   markProcessed: (eventId: string) => Promise<void>;
-  /** Returns every commission refund that now exists on the charge. */
-  refundCommission: (
+  /** Returns every commission refund that now exists on the charge. Wired together with `audit`. */
+  refundCommission?: (
     chargeId: string,
     stripeAccountId: string,
     options: { lostDisputeAmount?: number },
   ) => Promise<Array<{ id: string; amount: number }>>;
-  audit: (entry: StripeAuditEntry) => Promise<void>;
+  audit?: (entry: StripeAuditEntry) => Promise<void>;
   /** A host's payout bank account was added, changed or removed. */
   onExternalAccountChanged?: (input: {
     /** The Stripe event id, so the record and the email happen once per event. */
@@ -54,12 +62,50 @@ export type StripeEventDeps = {
     last4: string | null;
     country: string | null;
   }) => Promise<void>;
+  /**
+   * A booking checkout was paid: turn its intent into a booking, or refund it.
+   * Amounts are Stripe's, in cents, as charged on the host's account.
+   */
+  onCheckoutPaid?: (input: PaidCheckout & { eventId: string }) => Promise<void>;
+  /** A delayed payment (a bank debit) failed: the intent stops holding its rooms. */
+  onCheckoutFailed?: (input: { intentId: string; sessionId: string }) => Promise<void>;
+  /** The checkout lapsed unpaid: the intent's hold ends now. */
+  onCheckoutExpired?: (input: { intentId: string; sessionId: string }) => Promise<void>;
 };
 
 export type StripeEventOutcome = "handled" | "ignored" | "duplicate";
 
+/** A booking checkout Stripe has taken the money for. Amounts in cents, as charged. */
+export type PaidCheckout = {
+  intentId: string;
+  sessionId: string;
+  paymentIntentId: string;
+  stripeAccountId: string;
+  amountCents: number;
+};
+
 type Obj = Record<string, unknown>;
 const str = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+const asObj = (value: unknown): Obj => (value && typeof value === "object" ? (value as Obj) : {});
+
+/**
+ * The paid booking checkout in a Checkout Session, or null when it is not one:
+ * not a booking intent's, or not paid yet (a bank payment still clearing).
+ *
+ * The webhook and the payment reconciliation both decide through this, so a
+ * session Stripe reports as paid is confirmed the same way whichever finds it.
+ * `payment_intent` may be an id or, when retrieved expanded, the object.
+ */
+export function readPaidCheckout(session: unknown, stripeAccountId: string | null): PaidCheckout | null {
+  const object = asObj(session);
+  const intentId = str(asObj(object.metadata).bookingIntentId);
+  const sessionId = str(object.id);
+  const paymentIntentId = str(object.payment_intent) ?? str(asObj(object.payment_intent).id);
+  const amountCents = object.amount_total;
+  if (!stripeAccountId || !intentId || !sessionId || !paymentIntentId) return null;
+  if (object.payment_status !== "paid" || typeof amountCents !== "number") return null;
+  return { intentId, sessionId, paymentIntentId, stripeAccountId, amountCents };
+}
 
 export async function handleStripeEvent(
   event: StripeEventLike,
@@ -112,28 +158,46 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
         });
     }
 
-    // checkout.session.completed is deliberately not handled yet: creating
-    // the booking from it comes with real booking intents. Leaving it
-    // unmarked means those events can still be replayed once it is.
+    // `completed` while still `unpaid` is a bank payment that has not cleared:
+    // async_payment_succeeded (or _failed) follows, and decides.
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
+      const confirm = deps.onCheckoutPaid;
+      const paid = readPaidCheckout(object, account);
+      if (!confirm || !paid) return null;
+      return () => confirm({ eventId: event.id, ...paid });
+    }
+
+    case "checkout.session.async_payment_failed":
+    case "checkout.session.expired": {
+      const release = event.type === "checkout.session.expired" ? deps.onCheckoutExpired : deps.onCheckoutFailed;
+      const intentId = str(asObj(object.metadata).bookingIntentId);
+      const sessionId = str(object.id);
+      if (!release || !intentId || !sessionId) return null;
+      return () => release({ intentId, sessionId });
+    }
 
     case "charge.refunded": {
+      const commission = commissionDeps(deps);
       const chargeId = str(object.id);
-      if (!account || !chargeId) return null;
-      return () => returnCommission(deps, chargeId, account, {});
+      if (!commission || !account || !chargeId) return null;
+      return () => returnCommission(commission, chargeId, account, {});
     }
 
     case "charge.dispute.closed": {
       const chargeId = str(object.charge);
       const amount = typeof object.amount === "number" ? object.amount : 0;
-      if (!account || !chargeId || object.status !== "lost" || amount <= 0) return null;
-      return () => returnCommission(deps, chargeId, account, { lostDisputeAmount: amount });
+      const commission = commissionDeps(deps);
+      if (!commission || !account || !chargeId || object.status !== "lost" || amount <= 0) return null;
+      return () => returnCommission(commission, chargeId, account, { lostDisputeAmount: amount });
     }
 
     case "charge.dispute.created": {
+      const audit = deps.audit;
       const disputeId = str(object.id);
-      if (!account || !disputeId) return null;
+      if (!audit || !account || !disputeId) return null;
       return () =>
-        deps.audit({
+        audit({
           action: "payment.dispute-opened",
           stripeAccountId: account,
           dedupeKey: disputeId,
@@ -158,8 +222,16 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
  * Not just the one this event caused: if an earlier attempt moved the money
  * and failed before writing its record, this is where that record gets made.
  */
+type CommissionDeps = Required<Pick<StripeEventDeps, "refundCommission" | "audit">>;
+
+/** Both, or neither: a commission refund that moved money must be recorded. */
+function commissionDeps(deps: StripeEventDeps): CommissionDeps | null {
+  const { refundCommission, audit } = deps;
+  return refundCommission && audit ? { refundCommission, audit } : null;
+}
+
 async function returnCommission(
-  deps: StripeEventDeps,
+  deps: CommissionDeps,
   chargeId: string,
   stripeAccountId: string,
   options: { lostDisputeAmount?: number },

@@ -34,6 +34,7 @@ export function renderInvitation(invite: HostInvitationEmail, appUrl: string = A
       ctaUrl: invitationUrl(invite.invitationId, appUrl),
       ctaLabel: "View invitation →",
       footnote: `The invitation is open until ${expiry.format(invite.expiresAt)}. Not expecting it? Ignore this email and nothing happens.`,
+      details: "",
     },
     { htmlSlots: ["headline", "body", "footnote"] },
   );

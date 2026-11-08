@@ -1,10 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { cached, propertyPageKey } from "@openbookings/cache";
 import { getDb, sql } from "@openbookings/db";
+import { isTestingMode } from "@openbookings/demo";
 import type { TouristTaxRule } from "@openbookings/pricing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import { buildHeroQuery, type HotelPageData } from "./hotel-page-query";
-import { getDemoHotelPage, isDemoMode } from "./demo-data";
 
 /** One `amenities` row as the page groups it; the grouping itself stays in the page. */
 export interface RawAmenity {
@@ -69,11 +69,12 @@ export const PROPERTY_PAGE_TTL = {
  * text. Every other field is text, uuid, an integer, a text array or already
  * JSON, and reaches the caller unchanged.
  *
- * An inactive or unknown slug yields no hero row, and therefore no row at all.
+ * An inactive or unknown slug, or a demo hotel with testing off, yields no
+ * hero row, and therefore no row at all.
  */
 function buildPropertyPageQuery(slug: string) {
   return sql`
-  WITH hero AS (${buildHeroQuery(slug)})
+  WITH hero AS (${buildHeroQuery(slug, isTestingMode())})
   SELECT
     hero.*,
     (
@@ -167,12 +168,12 @@ async function loadFromDb(slug: string): Promise<PropertyPagePayload | null> {
  * cannot. Returns `null` for a slug with no active property.
  */
 export function getHotelPage(slug: string): Promise<PropertyPagePayload | null> {
-  if (isDemoMode()) {
-    const demo = getDemoHotelPage(slug);
-    if (demo) return Promise.resolve(demo);
-  }
   return cached<PropertyPagePayload>(propertyPageKey(slug), () => loadFromDb(slug), {
     ...PROPERTY_PAGE_TTL,
+    // Testing mode shows demo hotels, which a normal deploy must not serve
+    // from a shared cache, and demo data changes under the tester's hands.
+    // So testing mode neither reads nor writes the cache.
+    ...(isTestingMode() ? { redis: null } : {}),
     onError: (error, ctx) =>
       Sentry.captureException(error, {
         tags: { area: "cache", surface: "property-page", phase: ctx.phase },

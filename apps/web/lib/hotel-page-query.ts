@@ -40,6 +40,11 @@ export interface HotelPageData {
   check_in_time: string;
   check_in_until: string | null;
   check_out_time: string;
+  /**
+   * IANA zone the property's dates are in. Optional: pages cached before it
+   * was added do not have it.
+   */
+  timezone?: string;
 
   // Everything below is `property_content`, and is NULL until the host fills it in.
   overview_headline: string | null;
@@ -90,8 +95,10 @@ export interface HotelPageData {
  *
  * `property_content` is LEFT JOINed and the highlights are a correlated
  * aggregate, so this is still one round trip.
+ *
+ * Demo hotels (`is_demo`) are found only when `testing` is on.
  */
-export function buildHeroQuery(slug: string) {
+export function buildHeroQuery(slug: string, testing: boolean) {
   return sql`
   SELECT
     p.id,
@@ -107,6 +114,7 @@ export function buildHeroQuery(slug: string) {
     to_char(p.check_in_time,  'HH24:MI') AS check_in_time,
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
+    p.timezone,
     p.cancellation_tier,
     c.overview_headline, c.overview_description, c.location_about,
     c.cta_headline, c.cta_body, c.fine_print,
@@ -159,6 +167,7 @@ export function buildHeroQuery(slug: string) {
   FROM properties p
   LEFT JOIN property_content c ON c.property_id = p.id
   WHERE p.slug = ${slug} AND p.is_active
+    AND (NOT p.is_demo OR ${testing})
   LIMIT 1
 `;
 }

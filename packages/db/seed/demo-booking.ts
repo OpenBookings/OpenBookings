@@ -1,19 +1,14 @@
 /**
- * Seeds the one booking the checkout page pays for.
- *
- * There is no booking-intent table yet, so checkout reads a real `bookings`
- * row in `pending` — which is exactly what a pre-payment intent is. The ids are
- * fixed rather than generated so the script is idempotent and so
- * `apps/web/app/checkout/_lib/booking.ts` can look the row up by constant.
+ * Seeds the demo rate plan and the confirmed two-room booking used by the
+ * cancellation screens, plus the inclusive-rates confirmation for the demo
+ * property's organisation.
  *
  * It attaches to whatever property is already in the database rather than
- * inventing one, so the summary renders the real Terme Di Saturnia rows,
+ * inventing one, so the bookings show the real Terme Di Saturnia rows,
  * images and check-in times.
  *
- * Money: every `bigint` amount in this schema is in MAJOR units (whole euros) —
- * `rate_plans.bar` of 109 is €109, and the pricing calculator rounds to two
- * decimals rather than working in minor units. Stripe is handed minor units,
- * converted at the edge in `_lib/booking.ts`.
+ * Money: every `bigint` amount in this schema is in MAJOR units (whole euros),
+ * so `rate_plans.bar` of 109 is €109.
  *
  * Run: bun --env-file=../../.env.local packages/db/seed/demo-booking.ts
  */
@@ -21,8 +16,6 @@
 import { Pool } from "pg";
 import { confirmBookingPolicy } from "../src/reservation-policy";
 
-/** The demo booking, and the rate plan it is priced against. */
-export const DEMO_BOOKING_ID = "b0000000-0000-4000-8000-000000000001";
 /**
  * A confirmed two-room booking for the cancellation screens (guest booking
  * page, host reservations). Reset to a fresh confirmed state on every run,
@@ -34,28 +27,19 @@ const DEMO_CONFIRMED_RESERVATION_IDS = [
   "b0000000-0000-4000-8000-000000000013",
 ];
 const CONFIRMED_NIGHTS = 3;
-const DEMO_RESERVATION_ID = "b0000000-0000-4000-8000-000000000002";
+/** The rate plan the confirmed booking is priced against. */
 const DEMO_RATE_PLAN_ID = "b0000000-0000-4000-8000-000000000003";
 
 /** "Deluxe" at Terme Di Saturnia — the only room with a room photo and a description. */
 const ROOM_ID = "533f72ed-2519-4684-b456-46adb557aba5";
 const PROPERTY_ID = "44ca5796-7461-488a-9613-be71394d4aaa";
 
-const CHECK_IN = "2026-10-14";
-const CHECK_OUT = "2026-10-17";
-const NIGHTS = 3;
 const ADULTS = 2;
-const CHILDREN = 0;
 
 /** Tax-inclusive, like every rate: this is what the guest pays per night. */
 const PRICE_PER_NIGHT = 185;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
 const BOOKING_FEE_RATE = 0.045;
-
-const ROOM_SUBTOTAL = PRICE_PER_NIGHT * NIGHTS;
-const BOOKING_FEE = Math.round(ROOM_SUBTOTAL * BOOKING_FEE_RATE);
-/** Grand total, fee included. `booking_fee_amount` names a component of it. */
-const TOTAL = ROOM_SUBTOTAL + BOOKING_FEE;
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -66,7 +50,7 @@ async function main() {
       `select id from "user" order by "createdAt" limit 1`,
     );
     const userId = users[0]?.id;
-    if (!userId) throw new Error("No user rows to attach the demo booking to");
+    if (!userId) throw new Error("No user rows to attach the demo bookings to");
 
     const { rowCount: roomExists } = await pool.query(
       `select 1 from rooms where id = $1 and property_id = $2`,
@@ -88,46 +72,6 @@ async function main() {
          booking_fee_rate = excluded.booking_fee_rate,
          updated_at = now()`,
       [DEMO_RATE_PLAN_ID, ROOM_ID, PRICE_PER_NIGHT, BOOKING_FEE_RATE.toFixed(4)],
-    );
-
-    // `pending` is the pre-payment state: the room is held, nothing is charged.
-    await pool.query(
-      `insert into bookings
-         (id, hotel_id, user_id, check_in_date, check_out_date, status,
-          total_amount, booking_fee_amount, currency)
-       values ($1, $2, $3, $4, $5, 'pending', $6, $7, 'EUR')
-       on conflict (id) do update set
-         check_in_date = excluded.check_in_date,
-         check_out_date = excluded.check_out_date,
-         status = excluded.status,
-         total_amount = excluded.total_amount,
-         booking_fee_amount = excluded.booking_fee_amount,
-         updated_at = now()`,
-      [DEMO_BOOKING_ID, PROPERTY_ID, userId, CHECK_IN, CHECK_OUT, TOTAL, BOOKING_FEE],
-    );
-
-    await pool.query(
-      `insert into reservations
-         (id, booking_id, room_id, rate_plan_id, adults, children,
-          total_nights, price_per_night, total_amount)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       on conflict (id) do update set
-         adults = excluded.adults,
-         children = excluded.children,
-         total_nights = excluded.total_nights,
-         price_per_night = excluded.price_per_night,
-         total_amount = excluded.total_amount`,
-      [
-        DEMO_RESERVATION_ID,
-        DEMO_BOOKING_ID,
-        ROOM_ID,
-        DEMO_RATE_PLAN_ID,
-        ADULTS,
-        CHILDREN,
-        NIGHTS,
-        PRICE_PER_NIGHT,
-        ROOM_SUBTOTAL,
-      ],
     );
 
     // Checkout refuses a property whose organisation has not confirmed that
@@ -164,10 +108,6 @@ async function main() {
           "(no organisation, or no owner member). Checkout will refuse this booking.",
       );
     }
-
-    console.log(
-      `Seeded booking ${DEMO_BOOKING_ID}: ${NIGHTS} nights, ${ADULTS} adults, €${TOTAL} total (€${BOOKING_FEE} fee).`,
-    );
 
     await seedConfirmedBooking(pool, userId);
     console.log(
@@ -217,6 +157,20 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
       );
     }
     await confirmBookingPolicy(client, { bookingId: DEMO_CONFIRMED_BOOKING_ID, confirmedAt: new Date() });
+    // The exact split (0035), from the nights and tourist tax the policy snapshot just wrote.
+    await client.query(
+      `update bookings b
+       set rooms_total_cents = r.rooms_cents, tourist_tax_cents = r.tax_cents,
+           total_cents = r.rooms_cents + r.tax_cents, commission_cents = 0
+       from (
+         select booking_id,
+                sum((select round(sum((n->>'price')::numeric) * 100) from jsonb_array_elements(nights) n)) as rooms_cents,
+                sum(round(tourist_tax_amount * 100)) as tax_cents
+         from reservations group by booking_id
+       ) r
+       where r.booking_id = b.id and b.id = $1`,
+      [DEMO_CONFIRMED_BOOKING_ID],
+    );
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

@@ -59,29 +59,51 @@ export function isDefiniteRefundFailure(error: unknown): boolean {
   return typeof type === 'string' && DEFINITE.has(type);
 }
 
-/** The live refund made for our refund row `refundId`, if any. */
-export function matchRefund(
-  refunds: { id: string; status: string | null; metadata?: Record<string, string> | null }[],
-  refundId: string,
-): { id: string } | null {
-  const found = refunds.find((r) => r.metadata?.refundId === refundId && r.status !== 'failed' && r.status !== 'canceled');
+type ListedRefund = { id: string; status: string | null; metadata?: Record<string, string> | null };
+
+/** A live refund carrying every value in `metadata`, if any. Failed and canceled refunds moved no money. */
+export function matchRefundByMetadata(refunds: ListedRefund[], metadata: Record<string, string>): { id: string } | null {
+  const found = refunds.find(
+    (r) =>
+      r.status !== 'failed' &&
+      r.status !== 'canceled' &&
+      Object.entries(metadata).every(([key, value]) => r.metadata?.[key] === value),
+  );
   return found ? { id: found.id } : null;
 }
 
+/** The live refund made for our refund row `refundId`, if any. */
+export function matchRefund(refunds: ListedRefund[], refundId: string): { id: string } | null {
+  return matchRefundByMetadata(refunds, { refundId });
+}
+
 /**
- * Look on the host's account for a refund already made for our row. Run
- * before resending, because Stripe forgets idempotency keys after about a day:
- * a retry the next day would otherwise pay out twice if the first attempt
- * did go through.
+ * A refund already made on the host's account for this payment, recognised by
+ * the metadata we gave it. Run before refunding again, because Stripe forgets
+ * idempotency keys after about a day: a retry the next day would otherwise
+ * pay out twice, or be refused for good once the charge is fully refunded.
  */
-export async function findRefundForRow(i: {
+export async function findRefundByMetadata(i: {
   paymentIntentId: string;
   stripeAccountId: string;
-  refundRowId: string;
+  metadata: Record<string, string>;
 }): Promise<{ id: string } | null> {
   const list = await stripe.refunds.list(
     { payment_intent: i.paymentIntentId, limit: 100 },
     { stripeAccount: i.stripeAccountId },
   );
-  return matchRefund(list.data, i.refundRowId);
+  return matchRefundByMetadata(list.data, i.metadata);
+}
+
+/** The live refund made for our refund row, if any (see `findRefundByMetadata`). */
+export function findRefundForRow(i: {
+  paymentIntentId: string;
+  stripeAccountId: string;
+  refundRowId: string;
+}): Promise<{ id: string } | null> {
+  return findRefundByMetadata({
+    paymentIntentId: i.paymentIntentId,
+    stripeAccountId: i.stripeAccountId,
+    metadata: { refundId: i.refundRowId },
+  });
 }

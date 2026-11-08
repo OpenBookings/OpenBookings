@@ -1,3 +1,4 @@
+import type { UnavailableReason } from "@openbookings/pricing";
 import { DEFAULT_FOCAL, type StayPosterData } from "@/components/search/stay-poster-data";
 
 /** Shape returned by GET /api/query — see resolveSearchResults() in @openbookings/pricing */
@@ -21,6 +22,11 @@ export interface HotelSearchApiResult {
   free_cancellation_until?: string | null;
   total_price: number;
   nights: { date: string }[];
+  /**
+   * Whether the stay can be booked. Unbookable hotels only come back in
+   * testing mode, after the bookable ones.
+   */
+  availability?: { bookable: boolean; reason: UnavailableReason | null };
 }
 
 function utcDay(date: string): number {

@@ -385,16 +385,20 @@ export function buildMockAriGrid(
       const blocked = inventorySpec?.blocked ?? 0;
       const override = inventorySpec?.override ?? null;
       const computed = Math.max(0, spec.units - booked - blocked);
-      const effective = override ?? computed;
+      const total = override ?? Math.max(0, spec.units - blocked);
+      const left = Math.max(0, total - Math.min(booked, spec.units));
 
       return {
         date,
         totalUnits: spec.units,
         booked: Math.min(booked, spec.units),
+        held: 0,
         blocked,
         computed,
         override,
-        effective,
+        total,
+        left,
+        effective: left,
         source: override === null ? "computed" : "override",
         note: inventorySpec?.note ?? null,
         updatedBy: inventorySpec?.by ?? null,

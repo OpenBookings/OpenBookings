@@ -36,12 +36,12 @@ export function FootnoteSection({ hotel }: { hotel: HotelPageData }) {
         <div className="text-center">
           <h2 className="font-serif text-5xl sm:text-6xl md:text-7xl mb-6">{hotel.cta_headline}</h2>
           <p className="text-white/70 text-xl mb-12 max-w-lg mx-auto">{hotel.cta_body}</p>
-          <button
-            type="button"
-            className="bg-white text-black font-semibold text-lg px-10 py-4 rounded-xl hover:bg-white/90 transition-colors"
+          <a
+            href="#rooms"
+            className="inline-block bg-white text-black font-semibold text-lg px-10 py-4 rounded-xl hover:bg-white/90 transition-colors"
           >
             Book Now
-          </button>
+          </a>
         </div>
       </div>
     </section>

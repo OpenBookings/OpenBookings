@@ -1,3 +1,4 @@
+import { alertOwnerEmails } from "./alert-owners";
 import { betterAuth, APIError } from "better-auth";
 import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -217,14 +218,7 @@ export function createHostAuth(config: HostAuthConfig) {
       })
       .catch((err) => console.error("[auth] onAuthEvent failed:", err));
     if (!isNewDevice || !config.sendSecurityAlert) return;
-    const owners = await pool.query<{ email: string }>(
-      `SELECT DISTINCT u.email
-       FROM "member" me
-       JOIN "member" mo ON mo."organizationId" = me."organizationId" AND mo.role = 'owner'
-       JOIN "user" u ON u.id = mo."userId"
-       WHERE me."userId" = $1`,
-      [session.userId],
-    );
+    const ownerEmails = await alertOwnerEmails(pool, session.userId);
     const user = await pool.query<{ email: string }>(
       `SELECT email FROM "user" WHERE id = $1`,
       [session.userId],
@@ -238,7 +232,7 @@ export function createHostAuth(config: HostAuthConfig) {
       ip: session.ipAddress ?? null,
       userAgent: ua,
       location: locationFromHeaders(headers),
-      ownerEmails: owners.rows.map((row) => row.email),
+      ownerEmails,
     });
   };
 

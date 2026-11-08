@@ -26,10 +26,20 @@ export function parseSearchDate(value: string): number | null {
 
 /** Validation messages for a parsed search; empty when it is within bounds. */
 export function searchBoundErrors(i: { lat: number; lon: number; checkin: string; checkout: string }): string[] {
+  return [...pointBoundErrors(i), ...stayBoundErrors(i)];
+}
+
+/** The searched point must be a real coordinate. */
+export function pointBoundErrors(i: { lat: number; lon: number }): string[] {
   const errors: string[] = [];
   if (!Number.isFinite(i.lat) || i.lat < -90 || i.lat > 90) errors.push("lat must be between -90 and 90");
   if (!Number.isFinite(i.lon) || i.lon < -180 || i.lon > 180) errors.push("lon must be between -180 and 180");
+  return errors;
+}
 
+/** Real calendar dates, check-out after check-in, at most MAX_SEARCH_NIGHTS. Also bounds the stay quote. */
+export function stayBoundErrors(i: { checkin: string; checkout: string }): string[] {
+  const errors: string[] = [];
   const arrival = parseSearchDate(i.checkin);
   const departure = parseSearchDate(i.checkout);
   if (arrival === null) errors.push("checkin must be a valid date (YYYY-MM-DD)");

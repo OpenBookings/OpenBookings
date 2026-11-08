@@ -25,6 +25,10 @@ describe("renderInvitation", () => {
     expect(html).toContain("Olga &quot;O&quot; Owner");
   });
 
+  test("leaves no template placeholder unfilled", () => {
+    expect(renderInvitation(invite, "https://business.example").html).not.toContain("{{");
+  });
+
   test("links to the invite page on our own origin", () => {
     expect(invitationUrl("abc 123", "https://business.example")).toBe("https://business.example/invite/abc%20123");
     expect(renderInvitation(invite, "https://business.example").html).toContain(

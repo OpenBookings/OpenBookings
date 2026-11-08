@@ -1,5 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { buildBookingCheckoutParams, type BookingCheckoutInput } from "./checkout";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+
+// The client is a lazy proxy that needs STRIPE_SECRET_KEY; tests never talk to Stripe.
+const expire = mock(async (_id: string, _params?: unknown, _options?: unknown): Promise<unknown> => ({}));
+mock.module("../client", () => ({ stripe: { checkout: { sessions: { expire } } } }));
+
+const { buildBookingCheckoutParams, expireBookingCheckout } = await import("./checkout");
+type BookingCheckoutInput = import("./checkout").BookingCheckoutInput;
 
 const input: BookingCheckoutInput = {
   stripeAccountId: "acct_test_1",
@@ -60,5 +66,38 @@ describe("buildBookingCheckoutParams", () => {
 
   test("refuses to build a charge with no connected account", () => {
     expect(() => buildBookingCheckoutParams({ ...input, stripeAccountId: "" })).toThrow();
+  });
+});
+
+describe("expireBookingCheckout", () => {
+  beforeEach(() => {
+    expire.mockReset();
+    expire.mockImplementation(async () => ({}));
+  });
+
+  test("expires the session on the host's connected account", async () => {
+    await expireBookingCheckout("cs_1", "acct_test_1");
+    expect(expire).toHaveBeenCalledTimes(1);
+    expect(expire.mock.calls[0]).toEqual(["cs_1", {}, { stripeAccount: "acct_test_1" }]);
+  });
+
+  test("swallows Stripe refusing because the session is no longer open", async () => {
+    expire.mockImplementation(async () => {
+      throw Object.assign(new Error('Only Checkout Sessions with a status in ["open"] can be expired.'), {
+        type: "StripeInvalidRequestError",
+      });
+    });
+    await expect(expireBookingCheckout("cs_1", "acct_test_1")).resolves.toBeUndefined();
+  });
+
+  test("rethrows anything else", async () => {
+    expire.mockImplementation(async () => {
+      throw Object.assign(new Error("No such checkout.session: 'cs_1'"), { type: "StripeInvalidRequestError" });
+    });
+    await expect(expireBookingCheckout("cs_1", "acct_test_1")).rejects.toThrow("No such checkout.session");
+    expire.mockImplementation(async () => {
+      throw Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" });
+    });
+    await expect(expireBookingCheckout("cs_1", "acct_test_1")).rejects.toThrow("socket hang up");
   });
 });

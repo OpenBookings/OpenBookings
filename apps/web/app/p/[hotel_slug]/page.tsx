@@ -72,7 +72,15 @@ export default async function HotelPage({
       )}
 
       <OverviewSection hotel={hotel} amenityCategories={amenityCategories} />
-      <RoomsSection rooms={rooms} ratesConfirmed={hotel.rates_confirmed === true} />
+      <RoomsSection
+        rooms={rooms}
+        ratesConfirmed={hotel.rates_confirmed === true}
+        slug={slug}
+        propertyId={hotel.id}
+        // Pages cached before the zone was stored: the EU's earliest today, as
+        // search uses. The stay quote judges "in the past" itself.
+        timeZone={hotel.timezone ?? "Atlantic/Azores"}
+      />
       <PoliciesSection
         hotel={hotel}
         hasNonRefundable={rooms.some((room) => room.rate_plans.some((plan) => !plan.is_refundable))}

@@ -1,49 +1,31 @@
 /**
- * The booking being paid for, read from the database.
- *
- * There is still no booking-intent table, so checkout reads a `bookings` row in
- * `pending` — which is what a pre-payment intent is. `packages/db/seed/demo-booking.ts`
- * creates the one this page uses. When intents become real, the only change here
- * is where `CHECKOUT_BOOKING_ID` comes from.
+ * The booking intent being paid for, read from the database.
  *
  * Both the page and the Checkout Session route call `getBookingSummary`, so
  * what the guest reads and what Stripe charges are derived from the same rows.
+ * The prices are the intent's own — fixed per night and per room when the
+ * rooms were held — so nothing is re-priced here; the property and room rows
+ * only supply what the page shows around them.
  *
- * Money: every `bigint` amount in the schema is in MAJOR units — `rate_plans.bar`
- * of 109 means €109, and `packages/pricing` rounds to two decimals rather than
- * working in cents. Minor units exist only at the Stripe boundary, produced by
- * the `*Cents` fields below.
+ * Money: every amount in the schema is in MAJOR units — a night of 109 means
+ * €109. Minor units exist only at the Stripe boundary, produced by the `*Cents`
+ * fields below.
  */
 
-import { query, queryOne } from '@openbookings/db';
+import { getPool, loadIntent, type BookingIntentStatus, type Queryable } from '@openbookings/db';
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
-import {
-  calculateTouristTax,
-  type TouristTaxResult,
-  type TouristTaxRule,
-} from '@openbookings/pricing';
-import { buildBookingLines, stayCents, type BookingLine } from './booking-lines';
-import { applicationFeeCents } from '@openbookings/stripe';
+import { isTestingMode } from '@openbookings/demo';
+import { buildIntentLines, type BookingLine } from './booking-lines';
 import type { PropertyCancellationTier } from '@openbookings/pricing';
 import { checkoutCancellationTerms, type CheckoutCancellationTerms } from './cancellation-terms';
 
-/** The booking checkout is currently wired to. Seeded, fixed, idempotent. */
-const CHECKOUT_BOOKING_ID = 'b0000000-0000-4000-8000-000000000001';
-
 export type { BookingLine } from './booking-lines';
 
-export type StaySummary = {
-  intentId: string;
-  /** The reservation row the tourist tax is recorded on. */
-  reservationId: string;
+/** One room of the intent, as checkout shows it. */
+export type StayRoom = {
+  /** The intent's own row for this room; a room type can be picked twice. */
+  intentRoomId: string;
   roomId: string;
-
-  propertyName: string;
-  /** The host's own one-liner, e.g. "A haven for regeneration and relaxation". */
-  propertySubtitle: string | null;
-  /** "Saturnia, Italy" — set only when the property gave us both parts. */
-  locationLabel: string | null;
-
   roomName: string;
   /** "Suite", "Double" — the room's category, when the host set one. */
   roomType: string | null;
@@ -51,6 +33,35 @@ export type StaySummary = {
   sizeSqm: number | null;
   /** One room photo, to confirm the guest is buying the room they picked. */
   roomImageUrl: string;
+  ratePlanName: string;
+  isRefundable: boolean;
+  adults: number;
+  children: number;
+  nights: number;
+  /** Euros, the nights summed. */
+  stayTotal: number;
+  /** Tier, exact deadlines and whether the guest must confirm Non-refundable. */
+  cancellation: CheckoutCancellationTerms;
+};
+
+export type StaySummary = {
+  intentId: string;
+  status: BookingIntentStatus;
+  /** When the rooms stop being held. The checkout countdown runs to this. */
+  holdExpiresAt: Date;
+  /** The payment session already made for this intent, if any, and its account. */
+  paymentSessionId: string | null;
+  paymentAccountId: string | null;
+
+  propertySlug: string;
+  propertyName: string;
+  /** The host's own one-liner, e.g. "A haven for regeneration and relaxation". */
+  propertySubtitle: string | null;
+  /** "Saturnia, Italy" — set only when the property gave us both parts. */
+  locationLabel: string | null;
+
+  /** In the order the guest picked them. */
+  rooms: StayRoom[];
 
   /** Full-bleed background behind the whole checkout. Empty string = flat navy. */
   heroImageUrl: string;
@@ -64,17 +75,13 @@ export type StaySummary = {
   checkInTime: string | null;
   checkOutTime: string | null;
 
-  adults: number;
-  children: number;
-
   lines: BookingLine[];
-  /** Already in `lines`, one line per charge; kept whole for the record. */
-  touristTax: TouristTaxResult;
+  /** Euros, what the guest agreed to when the rooms were held; `lines` must add up to it. */
+  intentTotal: number;
+  /** Euros, every room's tourist tax; already in `lines`. */
+  touristTaxTotal: number;
   platformFeeCents: number;
   currency: string;
-
-  /** Tier, exact deadlines and whether the guest must confirm Non-refundable. */
-  cancellation: CheckoutCancellationTerms;
 
   stripeAccountId: string;
   /**
@@ -83,112 +90,46 @@ export type StaySummary = {
    * that, so a booking without it is not chargeable.
    */
   ratesConfirmed: boolean;
-  /** How long the room is held, in minutes, before the Session expires. */
-  holdMinutes: number;
 };
 
 /** Kept as the old name so callers reading a "booking summary" still find it. */
 export type BookingSummary = StaySummary;
 
-const HOLD_MINUTES = 30;
 const MS_PER_NIGHT = 24 * 60 * 60 * 1000;
 
-type BookingRow = {
-  booking_id: string;
-  check_in_date: string;
-  check_out_date: string;
-  currency: string;
-  property_name: string;
-  property_subtitle: string | null;
+type PropertyRow = {
+  name: string;
+  subtitle: string | null;
   city: string | null;
   country: string | null;
   check_in_time: string | null;
   check_out_time: string | null;
   timezone: string;
   cancellation_tier: PropertyCancellationTier;
+  is_demo: boolean;
   rates_confirmed: boolean;
-  commission_rate: string;
-  reservation_id: string;
-  tourist_tax_rules: TouristTaxRule[];
   stripe_account_id: string | null;
-  room_id: string;
-  room_name: string;
-  room_type: string | null;
-  bed_type: string | null;
-  size_sqm: string | null;
-  adults: number;
-  children: number;
-  total_nights: number;
-  price_per_night: string;
-  rate_plan_name: string;
-  is_refundable: boolean;
   hero_image_url: string | null;
   logo_url: string | null;
-  room_image_url: string | null;
 };
 
 /**
- * One round trip for the whole page.
- *
- * The image joins are lateral rather than plain: a property has many gallery
- * rows, and joining them normally would multiply the booking row by however
- * many photos the host uploaded.
+ * The property around the intent. The image joins are lateral rather than
+ * plain: a property has many gallery rows, and joining them normally would
+ * multiply the row by however many photos the host uploaded.
  */
-const BOOKING_QUERY = `
+const PROPERTY_QUERY = `
   select
-    b.id                as booking_id,
-    -- Cast to text deliberately. node-postgres parses a date column into a Date
-    -- at the *server's* local midnight, so 2026-10-14 comes back as 13 Oct
-    -- 22:00 UTC in Amsterdam, and every guest west of Greenwich would then be
-    -- shown the wrong arrival day. A date has no time zone; keep it that way.
-    b.check_in_date::text  as check_in_date,
-    b.check_out_date::text as check_out_date,
-    b.currency,
-    p.name              as property_name,
-    p.subtitle          as property_subtitle,
-    p.city,
-    p.country,
-    p.check_in_time,
-    p.check_out_time,
-    p.timezone,
-    p.cancellation_tier,
+    p.name, p.subtitle, p.city, p.country, p.check_in_time, p.check_out_time,
+    p.timezone, p.cancellation_tier, p.is_demo,
     exists (
       select 1 from org_consent oc
       where oc.organization_id = p.organization_id and oc.doc_id = $2
     )                   as rates_confirmed,
-    p.commission_rate,
-    res.id              as reservation_id,
-    -- Every rule, not just today's: each night of the stay takes the rule in
-    -- force on that night.
-    coalesce((
-      select json_agg(json_build_object(
-        'effectiveFrom',               t.effective_from::text,
-        'charges',                     t.charges,
-        'childrenExempt',              t.children_exempt,
-        'maxNights',                   t.max_nights
-      ) order by t.effective_from)
-      from tourist_tax_rules t where t.property_id = p.id
-    ), '[]'::json)      as tourist_tax_rules,
     p.stripe_account_id,
-    r.id                as room_id,
-    r.name              as room_name,
-    r.room_type,
-    r.bed_type,
-    r.size_sqm,
-    res.adults,
-    res.children,
-    res.total_nights,
-    res.price_per_night,
-    rp.name             as rate_plan_name,
-    rp.is_refundable,
     hero.url            as hero_image_url,
-    logo.url            as logo_url,
-    room_img.url        as room_image_url
-  from bookings b
-  join properties   p   on p.id   = b.hotel_id
-  join reservations res on res.booking_id = b.id
-  join rooms        r   on r.id   = res.room_id
-  join rate_plans   rp  on rp.id  = res.rate_plan_id
+    logo.url            as logo_url
+  from properties p
   left join lateral (
     select url from property_images
     where property_id = p.id and "group" = 'hero-image'
@@ -199,74 +140,47 @@ const BOOKING_QUERY = `
     where property_id = p.id and "group" = 'logo'
     order by sort_order limit 1
   ) logo on true
+  where p.id = $1
+  limit 1
+`;
+
+type RoomRow = {
+  room_id: string;
+  rate_plan_id: string;
+  room_name: string;
+  room_type: string | null;
+  bed_type: string | null;
+  size_sqm: string | null;
+  rate_plan_name: string;
+  is_refundable: boolean;
+  room_image_url: string | null;
+};
+
+/** What the page shows of each room and rate plan the intent holds. */
+const ROOMS_QUERY = `
+  select
+    r.id as room_id, rp.id as rate_plan_id, r.name as room_name, r.room_type, r.bed_type, r.size_sqm,
+    rp.name as rate_plan_name, rp.is_refundable, room_img.url as room_image_url
+  from rate_plans rp
+  join rooms r on r.id = rp.room_id
   left join lateral (
     select url from room_images
     where room_id = r.id
     order by sort_order limit 1
   ) room_img on true
-  where b.id = $1
-  limit 1
+  where rp.id = any($1::uuid[])
 `;
 
-/** A booking that cannot be rendered or charged. Surfaced as a checkout failure. */
+/** An intent that cannot be rendered or charged. Surfaced as a checkout failure. */
 export class BookingNotFoundError extends Error {
   /** Which link in the chain was missing. Carried for logs, not for callers. */
   readonly reason: string;
 
-  constructor(bookingId: string, reason: string) {
-    super(`No bookable row for booking ${bookingId}: ${reason}`);
+  constructor(intentId: string, reason: string) {
+    super(`No bookable intent ${intentId}: ${reason}`);
     this.name = 'BookingNotFoundError';
     this.reason = reason;
   }
-}
-
-/**
- * Why `BOOKING_QUERY` came back empty.
- *
- * Every join in that query is inner, so a booking missing any one of its
- * reservation, room or rate plan disappears exactly as if the booking itself
- * did not exist — and the two need very different fixes. Run only on the
- * failure path, so the happy path stays at one round trip.
- */
-const DIAGNOSIS_QUERY = `
-  select
-    exists(select 1 from bookings where id = $1)                     as booking,
-    exists(select 1 from bookings b join properties p on p.id = b.hotel_id
-           where b.id = $1)                                          as property,
-    exists(select 1 from reservations where booking_id = $1)         as reservation,
-    exists(select 1 from reservations res join rooms r on r.id = res.room_id
-           where res.booking_id = $1)                                as room,
-    exists(select 1 from reservations res join rate_plans rp on rp.id = res.rate_plan_id
-           where res.booking_id = $1)                                as rate_plan
-`;
-
-type Diagnosis = {
-  booking: boolean;
-  property: boolean;
-  reservation: boolean;
-  room: boolean;
-  rate_plan: boolean;
-};
-
-/** Names the first missing link, in the order the query joins them. */
-async function diagnose(bookingId: string): Promise<string> {
-  let d: Diagnosis | null;
-  try {
-    d = await queryOne<Diagnosis>(DIAGNOSIS_QUERY, [bookingId]);
-  } catch (err) {
-    // The diagnosis is a courtesy; never let it replace the real failure.
-    return `diagnosis failed (${err instanceof Error ? err.message : String(err)})`;
-  }
-  if (!d) return 'no diagnosis available';
-
-  if (!d.booking) return 'no such booking';
-  if (!d.property) return 'booking references a property that does not exist';
-  if (!d.reservation) return 'booking has no reservation — it was never given a room';
-  if (!d.room) return 'reservation references a room that does not exist';
-  if (!d.rate_plan) return 'reservation references a rate plan that does not exist';
-  // Every link resolves on its own, so the row was lost to something the
-  // checks above do not model. Worth seeing verbatim rather than guessing.
-  return 'all joins resolve individually; the combined query still returned no row';
 }
 
 /** Postgres `date` arrives as "2026-10-14"; parsed as UTC so the day never shifts. */
@@ -280,22 +194,6 @@ function trimSeconds(value: string | null): string | null {
 }
 
 /**
- * The commission on these lines. A rate that cannot be a commission (someone
- * typing `4.5` for 4.5%) must not take the checkout page down, and must not
- * be charged either: NaN makes the booking fail `assertChargeable` in the
- * route as a handled, non-retryable error.
- */
-function commissionCents(lines: BookingLine[], rate: string): number {
-  try {
-    // The stay only. Tourist tax is the host's to pay to their town, and
-    // OpenBookings never takes commission on it.
-    return applicationFeeCents(stayCents(lines), Number(rate));
-  } catch {
-    return Number.NaN;
-  }
-}
-
-/**
  * Whether the commission is taken as an application fee yet. Off by default,
  * so direct charges can be verified in test mode before any fee is live.
  */
@@ -303,105 +201,120 @@ function applicationFeeEnabled(): boolean {
   return process.env.STRIPE_APPLICATION_FEE_ENABLED === 'true';
 }
 
-export async function getBookingSummary(): Promise<StaySummary> {
-  const row = await queryOne<BookingRow>(BOOKING_QUERY, [
-    CHECKOUT_BOOKING_ID,
-    RATES_TAX_INCLUSIVE_DOC_ID,
+/**
+ * The guest's own intent, ready to show and to charge. Someone else's intent,
+ * and a demo hotel's outside testing mode, read as not found.
+ *
+ * `testing` and `db` are for tests; the app uses the deployment's mode and pool.
+ */
+export async function getBookingSummary(
+  i: { intentId: string; userId: string; testing?: boolean },
+  db: Queryable = getPool(),
+): Promise<StaySummary> {
+  const intent = await loadIntent(db, { intentId: i.intentId, userId: i.userId });
+  if (!intent) throw new BookingNotFoundError(i.intentId, 'no such intent for this guest');
+
+  const [propertyResult, roomsResult] = await Promise.all([
+    db.query(PROPERTY_QUERY, [intent.propertyId, RATES_TAX_INCLUSIVE_DOC_ID]),
+    db.query(ROOMS_QUERY, [intent.rooms.map((r) => r.ratePlanId)]),
   ]);
-  if (!row) throw new BookingNotFoundError(CHECKOUT_BOOKING_ID, await diagnose(CHECKOUT_BOOKING_ID));
+  const property = propertyResult.rows[0] as PropertyRow | undefined;
+  if (!property) throw new BookingNotFoundError(intent.id, 'intent references a property that does not exist');
+  if (property.is_demo && !(i.testing ?? isTestingMode())) {
+    throw new BookingNotFoundError(intent.id, 'demo property outside testing mode');
+  }
+  const plans = new Map((roomsResult.rows as RoomRow[]).map((r) => [r.rate_plan_id, r]));
 
-  const checkIn = parseDate(row.check_in_date);
-  const checkOut = parseDate(row.check_out_date);
-  // Trusted over the date arithmetic: it is the number the reservation was
-  // actually priced on, and a mismatch would mean charging for a different stay.
-  const nights = row.total_nights;
+  const now = new Date();
+  const rooms = intent.rooms.map((room, index): StayRoom => {
+    const plan = plans.get(room.ratePlanId);
+    if (!plan) throw new BookingNotFoundError(intent.id, `rate plan ${room.ratePlanId} no longer exists`);
+    // What the guest was shown when the rooms were held, when it lines up;
+    // the rows otherwise. The two only differ if the host renamed something.
+    const shown = intent.snapshot.rooms[index];
+    const snap = shown?.roomId === room.roomId && shown.ratePlanId === room.ratePlanId ? shown : null;
+    const isRefundable = snap?.isRefundable ?? plan.is_refundable;
+    return {
+      intentRoomId: room.id,
+      roomId: room.roomId,
+      roomName: snap?.roomName ?? plan.room_name,
+      roomType: plan.room_type,
+      bedType: plan.bed_type,
+      sizeSqm: plan.size_sqm === null ? null : Number(plan.size_sqm),
+      roomImageUrl: plan.room_image_url ?? '',
+      ratePlanName: snap?.ratePlanName ?? plan.rate_plan_name,
+      isRefundable,
+      adults: room.adults,
+      children: room.children,
+      nights: room.nights.length,
+      stayTotal: room.stayTotal,
+      cancellation: checkoutCancellationTerms({
+        propertyTier: property.cancellation_tier,
+        isRefundable,
+        timeZone: property.timezone,
+        checkInTime: property.check_in_time,
+        arrivalDate: intent.checkIn,
+        now,
+      }),
+    };
+  });
 
-  const pricePerNight = Number(row.price_per_night);
-  const touristTax = calculateTouristTax(row.tourist_tax_rules, {
-    nights: Array.from({ length: nights }, (_, i) => ({
-      date: new Date(checkIn.getTime() + i * MS_PER_NIGHT).toISOString().slice(0, 10),
-      price: pricePerNight,
+  const lines = buildIntentLines(
+    intent.rooms.map((room, index) => ({
+      roomName: rooms[index]!.roomName,
+      roomType: rooms[index]!.roomType,
+      nights: room.nights,
+      touristTaxLines: room.touristTaxLines,
     })),
-    adults: row.adults,
-    children: row.children,
-    // A reservation is one room.
-    rooms: 1,
-  });
+  );
 
-  const lines = buildBookingLines({
-    roomName: row.room_name,
-    roomType: row.room_type,
-    pricePerNight,
-    nights,
-    touristTax: touristTax.lines,
-  });
+  const checkIn = parseDate(intent.checkIn);
+  const checkOut = parseDate(intent.checkOut);
 
   return {
-    intentId: row.booking_id,
-    reservationId: row.reservation_id,
-    roomId: row.room_id,
+    intentId: intent.id,
+    status: intent.status,
+    holdExpiresAt: intent.holdExpiresAt,
+    paymentSessionId: intent.paymentSessionId,
+    paymentAccountId: intent.paymentAccountId,
 
-    propertyName: row.property_name,
-    propertySubtitle: row.property_subtitle,
-    locationLabel: formatLocation(row.city, row.country),
+    propertySlug: intent.propertySlug,
+    propertyName: property.name,
+    propertySubtitle: property.subtitle,
+    locationLabel: formatLocation(property.city, property.country),
 
-    roomName: row.room_name,
-    roomType: row.room_type,
-    bedType: row.bed_type,
-    sizeSqm: row.size_sqm === null ? null : Number(row.size_sqm),
-    roomImageUrl: row.room_image_url ?? '',
+    rooms,
 
-    heroImageUrl: row.hero_image_url ?? '',
-    logoUrl: row.logo_url ?? '',
+    heroImageUrl: property.hero_image_url ?? '',
+    logoUrl: property.logo_url ?? '',
 
     checkIn,
     checkOut,
-    nights,
-    checkInTime: trimSeconds(row.check_in_time),
-    checkOutTime: trimSeconds(row.check_out_time),
-
-    adults: row.adults,
-    children: row.children,
+    nights: Math.round((checkOut.getTime() - checkIn.getTime()) / MS_PER_NIGHT),
+    checkInTime: trimSeconds(property.check_in_time),
+    checkOutTime: trimSeconds(property.check_out_time),
 
     lines,
-    touristTax,
+    intentTotal: intent.snapshot.total,
+    touristTaxTotal: intent.snapshot.touristTaxTotal,
     // OpenBookings' commission on the stay, excluding tourist tax, in the
-    // units Stripe wants. Zero until the fee is switched on for this deployment.
-    platformFeeCents: applicationFeeEnabled() ? commissionCents(lines, row.commission_rate) : 0,
-    currency: row.currency.toLowerCase(),
-
-    cancellation: checkoutCancellationTerms({
-      propertyTier: row.cancellation_tier,
-      isRefundable: row.is_refundable,
-      timeZone: row.timezone,
-      checkInTime: row.check_in_time,
-      arrivalDate: row.check_in_date,
-      now: new Date(),
-    }),
+    // units Stripe wants: the one the intent recorded when the rooms were held,
+    // not one from today's rate. Zero until the fee is switched on for this
+    // deployment. A malformed value reads as NaN, which `assertChargeable` in
+    // the route refuses as a handled, non-retryable error (as it does a fee
+    // below zero or not below the total).
+    platformFeeCents: applicationFeeEnabled() ? Number(intent.snapshot.commissionCents) : 0,
+    currency: intent.snapshot.currency.toLowerCase(),
 
     // The host's own connected account: the booking is charged on it. The env
-    // fallback exists for the seeded demo property in development only — in
-    // production a property without an account is not chargeable, and must
+    // fallback exists for the seeded and demo properties in development only —
+    // in production a property without an account is not chargeable, and must
     // never be charged on somebody else's.
     stripeAccountId:
-      row.stripe_account_id ??
+      property.stripe_account_id ??
       (process.env.NODE_ENV === 'production' ? '' : (process.env.STRIPE_CONNECT_ACCOUNT_ID ?? '')),
-    ratesConfirmed: row.rates_confirmed === true,
-    holdMinutes: HOLD_MINUTES,
+    ratesConfirmed: property.rates_confirmed === true,
   };
-}
-
-/**
- * Fix the tourist tax on the reservation as it is about to be charged, so a
- * later change to the property's rules never alters what this booking owed.
- * Written each time a Checkout Session is created: until the guest pays, the
- * booking is not made, and the newest figure is the one they are charged.
- */
-export async function recordTouristTax(summary: StaySummary): Promise<void> {
-  await query(
-    `update reservations set tourist_tax_amount = $1, tourist_tax_lines = $2::jsonb where id = $3`,
-    [summary.touristTax.total, JSON.stringify(summary.touristTax.lines), summary.reservationId],
-  );
 }
 
 /** Sum of every line, in minor units. The one place the total is derived. */
