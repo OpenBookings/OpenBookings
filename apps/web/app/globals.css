@@ -81,6 +81,25 @@
   border-radius: 1rem;
 }
 
+/*
+ * Checkout's own cards (details, non-refundable consent): light surfaces on the
+ * hotel's photograph in every theme, like the Stripe fields beside them. The
+ * values match checkout/_lib/appearance.ts so our inputs and Stripe's read as
+ * one form.
+ */
+.checkout-light {
+  --foreground: #1a1a1f;
+  --muted-foreground: #5c5c66;
+  --input: #c9ccd6;
+  --border: rgb(0 0 0 / 0.1);
+  --ring: #5b6ee8;
+  --primary: #5b6ee8;
+  --primary-foreground: #ffffff;
+  --destructive: #b4372d;
+  --red-11: #b4372d;
+  color: var(--foreground);
+  color-scheme: light;
+}
 /* apps/web sets no default border colour (Tailwind v4 falls back to
    currentColor); the Console surface uses apps/business's. In the base layer,
    so any border utility still wins. */

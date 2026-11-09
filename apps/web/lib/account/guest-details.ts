@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
-import { query } from "@openbookings/db";
+import { query, queryOne } from "@openbookings/db";
 import { auth } from "@/lib/auth";
-import type { Details } from "@/app/account/personal-details/_lib/validate";
+import type { Address, Details } from "@/app/account/personal-details/_lib/validate";
 
 /**
  * Writes a guest's personal details: phone and address to `guest_profile`
@@ -24,4 +24,33 @@ export async function saveGuestDetails(userId: string, currentName: string | nul
   if (details.name !== currentName) {
     await auth.api.updateUser({ headers: await headers(), body: { name: details.name } });
   }
+}
+
+type ProfileRow = {
+  phone: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string | null;
+};
+
+/** A guest's saved phone and address. The address only when it is complete. */
+export async function readGuestProfile(userId: string): Promise<{ phone: string | null; address: Address | null }> {
+  const profile = await queryOne<ProfileRow>(
+    `SELECT phone, address_line1, address_line2, postal_code, city, country FROM guest_profile WHERE user_id = $1`,
+    [userId],
+  );
+  const address: Address | null =
+    profile?.address_line1 && profile.postal_code && profile.city && profile.country
+      ? {
+          line1: profile.address_line1,
+          line2: profile.address_line2,
+          postalCode: profile.postal_code,
+          city: profile.city,
+          // char(2) pads with spaces; saves store upper case, but rows written by hand may not.
+          country: profile.country.trim().toUpperCase(),
+        }
+      : null;
+  return { phone: profile?.phone ?? null, address };
 }

@@ -6,6 +6,8 @@ import { loadStripe } from '@stripe/stripe-js';
 import type { Appearance, Stripe } from '@stripe/stripe-js';
 import { CheckoutFormProvider } from '@stripe/react-stripe-js/checkout';
 import { buildAppearance } from '../_lib/appearance';
+import type { GuestDetailsPrefill } from '../_lib/guest-details';
+import type { DialCode } from '@/app/account/personal-details/_components/fields';
 import {
   CHECKOUT_ALREADY_PAID,
   CHECKOUT_EXPIRED,
@@ -66,6 +68,11 @@ export type CheckoutClientProps = TripSummaryProps & {
   intentStatus: 'open' | 'expired' | 'paid' | 'oversold';
   /** The property page: where a lapsed hold starts again. */
   backHref: string;
+  /** The guest's saved details, for the details card. */
+  guestDetails: GuestDetailsPrefill;
+  /** Built on the server; see lib/account/countries.ts. */
+  countries: { code: string; name: string }[];
+  dialCodes: DialCode[];
 };
 
 function Shell({ heroImageUrl, children }: { heroImageUrl: string; children: React.ReactNode }) {

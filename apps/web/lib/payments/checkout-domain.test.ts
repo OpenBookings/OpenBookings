@@ -8,7 +8,7 @@ const KEY = "pmd:v1:acct_test_1:openbookings.co";
 
 function fakeRedis(initial: Record<string, string> = {}) {
   const store = new Map(Object.entries(initial));
-  const set = mock(async (key: string, value: string, _opts: { ex: number }) => {
+  const set = mock(async (key: string, value: string) => {
     store.set(key, value);
     return "OK";
   });
@@ -56,7 +56,7 @@ describe("ensureCheckoutDomain", () => {
     const ensure = mock(async () => {
       throw new Error("No such account");
     });
-    const report = mock((_err: unknown) => {});
+    const report = mock(() => {});
     const { redis, set } = fakeRedis();
     await ensureCheckoutDomain(ACCOUNT, APP, { ensure, redis, report });
     expect(report).toHaveBeenCalledTimes(1);
@@ -65,7 +65,7 @@ describe("ensureCheckoutDomain", () => {
 
   test("a Stripe call that hangs gives up at the deadline", async () => {
     const ensure = mock(() => new Promise<never>(() => {}));
-    const report = mock((_err: unknown) => {});
+    const report = mock(() => {});
     const started = Date.now();
     await ensureCheckoutDomain(ACCOUNT, APP, { ensure, redis: null, report, deadlineMs: 20 });
     expect(Date.now() - started).toBeLessThan(200);
@@ -73,7 +73,7 @@ describe("ensureCheckoutDomain", () => {
   });
 
   test("an Apple Pay refusal is reported, though the domain counts as registered", async () => {
-    const report = mock((_err: unknown) => {});
+    const report = mock(() => {});
     const { redis, set } = fakeRedis();
     await ensureCheckoutDomain(ACCOUNT, APP, {
       ensure: async () => ({ outcome: "exists", applePay: "inactive" }),
