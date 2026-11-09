@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { runInvoiceJob, type JobRun } from "@/lib/invoice-job";
@@ -22,7 +22,15 @@ export function RunForm({ defaultMonth }: { defaultMonth: string }) {
 
   return (
     <div className="space-y-4">
-      <form action={action} className="flex flex-wrap items-end gap-3">
+      {/* onSubmit, not `action`, so the chosen options survive the run instead of resetting. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const data = new FormData(e.currentTarget);
+          startTransition(() => action(data));
+        }}
+        className="flex flex-wrap items-end gap-3"
+      >
         <label className="flex flex-col gap-1 text-sm">
           Step
           <select name="step" defaultValue="backfill" className={selectClass}>
