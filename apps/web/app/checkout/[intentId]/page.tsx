@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
 import { readGuestProfile } from '@/lib/account/guest-details';
 import { COUNTRIES, DIAL_CODES } from '@/lib/account/countries';
-import { splitPhone } from '@/app/account/personal-details/_lib/phone';
+import { prefillFromProfile } from '../_lib/guest-details';
 import type { BookingIntentStatus } from '@openbookings/db';
 import { CheckoutClient, CheckoutSignIn, type CheckoutClientProps } from '../_components/CheckoutClient';
 import type { GateViewer } from '../_components/CheckoutGate';
@@ -89,12 +89,12 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
   // The details card starts from the account. Read here, beside the intent,
   // so the card is filled on first paint.
   const profile = await readGuestProfile(viewer.id);
-  const guestDetails = {
+  const guestDetails = prefillFromProfile({
     name: viewer.name ?? '',
     email: viewer.email,
-    phone: splitPhone(profile.phone, profile.address?.country ?? 'NL'),
+    phone: profile.phone,
     address: profile.address,
-  };
+  });
 
   // Dates are formatted here so the client component stays free of Date props,
   // and so they resolve in one place rather than in each of the four spots the

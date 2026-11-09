@@ -1,4 +1,5 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { splitPhone } from "@/app/account/personal-details/_lib/phone";
 import {
   parseCheckoutDetails,
   type Address,
@@ -13,7 +14,12 @@ import {
 export type GuestDetailsPrefill = {
   name: string;
   email: string;
-  phone: { country: string; number: string };
+  /**
+   * `needsCheck`: the stored number had no "+" code (saved before the country
+   * picker existed), so which country it belongs to is a guess. Checkout never
+   * sends a guess to the hotel: the form opens on it instead.
+   */
+  phone: { country: string; number: string; needsCheck?: true };
   address: Address | null;
 };
 
@@ -31,9 +37,28 @@ export function prefillToFormData(p: GuestDetailsPrefill): FormData {
   return data;
 }
 
+/** The prefill for a guest, from what their account stores. */
+export function prefillFromProfile(profile: {
+  name: string;
+  email: string;
+  phone: string | null;
+  address: Address | null;
+}): GuestDetailsPrefill {
+  const phone = splitPhone(profile.phone, profile.address?.country ?? "NL");
+  // A stored number that doesn't parse on its own has no country of its own;
+  // splitPhone has pinned it to the fallback, which may be wrong.
+  const needsCheck = profile.phone !== null && profile.phone.trim() !== "" && !parsePhoneNumberFromString(profile.phone);
+  return {
+    name: profile.name,
+    email: profile.email,
+    phone: needsCheck ? { ...phone, needsCheck: true } : phone,
+    address: profile.address,
+  };
+}
+
 /** True when checkout can show the summary: everything it requires is saved and valid. */
 export function isCompleteForCheckout(p: GuestDetailsPrefill): boolean {
-  return parseCheckoutDetails(prefillToFormData(p)).ok;
+  return !p.phone.needsCheck && parseCheckoutDetails(prefillToFormData(p)).ok;
 }
 
 export type StripeContact = {

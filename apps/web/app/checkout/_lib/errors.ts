@@ -248,6 +248,19 @@ export const DETAILS_SAVE_FAILED: CheckoutErrorCopy = {
 };
 
 /**
+ * The words for a failure we didn't expect (Stripe.js threw, the network
+ * dropped). Before `confirm` started, nothing can have been charged, and
+ * saying so stops a needless worry. After it started, a payment may have gone
+ * through, so the guest is told to check before paying again (rule 2).
+ */
+export function unexpectedPaymentError({ confirmStarted, offline }: { confirmStarted: boolean; offline: boolean }): string {
+  if (!confirmStarted) return offline ? OFFLINE.message : checkoutErrorCopy('session_failed').message;
+  return offline
+    ? "We lost the connection while confirming your payment. Check your email for a confirmation before trying again."
+    : "Something went wrong while confirming your payment. Check your email for a confirmation before trying again.";
+}
+
+/**
  * A confirm that failed without a message. Deliberately silent on whether a
  * charge was made: we don't know that here.
  */

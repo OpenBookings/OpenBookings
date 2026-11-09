@@ -18,6 +18,7 @@ import {
   describeConfirmError,
   describeValidationError,
   isExpiredSessionError,
+  unexpectedPaymentError,
 } from '../_lib/errors';
 import { toStripeContact } from '../_lib/guest-details';
 import { CheckoutNotice } from './CheckoutNotice';
@@ -128,7 +129,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
           extra: { code: confirmError.code, sessionId: checkout?.id },
         });
       }
-      setError(report && isOffline() ? OFFLINE.message : message);
+      setError(report && isOffline() ? unexpectedPaymentError({ confirmStarted: true, offline: true }) : message);
     },
     [checkout]
   );
@@ -141,6 +142,8 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
     setBusy(true);
     setError(null);
     let leaving = false;
+    // Past this point Stripe may have charged, so no error may claim otherwise.
+    let confirmStarted = false;
     try {
       // Cheapest first, and nothing is written until all of it is complete.
       if (!details.validate()) return;
@@ -155,6 +158,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
         if (outcome.reason === 'failed' && isOffline()) setError(OFFLINE.message);
         return;
       }
+      confirmStarted = true;
       const result = await checkout.confirm(toStripeContact(outcome.details));
       if (result.type === 'error') {
         showConfirmError(result.error);
@@ -167,7 +171,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
       window.location.assign(`/checkout/return?session_id=${encodeURIComponent(result.session.id)}`);
     } catch (err) {
       Sentry.captureException(err, { tags: { area: 'checkout', stage: 'confirm' } });
-      setError(isOffline() ? OFFLINE.message : checkoutErrorCopy('session_failed').message);
+      setError(unexpectedPaymentError({ confirmStarted, offline: isOffline() }));
     } finally {
       if (!leaving) {
         submitting.current = false;
@@ -192,6 +196,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
     setBusy(true);
     setError(null);
     let leaving = false;
+    let confirmStarted = false;
     try {
       const outcome = await details.save();
       if (!outcome.saved) {
@@ -199,6 +204,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
         if (outcome.reason === 'invalid') setError('Complete your details above, then pay again.');
         return;
       }
+      confirmStarted = true;
       const result = await checkout.confirm({
         expressCheckoutConfirmEvent: event,
         ...toStripeContact(outcome.details),
@@ -214,7 +220,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
     } catch (err) {
       Sentry.captureException(err, { tags: { area: 'checkout', stage: 'wallet-confirm' } });
       event.paymentFailed();
-      setError(isOffline() ? OFFLINE.message : checkoutErrorCopy('session_failed').message);
+      setError(unexpectedPaymentError({ confirmStarted, offline: isOffline() }));
     } finally {
       if (!leaving) {
         submitting.current = false;
@@ -295,6 +301,9 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
                 layout: 'tabs',
                 // Ours to send, from the details card, on confirm.
                 fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
+                // Link's "save my information" signup asks for an email and
+                // phone of its own; off here as it is on the wallet row.
+                wallets: { link: 'never' },
               }}
               onReady={() => setPaymentReady(true)}
               onLoadError={onLoadError}

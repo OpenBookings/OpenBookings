@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { DETAILS_SAVE_FAILED, OFFLINE, describeConfirmError, describeValidationError } from "./errors";
+import {
+  DETAILS_SAVE_FAILED,
+  OFFLINE,
+  describeConfirmError,
+  describeValidationError,
+  unexpectedPaymentError,
+} from "./errors";
 
 describe("describeConfirmError", () => {
   test("a known decline gets our words, and is not paged as a bug", () => {
@@ -66,5 +72,20 @@ describe("copy", () => {
 
   test("offline copy is unchanged", () => {
     expect(OFFLINE.message).toBe("You appear to be offline. Reconnect and try again — nothing has been charged.");
+  });
+});
+
+describe("unexpectedPaymentError", () => {
+  test("before Stripe was asked to charge, nothing was charged and it may say so", () => {
+    expect(unexpectedPaymentError({ confirmStarted: false, offline: false })).toMatch(/nothing has been charged/i);
+    expect(unexpectedPaymentError({ confirmStarted: false, offline: true })).toBe(OFFLINE.message);
+  });
+
+  test("once Stripe was asked to charge, it never claims nothing was charged", () => {
+    for (const offline of [false, true]) {
+      const message = unexpectedPaymentError({ confirmStarted: true, offline });
+      expect(message).not.toMatch(/nothing has been charged|no charge/i);
+      expect(message).toMatch(/check your email/i);
+    }
   });
 });

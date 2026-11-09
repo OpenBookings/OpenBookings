@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { splitPhone } from "@/app/account/personal-details/_lib/phone";
-import { isCompleteForCheckout, prefillToFormData, toStripeContact, type GuestDetailsPrefill } from "./guest-details";
+import {
+  isCompleteForCheckout,
+  prefillFromProfile,
+  prefillToFormData,
+  toStripeContact,
+  type GuestDetailsPrefill,
+} from "./guest-details";
 
 const complete: GuestDetailsPrefill = {
   name: "Sanne de Vries",
@@ -62,5 +68,27 @@ describe("toStripeContact", () => {
       },
       phoneNumber: "+31623456789",
     });
+  });
+});
+
+describe("prefillFromProfile", () => {
+  const address = { line1: "Hauptstraße 1", line2: null, postalCode: "10115", city: "Berlin", country: "DE" };
+
+  test("a number saved without its + code is never trusted: the form opens on it", () => {
+    const prefill = prefillFromProfile({ name: "Sanne de Vries", email: "s@example.com", phone: "0612345678", address });
+    expect(prefill.phone.needsCheck).toBe(true);
+    expect(prefill.phone.number).toBe("0612345678");
+    expect(isCompleteForCheckout(prefill)).toBe(false);
+  });
+
+  test("a number saved in international format is split for the picker as usual", () => {
+    const prefill = prefillFromProfile({ name: "Sanne de Vries", email: "s@example.com", phone: "+31 6 23456789", address });
+    expect(prefill.phone).toEqual({ country: "NL", number: "6 23456789" });
+    expect(isCompleteForCheckout(prefill)).toBe(true);
+  });
+
+  test("no saved number: an empty field on the address country, or NL", () => {
+    expect(prefillFromProfile({ name: "A", email: "a@example.com", phone: null, address }).phone).toEqual({ country: "DE", number: "" });
+    expect(prefillFromProfile({ name: "A", email: "a@example.com", phone: null, address: null }).phone).toEqual({ country: "NL", number: "" });
   });
 });

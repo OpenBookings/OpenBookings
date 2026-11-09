@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { splitPhone } from '@/app/account/personal-details/_lib/phone';
 import {
+  PHONE_ERROR,
   parseCheckoutDetails,
   type CheckoutDetails,
   type DetailsField,
@@ -60,7 +61,10 @@ function toPrefill(details: CheckoutDetails, email: string): GuestDetailsPrefill
 export function useCheckoutDetails(prefill: GuestDetailsPrefill): CheckoutDetailsController {
   const [saved, setSaved] = useState(prefill);
   const [mode, setMode] = useState<'summary' | 'form'>(() => (isCompleteForCheckout(prefill) ? 'summary' : 'form'));
-  const [errors, setErrors] = useState<Partial<Record<DetailsField, string>>>({});
+  // A number saved without its country code opens already flagged.
+  const [errors, setErrors] = useState<Partial<Record<DetailsField, string>>>(() =>
+    prefill.phone.needsCheck ? { phone: PHONE_ERROR } : {}
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ field: DetailsField } | null>(null);
   // State, not a ref: the hook's functions read it, and React's rules keep
