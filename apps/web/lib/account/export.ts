@@ -9,7 +9,7 @@ type Run = (sql: string, values: unknown[]) => Promise<unknown[]>;
 export const EXPORT_QUERIES = {
   user: `SELECT id, name, email, "emailVerified" AS email_verified, image, "createdAt" AS created_at
          FROM "user" WHERE id = $1`,
-  profile: `SELECT phone, address_line1, address_line2, postal_code, city, country, updated_at
+  profile: `SELECT phone, address_line1, address_line2, postal_code, city, country, review_emails_opt_out_at, updated_at
             FROM guest_profile WHERE user_id = $1`,
   accounts: `SELECT "providerId" AS provider, "createdAt" AS created_at FROM account WHERE "userId" = $1 ORDER BY "createdAt"`,
   passkeys: `SELECT name, "deviceType" AS device_type, "backedUp" AS backed_up, "createdAt" AS created_at
@@ -41,6 +41,11 @@ export const EXPORT_QUERIES = {
   likes: `SELECT p.name AS property, r.name AS room, l.created_at AS liked_at
           FROM guest_room_likes l JOIN rooms r ON r.id = l.room_id JOIN properties p ON p.id = r.property_id
           WHERE l.user_id = $1 ORDER BY l.created_at DESC`,
+  reviews: `SELECT p.name AS property, rv.booking_id, rv.status, rv.score, rv.body, rv.author_name, rv.author_country,
+                    rv.stay_month::text AS stay_month, rv.room_label, rv.submitted_via, rv.created_at, rv.published_at,
+                    rv.deleted_at
+             FROM reviews rv JOIN properties p ON p.id = rv.property_id
+             WHERE rv.guest_user_id = $1 ORDER BY rv.created_at DESC`,
   consent: `SELECT event_type, categories, banner_version, app, created_at, expires_at
             FROM consent_log WHERE user_id = $1 ORDER BY created_at`,
 } as const;
@@ -55,12 +60,13 @@ export type GuestExport = {
   bookings: unknown[];
   conversations: unknown[];
   likedRooms: unknown[];
+  reviews: unknown[];
   consentRecords: unknown[];
 };
 
 export async function buildGuestExport(userId: string, run: Run, now: Date = new Date()): Promise<GuestExport> {
   const q = (sql: string) => run(sql, [userId]);
-  const [user, profile, accounts, passkeys, sessions, bookings, conversations, likes, consent] = await Promise.all([
+  const [user, profile, accounts, passkeys, sessions, bookings, conversations, likes, reviews, consent] = await Promise.all([
     q(EXPORT_QUERIES.user),
     q(EXPORT_QUERIES.profile),
     q(EXPORT_QUERIES.accounts),
@@ -69,6 +75,7 @@ export async function buildGuestExport(userId: string, run: Run, now: Date = new
     q(EXPORT_QUERIES.bookings),
     q(EXPORT_QUERIES.conversations),
     q(EXPORT_QUERIES.likes),
+    q(EXPORT_QUERIES.reviews),
     q(EXPORT_QUERIES.consent),
   ]);
   return {
@@ -81,6 +88,7 @@ export async function buildGuestExport(userId: string, run: Run, now: Date = new
     bookings,
     conversations,
     likedRooms: likes,
+    reviews,
     consentRecords: consent,
   };
 }

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getHotelPage } from "@/lib/hotel-page-data";
 import { withAllInPrices, withCancellationTerms } from "@/lib/listing-prices";
+import { getPropertyReviews } from "@/lib/property-reviews";
 import type { DbAmenityCategory } from "./_components/constants";
 
 import { NavWrapper }       from "./_components/NavWrapper";
@@ -39,6 +40,8 @@ export default async function HotelPage({
   if (!page) notFound();
 
   const { hotel, amenities: rawAmenities } = page;
+  // Cached for a day on its own (lib/property-reviews.ts); never throws.
+  const reviews = await getPropertyReviews(hotel.id);
   // All-in per night, tourist tax included, priced for today.
   // Non-refundable rates that are not at least 10% cheaper are left out.
   const rooms = withCancellationTerms(
@@ -71,7 +74,7 @@ export default async function HotelPage({
         </div>
       )}
 
-      <OverviewSection hotel={hotel} amenityCategories={amenityCategories} />
+      <OverviewSection hotel={hotel} amenityCategories={amenityCategories} reviews={reviews} />
       <RoomsSection
         rooms={rooms}
         ratesConfirmed={hotel.rates_confirmed === true}

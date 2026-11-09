@@ -632,6 +632,7 @@ export const bookings = pgTable(
     index("idx_bookings_status").on(table.status),
     index("idx_bookings_stripe_pi").on(table.stripePaymentIntentId),
     index("idx_bookings_user_id").on(table.userId),
+    index("idx_bookings_check_out").on(table.checkOutDate),
   ],
 );
 
@@ -1069,6 +1070,8 @@ export const guestProfile = pgTable("guest_profile", {
   postalCode: varchar("postal_code", { length: 20 }),
   city: varchar("city", { length: 100 }),
   country: char("country", { length: 2 }),
+  /** The guest turned off review invitations and reminders (0038). */
+  reviewEmailsOptOutAt: timestamp("review_emails_opt_out_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -1089,6 +1092,98 @@ export const guestRoomLikes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.roomId] })],
+);
+
+/**
+ * Verified guest reviews (0038): one per booking that took place. Who may
+ * review is decided in @openbookings/pricing (reviews.ts). A deleted review
+ * keeps its row (status 'deleted', no content) so the booking can't be
+ * reviewed again.
+ *
+ * Mirrors packages/db/drizzle/0038_guest_reviews.sql; keep the two in sync.
+ */
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .unique()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    /** Better Auth user id. NULL once the author's account is deleted. */
+    guestUserId: text("guest_user_id"),
+    /** 1–10. NULL only on a deleted review. */
+    score: smallint("score"),
+    body: text("body"),
+    language: text("language"),
+    authorName: text("author_name").notNull(),
+    authorCountry: char("author_country", { length: 2 }),
+    /** First day of the check-out month. */
+    stayMonth: date("stay_month").notNull(),
+    roomLabel: text("room_label"),
+    /** 'pending' | 'published' | 'hidden' | 'removed' | 'deleted', enforced by a DB check. */
+    status: text("status").notNull().default("pending"),
+    flaggedReason: text("flagged_reason"),
+    /** 'session' | 'token' */
+    submittedVia: text("submitted_via").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_reviews_property_published")
+      .on(table.propertyId, table.publishedAt.desc())
+      .where(sql`${table.status} = 'published'`),
+    index("idx_reviews_guest").on(table.guestUserId).where(sql`${table.guestUserId} IS NOT NULL`),
+    index("idx_reviews_pending").on(table.createdAt).where(sql`${table.status} = 'pending'`),
+    check("reviews_score_unless_deleted", sql`${table.status} = 'deleted' OR ${table.score} IS NOT NULL`),
+  ],
+);
+
+/** Review email state per booking (0038), claimed before every send. */
+export const reviewInvitations = pgTable(
+  "review_invitations",
+  {
+    bookingId: uuid("booking_id")
+      .primaryKey()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    hostWarnedAt: timestamp("host_warned_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    attempts: smallint("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_review_invitations_reminder")
+      .on(table.sentAt)
+      .where(sql`${table.reminderSentAt} IS NULL AND ${table.sentAt} IS NOT NULL`),
+  ],
+);
+
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+/** Emailed review links (0038). Only the SHA-256 of each token is kept. */
+export const reviewTokens = pgTable(
+  "review_tokens",
+  {
+    tokenHash: bytea("token_hash").primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("idx_review_tokens_booking").on(table.bookingId)],
 );
 
 /**

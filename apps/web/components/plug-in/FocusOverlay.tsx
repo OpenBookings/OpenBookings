@@ -8,10 +8,13 @@ export default function FocusOverlay({
   open,
   onClose,
   children,
+  contentClassName = 'max-w-3xl px-6 sm:px-8',
 }: {
   open: boolean
   onClose: () => void
   children: ReactNode
+  /** Width and padding of the content wrapper; wider panels pass their own. */
+  contentClassName?: string
 }) {
   // lock scroll
   useEffect(() => {
@@ -48,7 +51,7 @@ export default function FocusOverlay({
       />
 
       {/* focused content - full-width wrapper so SearchBar/GuestSelector get room to breathe */}
-      <div className="relative z-10 w-full max-w-3xl px-6 sm:px-8">
+      <div className={`relative z-10 w-full ${contentClassName}`}>
         <div className="w-full min-w-0">
           {children}
         </div>

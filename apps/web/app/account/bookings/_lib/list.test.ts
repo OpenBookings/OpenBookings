@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyBooking, groupBookings, type GuestBookingListRow } from "./list";
+import { classifyBooking, groupBookings, reviewAction, type GuestBookingListRow } from "./list";
 
 const TODAY = "2026-11-01";
 
@@ -16,6 +16,10 @@ function row(over: Partial<GuestBookingListRow>): GuestBookingListRow {
     rooms: 1,
     guests: 2,
     total_paid: 200,
+    check_out_time: "11:00",
+    timezone: "Europe/Amsterdam",
+    no_show_reported_at: null,
+    review_status: null,
     ...over,
   };
 }
@@ -68,5 +72,28 @@ describe("groupBookings", () => {
 
   test("no bookings gives three empty lists", () => {
     expect(groupBookings([], TODAY)).toEqual({ upcoming: [], past: [], cancelled: [] });
+  });
+});
+
+describe("reviewAction", () => {
+  // Check-out 12 Nov 2026 11:00 Amsterdam = 10:00 UTC; the review opens 24 hours later.
+  const opens = new Date("2026-11-13T10:00:00Z");
+
+  test("offers a review once the window opens, without the stay being marked", () => {
+    expect(reviewAction(row({}), new Date(opens.getTime() - 1))).toBeNull();
+    expect(reviewAction(row({}), opens)).toBe("write");
+    expect(reviewAction(row({ status: "checked_in" }), opens)).toBe("write");
+  });
+
+  test("shows the guest's own review instead, unless they deleted it", () => {
+    expect(reviewAction(row({ review_status: "published" }), opens)).toBe("view");
+    expect(reviewAction(row({ review_status: "pending" }), opens)).toBe("view");
+    expect(reviewAction(row({ review_status: "deleted" }), opens)).toBeNull();
+  });
+
+  test("nothing for no-shows, cancellations or a closed window", () => {
+    expect(reviewAction(row({ status: "no_show" }), opens)).toBeNull();
+    expect(reviewAction(row({ status: "cancelled" }), opens)).toBeNull();
+    expect(reviewAction(row({}), new Date("2026-12-20T10:00:00Z"))).toBeNull();
   });
 });

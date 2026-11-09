@@ -14,6 +14,7 @@
 import {
   allowedActions,
   checkInClosesAt,
+  hostNoShowDeadline,
   type BookingAction,
   type BookingStatus,
   type CancellationTier,
@@ -116,6 +117,7 @@ type BookingRow = {
   stripe_payment_intent_id: string | null;
   timezone: string;
   check_in_time: string | null;
+  check_out_time: string | null;
   check_in_until: string | null;
   /** The account the booking was charged on (its intent's), else the property's. */
   stripe_account_id: string | null;
@@ -163,6 +165,7 @@ export async function loadBookingState(
             b.check_out_date::text AS check_out_date, b.confirmed_at,
             b.departed_early_on::text AS departed_early_on, b.stripe_payment_intent_id,
             p.timezone, to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
+            to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
             to_char(p.check_in_until, 'HH24:MI') AS check_in_until, p.organization_id,
             -- Refund on the account that was charged: the intent's, when the booking came
             -- from one (demo hotels charge on the platform's fallback and have none of their
@@ -226,6 +229,11 @@ export async function loadBookingState(
         timeZone: booking.timezone,
         now,
         actor,
+        noShowUntil: hostNoShowDeadline({
+          checkOutDate: booking.check_out_date,
+          checkOutTime: booking.check_out_time,
+          timeZone: booking.timezone,
+        }),
       })
     : []
   ).filter((a) => !(a === "record_early_departure" && booking.departed_early_on));

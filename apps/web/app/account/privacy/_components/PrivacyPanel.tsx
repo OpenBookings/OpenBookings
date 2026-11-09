@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState } from "react";
 import Link from "next/link";
-import { Cookie, Download, ShieldCheck, Trash2 } from "lucide-react";
+import { Cookie, Download, ShieldCheck, Star, Trash2 } from "lucide-react";
 import posthog from "posthog-js";
 import { toast } from "sonner";
 import { useCookieConsent } from "@openbookings/analytics/client";
@@ -14,6 +14,7 @@ import { DANGER_OUTLINE, PendingButton } from "../../_components/pending-button"
 import { Row, RowList, Section } from "../../_components/section";
 import { AccountDialog, useAction, type ActionResult } from "../../security/_components/passkey-dialogs";
 import { checkCanDeleteAccount } from "../_lib/actions";
+import { setMyReviewEmails } from "@/lib/reviews/actions";
 
 function CookiePreferences() {
   const { consent, loaded, accept, decline } = useCookieConsent();
@@ -56,6 +57,44 @@ function CookiePreferences() {
                   if (next) accept();
                   else decline();
                   toast.success(next ? "Analytics cookies on" : "Analytics cookies off");
+                }}
+              />
+            }
+          />
+        </ul>
+      </RowList>
+    </Section>
+  );
+}
+
+function ReviewEmails({ initial }: { initial: boolean }) {
+  const [on, setOn] = useState(initial);
+  const [pending, startTransition] = React.useTransition();
+
+  return (
+    <Section id="privacy-review-emails" title="Review emails" helper="After a stay we ask once for a review, and remind you once.">
+      <RowList>
+        <ul className="divide-y">
+          <Row
+            icon={<Star aria-hidden className="size-5" />}
+            name="Review requests"
+            meta={on ? "On" : "Off. We won't ask you to review your stays."}
+            actions={
+              <Switch
+                checked={on}
+                disabled={pending}
+                aria-label="Review request emails"
+                onCheckedChange={(next) => {
+                  setOn(next);
+                  startTransition(async () => {
+                    const result = await setMyReviewEmails(next);
+                    if (!result.ok) {
+                      setOn(!next);
+                      toast.error("Could not save that. Try again.");
+                      return;
+                    }
+                    toast.success(next ? "Review emails on" : "Review emails off");
+                  });
                 }}
               />
             }
@@ -197,10 +236,11 @@ function DeleteAccount({ email }: { email: string }) {
   );
 }
 
-export function PrivacyPanel({ email }: { email: string }) {
+export function PrivacyPanel({ email, reviewEmails }: { email: string; reviewEmails: boolean }) {
   return (
     <>
       <CookiePreferences />
+      <ReviewEmails initial={reviewEmails} />
       <DownloadData />
       <DeleteAccount email={email} />
     </>

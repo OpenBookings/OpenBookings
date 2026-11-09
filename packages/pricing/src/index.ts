@@ -8,3 +8,4 @@ export * from "./availability";
 export * from "./tourist-tax";
 export * from "./cancellation";
 export * from "./cancellation-copy";
+export * from "./reviews";

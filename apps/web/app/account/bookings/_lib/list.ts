@@ -1,4 +1,4 @@
-import type { BookingStatus } from "@openbookings/pricing";
+import { projectedCheckOutAt, reviewEligibility, type BookingStatus } from "@openbookings/pricing";
 
 /** One row of GUEST_BOOKINGS_SQL. Dates are `YYYY-MM-DD` text. */
 export type GuestBookingListRow = {
@@ -15,7 +15,26 @@ export type GuestBookingListRow = {
   guests: number;
   /** What the guest paid, tourist tax included, in euros. */
   total_paid: number;
+  /** For the review button: the property's check-out time (HH:MM) and time zone. */
+  check_out_time: string | null;
+  timezone: string;
+  no_show_reported_at: Date | null;
+  /** The booking's review, if any ('deleted' included: a stay is reviewed once). */
+  review_status: string | null;
 };
+
+/** What the card offers about a review: write one, see yours, or nothing. */
+export function reviewAction(row: GuestBookingListRow, now: Date): "write" | "view" | null {
+  if (row.review_status && row.review_status !== "deleted") return "view";
+  const eligibility = reviewEligibility({
+    status: row.status,
+    noShowReportedAt: row.no_show_reported_at,
+    checkOutAt: projectedCheckOutAt({ checkOutDate: row.check_out_date, checkOutTime: row.check_out_time, timeZone: row.timezone }),
+    hasReview: row.review_status !== null,
+    now,
+  });
+  return eligibility.ok ? "write" : null;
+}
 
 export type BookingTab = "upcoming" | "past" | "cancelled";
 
@@ -39,6 +58,10 @@ export const GUEST_BOOKINGS_SQL = `
     p.name AS property_name,
     p.slug AS property_slug,
     p.city,
+    to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
+    p.timezone,
+    b.no_show_reported_at,
+    (SELECT rv.status FROM reviews rv WHERE rv.booking_id = b.id) AS review_status,
     (
       SELECT pi.url FROM property_images pi
       WHERE pi.property_id = p.id

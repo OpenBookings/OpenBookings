@@ -4,7 +4,8 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./booking-send": "./src/booking-send.ts"
+    "./booking-send": "./src/booking-send.ts",
+    "./review-send": "./src/review-send.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",
