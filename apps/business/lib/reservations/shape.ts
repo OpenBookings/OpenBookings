@@ -1,6 +1,7 @@
 import {
   allowedActions,
   checkInClosesAt,
+  hostNoShowDeadline,
   describePolicy,
   POLICY_VERSION,
   TIER_LABELS,
@@ -163,6 +164,11 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
         checkOutDate: row.check_out_date,
         timeZone: row.timezone,
         now,
+        noShowUntil: hostNoShowDeadline({
+          checkOutDate: row.check_out_date,
+          checkOutTime: row.check_out_time,
+          timeZone: row.timezone,
+        }),
       }).filter((a) => !(a === "record_early_departure" && row.departed_early_on))
     : [];
 

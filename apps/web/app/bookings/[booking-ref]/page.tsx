@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { CircleCheck, CircleX } from 'lucide-react';
+import { CircleCheck, CircleX, Star } from 'lucide-react';
+import { getPool } from '@openbookings/db';
+import { getReviewContext } from '@openbookings/db/reviews';
 import { BACKDROP_COOKIE } from '@openbookings/images';
 import { getBackdrop } from '@openbookings/images/server';
 import { getServerSession } from '@/lib/auth';
@@ -67,8 +70,18 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
     );
   }
 
-  const booking = await loadGuestBooking(bookingId, session.user.id);
+  const [booking, review] = await Promise.all([
+    loadGuestBooking(bookingId, session.user.id),
+    getReviewContext(getPool(), bookingId, new Date()),
+  ]);
   if (!booking) notFound();
+  const ownReview = review?.guestUserId === session.user.id ? review : null;
+  const reviewLink =
+    ownReview?.review && ownReview.review.status !== 'deleted'
+      ? 'Your review'
+      : ownReview?.eligibility.ok
+        ? 'Write a review'
+        : null;
 
   const { trip } = booking.timeline;
   const activeRooms = booking.rooms.filter((r) => !r.cancelledAt);
@@ -215,6 +228,15 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
 
             <div className="flex flex-wrap gap-2 border-t border-white/10 pt-5">
               <MessagePropertyButton bookingId={booking.id} />
+              {reviewLink ? (
+                <Link
+                  href={`/bookings/${booking.id}/review`}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-sm text-white backdrop-blur-sm hover:bg-white/15"
+                >
+                  <Star aria-hidden className="size-4" />
+                  {reviewLink}
+                </Link>
+              ) : null}
               {canCancelRooms ? <EditRoomsButton /> : null}
               {booking.canCancel && activeRooms.length > 0 ? (
                 <CancelDialog

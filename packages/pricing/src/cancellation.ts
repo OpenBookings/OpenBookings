@@ -272,6 +272,12 @@ export function allowedActions(i: {
   timeZone: string;
   now: Date;
   actor?: "guest" | "host";
+  /**
+   * Until when a host may mark a no-show: `hostNoShowDeadline` (check-out +
+   * 24h, when the review opens). Left out = no limit; an admin can always
+   * correct a status by hand.
+   */
+  noShowUntil?: Date;
 }): BookingAction[] {
   if (i.actor === "guest") {
     return i.status === "confirmed" && i.now.getTime() < i.checkInAt.getTime() ? ["cancel"] : [];
@@ -285,7 +291,9 @@ export function allowedActions(i: {
     case "confirmed":
       if (!stayOver) actions.push("cancel");
       if (!stayOver && now >= checkIn - DAY) actions.push("mark_checked_in");
-      if (now >= i.checkInClosesAt.getTime()) actions.push("mark_no_show");
+      if (now >= i.checkInClosesAt.getTime() && (!i.noShowUntil || now < i.noShowUntil.getTime())) {
+        actions.push("mark_no_show");
+      }
       if (!stayOver && now >= checkIn) actions.push("record_early_departure");
       actions.push("goodwill_refund");
       break;

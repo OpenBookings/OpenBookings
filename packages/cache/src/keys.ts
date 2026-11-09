@@ -24,6 +24,15 @@ export function propertyPageKey(slug: string): string {
 }
 
 /**
+ * The key for one property's published reviews (the card and the "show all"
+ * panel on its page). Keyed by property id, not slug: reviews belong to the
+ * property, and a slug can change.
+ */
+export function propertyReviewsKey(propertyId: string): string {
+  return `ob:${CACHE_SCHEMA_VERSION}:prop-reviews:${propertyId.toLowerCase()}`;
+}
+
+/**
  * The key marking that `key` was purged, and when.
  *
  * A purge deletes a key that an in-flight loader is about to write back. The

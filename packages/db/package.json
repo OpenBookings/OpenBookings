@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./booking-lifecycle": "./src/booking-lifecycle/index.ts",
-    "./testing": "./src/testing/db-harness.ts"
+    "./testing": "./src/testing/db-harness.ts",
+    "./reviews": "./src/reviews/index.ts"
   },
   "scripts": {
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, ChevronRight, Hotel } from "lucide-react";
+import { CalendarDays, ChevronRight, Hotel, Star } from "lucide-react";
 import { query } from "@openbookings/db";
 import { getServerSession } from "@/lib/auth";
 import { todayInEurope } from "@/lib/account/deletion";
@@ -15,6 +15,7 @@ import {
   GUEST_BOOKINGS_SQL,
   groupBookings,
   parseTab,
+  reviewAction,
   type BookingTab,
   type GuestBookingListRow,
 } from "./_lib/list";
@@ -42,7 +43,7 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-function BookingCard({ booking }: { booking: GuestBookingListRow }) {
+function BookingCard({ booking, review }: { booking: GuestBookingListRow; review: "write" | "view" | null }) {
   const status = STATUS[booking.status];
   return (
     <li>
@@ -74,6 +75,15 @@ function BookingCard({ booking }: { booking: GuestBookingListRow }) {
               {euros.format(booking.total_paid)} · Ref {booking.booking_id.slice(0, 8).toUpperCase()}
             </p>
           </div>
+          {review ? (
+            // Above the card's full-size link, so it gets its own click.
+            <Button asChild variant="outline" size="sm" className="relative z-10 shrink-0">
+              <Link href={`/bookings/${booking.booking_id}/review`}>
+                <Star aria-hidden />
+                {review === "write" ? "Write a review" : "Your review"}
+              </Link>
+            </Button>
+          ) : null}
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>
       </Card>
@@ -87,7 +97,8 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
 
   const tab = parseTab((await searchParams).tab);
   const rows = await query<GuestBookingListRow>(GUEST_BOOKINGS_SQL, [session.user.id]);
-  const groups = groupBookings(rows, todayInEurope());
+  const now = new Date();
+  const groups = groupBookings(rows, todayInEurope(now));
   const list = groups[tab];
 
   return (
@@ -106,7 +117,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
         {list.length > 0 ? (
           <ul className="flex flex-col gap-3">
             {list.map((booking) => (
-              <BookingCard key={booking.booking_id} booking={booking} />
+              <BookingCard key={booking.booking_id} booking={booking} review={tab === "past" ? reviewAction(booking, now) : null} />
             ))}
           </ul>
         ) : (

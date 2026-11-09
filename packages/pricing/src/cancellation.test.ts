@@ -300,6 +300,17 @@ describe("allowedActions", () => {
     ]);
   });
 
+  test("a host can mark a no-show until the review opens, not after", () => {
+    // Check-out 15 Nov 11:00 Amsterdam; the review opens 24h later.
+    const noShowUntil = new Date("2026-11-16T10:00:00Z");
+    expect(allowedActions({ ...base, noShowUntil, status: "confirmed", now: at("2026-11-16T09:59:00Z") })).toContain(
+      "mark_no_show",
+    );
+    expect(allowedActions({ ...base, noShowUntil, status: "confirmed", now: at("2026-11-16T10:00:00Z") })).toEqual([
+      "goodwill_refund",
+    ]);
+  });
+
   test("completed: goodwill only", () => {
     expect(allowedActions({ ...base, status: "completed", now: at("2026-11-16T08:00:00Z") })).toEqual(["goodwill_refund"]);
   });

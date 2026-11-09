@@ -37,13 +37,16 @@ describe("assertCanDeleteAccount", () => {
 });
 
 describe("anonymizeGuestData", () => {
-  test("unlinks consent records and guest messages, and closes the guest's threads, all for this user only", async () => {
+  test("unlinks consent records, guest messages and reviews, and closes the guest's threads, all for this user only", async () => {
     const { run, calls } = recorder();
     await anonymizeGuestData("u1", run);
-    expect(calls.map((c) => c.values)).toEqual([["u1"], ["u1", REDACTED_MESSAGE_BODY], ["u1"]]);
+    expect(calls.map((c) => c.values)).toEqual([["u1"], ["u1", REDACTED_MESSAGE_BODY], ["u1"], ["u1"]]);
     expect(calls[0].sql).toContain("UPDATE consent_log SET user_id = NULL WHERE user_id = $1");
     expect(calls[1].sql).toContain("UPDATE messages SET sender_id = NULL, body = $2 WHERE sender_id = $1 AND sender_role = 'guest'");
     expect(calls[2].sql).toContain("UPDATE message_threads SET status = 'closed'");
     expect(calls[2].sql).toContain("WHERE guest_id = $1");
+    expect(calls[3].sql).toContain("UPDATE reviews");
+    expect(calls[3].sql).toContain("author_name = 'Former guest'");
+    expect(calls[3].sql).toContain("WHERE guest_user_id = $1");
   });
 });
