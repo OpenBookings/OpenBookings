@@ -29,11 +29,19 @@ export type CheckoutDetailsController = {
    * answer. Opens the form on the first problem and returns null.
    */
   validate(): CheckoutDetails | null;
-  /** Validates, then saves to the account. Null when it didn't save. */
-  save(): Promise<CheckoutDetails | null>;
+  /**
+   * Validates, then saves to the account. When it didn't save, says why:
+   * `invalid` (the card now shows the field errors) or `failed` (`saveError`
+   * holds the sentence).
+   */
+  save(): Promise<SaveOutcome>;
   /** A save that failed for a reason no field can show. */
   saveError: string | null;
 };
+
+export type SaveOutcome =
+  | { saved: true; details: CheckoutDetails }
+  | { saved: false; reason: 'invalid' | 'failed' };
 
 function toPrefill(details: CheckoutDetails, email: string): GuestDetailsPrefill {
   return {
@@ -87,17 +95,20 @@ export function useCheckoutDetails(prefill: GuestDetailsPrefill): CheckoutDetail
     return parsed.value;
   }, [currentData, fail]);
 
-  const save = useCallback(async (): Promise<CheckoutDetails | null> => {
-    if (!validate()) return null;
+  const save = useCallback(async (): Promise<SaveOutcome> => {
+    if (!validate()) return { saved: false, reason: 'invalid' };
     const result = await saveCheckoutDetails(currentData());
     if (result.ok) {
       setSaved(toPrefill(result.details, saved.email));
       setMode('summary');
-      return result.details;
+      return { saved: true, details: result.details };
     }
-    if (result.errors && Object.keys(result.errors).length > 0) fail(result.errors);
-    if (result.message) setSaveError(result.message);
-    return null;
+    if (result.errors && Object.keys(result.errors).length > 0) {
+      fail(result.errors);
+      return { saved: false, reason: 'invalid' };
+    }
+    setSaveError(result.message ?? null);
+    return { saved: false, reason: 'failed' };
   }, [validate, currentData, fail, saved.email]);
 
   return {
