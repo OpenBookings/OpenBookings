@@ -60,8 +60,11 @@ export function buildBookingCheckoutParams(
       },
       quantity: line.quantity,
     })),
-    // No phone_number_collection: the page saves the guest's phone to their
-    // account (where hosts read it) and sends it on confirm.
+    // The page saves the guest's phone to their account (where hosts read
+    // it) and sends it on confirm. Stripe.js refuses a phone on confirm
+    // unless collection is on, so it stays on; no Stripe element draws a
+    // phone field on this page.
+    phone_number_collection: { enabled: true },
     // The name and address arrive on confirm too; requiring them here makes
     // Stripe refuse a confirm that leaves them out.
     billing_address_collection: 'required',

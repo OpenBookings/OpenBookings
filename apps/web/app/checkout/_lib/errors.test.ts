@@ -5,6 +5,7 @@ import {
   describeConfirmError,
   describeValidationError,
   unexpectedPaymentError,
+  alertForConfirmError,
 } from "./errors";
 
 describe("describeConfirmError", () => {
@@ -87,5 +88,30 @@ describe("unexpectedPaymentError", () => {
       expect(message).not.toMatch(/nothing has been charged|no charge/i);
       expect(message).toMatch(/check your email/i);
     }
+  });
+});
+
+describe("alertForConfirmError", () => {
+  const decline = { code: "paymentFailed", paymentFailed: { declineCode: "insufficient_funds" } };
+
+  test("a card decline is left to Stripe's own line under the card field", () => {
+    expect(alertForConfirmError(decline, { elementShowsDeclines: true }).message).toBeNull();
+  });
+
+  test("a wallet decline has no field to show it, so our line says it", () => {
+    expect(alertForConfirmError(decline, { elementShowsDeclines: false }).message).toContain("isn't enough money");
+  });
+
+  test("a decline code we have no words for is still reported, even when Stripe shows it", () => {
+    const described = alertForConfirmError(
+      { code: "paymentFailed", paymentFailed: { declineCode: "brand_new_code" } },
+      { elementShowsDeclines: true },
+    );
+    expect(described.report).toBe(true);
+    expect(described.unmappedCode).toBe("brand_new_code");
+  });
+
+  test("other failures always get our line", () => {
+    expect(alertForConfirmError({ code: null, message: "Something odd." }, { elementShowsDeclines: true }).message).toBe("Something odd.");
   });
 });

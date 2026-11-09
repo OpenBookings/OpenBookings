@@ -23,8 +23,8 @@ describe("buildBookingCheckoutParams", () => {
     expect(buildBookingCheckoutParams(input).ui_mode).toBe("elements");
   });
 
-  test("leaves the phone to the page, which sends it on confirm", () => {
-    expect("phone_number_collection" in buildBookingCheckoutParams(input)).toBe(false);
+  test("accepts the phone the page sends on confirm (Stripe.js refuses it otherwise)", () => {
+    expect(buildBookingCheckoutParams(input).phone_number_collection).toEqual({ enabled: true });
   });
 
   test("still insists on a billing address, and keeps the account email locked", () => {

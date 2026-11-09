@@ -465,6 +465,21 @@ export function describeConfirmError(error: ConfirmErrorLike): ConfirmErrorDescr
 }
 
 /**
+ * What our alert line shows for a failed confirm. Stripe's Payment Element
+ * already prints a card decline under the card field, so on that path ours
+ * stays quiet rather than saying it twice; a wallet has no field to print
+ * into, so there it speaks. Reporting is unchanged either way.
+ */
+export function alertForConfirmError(
+  error: ConfirmErrorLike,
+  { elementShowsDeclines }: { elementShowsDeclines: boolean }
+): Omit<ConfirmErrorDescription, 'message'> & { message: string | null } {
+  const described = describeConfirmError(error);
+  if (elementShowsDeclines && error.code === 'paymentFailed') return { ...described, message: null };
+  return described;
+}
+
+/**
  * Our words for a Stripe decline code, for callers holding one directly rather
  * than a `confirm()` result — the return page reading
  * `payment_intent.last_payment_error`, for instance.

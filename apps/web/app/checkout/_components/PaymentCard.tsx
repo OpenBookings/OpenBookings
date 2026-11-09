@@ -15,7 +15,7 @@ import {
   ELEMENT_LOAD_FAILED,
   OFFLINE,
   checkoutErrorCopy,
-  describeConfirmError,
+  alertForConfirmError,
   describeValidationError,
   isExpiredSessionError,
   unexpectedPaymentError,
@@ -116,12 +116,12 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
 
   /** Puts a failed confirm into words; a lapsed session takes the card over instead. */
   const showConfirmError = useCallback(
-    (confirmError: ConfirmError) => {
+    (confirmError: ConfirmError, elementShowsDeclines: boolean) => {
       if (isExpiredSessionError(confirmError)) {
         setSessionLapsed(true);
         return;
       }
-      const { message, report, unmappedCode } = describeConfirmError(confirmError);
+      const { message, report, unmappedCode } = alertForConfirmError(confirmError, { elementShowsDeclines });
       if (report) {
         Sentry.captureException(new Error(confirmError.message || 'Checkout confirm failed'), {
           level: unmappedCode ? 'warning' : 'error',
@@ -161,7 +161,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
       confirmStarted = true;
       const result = await checkout.confirm(toStripeContact(outcome.details));
       if (result.type === 'error') {
-        showConfirmError(result.error);
+        showConfirmError(result.error, true);
         return;
       }
       // Methods that need no redirect resolve here; send the guest on ourselves.
@@ -210,7 +210,7 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
         ...toStripeContact(outcome.details),
       });
       if (result.type === 'error') {
-        showConfirmError(result.error);
+        showConfirmError(result.error, false);
         return;
       }
       leaving = true;
