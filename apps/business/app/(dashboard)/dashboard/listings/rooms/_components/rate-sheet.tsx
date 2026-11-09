@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Form from "next/form";
 import Link from "next/link";
 import { toast } from "sonner";
 import posthog from "posthog-js";
@@ -223,9 +222,15 @@ function RateForm({
         <SheetTitle className="text-lg">{isNew ? "New rate" : rate.name}</SheetTitle>
       </SheetHeader>
 
-      <Form
+      {/* onSubmit, not `action`: React resets a form after its action, which would wipe
+          fields that default from page data when the save comes back with errors. */}
+      <form
         ref={formRef}
-        action={formAction}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          React.startTransition(() => formAction(data));
+        }}
         id="rate-form"
         onChange={markDirty}
         className="flex-1 space-y-5 overflow-y-auto px-4 pb-6"
@@ -511,7 +516,7 @@ function RateForm({
             />
           </Field>
         </Section>
-      </Form>
+      </form>
 
       {/* Pinned, like the R&A Sheet's actions. */}
       <div className="flex items-center justify-end gap-2 border-t bg-(--ari-group) p-4">

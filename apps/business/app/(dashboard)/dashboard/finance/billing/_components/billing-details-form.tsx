@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -118,7 +118,16 @@ export function BillingDetailsForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <form action={save} className="flex flex-col gap-4" key={JSON.stringify(values)}>
+        {/* onSubmit, not `action`: React resets a form after its action, which would wipe what was typed when the save fails. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const data = new FormData(e.currentTarget);
+            startTransition(() => save(data));
+          }}
+          className="flex flex-col gap-4"
+          key={JSON.stringify(values)}
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Field name="legalName" label="Company name" defaultValue={values.legalName} error={err.legalName} readOnly={ro} required />

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Form from "next/form";
 import { toast } from "sonner";
 import { AlertCircleIcon } from "lucide-react";
 import posthog from "posthog-js";
@@ -113,9 +112,15 @@ export function SectionForm<T>({
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
 
-      <Form
+      {/* onSubmit, not `action`: React resets a form after its action, which would wipe
+          fields that default from page data when the save comes back with errors. */}
+      <form
         ref={formRef}
-        action={formAction}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          React.startTransition(() => formAction(data));
+        }}
         id={`section-${sectionId}`}
         onChange={markDirty}
         className="flex-1 overflow-y-auto px-6 py-6"
@@ -149,7 +154,7 @@ export function SectionForm<T>({
         )}
 
         {children(state, pending, markDirty)}
-      </Form>
+      </form>
 
       <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
         <p className="text-muted-foreground text-sm" aria-live="polite">
