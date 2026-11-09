@@ -17,6 +17,7 @@ import {
 } from '@/app/checkout/_lib/errors';
 import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
 import { propertyBookable } from '@/lib/booking/readiness-gate';
+import { ensureCheckoutDomain } from '@/lib/payments/checkout-domain';
 import { getClientIP } from '@/lib/rateLimit';
 
 /**
@@ -272,52 +273,58 @@ export async function POST(request: Request) {
     }
     const stripeAccountId = booking.stripeAccountId;
 
-    const opened = await openIntentSession(
-      {
-        transaction: (fn) => withTransaction((client) => fn(client)),
-        retrieve: async (sessionId, accountId) => {
-          const existing = await retrieveBookingCheckout(sessionId, accountId);
-          return { status: existing.status, clientSecret: existing.client_secret, expiresAt: existing.expires_at };
+    // Beside the Session, never instead of it: the hotel's account needs our
+    // domain registered before Apple Pay can show, and that check never fails
+    // the booking (it reports and gives up after a short deadline).
+    const [opened] = await Promise.all([
+      openIntentSession(
+        {
+          transaction: (fn) => withTransaction((client) => fn(client)),
+          retrieve: async (sessionId, accountId) => {
+            const existing = await retrieveBookingCheckout(sessionId, accountId);
+            return { status: existing.status, clientSecret: existing.client_secret, expiresAt: existing.expires_at };
+          },
+          create: () =>
+            createBookingCheckout({
+              stripeAccountId,
+              // Prefilled and locked: the booking is attached to this account, so
+              // the confirmation must not go somewhere the account holder cannot see.
+              customerEmail: user.email,
+              currency: booking.currency,
+              // Every priced row goes across as its own line item; the page
+              // renders the breakdown back out of the session, so the guest
+              // cannot be shown a split that differs from what is charged.
+              lines: booking.lines.map((line) => ({
+                name: line.name,
+                description: booking.propertyName,
+                unitAmountCents: line.unitAmountCents,
+                quantity: line.quantity,
+              })),
+              applicationFeeCents: booking.platformFeeCents,
+              paymentMethodConfiguration,
+              // The intent carries the guest, the rooms and the prices; the
+              // webhook finds it through `bookingIntentId`.
+              metadata: {
+                bookingIntentId: booking.intentId,
+                totalCents: String(total),
+                touristTaxCents: String(total - stayCents(booking.lines)),
+              },
+              returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+              expiresAt: resolveExpiry(),
+            }),
+          expire: expireBookingCheckout,
+          // An orphaned session that could not be expired: logged, not the
+          // guest's problem. It lapses on its own, and a payment on an intent
+          // that is not open is caught when it is confirmed.
+          report: (err, { sessionId }) => {
+            Sentry.captureException(err, { tags: { area: 'checkout' }, extra: { intentId: booking.intentId, sessionId } });
+            console.error('[checkout] expire orphaned session', sessionId, err instanceof Error ? err.message : String(err));
+          },
         },
-        create: () =>
-          createBookingCheckout({
-            stripeAccountId,
-            // Prefilled and locked: the booking is attached to this account, so
-            // the confirmation must not go somewhere the account holder cannot see.
-            customerEmail: user.email,
-            currency: booking.currency,
-            // Every priced row goes across as its own line item; the page
-            // renders the breakdown back out of the session, so the guest
-            // cannot be shown a split that differs from what is charged.
-            lines: booking.lines.map((line) => ({
-              name: line.name,
-              description: booking.propertyName,
-              unitAmountCents: line.unitAmountCents,
-              quantity: line.quantity,
-            })),
-            applicationFeeCents: booking.platformFeeCents,
-            paymentMethodConfiguration,
-            // The intent carries the guest, the rooms and the prices; the
-            // webhook finds it through `bookingIntentId`.
-            metadata: {
-              bookingIntentId: booking.intentId,
-              totalCents: String(total),
-              touristTaxCents: String(total - stayCents(booking.lines)),
-            },
-            returnUrl: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
-            expiresAt: resolveExpiry(),
-          }),
-        expire: expireBookingCheckout,
-        // An orphaned session that could not be expired: logged, not the
-        // guest's problem. It lapses on its own, and a payment on an intent
-        // that is not open is caught when it is confirmed.
-        report: (err, { sessionId }) => {
-          Sentry.captureException(err, { tags: { area: 'checkout' }, extra: { intentId: booking.intentId, sessionId } });
-          console.error('[checkout] expire orphaned session', sessionId, err instanceof Error ? err.message : String(err));
-        },
-      },
-      { intentId: booking.intentId, userId: user.id, accountId: stripeAccountId, now: new Date() }
-    );
+        { intentId: booking.intentId, userId: user.id, accountId: stripeAccountId, now: new Date() }
+      ),
+      ensureCheckoutDomain(stripeAccountId, appUrl),
+    ]);
     if (!opened.ok) {
       if (opened.code === 'not_found') throw new BookingNotFoundError(booking.intentId, 'gone while opening its session');
       return failure(opened.code, 409);
