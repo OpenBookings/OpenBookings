@@ -30,10 +30,10 @@ import { getClientIP } from '@/lib/rateLimit';
  * An intent has at most one payable session: one Stripe still has open is
  * handed back rather than a second made beside it.
  *
- * `ui_mode: 'form'` returns a client secret instead of a hosted URL: the page
- * mounts Stripe's embedded form against it and confirms client-side, so the
- * page keeps its own surrounding layout while Stripe owns the fields, the
- * validation and the pay button.
+ * `ui_mode: 'elements'` returns a client secret instead of a hosted URL: the
+ * page mounts Stripe's wallet buttons and payment box against it and confirms
+ * client-side. The guest's name, phone and address come from the page's own
+ * details card (saved to their account first) and go to Stripe on confirm.
  *
  * Every priced row of the booking goes across as its own line item. The page
  * renders the breakdown back out of the session rather than from local data,

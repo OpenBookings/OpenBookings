@@ -45,9 +45,12 @@ export function buildBookingCheckoutParams(
 
   return {
     mode: 'payment',
-    ui_mode: 'form',
-    // Prefills the contact block and locks it: the booking is attached to this
-    // account, so the confirmation must not go to a different address.
+    // Stripe's separate elements: the page draws the guest's details itself
+    // (from their account) and its own Pay button, and mounts only Stripe's
+    // wallet buttons and payment box.
+    ui_mode: 'elements',
+    // Locked to the account: the booking is attached to it, so the
+    // confirmation must not go to a different address.
     customer_email: input.customerEmail,
     line_items: input.lines.map((line) => ({
       price_data: {
@@ -57,10 +60,10 @@ export function buildBookingCheckoutParams(
       },
       quantity: line.quantity,
     })),
-    // Hosts need a number to reach the guest about arrival.
-    phone_number_collection: { enabled: true },
-    // Collects the guest's name and address; without it the booking reaches
-    // the host anonymous.
+    // No phone_number_collection: the page saves the guest's phone to their
+    // account (where hosts read it) and sends it on confirm.
+    // The name and address arrive on confirm too; requiring them here makes
+    // Stripe refuse a confirm that leaves them out.
     billing_address_collection: 'required',
     ...(input.paymentMethodConfiguration
       ? { payment_method_configuration: input.paymentMethodConfiguration }
