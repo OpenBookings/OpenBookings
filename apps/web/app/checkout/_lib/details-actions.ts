@@ -8,13 +8,13 @@ import {
   type CheckoutDetails,
   type DetailsField,
 } from "@/app/account/personal-details/_lib/validate";
+import { DETAILS_SAVE_FAILED } from "./errors";
 
 export type CheckoutSaveResult =
   | { ok: true; details: CheckoutDetails }
   | { ok: false; errors?: Partial<Record<DetailsField, string>>; message?: string };
 
 const SIGNED_OUT = "Your session ended. Sign in again to save.";
-const FAILED = "We couldn't save your details. Nothing has been charged — please try again.";
 
 /**
  * Saves the checkout's details card to the guest's account before they pay,
@@ -30,7 +30,7 @@ export async function saveCheckoutDetails(form: FormData): Promise<CheckoutSaveR
   try {
     await saveGuestDetails(session.user.id, session.user.name ?? null, parsed.value);
   } catch {
-    return { ok: false, message: FAILED };
+    return { ok: false, message: DETAILS_SAVE_FAILED.message };
   }
   revalidatePath("/account", "layout");
   return { ok: true, details: parsed.value };
