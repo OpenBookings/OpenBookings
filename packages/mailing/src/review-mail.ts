@@ -85,6 +85,30 @@ export function guestReviewPosted(i: { propertyName: string; pending: boolean; m
   });
 }
 
+/**
+ * To the guest, once, when the property publishes a public reply to their
+ * review. The reply is public already, so the mail quotes it in full.
+ */
+export function guestReviewReplied(i: {
+  guestFirstName: string;
+  propertyName: string;
+  replyBody: string;
+  manageUrl: string;
+  settingsUrl: string;
+}): ActionMail {
+  return composeActionMail({
+    subject: `${i.propertyName} replied to your review`,
+    preheader: "Read their reply, and answer it if you like.",
+    eyebrow: "Review",
+    headline: `${escapeHtml(i.propertyName)} replied<br />to your review.`,
+    body: `Hi ${escapeHtml(i.guestFirstName)}, ${STRONG(i.propertyName)} answered the review you wrote. Their reply is public, under your review on their page:`,
+    details: `<p style="margin:0;border-left:2px solid #444444;padding-left:12px;font-size:14px;line-height:1.6;color:#CCCCCC;white-space:pre-line;">${escapeHtml(i.replyBody)}</p>`,
+    ctaUrl: i.manageUrl,
+    ctaLabel: "See the reply",
+    footnote: `You can answer once, under your review. Your answer is public too.<br /><br />${LINK(i.settingsUrl, "Turn off review emails")}. ${SUPPORT}`,
+  });
+}
+
 export type UnconfirmedStay = { guestName: string; checkInDate: string; checkOutDate: string };
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CACHE_SCHEMA_VERSION, propertyPageKey } from "./keys";
+import { CACHE_SCHEMA_VERSION, propertyPageKey, propertyReviewsKey } from "./keys";
 
 describe("propertyPageKey", () => {
   test("uses the ob:<version>:prop-page:<slug> shape", () => {
@@ -19,5 +19,11 @@ describe("propertyPageKey", () => {
 
   test("carries the schema version, so a shape change orphans old entries", () => {
     expect(propertyPageKey("x")).toContain(`:${CACHE_SCHEMA_VERSION}:`);
+  });
+});
+
+describe("propertyReviewsKey", () => {
+  test("carries the reviews shape version, so entries cached before replies existed are never read", () => {
+    expect(propertyReviewsKey("ABC")).toBe(`ob:${CACHE_SCHEMA_VERSION}:prop-reviews:r2:abc`);
   });
 });

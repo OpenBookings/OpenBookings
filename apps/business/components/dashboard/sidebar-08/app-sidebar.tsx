@@ -90,10 +90,19 @@ const navMain: NavItem[] = [
   },
 ];
 
+/** The nav with live counts filled in. */
+function withCounts(items: NavItem[], reviewsWaiting: number): NavItem[] {
+  return items.map((item) => ({
+    ...item,
+    items: item.items?.map((s) => (s.url === "/dashboard/bookings/reviews" ? { ...s, badge: reviewsWaiting } : s)),
+  }));
+}
+
 export function DashboardSidebar({
   brand,
+  reviewsWaiting = 0,
   ...props
-}: React.ComponentProps<typeof Sidebar> & { brand?: PropertyBrand | null }) {
+}: React.ComponentProps<typeof Sidebar> & { brand?: PropertyBrand | null; reviewsWaiting?: number }) {
   const { counts, markSeen } = useNavAttention();
   const support = useOptionalSupport();
   const { setOpenMobile } = useSidebar();
@@ -153,7 +162,7 @@ export function DashboardSidebar({
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <NavMain items={navMain} />
+          <NavMain items={withCounts(navMain, reviewsWaiting)} />
           <NavSecondary items={navSecondary} className="mt-auto" />
         </SidebarContent>
         <SidebarFooter>

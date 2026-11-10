@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatStayMonth, guestReviewInvitation, guestReviewPosted, hostUnconfirmedStays } from "./review-mail";
+import { formatStayMonth, guestReviewInvitation, guestReviewPosted, guestReviewReplied, hostUnconfirmedStays } from "./review-mail";
 
 const invitation = {
   guestFirstName: "Anna",
@@ -48,6 +48,30 @@ describe("review mails", () => {
     expect(mail.html).toContain("Anna de Vries");
     expect(mail.html).toContain("Ben &lt;b&gt;");
     expect(mail.html).toContain("Thu 13 Nov, 11:00");
+  });
+
+  const replied = {
+    guestFirstName: "Anna",
+    propertyName: "Hotel",
+    replyBody: "Thanks <b>Anna</b>",
+    manageUrl: "https://openbookings.co/bookings/b1/review",
+    settingsUrl: "https://openbookings.co/account/privacy",
+  };
+
+  test("the reply mail quotes the reply and escapes it", () => {
+    const mail = guestReviewReplied(replied);
+    expect(mail.subject).toBe("Hotel replied to your review");
+    expect(mail.html).toContain("Thanks &lt;b&gt;Anna&lt;/b&gt;");
+    expect(mail.html).not.toContain("<b>Anna</b>");
+    expect(mail.html).toContain("Hi Anna");
+  });
+
+  test("the reply mail links to the review page and the email setting", () => {
+    const mail = guestReviewReplied(replied);
+    expect(mail.html).toContain("https://openbookings.co/bookings/b1/review");
+    expect(mail.html).toContain("See the reply");
+    expect(mail.html).toContain("https://openbookings.co/account/privacy");
+    expect(mail.html).toContain("Turn off review emails");
   });
 
   test("formatStayMonth", () => {

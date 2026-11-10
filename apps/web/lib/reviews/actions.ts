@@ -3,11 +3,12 @@
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
-import { getPool } from '@openbookings/db';
+import { getPool, withTransaction } from '@openbookings/db';
 import {
   bookingForReviewToken,
   deleteGuestReview,
   getReviewContext,
+  postReviewReply,
   setReviewEmails,
   submitReview,
   type SubmitReviewResult,
@@ -16,7 +17,7 @@ import { sendReviewPosted } from '@openbookings/mailing/review-send';
 import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
-import { screenReview } from './screen';
+import { screenReview } from '@openbookings/messaging';
 
 /**
  * The review form's actions. Two ways to prove the booking, one rule for
@@ -120,6 +121,37 @@ export async function deleteMyReview(bookingId: string): Promise<ReviewActionRes
   await purgePropertyReviews(context.propertyId);
   refresh(bookingId, context.propertySlug);
   return { ok: true, status: 'published' };
+}
+
+const ANSWER_ERRORS: Record<string, string> = {
+  invalid: 'Write between 1 and 1,000 characters.',
+  not_your_turn: 'You can answer once the property has replied.',
+  thread_closed: 'You already answered this reply.',
+  review_deleted: 'This review was deleted.',
+};
+
+/** The review's author answers the property's public reply, once. */
+export async function answerHostReply(bookingId: string, body: string): Promise<ReviewActionResult> {
+  const session = await getServerSession();
+  if (!session) return { ok: false, message: 'Your session ended. Sign in again.' };
+  const context = await getReviewContext(getPool(), bookingId, new Date());
+  if (!context?.review || context.guestUserId !== session.user.id) return fail('not_found');
+  const text = typeof body === 'string' ? body : '';
+  const reviewId = context.review.id;
+  const result = await withTransaction((tx) =>
+    postReviewReply(tx, {
+      reviewId,
+      role: 'guest',
+      authorUserId: session.user.id,
+      body: text,
+      flaggedReason: screenReview(text),
+      now: new Date(),
+    }),
+  );
+  if (!result.ok) return { ok: false, message: ANSWER_ERRORS[result.error] ?? MESSAGES.not_found };
+  if (result.status === 'published') await purgePropertyReviews(context.propertyId);
+  refresh(bookingId, context.propertySlug);
+  return { ok: true, status: result.status };
 }
 
 /** "Don't send me review requests", from the emailed link. */
