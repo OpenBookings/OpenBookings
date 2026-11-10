@@ -1,4 +1,4 @@
-import { detectCircumvention } from "@openbookings/messaging";
+import { detectCircumvention } from "./circumvention";
 
 /**
  * The automated check before a review is published. Anything it flags is

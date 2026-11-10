@@ -16,7 +16,7 @@ import { sendReviewPosted } from '@openbookings/mailing/review-send';
 import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
-import { screenReview } from './screen';
+import { screenReview } from '@openbookings/messaging';
 
 /**
  * The review form's actions. Two ways to prove the booking, one rule for

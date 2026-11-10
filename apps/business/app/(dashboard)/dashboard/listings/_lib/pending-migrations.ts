@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
  * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
  * branch, so a long list here makes them queue behind each other's locks.
  */
-const PENDING: string[] = [];
+const PENDING: string[] = ["0038_guest_reviews.sql", "0039_review_replies.sql"];
 
 const DRIZZLE_DIR = new URL("../../../../../../../packages/db/drizzle/", import.meta.url);
 
