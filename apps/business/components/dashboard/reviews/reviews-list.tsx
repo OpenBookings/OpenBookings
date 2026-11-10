@@ -17,12 +17,9 @@ function Trailing({ review }: { review: HostReview }) {
     return <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="Waiting for a reply" />;
   }
   const replied = review.replies.some((r) => r.role === "host");
-  if (!replied && !review.privateReplyAt) return null;
-  return (
-    <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">
-      {replied ? "Replied" : "Replied privately"}
-    </span>
-  );
+  const label = replied ? "Replied" : review.privateReplyAt ? "Replied privately" : review.skippedAt ? "No reply" : null;
+  if (!label) return null;
+  return <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">{label}</span>;
 }
 
 function ReviewRow({ review, selected, onSelect }: { review: HostReview; selected: boolean; onSelect: () => void }) {

@@ -23,6 +23,7 @@ type Row = {
   flagged_reason: string | null;
   posted_at: Date;
   private_reply_at: Date | null;
+  reply_skipped_at: Date | null;
   replies: {
     id: string;
     role: ReplyRole;
@@ -43,7 +44,7 @@ type Row = {
 const hostReviewsSql = (testing: boolean) => `
   SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, rv.score, rv.body,
          rv.author_name, rv.author_country, rv.stay_month::text AS stay_month, rv.room_label,
-         rv.status, rv.flagged_reason, COALESCE(rv.published_at, rv.created_at) AS posted_at,
+         rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
          COALESCE((
            SELECT json_agg(json_build_object(
@@ -88,6 +89,7 @@ function toHostReview(row: Row): HostReview {
     postedAt: iso(row.posted_at)!,
     replies,
     privateReplyAt: iso(row.private_reply_at),
+    skippedAt: iso(row.reply_skipped_at),
     nextRole: nextReplyRole(replies.map((r) => r.role)),
   };
 }

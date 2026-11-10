@@ -1134,6 +1134,9 @@ export const reviews = pgTable(
     submittedVia: text("submitted_via").notNull(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** The host marked it as needing no reply (0039). Cleared on undo. */
+    replySkippedAt: timestamp("reply_skipped_at", { withTimezone: true }),
+    replySkippedBy: text("reply_skipped_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

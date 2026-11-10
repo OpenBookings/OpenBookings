@@ -9,6 +9,7 @@ import {
   insertPrivateReviewReply,
   loadPropertyReviews,
   postReviewReply,
+  setReplySkipped,
   submitReview,
   type ReplyRole,
 } from "./index";
@@ -190,5 +191,25 @@ describeWithDb("review replies against Postgres", () => {
     expect(
       await insertPrivateReviewReply(db, { reviewId, senderUserId: hostId, body: "Hello", flaggedReason: null, now: NOW }),
     ).toEqual({ ok: false, error: "no_thread_host" });
+  });
+
+  test("a host can mark a review as needing no reply, and undo it", async () => {
+    expect(await setReplySkipped(db, { reviewId, userId: hostId, skipped: true, now: NOW })).toEqual({ ok: true, propertyId });
+    const marked = await one<{ reply_skipped_at: Date | null; reply_skipped_by: string | null }>(
+      `SELECT reply_skipped_at, reply_skipped_by FROM reviews WHERE id = $1`,
+      [reviewId],
+    );
+    expect(marked.reply_skipped_at?.toISOString()).toBe(NOW.toISOString());
+    expect(marked.reply_skipped_by).toBe(hostId);
+    expect(await setReplySkipped(db, { reviewId, userId: hostId, skipped: false, now: NOW })).toEqual({ ok: true, propertyId });
+    expect(await one(`SELECT reply_skipped_at, reply_skipped_by FROM reviews WHERE id = $1`, [reviewId])).toEqual({
+      reply_skipped_at: null,
+      reply_skipped_by: null,
+    });
+  });
+
+  test("a deleted review can't be marked", async () => {
+    await deleteGuestReview(db, { bookingId, guestUserId: guestId, now: NOW });
+    expect(await setReplySkipped(db, { reviewId, userId: hostId, skipped: true, now: NOW })).toEqual({ ok: false, error: "review_deleted" });
   });
 });

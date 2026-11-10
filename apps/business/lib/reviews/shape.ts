@@ -33,6 +33,8 @@ export type HostReview = {
   replies: ReviewReply[];
   /** ISO time of the latest private reply in Messages, if any. */
   privateReplyAt: string | null;
+  /** ISO time the host marked it as needing no reply, if they did. */
+  skippedAt: string | null;
   /** Whose turn it is in the public thread; null when it is closed. */
   nextRole: ReplyRole | null;
 };
@@ -40,12 +42,16 @@ export type HostReview = {
 export type ReviewTab = "reply" | "all" | "checking";
 export type HostReviewSort = "newest" | "oldest" | "highest" | "lowest";
 
-/** Published, the host's turn, and not answered privately since the thread's last reply. */
+/**
+ * Published, the host's turn, and not handled since the thread's last
+ * reply: a private message or "no reply needed" both count as handled.
+ */
 export function needsReply(r: HostReview): boolean {
   if (r.status !== "published" || r.nextRole !== "host") return false;
-  if (r.privateReplyAt === null) return true;
+  const handled = [r.privateReplyAt, r.skippedAt].filter((t): t is string => t !== null).map(Date.parse);
+  if (handled.length === 0) return true;
   const last = r.replies.at(-1)?.createdAt;
-  return last !== undefined && Date.parse(r.privateReplyAt) < Date.parse(last);
+  return last !== undefined && Math.max(...handled) < Date.parse(last);
 }
 
 export function inTab(r: HostReview, tab: ReviewTab): boolean {

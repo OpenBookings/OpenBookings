@@ -254,3 +254,26 @@ export async function loadReviewReplies(
   }
   return out;
 }
+
+/**
+ * "No reply needed": the host marks a review as handled without answering
+ * it, or takes that back. It counts until the thread moves on (a guest
+ * answer after it makes the review need a reply again).
+ */
+export async function setReplySkipped(
+  db: Queryable,
+  i: { reviewId: string; userId: string; skipped: boolean; now: Date },
+): Promise<{ ok: true; propertyId: string } | Fail> {
+  if (!UUID.test(i.reviewId)) return { ok: false, error: "not_found" };
+  const review = (await db.query(`SELECT property_id, status FROM reviews WHERE id = $1::uuid`, [i.reviewId])).rows[0] as
+    | { property_id: string; status: string }
+    | undefined;
+  if (!review) return { ok: false, error: "not_found" };
+  if (review.status !== "published" && review.status !== "pending") return { ok: false, error: "review_deleted" };
+  await db.query(`UPDATE reviews SET reply_skipped_at = $2, reply_skipped_by = $3 WHERE id = $1::uuid`, [
+    i.reviewId,
+    i.skipped ? i.now : null,
+    i.skipped ? i.userId : null,
+  ]);
+  return { ok: true, propertyId: review.property_id };
+}

@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import { REPLY_BODY_MAX } from "@openbookings/pricing";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { replyToReview, type ReplyActionResult } from "@/lib/reviews/actions";
-import type { HostReview } from "@/lib/reviews/shape";
+import { replyToReview, skipReviewReply, type ReplyActionResult } from "@/lib/reviews/actions";
+import { needsReply, type HostReview } from "@/lib/reviews/shape";
 
 type Mode = "public" | "private";
 
@@ -66,7 +66,31 @@ export function ReplyComposer({ review }: { review: HostReview }) {
   const [text, setText] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
+  const [replyAnyway, setReplyAnyway] = React.useState(false);
   const fieldId = `reply-${review.id}`;
+  const skipped = review.skippedAt !== null && review.status === "published" && !needsReply(review);
+
+  const markSkipped = (value: boolean) =>
+    startTransition(async () => {
+      const result = await skipReviewReply(review.id, value);
+      if (!result.ok) toast.error(result.message);
+      else toast.success(value ? "Marked as no reply needed" : "Back in To reply");
+    });
+
+  // Marked as needing no reply: say so, keep replying one click away.
+  if (skipped && mode === null && !replyAnyway) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+        <span>You marked this review as needing no reply.</span>
+        <button type="button" disabled={pending} onClick={() => markSkipped(false)} className="underline underline-offset-2 hover:text-foreground">
+          Undo
+        </button>
+        <Button variant="outline" size="sm" onClick={() => setReplyAnyway(true)}>
+          Reply anyway
+        </Button>
+      </div>
+    );
+  }
 
   // Not the host's turn in the public thread: only a private message is possible, so it waits behind a quiet button.
   if (mode === null && !canPublic) {
@@ -89,6 +113,16 @@ export function ReplyComposer({ review }: { review: HostReview }) {
             onClick={() => setMode("private")}
           />
         </div>
+        {review.status === "published" && !skipped ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => markSkipped(true)}
+            className="self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            No reply needed
+          </button>
+        ) : null}
       </div>
     );
   }

@@ -23,6 +23,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     postedAt: "2031-11-15T10:00:00.000Z",
     replies: [],
     privateReplyAt: null,
+    skippedAt: null,
     nextRole: "host",
     ...extra,
   };
@@ -55,6 +56,13 @@ describe("needsReply", () => {
     const answered = [reply("host"), { ...reply("guest"), createdAt: "2031-11-17T10:00:00.000Z" }];
     expect(needsReply(review({ replies: answered, nextRole: "host", privateReplyAt: "2031-11-18T10:00:00.000Z" }))).toBe(false);
     expect(needsReply(review({ replies: answered, nextRole: "host", privateReplyAt: "2031-11-16T09:00:00.000Z" }))).toBe(true);
+  });
+  test("not when the host marked it as needing no reply", () => {
+    expect(needsReply(review({ skippedAt: "2031-11-16T10:00:00.000Z" }))).toBe(false);
+  });
+  test("again when the guest answers after it was marked", () => {
+    const answered = [reply("host"), { ...reply("guest"), createdAt: "2031-11-17T10:00:00.000Z" }];
+    expect(needsReply(review({ replies: answered, skippedAt: "2031-11-16T12:00:00.000Z" }))).toBe(true);
   });
   test("not while the review is being checked", () => {
     expect(needsReply(review({ status: "pending" }))).toBe(false);

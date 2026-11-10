@@ -11,6 +11,9 @@
 --                     a private reply is an ordinary message in the
 --                     booking's conversation; this links it to the review it
 --                     answers.
+--   reviews.reply_skipped_at / reply_skipped_by
+--                     the host decided this review needs no reply. It
+--                     counts as handled until the thread moves on.
 --
 -- Idempotent: safe to replay (see packages/db/src/testing/pending-migrations.ts).
 
@@ -38,3 +41,6 @@ CREATE INDEX IF NOT EXISTS idx_review_replies_review ON review_replies (review_i
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS review_id uuid NULL REFERENCES reviews(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_review ON messages (review_id) WHERE review_id IS NOT NULL;
+
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply_skipped_at timestamptz NULL;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply_skipped_by text NULL;
