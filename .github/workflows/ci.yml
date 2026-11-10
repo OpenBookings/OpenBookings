@@ -19,24 +19,91 @@ env:
   SCW_NAMESPACE: namespace-distracted-saha
 
 jobs:
-  verify:
-    name: Verify
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+  # ---- Pull requests only ----------------------------------------------------
+  #
+  # Everything that proves a change is correct runs on the PR, and only there.
+  # A push to main does not re-run it: the PR already tested the merge of the
+  # branch into main (refs/pull/N/merge), and with "Require branches to be up
+  # to date before merging" on, that is the exact tree that lands. main only
+  # builds, pushes and releases.
+  #
+  # Only what the PR touches is checked: `--affected` compares against the PR's
+  # base and selects the changed packages plus everything that depends on
+  # them. A change to apps/web runs web's tests and skips billing (~10 min) and
+  # db (~7 min). A change to packages/db, bun.lock, turbo.json or the root
+  # package.json still runs everything.
+
+  checks:
+    name: Lint & typecheck
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    env:
+      TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          # --affected needs the base commit to diff against.
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.13
 
+      # Turbo's local cache, so a second push to the same PR replays the
+      # packages it did not change instead of linting them again.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .turbo/cache
+          key: turbo-checks-${{ github.event.pull_request.number }}-${{ github.sha }}
+          restore-keys: turbo-checks-${{ github.event.pull_request.number }}-
+
       - run: bun install --frozen-lockfile
 
-      - run: bun run lint
+      - run: bunx turbo run lint typecheck --affected
 
-      - run: bun run typecheck
+  test:
+    name: Test
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    env:
+      TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+
+      # Replays a package's tests only when nothing it depends on changed --
+      # migrations included, since packages/db/drizzle is part of db's hash.
+      # Not covered: drift in the parent Neon branch between two pushes. The
+      # cache is per PR, so that window is the life of one PR.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .turbo/cache
+          key: turbo-test-${{ github.event.pull_request.number }}-${{ github.sha }}
+          restore-keys: turbo-test-${{ github.event.pull_request.number }}-
+
+      - run: bun install --frozen-lockfile
+
+      # Not the demo package: its tests generate demo hotels (slow) and only
+      # check the local testing setup. Run them with `bun run test` locally.
+      - name: Work out which packages to test
+        id: affected
+        run: |
+          set -euo pipefail
+          packages=$(bunx turbo run test --affected --filter='!@openbookings/demo' --dry=json \
+            | jq -r '[.tasks[] | select(.task == "test") | .package] | unique | join(" ")')
+          echo "Affected: ${packages:-none}"
+          if [ -n "$packages" ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # A throwaway Neon branch, not a Postgres service container.
       #
@@ -54,6 +121,7 @@ jobs:
       # fixtures inside a transaction and roll it back.
       - name: Create a throwaway database branch
         id: neon
+        if: steps.affected.outputs.any == 'true'
         uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
@@ -68,6 +136,7 @@ jobs:
       # first connect waits on it, which can outrun bun's 5-second hook limit.
       # So wait here until the database answers.
       - name: Wait for the database to accept connections
+        if: steps.affected.outputs.any == 'true'
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
         run: |
@@ -84,6 +153,7 @@ jobs:
       # Once, so the tests need not replay them each (see
       # packages/db/scripts/apply-pending-ci.ts).
       - name: Apply this branch's pending migrations
+        if: steps.affected.outputs.any == 'true'
         env:
           DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
         run: bun run --cwd packages/db db:apply-pending:ci
@@ -91,18 +161,16 @@ jobs:
       # The direct endpoint, not the pooled one: the pooler rewrites and
       # batches statements, and these tests drive explicit transactions.
       #
-      # Not the demo package: its tests generate demo hotels (slow) and only
-      # check the local testing setup. Run them with `bun run test` locally.
-      #
       # Four packages at a time, not turbo's default ten: the branch's compute
       # starts at 0.25 CU, and every package opening its connections at once
       # got them dropped ("Connection terminated unexpectedly").
       - name: Run tests
+        if: steps.affected.outputs.any == 'true'
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url }}
           DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
           PENDING_MIGRATIONS_APPLIED: "1"
-        run: bun run test --filter='!@openbookings/demo' --concurrency=4
+        run: bunx turbo run test --affected --filter='!@openbookings/demo' --concurrency=4
 
       # Always, including when the tests failed -- an abandoned branch keeps
       # billing. Skipped only if the branch was never created, where there is
@@ -115,9 +183,27 @@ jobs:
           branch: ${{ steps.neon.outputs.branch_id }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
+  # The one check branch protection needs to require. Keeps the old job's name,
+  # so an existing "Verify" required check keeps working.
+  verify:
+    name: Verify
+    needs: [checks, test]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lint, typecheck and tests all passed
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          TEST: ${{ needs.test.result }}
+        run: |
+          echo "Lint & typecheck: $CHECKS, Test: $TEST"
+          [ "$CHECKS" = "success" ] && [ "$TEST" = "success" ]
+
+  # ---- Pull requests and main ------------------------------------------------
+
   detect:
     name: Detect changed apps
-    needs: verify
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     outputs:
       web: ${{ steps.filter.outputs.web }}
@@ -194,6 +280,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name == 'push'
         with:
@@ -205,6 +292,12 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=web
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=web,mode=max' || '' }}
           # A mounted secret, not a build arg: build args are recorded in build
           # metadata and provenance attestations, and this token can write to
           # every project in the org. It is only needed to upload source maps --
@@ -252,6 +345,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name == 'push'
         with:
@@ -263,6 +357,12 @@ jobs:
           context: .
           file: ./apps/business/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=business
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=business,mode=max' || '' }}
           # A mounted secret, not a build arg: build args are recorded in build
           # metadata and provenance attestations, and this token can write to
           # every project in the org. It is only needed to upload source maps --
@@ -309,6 +409,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name == 'push'
         with:
@@ -320,6 +421,12 @@ jobs:
           context: .
           file: ./apps/docs/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=docs
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=docs,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -336,6 +443,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name == 'push'
         with:
@@ -347,6 +455,12 @@ jobs:
           context: .
           file: ./apps/support-bot/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=support-bot
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=support-bot,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -367,6 +481,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: github.event_name == 'push'
         with:
@@ -378,6 +493,12 @@ jobs:
           context: .
           file: ./apps/invoice-job/Dockerfile
           push: ${{ github.event_name == 'push' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=invoice-job
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=invoice-job,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -389,7 +510,7 @@ jobs:
   release:
     name: Release
     needs: [detect, build-web, build-business, build-docs, build-support, build-invoice-job]
-    # `detect.result == 'success'` implies verify passed, since detect needs it.
+    # Tests do not run here: they passed on the PR (see `checks` and `test`).
     # `!failure()` stops a release when any build failed; `!cancelled()` still
     # lets *skipped* builds through, which is the normal case -- an app whose
     # paths did not change has no new image and simply is not rolled.
