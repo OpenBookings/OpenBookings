@@ -71,7 +71,19 @@ const bedsSchema = z
   })
   .refine((beds) => Object.keys(beds).length > 0, "Add at least one bed.");
 
-export const spaceSchema = z.object({
+/** A blank fee is free (0): a guest is never charged for a field the host left empty. */
+const fee = (label: string) =>
+  z.preprocess(
+    (v) => (v === undefined || v === null || String(v).trim() === "" ? 0 : v),
+    wholeNumber(label, 0, LIMITS.fee.max),
+  );
+
+/** A count posted only while its switch is on; absent reads as 0. */
+const count = (label: string, max: number) =>
+  z.preprocess((v) => (v === undefined || v === null || v === "" ? 0 : v), wholeNumber(label, 0, max));
+
+export const spaceSchema = z
+  .object({
   sizeM2: z.coerce
     .number({ error: "Enter the room size in square metres." })
     .gt(0, "Enter the room size in square metres.")
@@ -83,7 +95,53 @@ export const spaceSchema = z.object({
   maxAdults: wholeNumber("maximum adults", LIMITS.adults.min, LIMITS.adults.max),
   maxChildren: wholeNumber("maximum children", LIMITS.children.min, LIMITS.children.max),
   units: wholeNumber("the number of units", LIMITS.units.min, LIMITS.units.max),
-});
+  baseOccupancy: wholeNumber("guests included", 1, LIMITS.adults.max + LIMITS.children.max),
+  extraAdultFee: fee("the extra adult fee"),
+  extraChildFee: fee("the extra child fee"),
+  cotsOn: checkbox,
+  cotsMax: count("the number of cots", LIMITS.cots.max),
+  cotFee: fee("the cot fee"),
+  extraBedsOn: checkbox,
+  extraBedsMax: count("the number of extra beds", LIMITS.extraBeds.max),
+  extraBedFee: fee("the extra bed fee"),
+  cotAndExtraBedTogether: checkbox,
+  })
+  .superRefine((v, ctx) => {
+    const maxGuests = v.maxAdults + v.maxChildren;
+    if (v.baseOccupancy > maxGuests) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["baseOccupancy"],
+        message: `Guests included can be at most ${maxGuests}, your max guests.`,
+      });
+    }
+    if (v.cotsOn && v.cotsMax < 1) {
+      ctx.addIssue({ code: "custom", path: ["cotsMax"], message: "Set how many cots fit, or turn cots off." });
+    }
+    if (v.extraBedsOn && v.extraBedsMax < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["extraBedsMax"],
+        message: "Set how many extra beds fit, or turn extra beds off.",
+      });
+    }
+  })
+  // What is stored: a fee only where it can be charged, nothing for a switch
+  // that is off, and "combined" only matters when both are offered.
+  .transform(({ cotsOn, extraBedsOn, ...v }) => {
+    const adultCanBeExtra = v.maxAdults > v.baseOccupancy;
+    const childCanBeExtra = v.maxChildren > 0 && v.maxAdults + v.maxChildren > v.baseOccupancy;
+    return {
+      ...v,
+      extraAdultFee: adultCanBeExtra ? v.extraAdultFee : null,
+      extraChildFee: childCanBeExtra ? v.extraChildFee : null,
+      cotsMax: cotsOn ? v.cotsMax : 0,
+      cotFee: cotsOn ? v.cotFee : null,
+      extraBedsMax: extraBedsOn ? v.extraBedsMax : 0,
+      extraBedFee: extraBedsOn ? v.extraBedFee : null,
+      cotAndExtraBedTogether: cotsOn && extraBedsOn ? v.cotAndExtraBedTogether : true,
+    };
+  });
 
 export const amenitiesSchema = z
   .object({

@@ -194,7 +194,7 @@ describeWithDb("Rooms editor against Postgres", () => {
   }
 
   const spaceForm = (units: string) =>
-    form({ roomId, sizeM2: "35", maxAdults: "2", maxChildren: "1", units, bed_king: "1", bed_sofa_bed: "1" });
+    form({ roomId, sizeM2: "35", maxAdults: "2", maxChildren: "1", baseOccupancy: "2", units, bed_king: "1", bed_sofa_bed: "1" });
 
   // ── Access ──────────────────────────────────────────────────────────
 

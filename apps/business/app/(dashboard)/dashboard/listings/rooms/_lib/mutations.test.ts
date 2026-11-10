@@ -36,6 +36,7 @@ const session = (id: string): SessionLike => ({ user: { id, account_type: "busin
 
 function fakeDeps() {
   const statements: string[] = [];
+  const calls: { sql: string; values: unknown[] }[] = [];
   const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql);
 
   const queryOne = async <T,>(sql: string, values: unknown[] = []): Promise<T | null> => {
@@ -59,6 +60,7 @@ function fakeDeps() {
 
   const query = async <T,>(sql: string, values: unknown[] = []): Promise<T[]> => {
     statements.push(sql);
+    calls.push({ sql, values });
     if (/RETURNING r.id/.test(sql)) return (values[1] as string[]).map((id) => ({ id })) as T[];
     return [];
   };
@@ -70,7 +72,7 @@ function fakeDeps() {
     purge: async () => {},
     loadRoom: async () => null,
   };
-  return { deps, writes: () => statements.filter(isWrite) };
+  return { deps, writes: () => statements.filter(isWrite), calls };
 }
 
 function form(fields: Record<string, string | string[]>): FormData {
@@ -147,6 +149,32 @@ describe("the owner (control)", () => {
     expect((await setRateActive(owner, RATE, false, deps)).ok).toBe(true);
     expect((await reorderRooms(owner, PROPERTY, [ROOM], deps)).ok).toBe(true);
     expect(writes().length).toBe(3);
+  });
+
+  test("saving the space writes base occupancy, extra-guest fees, cots and extra beds", async () => {
+    const { deps, calls } = fakeDeps();
+    const fd = form({
+      roomId: ROOM,
+      sizeM2: "35",
+      maxAdults: "3",
+      maxChildren: "1",
+      units: "3",
+      bed_king: "1",
+      baseOccupancy: "2",
+      extraAdultFee: "20",
+      extraChildFee: "10",
+      cotsOn: "on",
+      cotsMax: "1",
+      cotFee: "",
+      extraBedsOn: "on",
+      extraBedsMax: "1",
+      extraBedFee: "25",
+    });
+    const state = await saveRoomSpace(owner, fd, deps);
+    expect(state.errors).toBeNull();
+    const update = calls.find((c) => /UPDATE rooms/.test(c.sql))!;
+    expect(update.sql).toContain("base_occupancy");
+    expect(update.values).toEqual(expect.arrayContaining([2, 20, 10, 1, 0, 25, false]));
   });
 
   test("a new rate cannot be created active, because it has no price", async () => {

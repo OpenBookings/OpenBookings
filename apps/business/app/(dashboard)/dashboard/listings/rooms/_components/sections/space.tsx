@@ -37,6 +37,16 @@ export function SpaceSection({ data, onDirtyChange }: RoomSectionProps) {
     maxAdults: String(room.maxAdults),
     maxChildren: String(room.maxChildren),
     units: String(room.units),
+    baseOccupancy: String(room.baseOccupancy),
+    extraAdultFee: room.extraAdultFee === null ? "" : String(room.extraAdultFee),
+    extraChildFee: room.extraChildFee === null ? "" : String(room.extraChildFee),
+    cotsOn: room.cotsMax > 0 ? "on" : "",
+    cotsMax: String(room.cotsMax),
+    cotFee: room.cotFee === null ? "" : String(room.cotFee),
+    extraBedsOn: room.extraBedsMax > 0 ? "on" : "",
+    extraBedsMax: String(room.extraBedsMax),
+    extraBedFee: room.extraBedFee === null ? "" : String(room.extraBedFee),
+    cotAndExtraBedTogether: room.cotAndExtraBedTogether ? "on" : "",
     ...Object.fromEntries(BED_TYPES.map(({ key }) => [`bed_${key}`, String(room.beds[key] ?? 0)])),
   } as SpaceValues;
 
@@ -87,6 +97,21 @@ function SpaceFields({
 
   return (
     <FieldGroup className="max-w-2xl">
+      {/* Occupancy fees, cots and extra beds: posted as they are until their controls land. */}
+      {(
+        [
+          "baseOccupancy",
+          "extraAdultFee",
+          "extraChildFee",
+          "cotsOn",
+          "cotsMax",
+          "cotFee",
+          "extraBedsOn",
+          "extraBedsMax",
+          "extraBedFee",
+          "cotAndExtraBedTogether",
+        ] as const
+      ).map((name) => (v[name] ? <input key={name} type="hidden" name={name} value={v[name]} /> : null))}
       <Field data-invalid={!!state.errors?.sizeM2}>
         <FieldLabel htmlFor="sizeM2">Size</FieldLabel>
         {/* Wrapped: a vertical Field stretches its direct children full width. */}
