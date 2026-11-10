@@ -37,13 +37,13 @@
     "test": "bun test --timeout 30000"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1155.0",
-    "@aws-sdk/s3-request-presigner": "^3.1155.0",
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0",
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
-    "pdfkit": "^0.17.2",
+    "pdfkit": "^0.20.2",
     "pg": "^8.23.1"
   },
   "devDependencies": {
