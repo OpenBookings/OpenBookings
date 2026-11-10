@@ -1,4 +1,5 @@
 import { SiteHeader } from "@/components/dashboard/site-header";
+import { AnalyticsPendingProvider } from "./_components/analytics-pending";
 
 /**
  * `min-w-0` on every flex child between the viewport and the page. A flex item
@@ -7,7 +8,7 @@ import { SiteHeader } from "@/components/dashboard/site-header";
  */
 export default function AnalyticsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <AnalyticsPendingProvider>
       <SiteHeader title="Analytics" />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="@container/main flex min-h-0 min-w-0 flex-1 flex-col gap-2">
@@ -16,6 +17,6 @@ export default function AnalyticsLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </div>
-    </>
+    </AnalyticsPendingProvider>
   );
 }

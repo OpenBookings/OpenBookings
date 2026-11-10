@@ -19,6 +19,7 @@ import {
   type PeriodPreset,
 } from "@/lib/analytics/period";
 import type { IsoDate } from "@/lib/analytics/types";
+import { useAnalyticsPending } from "./analytics-pending";
 
 interface PeriodControlProps {
   preset: PeriodPreset;
@@ -64,19 +65,32 @@ function Option({
  * in the URL, so a view is shareable, survives a refresh, and follows the host
  * to the next analytics page.
  */
+/** The label on the period button, also shown dimmed while a page loads. */
+export function periodSummary(preset: PeriodPreset, range: DateRange, compare: CompareMode): string {
+  return [
+    preset === "custom" ? formatRange(range) : PERIOD_LABELS[preset],
+    compare === "none" ? null : `vs ${COMPARE_LABELS[compare].toLowerCase()}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
 export function PeriodControl({ preset, range, compare, canCompareLastYear }: PeriodControlProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = React.useTransition();
+  const { pending, run } = useAnalyticsPending();
 
   // Merged into the existing params, so `demo` survives a filter change.
-  const setParams = (updates: Record<string, string | null>) => {
+  // `lead` is the loader's first line while the new figures load.
+  const setParams = (updates: Record<string, string | null>, lead: string) => {
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(updates)) {
       if (value === null) params.delete(key);
       else params.set(key, value);
     }
-    startTransition(() => router.push(`?${params.toString()}`, { scroll: false }));
+    run(lead, () => router.push(`?${params.toString()}`, { scroll: false }));
   };
 
   const selectPreset = (next: PeriodPreset) =>
@@ -84,19 +98,22 @@ export function PeriodControl({ preset, range, compare, canCompareLastYear }: Pe
       next === "custom"
         ? { period: next, from: range.from, to: range.to }
         : { period: next, from: null, to: null },
+      next === "custom" ? "Switching to a custom range" : `Switching to ${lowerFirst(PERIOD_LABELS[next])}`,
     );
 
   const selectRange = (selected: PickerRange | undefined) => {
     if (!selected?.from) return;
-    setParams({ period: "custom", from: toIso(selected.from), to: toIso(selected.to ?? selected.from) });
+    const next = { from: toIso(selected.from), to: toIso(selected.to ?? selected.from) };
+    setParams({ period: "custom", ...next }, `Switching to ${formatRange(next)}`);
   };
 
-  const summary = [
-    preset === "custom" ? formatRange(range) : PERIOD_LABELS[preset],
-    compare === "none" ? null : `vs ${COMPARE_LABELS[compare].toLowerCase()}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const selectCompare = (next: CompareMode) =>
+    setParams(
+      { compare: next },
+      next === "none" ? "Removing the comparison" : `Comparing with ${lowerFirst(COMPARE_LABELS[next])}`,
+    );
+
+  const summary = periodSummary(preset, range, compare);
 
   return (
     <Popover>
@@ -128,7 +145,7 @@ export function PeriodControl({ preset, range, compare, canCompareLastYear }: Pe
                     key={value}
                     selected={value === compare}
                     disabled={unavailable}
-                    onClick={() => setParams({ compare: value })}
+                    onClick={() => selectCompare(value)}
                   >
                     {COMPARE_LABELS[value]}
                   </Option>

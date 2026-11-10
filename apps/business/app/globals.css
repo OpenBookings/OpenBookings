@@ -347,6 +347,144 @@
   }
 }
 
+/*
+ * Analytics loader (dashboard/analytics/_components/analytics-loader.tsx). It
+ * sets --ob-grace (how long before it fades in, 0 today) and --ob-elapsed (how long its
+ * load has been running), so a loader that takes over from another one, or
+ * holds on after the data arrived, carries on mid-animation instead of
+ * starting again. Only opacity and transform move.
+ */
+.ob-loader {
+  animation: ob-loader-in 250ms ease-out both;
+  animation-delay: calc(var(--ob-grace, 0ms) - var(--ob-elapsed, 0ms));
+}
+
+@keyframes ob-loader-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The logo's stripes catch the light one after another, top to bottom, then
+ * rest. Timed so one full sweep fits in the 1-second minimum: the top stripe
+ * peaks about 200ms in, the bottom one about 800ms in.
+ */
+.ob-globe-stripe {
+  opacity: 0.2;
+  animation: ob-globe-wave 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 60ms - 250ms - var(--ob-elapsed, 0ms));
+}
+
+@keyframes ob-globe-wave {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  28% {
+    opacity: 1;
+  }
+  56% {
+    opacity: 0.2;
+  }
+}
+
+/* A hairline with a soft glint running along it: activity, not a percentage. */
+.ob-loader-track {
+  position: relative;
+  overflow: hidden;
+}
+
+.ob-loader-track::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 36%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--foreground) 70%, transparent), transparent);
+  animation: ob-loader-glint 1.6s ease-in-out infinite;
+}
+
+@keyframes ob-loader-glint {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}
+
+.ob-loader-line {
+  animation: ob-loader-line-in 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.ob-loader-line[data-leaving] {
+  animation-name: ob-loader-line-out;
+}
+
+@keyframes ob-loader-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes ob-loader-line-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+/* Old figures under a period change: dimmed and blurred once the grace has passed. */
+.ob-loader-dim {
+  transition:
+    opacity 300ms ease-out,
+    filter 300ms ease-out;
+}
+
+.ob-loader-dim[data-dimmed] {
+  opacity: 0.28;
+  filter: blur(3px) saturate(0.6);
+  transition-delay: var(--ob-grace, 0ms);
+}
+
+/* New figures waiting out the hold: hidden at once, then they fade in. */
+.ob-loader-dim[data-hidden] {
+  opacity: 0;
+  transition: none;
+}
+
+/* Reduced motion: a still logo, and fades instead of slides. */
+@keyframes ob-loader-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-loader {
+    animation-name: ob-loader-fade-in;
+  }
+  .ob-globe-stripe {
+    animation: none;
+    opacity: 1;
+  }
+  .ob-loader-track::after {
+    display: none;
+  }
+  .ob-loader-line {
+    animation-name: ob-loader-fade-in;
+  }
+  .ob-loader-line[data-leaving] {
+    display: none;
+  }
+}
+
 /* Custom scrollbar for search results */
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
