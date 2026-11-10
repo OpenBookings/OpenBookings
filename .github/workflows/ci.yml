@@ -68,6 +68,31 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+      LOCAL_DB: postgres://postgres:postgres@localhost:5432/postgres
+    # A local Postgres holding a copy of the real schema, not a Neon branch.
+    #
+    # The tests used to run against a throwaway Neon branch. Neon is in
+    # Frankfurt and GitHub's runners are in the US, so every query took ~100 ms
+    # (measured), and the DB suites issue thousands of them one after another:
+    # the full run took ~10 min, billing alone ~10 and db ~7 of it. Against
+    # this container, with the same schema, it takes ~10 s.
+    #
+    # What made the branch worth having still holds: the schema is whatever the
+    # dev database actually has -- the Better Auth / IAM tables nothing in this
+    # repo creates, PostGIS, views -- fetched from Neon's API below, with no
+    # schema of our own to keep in sync. Same major as Neon (17) and the same
+    # PostGIS; a check below fails the job if Neon moves to another major.
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -h localhost"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -80,8 +105,8 @@ jobs:
 
       # Replays a package's tests only when nothing it depends on changed --
       # migrations included, since packages/db/drizzle is part of db's hash.
-      # Not covered: drift in the parent Neon branch between two pushes. The
-      # cache is per PR, so that window is the life of one PR.
+      # Not covered: a schema change on the dev database between two pushes.
+      # The cache is per PR, so that window is the life of one PR.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .turbo/cache
@@ -105,83 +130,74 @@ jobs:
             echo "any=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # A throwaway Neon branch, not a Postgres service container.
-      #
-      # The container could only ever hold what drizzle-kit export renders from
-      # src/schema.ts, and that is 24 tables -- it does not include `user`,
-      # `session`, `organization`, `property_access` or the other eleven
-      # Better Auth / IAM tables, because nothing in this repo creates them.
-      # Queries that join `"user"` (the ARI availability read, support.ts)
-      # therefore could not be tested at all, and 0007, 0011 and 0012 would
-      # fail to apply to a genuinely empty database.
-      #
-      # A branch is a copy-on-write clone of the real thing, so the schema is
-      # whatever production actually has, PostGIS included, with no schema step
-      # to keep in sync. It is writable, which the tests need -- they insert
-      # fixtures inside a transaction and roll it back.
-      - name: Create a throwaway database branch
-        id: neon
-        if: steps.affected.outputs.any == 'true'
-        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          # The default branch of the openbookings-dev project, by id rather
-          # than name -- it is confusingly *called* "production".
-          parent_branch: br-frosty-wildflower-alcqwefl
-          branch_name: ci-${{ github.run_id }}-${{ github.run_attempt }}
-          api_key: ${{ secrets.NEON_API_KEY }}
-
-      # The branch step returns once the branch exists, not once its compute
-      # has booted. Booting takes anywhere from 1 to 9 seconds, and a test's
-      # first connect waits on it, which can outrun bun's 5-second hook limit.
-      # So wait here until the database answers.
-      - name: Wait for the database to accept connections
+      # Neon renders the dump server side, next to the database: one request,
+      # ~1.5 s. A pg_dump from here makes ~1,000 catalog queries across the
+      # Atlantic and takes ~95 s. Read-only, and no branch is created.
+      - name: Fetch the dev database's schema
         if: steps.affected.outputs.any == 'true'
         env:
-          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          # The default branch of the openbookings-dev project, by id rather
+          # than name -- it is confusingly *called* "production".
+          BRANCH_ID: br-frosty-wildflower-alcqwefl
         run: |
-          for attempt in $(seq 1 30); do
-            if PGCONNECT_TIMEOUT=10 psql "$DATABASE_URL" -XAtqc 'select 1' >/dev/null 2>&1; then
-              echo "Database ready after $attempt attempt(s)."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::The database branch did not accept connections within about a minute."
-          exit 1
+          set -euo pipefail
+          curl -fsS --retry 3 -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/schema?db_name=neondb" \
+            | jq -er .sql > schema.sql
+
+          neon_major=$(grep -oE 'Dumped from database version [0-9]+' schema.sql | grep -oE '[0-9]+$')
+          local_major=$(psql "$LOCAL_DB" -XAtc 'show server_version_num' | cut -c1-2)
+          if [ "$neon_major" != "$local_major" ]; then
+            echo "::error::Neon runs Postgres $neon_major but the test container is $local_major. Update the postgis/postgis image in ci.yml."
+            exit 1
+          fi
+
+      # The roles the dump grants to and owns objects as (neondb_owner,
+      # authenticated, ...), so ownership, grants and policies load as on
+      # Neon. Then every error fails the job except the two Neon-only
+      # extensions, which no table uses: a column of type `vector` would still
+      # fail, as "type does not exist". A quiet partial restore would mean
+      # tests passing against a schema that is not the real one.
+      - name: Load it into the test database
+        if: steps.affected.outputs.any == 'true'
+        run: |
+          set -euo pipefail
+          grep -oE '(OWNER TO|GRANT .* TO|FOR ROLE) "?[a-z_][a-z0-9_]*"?' schema.sql \
+            | awk '{print $NF}' | tr -d '"' | sort -u \
+            | grep -vxE 'public|current_user|session_user|postgres' \
+            | while read -r role; do
+                psql "$LOCAL_DB" -XAtqc "CREATE ROLE \"$role\""
+              done
+
+          psql "$LOCAL_DB" -X -q -f schema.sql > restore.log 2>&1 || true
+          errors=$(grep 'ERROR:' restore.log \
+            | grep -vE 'extension "(pg_session_jwt|vector)" (is not available|does not exist)' || true)
+          if [ -n "$errors" ]; then
+            echo "::error::The schema did not load cleanly into the test database."
+            echo "$errors"
+            exit 1
+          fi
+          psql "$LOCAL_DB" -XAtc "select count(*) || ' tables loaded' from pg_tables where schemaname = 'public'"
 
       # Once, so the tests need not replay them each (see
       # packages/db/scripts/apply-pending-ci.ts).
       - name: Apply this branch's pending migrations
         if: steps.affected.outputs.any == 'true'
         env:
-          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+          DATABASE_URL_DIRECT: ${{ env.LOCAL_DB }}
         run: bun run --cwd packages/db db:apply-pending:ci
 
-      # The direct endpoint, not the pooled one: the pooler rewrites and
-      # batches statements, and these tests drive explicit transactions.
-      #
-      # Four packages at a time, not turbo's default ten: the branch's compute
-      # starts at 0.25 CU, and every package opening its connections at once
-      # got them dropped ("Connection terminated unexpectedly").
+      # Four packages at a time: the suites open pools of up to 20 connections
+      # each, against the container's default of 100.
       - name: Run tests
         if: steps.affected.outputs.any == 'true'
         env:
-          DATABASE_URL: ${{ steps.neon.outputs.db_url }}
-          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+          DATABASE_URL: ${{ env.LOCAL_DB }}
+          DATABASE_URL_DIRECT: ${{ env.LOCAL_DB }}
           PENDING_MIGRATIONS_APPLIED: "1"
         run: bunx turbo run test --affected --filter='!@openbookings/demo' --concurrency=4
-
-      # Always, including when the tests failed -- an abandoned branch keeps
-      # billing. Skipped only if the branch was never created, where there is
-      # nothing to delete and the delete would itself fail.
-      - name: Delete the throwaway database branch
-        if: ${{ always() && steps.neon.outputs.branch_id != '' }}
-        uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          branch: ${{ steps.neon.outputs.branch_id }}
-          api_key: ${{ secrets.NEON_API_KEY }}
 
   # The one check branch protection needs to require. Keeps the old job's name,
   # so an existing "Verify" required check keeps working.

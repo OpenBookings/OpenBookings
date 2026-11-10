@@ -1,84 +1,64 @@
-# TEMPORARY: can the DB suites run against a local Postgres that holds a
-# schema-only copy of the Neon CI branch? Measures the copy and the tests.
-# Delete after reading.
+# TEMPORARY: runs ci.yml's Test job steps on every suite. Delete after.
 name: DB latency probe
-
-on:
+'on':
   push:
-    branches: ["claude/confident-lamport-1wxknx"]
-    paths: [".github/workflows/db-latency.yml"]
-
+    branches:
+    - claude/confident-lamport-1wxknx
+    paths:
+    - .github/workflows/db-latency.yml
 permissions:
   contents: read
-
 jobs:
   probe:
+    name: Test
     runs-on: ubuntu-latest
     env:
-      LOCAL_URL: postgres://postgres:pg@localhost:5432/postgres
+      LOCAL_DB: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U postgres -h localhost" --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.13
-
-      - run: bun install --frozen-lockfile
-
-      - name: Start a local Postgres with Neon's major and PostGIS
-        run: |
-          set -euo pipefail
-          docker run -d --name pg -e POSTGRES_PASSWORD=pg -p 5432:5432 postgis/postgis:17-3.5
-          for i in $(seq 1 60); do
-            psql "$LOCAL_URL" -XAtqc 'select 1' >/dev/null 2>&1 && break
-            sleep 1
-          done
-
-      - name: Fetch the parent branch's schema from the Neon API (timed)
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          start=$(date +%s%N)
-          curl -fsS --retry 3 \
-            -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/br-frosty-wildflower-alcqwefl/schema?db_name=neondb" \
-            | jq -r .sql > schema.sql
-          echo "fetch: $(( ($(date +%s%N) - start) / 1000000 )) ms, $(wc -l < schema.sql) lines"
-          echo "## statement kinds that mention roles"
-          grep -oE '^(ALTER [A-Z ]+ OWNER TO|GRANT|REVOKE|SET ROLE|CREATE ROLE|ALTER DEFAULT PRIVILEGES)' schema.sql | sort | uniq -c || true
-          grep -oE 'OWNER TO [a-z_"]+|TO [a-z_"]+;' schema.sql | sort | uniq -c | head -20 || true
-
-      - name: Restore it locally (timed)
-        run: |
-          set -uo pipefail
-          start=$(date +%s%N)
-          psql "$LOCAL_URL" -X -q -f schema.sql > restore.log 2>&1
-          echo "restore: $(( ($(date +%s%N) - start) / 1000000 )) ms"
-          echo "## restore errors"
-          grep 'ERROR' restore.log | sed -E 's/^psql:schema.sql:[0-9]+: //' | sort | uniq -c | head -40 || true
-          psql "$LOCAL_URL" -XAtc "select 'local tables: ' || count(*) from pg_tables where schemaname='public'"
-
-      - name: Apply this branch's pending migrations locally
-        env:
-          DATABASE_URL_DIRECT: ${{ env.LOCAL_URL }}
-        run: bun run --cwd packages/db db:apply-pending:ci
-
-      - name: Measure local round trip
-        run: |
-          { echo '\timing on'; for i in $(seq 1 30); do echo 'select 1;'; done; } \
-            | psql "$LOCAL_URL" -X -q -o /dev/null 2>&1 \
-            | grep -o 'Time: [0-9.]*' | awk '{print $2}' | sort -n \
-            | awk '{a[NR]=$1; s+=$1} END {printf "local select 1: median %.2f ms\n", a[int((NR+1)/2)]}'
-
-      - name: Run every suite against local Postgres (timed)
-        continue-on-error: true
-        env:
-          DATABASE_URL: ${{ env.LOCAL_URL }}
-          DATABASE_URL_DIRECT: ${{ env.LOCAL_URL }}
-          PENDING_MIGRATIONS_APPLIED: "1"
-        run: bunx turbo run test --filter='!@openbookings/demo' --concurrency=4 --no-cache 2>&1 | grep -E '\(fail\)|Ran [0-9]+ tests|[0-9]+ (pass|fail|skip)$|error:|Tasks:|Time:|Failed:' | head -120
-
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.3.13
+    - run: bun install --frozen-lockfile
+    - name: Work out which packages to test
+      id: affected
+      run: echo "any=true" >> "$GITHUB_OUTPUT"
+    - name: Fetch the dev database's schema
+      if: steps.affected.outputs.any == 'true'
+      env:
+        NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+        BRANCH_ID: br-frosty-wildflower-alcqwefl
+      run: "set -euo pipefail\ncurl -fsS --retry 3 -H \"Authorization: Bearer $NEON_API_KEY\" \\\n  \"https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/schema?db_name=neondb\" \\\
+        \n  | jq -er .sql > schema.sql\n\nneon_major=$(grep -oE 'Dumped from database version [0-9]+' schema.sql | grep -oE '[0-9]+$')\nlocal_major=$(psql \"$LOCAL_DB\" -XAtc 'show server_version_num' |\
+        \ cut -c1-2)\nif [ \"$neon_major\" != \"$local_major\" ]; then\n  echo \"::error::Neon runs Postgres $neon_major but the test container is $local_major. Update the postgis/postgis image in ci.yml.\"\
+        \n  exit 1\nfi\n"
+    - name: Load it into the test database
+      if: steps.affected.outputs.any == 'true'
+      run: "set -euo pipefail\ngrep -oE '(OWNER TO|GRANT .* TO|FOR ROLE) \"?[a-z_][a-z0-9_]*\"?' schema.sql \\\n  | awk '{print $NF}' | tr -d '\"' | sort -u \\\n  | grep -vxE 'public|current_user|session_user|postgres'\
+        \ \\\n  | while read -r role; do\n      psql \"$LOCAL_DB\" -XAtqc \"CREATE ROLE \\\"$role\\\"\"\n    done\n\npsql \"$LOCAL_DB\" -X -q -f schema.sql > restore.log 2>&1 || true\nerrors=$(grep 'ERROR:'\
+        \ restore.log \\\n  | grep -vE 'extension \"(pg_session_jwt|vector)\" (is not available|does not exist)' || true)\nif [ -n \"$errors\" ]; then\n  echo \"::error::The schema did not load cleanly\
+        \ into the test database.\"\n  echo \"$errors\"\n  exit 1\nfi\npsql \"$LOCAL_DB\" -XAtc \"select count(*) || ' tables loaded' from pg_tables where schemaname = 'public'\"\n"
+    - name: Apply this branch's pending migrations
+      if: steps.affected.outputs.any == 'true'
+      env:
+        DATABASE_URL_DIRECT: ${{ env.LOCAL_DB }}
+      run: bun run --cwd packages/db db:apply-pending:ci
+    - name: Run tests
+      if: steps.affected.outputs.any == 'true'
+      env:
+        DATABASE_URL: ${{ env.LOCAL_DB }}
+        DATABASE_URL_DIRECT: ${{ env.LOCAL_DB }}
+        PENDING_MIGRATIONS_APPLIED: '1'
+      run: bunx turbo run test --filter='!@openbookings/demo' --concurrency=4 --no-cache
