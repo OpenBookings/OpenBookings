@@ -274,8 +274,8 @@ LEFT JOIN LATERAL (
 }
 
 async function runSearch(input: SearchInput, testing: boolean) {
-  const result = await getDb().execute(buildHotelSearchQuery(input.lat, input.lon, input.checkIn, input.checkOut, testing))
-  const rows = result.rows as unknown as RoomRow[]
+  const result = await getDb().execute<RoomRow>(buildHotelSearchQuery(input.lat, input.lon, input.checkIn, input.checkOut, testing))
+  const rows = result.rows
   if (rows.length === 0) return []
 
   const roomRows = rows.map(row => ({
