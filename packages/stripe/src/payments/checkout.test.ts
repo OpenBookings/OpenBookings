@@ -19,6 +19,20 @@ const input: BookingCheckoutInput = {
 };
 
 describe("buildBookingCheckoutParams", () => {
+  test("uses Stripe's separate elements: the page draws its own details and Pay button", () => {
+    expect(buildBookingCheckoutParams(input).ui_mode).toBe("elements");
+  });
+
+  test("accepts the phone the page sends on confirm (Stripe.js refuses it otherwise)", () => {
+    expect(buildBookingCheckoutParams(input).phone_number_collection).toEqual({ enabled: true });
+  });
+
+  test("still insists on a billing address, and keeps the account email locked", () => {
+    const params = buildBookingCheckoutParams(input);
+    expect(params.billing_address_collection).toBe("required");
+    expect(params.customer_email).toBe("guest@example.com");
+  });
+
   test("is a direct charge: nothing routes the money through the platform", () => {
     const params = buildBookingCheckoutParams(input);
     expect(params.payment_intent_data?.transfer_data).toBeUndefined();
@@ -59,13 +73,9 @@ describe("buildBookingCheckoutParams", () => {
     ]);
   });
 
-  test("keeps the checkout form's behaviour: locked email, phone, billing address", () => {
+  test("is a one-off payment that lapses when the hold allows", () => {
     const params = buildBookingCheckoutParams(input);
     expect(params.mode).toBe("payment");
-    expect(params.ui_mode).toBe("form");
-    expect(params.customer_email).toBe("guest@example.com");
-    expect(params.phone_number_collection).toEqual({ enabled: true });
-    expect(params.billing_address_collection).toBe("required");
     expect(params.expires_at).toBe(1_800_000_000);
   });
 

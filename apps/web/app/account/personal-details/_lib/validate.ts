@@ -105,3 +105,30 @@ export function parseDetails(form: FormData): Parsed<Details, "name" | "phone" |
     },
   };
 }
+
+export const PHONE_REQUIRED = "Enter a phone number so the hotel can reach you.";
+
+export type DetailsField = "name" | "phone" | AddressField;
+
+/** What checkout needs: the account page's details, with phone and address required. */
+export type CheckoutDetails = { name: string; phone: string; address: Address };
+
+/**
+ * Checkout's rules. The host needs a number and an address for every paid
+ * booking (arrival contact, guest register), so here they are required; the
+ * account page keeps them optional.
+ */
+export function parseCheckoutDetails(form: FormData): Parsed<CheckoutDetails, DetailsField> {
+  const name = parseName(form);
+  const phone = parsePhone(form);
+  const address = parseAddress(form);
+  const errors: Partial<Record<DetailsField, string>> = {
+    ...(name.ok ? {} : name.errors),
+    ...(phone.ok ? (phone.value === null ? { phone: PHONE_REQUIRED } : {}) : phone.errors),
+    ...(address.ok ? (address.value === null ? { ...MISSING } : {}) : address.errors),
+  };
+  if (name.ok && phone.ok && phone.value !== null && address.ok && address.value !== null) {
+    return { ok: true, value: { name: name.value, phone: phone.value, address: address.value } };
+  }
+  return { ok: false, errors };
+}

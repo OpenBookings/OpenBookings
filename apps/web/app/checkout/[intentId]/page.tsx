@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
+import { readGuestProfile } from '@/lib/account/guest-details';
+import { COUNTRIES, DIAL_CODES } from '@/lib/account/countries';
+import { prefillFromProfile } from '../_lib/guest-details';
 import type { BookingIntentStatus } from '@openbookings/db';
 import { CheckoutClient, CheckoutSignIn, type CheckoutClientProps } from '../_components/CheckoutClient';
 import type { GateViewer } from '../_components/CheckoutGate';
@@ -83,6 +86,16 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
     throw err;
   }
 
+  // The details card starts from the account. Read here, beside the intent,
+  // so the card is filled on first paint.
+  const profile = await readGuestProfile(viewer.id);
+  const guestDetails = prefillFromProfile({
+    name: viewer.name ?? '',
+    email: viewer.email,
+    phone: profile.phone,
+    address: profile.address,
+  });
+
   // Dates are formatted here so the client component stays free of Date props,
   // and so they resolve in one place rather than in each of the four spots the
   // summary shows one.
@@ -92,6 +105,9 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
   return (
     <CheckoutClient
       viewer={{ email: viewer.email, name: viewer.name }}
+      guestDetails={guestDetails}
+      countries={COUNTRIES}
+      dialCodes={DIAL_CODES}
       stripeAccountId={summary.stripeAccountId}
       intentId={summary.intentId}
       holdExpiresAt={summary.holdExpiresAt.getTime()}

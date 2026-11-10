@@ -1,29 +1,42 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2, Lock } from 'lucide-react';
 import * as Sentry from '@sentry/nextjs';
-import { CheckoutForm, useCheckoutForm } from '@stripe/react-stripe-js/checkout';
-import type { StripeCheckoutFormConfirmEvent, StripeError } from '@stripe/stripe-js';
+import { ExpressCheckoutElement, PaymentElement, useCheckoutElements } from '@stripe/react-stripe-js/checkout';
+import type {
+  StripeCheckoutExpressCheckoutElementOptions,
+  StripeError,
+  StripeExpressCheckoutElementConfirmEvent,
+} from '@stripe/stripe-js';
 import {
   CHECKOUT_ALREADY_PAID,
   CHECKOUT_EXPIRED,
   ELEMENT_LOAD_FAILED,
+  OFFLINE,
   checkoutErrorCopy,
+  alertForConfirmError,
+  describeValidationError,
   isExpiredSessionError,
+  unexpectedPaymentError,
 } from '../_lib/errors';
+import { toStripeContact } from '../_lib/guest-details';
 import { CheckoutNotice } from './CheckoutNotice';
+import { CHECKOUT_CARD } from './DetailsCard';
+import type { CheckoutDetailsController } from './useCheckoutDetails';
 
 /**
- * The payment card: Stripe's embedded form and nothing else.
+ * The payment card: Stripe's wallet buttons and payment box, and our Pay
+ * button. Nothing else.
  *
- * Under `ui_mode: 'form'` Stripe owns every field the guest fills in — email,
- * phone, billing address and payment method — along with their validation,
- * their error messages and the pay button. None of it is mirrored into React
- * state, so there is no second copy of the guest's data to keep in sync or to
- * leak; the webhook reads it back from `customer_details`.
+ * The guest's name, phone and address live in the details card above and are
+ * saved to their account before Stripe is asked to charge; they reach Stripe
+ * as part of `confirm`. So this card collects only what is Stripe's to
+ * collect, inside Stripe's own frames.
  *
- * What is left here is only what Stripe cannot know about: our room hold, and
- * the takeovers for a hold that has lapsed or a session already paid.
+ * Which methods show is not ours to decide: Stripe draws what the hotel's
+ * account allows for this currency, amount and device. The wallet row is
+ * simply absent when Stripe has no wallet to offer.
  */
 
 export type PaymentCardProps = {
@@ -33,86 +46,188 @@ export type PaymentCardProps = {
   onRestart: () => void;
   /** The property page, where a lapsed hold starts again. */
   backHref: string;
-  /**
-   * A Non-refundable rate (Annex B B.4.3): the guest ticks that they
-   * understand before the card form appears. The form has its own pay
-   * button, so holding the form back is the one reliable way to gate it.
-   */
-  requiresNonRefundableConsent?: boolean;
+  /** The details card's state: validated and saved before anything is charged. */
+  details: CheckoutDetailsController;
+  /** Named in the trust line: the hotel is the merchant (a direct charge). */
+  propertyName: string;
 };
 
-function CardShell({ children }: { children: React.ReactNode }) {
+/**
+ * Stripe's elements show nothing until they have loaded. If one never says it
+ * is ready, the guest still gets the form after this long rather than a
+ * skeleton forever.
+ */
+const READY_FALLBACK_MS = 8000;
+
+type ConfirmError = { code?: string | null; message?: string; paymentFailed?: { declineCode?: string | null } };
+
+function isOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function Skeleton() {
   return (
-    <div className="rounded-3xl bg-white/70 p-4 shadow-2xl backdrop-blur-md sm:p-5">{children}</div>
+    <div className="space-y-3" aria-hidden="true">
+      <div className="h-11 animate-pulse rounded-xl bg-neutral-300/60" />
+      <div className="h-24 animate-pulse rounded-xl bg-neutral-300/60" />
+      <div className="h-12 animate-pulse rounded-xl bg-neutral-300/60" />
+    </div>
   );
 }
 
-export function PaymentCard({
-  holdLapsed,
-  onRestart,
-  backHref,
-  requiresNonRefundableConsent = false,
-}: PaymentCardProps) {
-  const checkoutState = useCheckoutForm();
-  const [consented, setConsented] = useState(false);
+export function PaymentCard({ holdLapsed, onRestart, backHref, details, propertyName }: PaymentCardProps) {
+  const checkoutState = useCheckoutElements();
   // Stripe refusing a confirm because the session expired; the countdown
   // covers the hold itself.
   const [sessionLapsed, setSessionLapsed] = useState(false);
   const [formFailed, setFormFailed] = useState(false);
+  const [walletsReady, setWalletsReady] = useState(false);
+  const [hasWallets, setHasWallets] = useState(false);
+  const [paymentReady, setPaymentReady] = useState(false);
+  const [waitedTooLong, setWaitedTooLong] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A ref as well as state: a double click lands before React re-renders.
+  const submitting = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
-  // Reported from an effect rather than inline: the provider's error branch
-  // re-renders, and reporting during render would file the same issue again
-  // on every one of them.
   const providerError = checkoutState.type === 'error' ? checkoutState.error.message : null;
   useEffect(() => {
     if (!providerError) return;
-    Sentry.captureException(new Error(providerError), {
-      tags: { area: 'checkout', stage: 'provider' },
-    });
+    Sentry.captureException(new Error(providerError), { tags: { area: 'checkout', stage: 'provider' } });
   }, [providerError]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setWaitedTooLong(true), READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const shownError = error ?? details.saveError;
+  useEffect(() => {
+    if (shownError) errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [shownError]);
+
   const onLoadError = useCallback((event: { error: StripeError }) => {
-    Sentry.captureException(event.error, { tags: { area: 'checkout', stage: 'form-load' } });
+    Sentry.captureException(event.error, { tags: { area: 'checkout', stage: 'element-load' } });
     setFormFailed(true);
   }, []);
 
   const checkout = checkoutState.type === 'success' ? checkoutState.checkout : null;
 
-  /**
-   * Hands the guest's confirmation straight back to Stripe.
-   *
-   * Deliberately silent about declines. The embedded form renders its own
-   * localised message for anything the guest can act on — a declined card, an
-   * incomplete field — so surfacing a second copy out here would say the same
-   * thing twice in two different voices. Only a lapsed hold is escalated,
-   * because that one needs the whole page rather than a line of red text.
-   */
-  const onConfirm = useCallback(
-    async (event: StripeCheckoutFormConfirmEvent) => {
-      if (!checkout) return;
-      try {
-        const result = await checkout.confirm({ formConfirmEvent: event });
-        if (result.type === 'error') {
-          if (isExpiredSessionError(result.error)) {
-            setSessionLapsed(true);
-            return;
-          }
-          // Left for Stripe to display; recorded here so a systematic failure
-          // is still visible to us rather than only to the guest.
-          Sentry.captureException(new Error(result.error.message || 'Checkout confirm failed'), {
-            level: 'warning',
-            tags: { area: 'checkout', stage: 'confirm' },
-            extra: { code: result.error.code, sessionId: checkout.id },
-          });
-        }
-      } catch (err) {
-        // Stripe.js throwing rather than returning an error. The form stays
-        // usable, so the guest can try again once we have logged it.
-        Sentry.captureException(err, { tags: { area: 'checkout', stage: 'confirm' } });
+  /** Puts a failed confirm into words; a lapsed session takes the card over instead. */
+  const showConfirmError = useCallback(
+    (confirmError: ConfirmError, elementShowsDeclines: boolean) => {
+      if (isExpiredSessionError(confirmError)) {
+        setSessionLapsed(true);
+        return;
       }
+      const { message, report, unmappedCode } = alertForConfirmError(confirmError, { elementShowsDeclines });
+      if (report) {
+        Sentry.captureException(new Error(confirmError.message || 'Checkout confirm failed'), {
+          level: unmappedCode ? 'warning' : 'error',
+          tags: { area: 'checkout', stage: 'confirm', ...(unmappedCode ? { unmappedDeclineCode: unmappedCode } : {}) },
+          extra: { code: confirmError.code, sessionId: checkout?.id },
+        });
+      }
+      setError(report && isOffline() ? unexpectedPaymentError({ confirmStarted: true, offline: true }) : message);
     },
     [checkout]
   );
+
+  /** Card, iDEAL and the rest of Stripe's payment box. */
+  async function pay(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!checkout || submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    setError(null);
+    let leaving = false;
+    // Past this point Stripe may have charged, so no error may claim otherwise.
+    let confirmStarted = false;
+    try {
+      // Cheapest first, and nothing is written until all of it is complete.
+      if (!details.validate()) return;
+      const validation = await checkout.validateElements();
+      if (validation.type === 'error') {
+        setError(describeValidationError(validation.error));
+        return;
+      }
+      const outcome = await details.save();
+      if (!outcome.saved) {
+        // Field errors show in the details card; a failed save shows its own sentence.
+        if (outcome.reason === 'failed' && isOffline()) setError(OFFLINE.message);
+        return;
+      }
+      confirmStarted = true;
+      const result = await checkout.confirm(toStripeContact(outcome.details));
+      if (result.type === 'error') {
+        showConfirmError(result.error, true);
+        return;
+      }
+      // Methods that need no redirect resolve here; send the guest on ourselves.
+      leaving = true;
+      // A full load, not router.push: the return page reads the paid Session fresh.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/checkout/return?session_id=${encodeURIComponent(result.session.id)}`);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'checkout', stage: 'confirm' } });
+      setError(unexpectedPaymentError({ confirmStarted, offline: isOffline() }));
+    } finally {
+      if (!leaving) {
+        submitting.current = false;
+        setBusy(false);
+      }
+    }
+  }
+
+  /**
+   * Apple Pay and Google Pay. The checkout's wallet element offers no click
+   * hook, so the details card is checked once the guest has approved in the
+   * wallet: incomplete details fail the wallet payment and open the card on
+   * the problem. A guest whose account is complete never meets that, since
+   * the card starts as a summary only when everything is there.
+   */
+  const onWalletConfirm = async (event: StripeExpressCheckoutElementConfirmEvent) => {
+    if (!checkout || submitting.current) {
+      event.paymentFailed();
+      return;
+    }
+    submitting.current = true;
+    setBusy(true);
+    setError(null);
+    let leaving = false;
+    let confirmStarted = false;
+    try {
+      const outcome = await details.save();
+      if (!outcome.saved) {
+        event.paymentFailed();
+        if (outcome.reason === 'invalid') setError('Complete your details above, then pay again.');
+        return;
+      }
+      confirmStarted = true;
+      const result = await checkout.confirm({
+        expressCheckoutConfirmEvent: event,
+        ...toStripeContact(outcome.details),
+      });
+      if (result.type === 'error') {
+        showConfirmError(result.error, false);
+        return;
+      }
+      leaving = true;
+      // A full load, not router.push: the return page reads the paid Session fresh.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/checkout/return?session_id=${encodeURIComponent(result.session.id)}`);
+    } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'checkout', stage: 'wallet-confirm' } });
+      event.paymentFailed();
+      setError(unexpectedPaymentError({ confirmStarted, offline: isOffline() }));
+    } finally {
+      if (!leaving) {
+        submitting.current = false;
+        setBusy(false);
+      }
+    }
+  };
 
   if (holdLapsed || sessionLapsed) {
     return <CheckoutNotice copy={CHECKOUT_EXPIRED} backHref={backHref} />;
@@ -120,14 +235,9 @@ export function PaymentCard({
 
   if (checkoutState.type === 'loading') {
     return (
-      <CardShell>
-        <div className="space-y-4" aria-hidden="true">
-          <div className="h-24 animate-pulse rounded-xl bg-neutral-300/60" />
-          <div className="h-12 animate-pulse rounded-xl bg-neutral-300/60" />
-          <div className="h-12 animate-pulse rounded-xl bg-neutral-300/60" />
-          <div className="h-64 animate-pulse rounded-xl bg-neutral-300/60" />
-        </div>
-      </CardShell>
+      <div className={CHECKOUT_CARD}>
+        <Skeleton />
+      </div>
     );
   }
 
@@ -153,59 +263,94 @@ export function PaymentCard({
     return <CheckoutNotice copy={ELEMENT_LOAD_FAILED} onRetry={onRestart} />;
   }
 
+  // Both of Stripe's pieces are measured before either is shown, so the wallet
+  // row never appears and then vanishes, or arrives late and shoves the form.
+  const ready = (walletsReady && paymentReady) || waitedTooLong;
+
   return (
-    <CardShell>
-      {/*
-        `expanded` keeps the whole checkout on one page. The compact layout is
-        a multi-step flow suited to modals, and it is in private preview.
+    <section aria-labelledby="checkout-payment-heading" className={CHECKOUT_CARD}>
+      <h2 id="checkout-payment-heading" className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Lock aria-hidden className="size-3.5" />
+        Payment
+      </h2>
 
-        There is no pay button of ours here any more: the form renders its own,
-        labelled with the amount from the Session, so what the guest presses
-        can never disagree with what is charged.
-
-        The express wallet buttons are turned off rather than left to `auto`.
-        They sit above everything else and lead with someone else's brand,
-        which on a page that has just shown the guest a specific room reads as
-        a detour rather than a shortcut. Apple Pay and Google Pay are left
-        alone: they are the two the guest's own device offers, and they cost
-        nothing in trust.
-      */}
-      {requiresNonRefundableConsent && (
-        <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl border border-neutral-300 bg-white/80 p-4 text-sm text-neutral-800">
-          <input
-            type="checkbox"
-            checked={consented}
-            onChange={(e) => setConsented(e.target.checked)}
-            className="mt-0.5 size-4 accent-neutral-900"
+      <div className="relative">
+        {!ready && <Skeleton />}
+        <div className={ready ? undefined : 'pointer-events-none absolute inset-x-0 top-0 opacity-0'} aria-hidden={!ready}>
+          <ExpressCheckoutElement
+            // Stripe's typings mark every option required; all but these are optional at runtime.
+            options={{ paymentMethods: { link: 'never', amazonPay: 'never' } } as StripeCheckoutExpressCheckoutElementOptions}
+            onReady={(event) => {
+              setHasWallets(Object.values(event.availablePaymentMethods ?? {}).some(Boolean));
+              setWalletsReady(true);
+            }}
+            onConfirm={onWalletConfirm}
+            onLoadError={onLoadError}
           />
-          <span>
-            <span className="font-medium">I understand this rate is non-refundable.</span>{' '}
-            If I cancel or don&apos;t show up, I won&apos;t get the room price back.
-          </span>
-        </label>
-      )}
-      {(!requiresNonRefundableConsent || consented) && (
-        <CheckoutForm
-          options={{
-            layout: 'expanded',
-            expressCheckout: { paymentMethods: { link: 'never', amazonPay: 'never' } },
-          }}
-          onConfirm={onConfirm}
-          onLoadError={onLoadError}
-        />
-      )}
-      {/*
-        Signed off under the pay button, where a payment page conventionally
-        says who handled the money. Decorative to a screen reader — the fields
-        above already announce themselves as Stripe's.
-      */}
+          {hasWallets && (
+            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-black/10" />
+              or pay another way
+              <span className="h-px flex-1 bg-black/10" />
+            </div>
+          )}
+
+          <form onSubmit={pay} noValidate className="space-y-4">
+            <PaymentElement
+              options={{
+                layout: 'tabs',
+                // Ours to send, from the details card, on confirm.
+                fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
+                // Link's "save my information" signup asks for an email and
+                // phone of its own; off here as it is on the wallet row.
+                wallets: { link: 'never' },
+              }}
+              onReady={() => setPaymentReady(true)}
+              onLoadError={onLoadError}
+            />
+
+            {/* Always present, so assistive technology has a region to announce into. */}
+            <p ref={errorRef} role="alert" aria-live="assertive" className="text-sm font-medium text-(--red-11) empty:hidden">
+              {shownError}
+            </p>
+
+            {/*
+              Not disabled on an incomplete form: pressing it should say what is
+              missing. The amount is Stripe's, so it can't differ from the charge.
+            */}
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#a5b4f0] text-base font-semibold text-neutral-900 transition-colors outline-none hover:bg-[#93a4e8] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-70"
+            >
+              {busy ? (
+                <>
+                  <Loader2 aria-hidden className="size-4 animate-spin" />
+                  Paying…
+                </>
+              ) : (
+                <>
+                  <Lock aria-hidden className="size-4" />
+                  Pay {session.total.total.amount}
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <p className="mt-4 text-center text-xs leading-relaxed text-pretty text-muted-foreground">
+        You pay {propertyName} directly. Stripe handles the payment securely; OpenBookings never sees your card details.
+      </p>
+      {/* Decorative to a screen reader: the fields above announce themselves as Stripe's. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- a static badge, nothing to optimise */}
       <img
         src="/powered-by-stripe.svg"
         alt=""
         aria-hidden="true"
-        className="mx-auto mt-5 h-8 w-auto opacity-70"
+        className="mx-auto mt-3 h-8 w-auto opacity-70"
         draggable="false"
       />
-    </CardShell>
+    </section>
   );
 }

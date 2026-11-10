@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { PHONE_ERROR, parseAddress, parseDetails, parseName, parsePhone } from "./validate";
+import {
+  PHONE_ERROR,
+  PHONE_REQUIRED,
+  parseAddress,
+  parseCheckoutDetails,
+  parseDetails,
+  parseName,
+  parsePhone,
+} from "./validate";
 
 function form(entries: Record<string, string>): FormData {
   const f = new FormData();
@@ -104,5 +112,60 @@ describe("parseDetails", () => {
         city: "Enter a city.",
       },
     });
+  });
+});
+
+describe("parseCheckoutDetails", () => {
+  const complete = {
+    name: "Sanne de Vries",
+    phone: "6 23456789",
+    phoneCountry: "NL",
+    line1: "Oudegracht 112",
+    line2: "",
+    postalCode: "3511 AV",
+    city: "Utrecht",
+    country: "nl",
+  };
+
+  test("accepts a complete form in the stored formats", () => {
+    const parsed = parseCheckoutDetails(form(complete));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.phone).toBe("+31 6 23456789");
+    expect(parsed.value.address.country).toBe("NL");
+    expect(parsed.value.address.line2).toBeNull();
+  });
+
+  test("requires a phone number", () => {
+    expect(parseCheckoutDetails(form({ ...complete, phone: "" }))).toEqual({ ok: false, errors: { phone: PHONE_REQUIRED } });
+  });
+
+  test("a number saved before the picker, with no country, is rejected rather than guessed", () => {
+    expect(parseCheckoutDetails(form({ ...complete, phone: "0612345678", phoneCountry: "" }))).toEqual({
+      ok: false,
+      errors: { phone: PHONE_ERROR },
+    });
+  });
+
+  test("requires the address, naming each missing part", () => {
+    const parsed = parseCheckoutDetails(form({ ...complete, line1: "", postalCode: "", city: "", country: "" }));
+    expect(parsed).toEqual({
+      ok: false,
+      errors: {
+        line1: "Enter a street and number.",
+        postalCode: "Enter a postcode.",
+        city: "Enter a city.",
+        country: "Choose a country.",
+      },
+    });
+  });
+
+  test("reports every missing part at once", () => {
+    const parsed = parseCheckoutDetails(form({ ...complete, name: "", phone: "" }));
+    expect(parsed).toEqual({ ok: false, errors: { name: "Enter your name.", phone: PHONE_REQUIRED } });
+  });
+
+  test("the account page still treats phone and address as optional", () => {
+    expect(parseDetails(form({ name: "Sanne de Vries", phone: "", phoneCountry: "NL" })).ok).toBe(true);
   });
 });

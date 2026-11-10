@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import * as Sentry from '@sentry/nextjs';
 import { loadStripe } from '@stripe/stripe-js';
 import type { Appearance, Stripe } from '@stripe/stripe-js';
-import { CheckoutFormProvider } from '@stripe/react-stripe-js/checkout';
+import { CheckoutElementsProvider } from '@stripe/react-stripe-js/checkout';
 import { buildAppearance } from '../_lib/appearance';
+import type { GuestDetailsPrefill } from '../_lib/guest-details';
+import type { DialCode } from '@/app/account/personal-details/_components/fields';
 import {
   CHECKOUT_ALREADY_PAID,
   CHECKOUT_EXPIRED,
@@ -19,9 +21,11 @@ import { useTurnstileToken } from '../_lib/useTurnstileToken';
 import { Backdrop } from './Backdrop';
 import { CheckoutGate, type GateViewer } from './CheckoutGate';
 import { CheckoutNotice } from './CheckoutNotice';
+import { CHECKOUT_CARD, DetailsCard } from './DetailsCard';
 import { PaymentCard } from './PaymentCard';
 import { PaymentCardBoundary } from './PaymentCardBoundary';
 import { TripSummary, type TripSummaryProps } from './TripSummary';
+import { useCheckoutDetails } from './useCheckoutDetails';
 
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
@@ -66,6 +70,11 @@ export type CheckoutClientProps = TripSummaryProps & {
   intentStatus: 'open' | 'expired' | 'paid' | 'oversold';
   /** The property page: where a lapsed hold starts again. */
   backHref: string;
+  /** The guest's saved details, for the details card. */
+  guestDetails: GuestDetailsPrefill;
+  /** Built on the server; see lib/account/countries.ts. */
+  countries: { code: string; name: string }[];
+  dialCodes: DialCode[];
 };
 
 function Shell({ heroImageUrl, children }: { heroImageUrl: string; children: React.ReactNode }) {
@@ -266,6 +275,10 @@ function CheckoutSession({
     chargeable ? { status: 'loading' } : { status: 'error', copy: checkoutErrorCopy('config_error') }
   );
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  const details = useCheckoutDetails(props.guestDetails);
+  // Non-refundable rates (Annex B B.4.3): nothing to do with paying is shown
+  // until the guest has ticked that they understand.
+  const [consented, setConsented] = useState(false);
   const holdLapsed = useHoldCountdown({
     intentId: props.intentId,
     holdExpiresAt: props.holdExpiresAt,
@@ -396,25 +409,50 @@ function CheckoutSession({
   }
 
   return (
-    <CheckoutFormProvider
+    <CheckoutElementsProvider
       // Keyed on the secret so a retry mounts a clean provider against the new
       // Session rather than reusing the one that failed.
       key={resolved.clientSecret}
       stripe={stripe}
-      options={{ clientSecret: resolved.clientSecret, appearance }}
+      options={{ clientSecret: resolved.clientSecret, elementsOptions: { appearance } }}
     >
       {gate}
       <Shell heroImageUrl={props.heroImageUrl}>
         <TripSummary {...props} />
-        <PaymentCardBoundary onRestart={retry}>
-          <PaymentCard
-            holdLapsed={holdLapsed}
-            onRestart={retry}
-            backHref={props.backHref}
-            requiresNonRefundableConsent={props.requiresNonRefundableConsent}
-          />
-        </PaymentCardBoundary>
+        {/*
+          Reading order: the non-refundable check (when there is one), the
+          guest's details, then payment. The details card stays usable before
+          the tick; payment appears only after it.
+        */}
+        <div className="flex flex-col gap-4">
+          {props.requiresNonRefundableConsent && (
+            <label className={`${CHECKOUT_CARD} flex cursor-pointer items-start gap-3 text-sm`}>
+              <input
+                type="checkbox"
+                checked={consented}
+                onChange={(e) => setConsented(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-neutral-900"
+              />
+              <span>
+                <span className="font-medium">I understand this rate is non-refundable.</span>{' '}
+                If I cancel or don&apos;t show up, I won&apos;t get the room price back.
+              </span>
+            </label>
+          )}
+          <DetailsCard controller={details} countries={props.countries} dialCodes={props.dialCodes} />
+          {(!props.requiresNonRefundableConsent || consented) && (
+            <PaymentCardBoundary onRestart={retry}>
+              <PaymentCard
+                holdLapsed={holdLapsed}
+                onRestart={retry}
+                backHref={props.backHref}
+                details={details}
+                propertyName={props.propertyName}
+              />
+            </PaymentCardBoundary>
+          )}
+        </div>
       </Shell>
-    </CheckoutFormProvider>
+    </CheckoutElementsProvider>
   );
 }
