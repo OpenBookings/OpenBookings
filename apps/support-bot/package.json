@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mistralai/mistralai": "^3.1.0",
+    "@mistralai/mistralai": "^3.5.0",
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
@@ -18,12 +18,12 @@
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",
     "@upstash/qstash": "2.12.1",
-    "hono": "^4.13.13",
+    "hono": "^4.13.17",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@types/bun": "latest",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   }
 }
