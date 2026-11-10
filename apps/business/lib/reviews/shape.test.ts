@@ -51,6 +51,11 @@ describe("needsReply", () => {
   test("not after a private reply with no public thread", () => {
     expect(needsReply(review({ privateReplyAt: "2031-11-16T10:00:00.000Z" }))).toBe(false);
   });
+  test("not after a private reply that came after the guest's answer", () => {
+    const answered = [reply("host"), { ...reply("guest"), createdAt: "2031-11-17T10:00:00.000Z" }];
+    expect(needsReply(review({ replies: answered, nextRole: "host", privateReplyAt: "2031-11-18T10:00:00.000Z" }))).toBe(false);
+    expect(needsReply(review({ replies: answered, nextRole: "host", privateReplyAt: "2031-11-16T09:00:00.000Z" }))).toBe(true);
+  });
   test("not while the review is being checked", () => {
     expect(needsReply(review({ status: "pending" }))).toBe(false);
   });

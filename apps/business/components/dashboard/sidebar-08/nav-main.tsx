@@ -32,6 +32,8 @@ export type NavItem = {
   items?: {
     title: string;
     url: string;
+    /** A count beside the link, e.g. reviews waiting for a reply. Hidden at 0. */
+    badge?: number;
   }[];
 };
 
@@ -148,6 +150,11 @@ export function NavMain({ items }: { items: NavItem[] }) {
                         >
                           <CarriedLink href={subItem.url} prefetch={!subItem.url.startsWith(ANALYTICS_ROOT)}>
                             <span>{subItem.title}</span>
+                            {subItem.badge ? (
+                              <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] leading-[18px] font-medium text-primary-foreground tabular-nums">
+                                {subItem.badge}
+                              </span>
+                            ) : null}
                           </CarriedLink>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>

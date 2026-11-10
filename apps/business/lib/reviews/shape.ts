@@ -40,10 +40,12 @@ export type HostReview = {
 export type ReviewTab = "reply" | "all" | "checking";
 export type HostReviewSort = "newest" | "oldest" | "highest" | "lowest";
 
-/** Published, the host's turn, and not already answered privately. */
+/** Published, the host's turn, and not answered privately since the thread's last reply. */
 export function needsReply(r: HostReview): boolean {
   if (r.status !== "published" || r.nextRole !== "host") return false;
-  return !(r.replies.length === 0 && r.privateReplyAt !== null);
+  if (r.privateReplyAt === null) return true;
+  const last = r.replies.at(-1)?.createdAt;
+  return last !== undefined && Date.parse(r.privateReplyAt) < Date.parse(last);
 }
 
 export function inTab(r: HostReview, tab: ReviewTab): boolean {

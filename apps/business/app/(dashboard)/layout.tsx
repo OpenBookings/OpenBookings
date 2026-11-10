@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { getServerSession } from "@/lib/auth";
 import { loadPropertyBrand } from "@/lib/property-brand";
 import { loadSupportBootstrap } from "@/lib/support/server/bootstrap";
+import { countReviewsNeedingReply } from "@/lib/reviews/query";
 
 // Auth + onboarding gating happens in proxy.ts before this ever renders, so
 // there is no redirect here — a null session simply means no property brand
@@ -17,16 +18,18 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [brand, support] = await Promise.all([
-    getServerSession().then(loadPropertyBrand),
+  const session = await getServerSession();
+  const [brand, support, reviewsWaiting] = await Promise.all([
+    loadPropertyBrand(session),
     // Null unless SUPPORT_CHAT_ENABLED and the session has a verified org.
     loadSupportBootstrap(),
+    session?.user.account_type === "business" ? countReviewsNeedingReply(session) : Promise.resolve(0),
   ]);
 
   const shell = (
     <>
       <SessionEntryOverlay />
-      <DashboardSidebar brand={brand} />
+      <DashboardSidebar brand={brand} reviewsWaiting={reviewsWaiting} />
       <SidebarInset>
         <PasskeyNudge />
         {children}
