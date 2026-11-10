@@ -492,9 +492,18 @@ export function InkField({
       ro.disconnect();
       io.disconnect();
       if (gl) {
-        if (buffer) gl.deleteBuffer(buffer);
-        if (program) gl.deleteProgram(program);
-        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        const ctx = gl;
+        if (buffer) ctx.deleteBuffer(buffer);
+        if (program) ctx.deleteProgram(program);
+        // A canvas has one context for life: getContext() returns the same
+        // object on every call. When this effect re-runs on the same canvas
+        // (React Strict Mode in development, or a prop change), losing the
+        // context here would hand the next run a dead one, and every shader
+        // would fail to compile. Release the GPU early only once the canvas
+        // has actually left the page.
+        setTimeout(() => {
+          if (!canvas.isConnected) ctx.getExtension('WEBGL_lose_context')?.loseContext();
+        }, 0);
       }
     };
   }, [speed, cursorInfluence, width]);
