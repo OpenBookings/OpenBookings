@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extraGuests,
   hasStayLengthDiscount,
   resolveNightlyRates,
   resolveRoom,
@@ -199,5 +200,71 @@ describe("resolveRoom priced_nights", () => {
     const sumCents = r.priced_nights.reduce((s, n) => s + Math.round(n.price * 100), 0);
     expect(sumCents).toBe(Math.round(r.room_price * 100));
     for (const n of r.priced_nights) expect(n.price).toBe(Math.round(n.price * 100) / 100);
+  });
+});
+
+describe("occupancy & extras", () => {
+  const room = (extra: Partial<RoomRow> = {}, nights = ["2026-07-01"]) =>
+    ({
+      base_occupancy: 2,
+      extra_adult_fee: 20,
+      extra_child_fee: 10,
+      cot_fee: 0,
+      extra_bed_fee: 25,
+      nights: nightsFrom(nights, 100),
+      modifiers: [],
+      ...extra,
+    }) as unknown as RoomRow;
+  const stay = (adults: number, children = 0, extra: { cots?: number; extraBeds?: number } = {}) => ({
+    adults,
+    children,
+    arrivalDate: "2026-07-01",
+    ...extra,
+  });
+
+  test("adults fill the included places first", () => {
+    expect(extraGuests(2, 2, 1)).toEqual({ adults: 0, children: 1 });
+    expect(extraGuests(2, 3, 0)).toEqual({ adults: 1, children: 0 });
+    expect(extraGuests(2, 1, 2)).toEqual({ adults: 0, children: 1 });
+    expect(extraGuests(1, 3, 2)).toEqual({ adults: 2, children: 2 });
+  });
+
+  test("guests above base occupancy pay the adult or child fee per night", () => {
+    expect(resolveRoom(room(), stay(2), "2026-06-01").room_price).toBe(100);
+    expect(resolveRoom(room(), stay(3), "2026-06-01").room_price).toBe(120);
+    expect(resolveRoom(room(), stay(2, 1), "2026-06-01").room_price).toBe(110);
+    expect(resolveRoom(room(), stay(3, 1), "2026-06-01").room_price).toBe(130);
+  });
+
+  test("no fee set means extra guests are not charged", () => {
+    expect(resolveRoom(room({ extra_adult_fee: null }), stay(3), "2026-06-01").room_price).toBe(100);
+  });
+
+  test("cots and extra beds are charged per night, a free cot leaves no trace line", () => {
+    const r = resolveRoom(room(), stay(2, 0, { cots: 1, extraBeds: 1 }), "2026-06-01");
+    expect(r.room_price).toBe(125);
+    expect(r.trace.map((s) => s.label)).toEqual(["Base rate", "Extra beds"]);
+    expect(r.trace.at(-1)).toMatchObject({ op: "extra", value: 25, delta: 25, result: 125 });
+  });
+
+  test("discounts never touch the extras", () => {
+    const r = resolveRoom(
+      room({ modifiers: [threeNightDiscount] }, ["2026-07-01", "2026-07-02", "2026-07-03"]),
+      stay(3),
+      "2026-06-01",
+    );
+    expect(r.room_price).toBe(300 * 0.9 + 3 * 20);
+    expect(r.priced_nights.map((n) => n.price)).toEqual([110, 110, 110]);
+  });
+
+  test("a percentage tourist tax includes the extras", () => {
+    const tenPercent: TouristTaxRule = {
+      effectiveFrom: "2026-01-01",
+      charges: [{ kind: "percent", amount: 10, perPerson: false, perNight: false, perRoom: false }],
+      childrenExempt: true,
+      maxNights: null,
+    };
+    const r = resolveRoom(room({ tourist_tax_rules: [tenPercent] }), stay(3), "2026-06-01");
+    expect(r.tourist_tax.total).toBe(12);
   });
 });

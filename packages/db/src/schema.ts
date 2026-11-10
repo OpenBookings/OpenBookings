@@ -212,12 +212,31 @@ export const rooms = pgTable(
     amenityKeys: text("amenity_keys").array(),
     /** Up to six of `amenityKeys`, featured on the guest room card (0023). */
     featuredAmenityKeys: text("featured_amenity_keys").array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Per extra guest per night, whole euros (0040). Guests above
+     * `baseOccupancy` pay it, adults filling the included places first.
+     * NULL = not charged. Never discounted.
+     */
+    extraAdultFee: bigint("extra_adult_fee", { mode: "number" }),
+    extraChildFee: bigint("extra_child_fee", { mode: "number" }),
+    /** How many cots fit (0040). 0 = not offered. */
+    cotsMax: smallint("cots_max").notNull().default(0),
+    /** Per cot per night, whole euros; 0 = free, NULL when not offered (0040). */
+    cotFee: bigint("cot_fee", { mode: "number" }),
+    extraBedsMax: smallint("extra_beds_max").notNull().default(0),
+    extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+    /** false = a guest gets cots or extra beds, not both (0040). */
+    cotAndExtraBedTogether: boolean("cot_and_extra_bed_together").notNull().default(true),
   },
   (table) => [
     index("idx_rooms_hotel_id").on(table.propertyId),
     index("idx_rooms_property_order").on(table.propertyId, table.sortOrder),
     check("rooms_featured_amenities_max", sql`cardinality(${table.featuredAmenityKeys}) <= 6`),
     check("rooms_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
+    check(
+      "rooms_base_occupancy_within_max",
+      sql`${table.baseOccupancy} <= ${table.maxAdults} + ${table.maxChildren}`,
+    ),
   ],
 );
 
@@ -651,6 +670,9 @@ export const reservations = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull().default(1),
     children: integer("children").notNull().default(0),
+    /** Cots and extra beds booked with the room, priced into `nights` (0040). */
+    cots: smallint("cots").notNull().default(0),
+    extraBeds: smallint("extra_beds").notNull().default(0),
     totalNights: integer("total_nights").notNull(),
     pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
@@ -796,6 +818,9 @@ export const bookingIntentRooms = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull(),
     children: integer("children").notNull().default(0),
+    /** Cots and extra beds booked with the room, priced into `nights` (0040). */
+    cots: smallint("cots").notNull().default(0),
+    extraBeds: smallint("extra_beds").notNull().default(0),
     nights: jsonb("nights").notNull(),
     stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
