@@ -84,6 +84,11 @@ interface SearchParams {
   extraBeds?: number
 }
 
+/** The calendar date it is now at the property, as YYYY-MM-DD. */
+export function todayInZone(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(now)
+}
+
 /**
  * How many of the party are above the room's base occupancy. Adults fill the
  * included places first, so a family of two adults and a child in a room for
@@ -120,7 +125,9 @@ function isEligible(
 
   switch (type) {
     case 'day_of_week': {
-      const dow = new Date(date).getDay()
+      // The date's own weekday: parsed and read in UTC, so the server's
+      // time zone cannot move it to the day before.
+      const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
       return (tc.days_of_week as number[]).includes(dow)
     }
 
@@ -411,11 +418,7 @@ function executeModifiers(
     trace: baseSteps(nights),
   }
 
-  // Sort by sort_order and execute each modifier
   const sortedModifiers = [...modifiers].sort((a, b) => a.sort_order - b.sort_order)
-
-  // Only one discount may fire — the eligible one with the lowest sort_order
-  const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
 
   // `extra_guest` rows are no longer a rate rule: extra guests are priced from
   // the room (applyOccupancyAndExtras), so such a row is skipped.
@@ -426,20 +429,30 @@ function executeModifiers(
     early_bird: applyEarlyBird,
   }
 
+  // Date surcharges first, in rule order, so a percentage discount is always
+  // taken from the same figure whatever order the rules were added in.
   for (const modifier of sortedModifiers) {
-    // Skip discount modifiers once one has already been applied
-    if (DISCOUNT_TYPES.has(modifier.type) && [...state.applied].some(t => DISCOUNT_TYPES.has(t))) {
-      continue
-    }
-
+    if (DISCOUNT_TYPES.has(modifier.type)) continue
     const stepFn = stepFunctions[modifier.type]
-    if (stepFn) {
-      state = stepFn(state, modifier, context)
-    }
+    if (stepFn) state = stepFn(state, modifier, context)
   }
 
-  return state
+  // Then one discount: the one that takes the most off for this guest. A
+  // discount always lowers the price, whatever sign it was stored with.
+  let best = state
+  for (const modifier of sortedModifiers) {
+    if (!DISCOUNT_TYPES.has(modifier.type)) continue
+    const stepFn = stepFunctions[modifier.type]
+    if (!stepFn) continue
+    const discounted = stepFn(state, { ...modifier, adjustment_value: -Math.abs(modifier.adjustment_value) }, context)
+    if (discounted.total < best.total) best = discounted
+  }
+
+  return best
 }
+
+/** Rules that lower the price. Only one applies per stay; see executeModifiers. */
+const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
 
 // ─────────────────────────────────────────────
 // Main resolver
@@ -475,8 +488,10 @@ export interface ResolvedRoom
 export function resolveRoom(
   row: RoomRow,
   params: SearchParams,
-  today: string = new Date().toISOString().split('T')[0]
+  /** Defaults to today at the property (its `timezone`), so lead time matches the guest's arrival date. */
+  todayAtProperty?: string
 ): ResolvedRoom {
+  const today = todayAtProperty ?? todayInZone(row.timezone ?? 'UTC')
   const { adults, children, arrivalDate } = params
   const numNights = row.nights.length
 

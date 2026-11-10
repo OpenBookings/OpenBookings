@@ -325,7 +325,14 @@ export const rateModifiers = pgTable(
     sortOrder: smallint("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("idx_rate_modifiers_plan_active").on(table.ratePlanId, table.isActive)],
+  (table) => [
+    index("idx_rate_modifiers_plan_active").on(table.ratePlanId, table.isActive),
+    // Discounts lower the price, so they are stored negative (0041).
+    check(
+      "rate_modifiers_discount_sign",
+      sql`${table.type} NOT IN ('length_of_stay', 'early_bird') OR ${table.adjustmentValue} < 0`,
+    ),
+  ],
 );
 
 export const propertyAmenities = pgTable(

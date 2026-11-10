@@ -4,6 +4,7 @@ import {
   hasStayLengthDiscount,
   nightTotal,
   resolveNightlyRates,
+  todayInZone,
   type Modifier,
 } from "@openbookings/pricing";
 import { applyLowestRates, deriveStatus, resolveStatus } from "./derive";
@@ -176,6 +177,7 @@ interface ModifierQueryRow {
 interface PropertyRow {
   id: string;
   name: string;
+  timezone: string;
 }
 
 // ─────────────────────────────────────────────
@@ -562,14 +564,15 @@ export async function loadAriGrid(
   options: AriQueryOptions = {},
 ): Promise<AriGridData | null> {
   const host = getHostScopedDb(session);
-  const today = options.today ?? toIsoDate(new Date());
   const stayLength = Math.max(1, Math.floor(options.stayLength ?? 1));
 
   const property = await host.queryOne<PropertyRow>(
-    `SELECT p.id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} AND p.id = $2`,
+    `SELECT p.id, p.name, p.timezone FROM properties p WHERE ${propertyReadAccessSql("$1")} AND p.id = $2`,
     [propertyId],
   );
   if (!property) return null;
+  // Lead-time rules (early bird, last minute) count from the property's date.
+  const today = options.today ?? todayInZone(property.timezone);
 
   // A multi-night probe on the last visible date needs base prices past the
   // end of the window. Fetch the overhang and price against it, then render

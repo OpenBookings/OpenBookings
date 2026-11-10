@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import {
   extraGuests,
   hasStayLengthDiscount,
+  todayInZone,
   resolveNightlyRates,
   resolveRoom,
   resolveSearchResults,
@@ -266,5 +267,92 @@ describe("occupancy & extras", () => {
     };
     const r = resolveRoom(room({ tourist_tax_rules: [tenPercent] }), stay(3), "2026-06-01");
     expect(r.tourist_tax.total).toBe(12);
+  });
+});
+
+describe("modifier fixes", () => {
+  // Fri 3, Sat 4, Sun 5 July 2026.
+  const stay = (modifiers: Modifier[], extra: Partial<RoomRow> = {}) =>
+    resolveRoom(
+      {
+        base_occupancy: 2,
+        nights: nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 100),
+        modifiers,
+        ...extra,
+      } as unknown as RoomRow,
+      { adults: 2, children: 0, arrivalDate: "2026-07-03" },
+      "2026-06-01",
+    );
+  const discount = (type: "length_of_stay" | "early_bird", value: number, sort: number, flat = false): Modifier => ({
+    type,
+    adjustment_type: flat ? "flat" : "percent",
+    adjustment_value: value,
+    trigger_condition: type === "length_of_stay" ? { min_nights: 3 } : { days_before_arrival: 30 },
+    sort_order: sort,
+  });
+
+  test("a discount entered as a positive number still lowers the price", () => {
+    expect(stay([discount("length_of_stay", 10, 1)]).room_price).toBe(270);
+  });
+
+  test("a percentage discount is taken from the price with date surcharges, whatever the order", () => {
+    // Weekend +20 on Sat and Sun: 340, then −10%.
+    expect(stay([discount("length_of_stay", -10, 1), { ...weekendSurcharge, sort_order: 30 }]).room_price).toBe(306);
+    expect(stay([{ ...weekendSurcharge, sort_order: 1 }, discount("length_of_stay", -10, 30)]).room_price).toBe(306);
+  });
+
+  test("a flat discount comes off the stay once", () => {
+    expect(stay([discount("length_of_stay", -10, 1, true)]).room_price).toBe(290);
+  });
+
+  test("the largest discount for the guest wins, not the first", () => {
+    const r = stay([discount("length_of_stay", -5, 1), discount("early_bird", -15, 2)]);
+    expect(r.room_price).toBe(255);
+    expect(r.applied_modifiers).toEqual(["early_bird"]);
+  });
+
+  test("weekdays are read from the date itself, not the server's time zone", () => {
+    const saved = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      const saturdayOnly: Modifier = { ...weekendSurcharge, trigger_condition: { days_of_week: [6] } };
+      const friSat = resolveRoom(
+        { base_occupancy: 2, nights: nightsFrom(["2026-07-03", "2026-07-04"], 100), modifiers: [saturdayOnly] } as unknown as RoomRow,
+        { adults: 2, children: 0, arrivalDate: "2026-07-03" },
+        "2026-06-01",
+      );
+      expect(friSat.room_price).toBe(220);
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
+  });
+
+  test("without a date passed in, lead time counts from the property's today", () => {
+    setSystemTime(new Date("2026-07-01T12:00:00Z")); // already 2 July in Kiritimati (UTC+14)
+    try {
+      const lastMinute: Modifier = {
+        type: "last_minute",
+        adjustment_type: "flat",
+        adjustment_value: 30,
+        trigger_condition: { days_till_arrival: 0 },
+        sort_order: 1,
+      };
+      const row = {
+        base_occupancy: 2,
+        timezone: "Pacific/Kiritimati",
+        nights: nightsFrom(["2026-07-02"], 100),
+        modifiers: [lastMinute],
+      } as unknown as RoomRow;
+      expect(resolveRoom(row, { adults: 2, children: 0, arrivalDate: "2026-07-02" }).room_price).toBe(130);
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("today is the property's date, not UTC's", () => {
+    const lateUtc = new Date("2026-07-01T12:00:00Z");
+    expect(todayInZone("Pacific/Kiritimati", lateUtc)).toBe("2026-07-02");
+    expect(todayInZone("Europe/Amsterdam", lateUtc)).toBe("2026-07-01");
   });
 });
