@@ -25,7 +25,7 @@
 - Hosts can't approve, hide or delete reviews.
 - Who may reply: anyone with `{ booking: ["read"] }` at the review's property (`userCan`).
 - Copy is plain and active. Reuse the exact copy in the mockups.
-- No guest email about replies in this plan. It's its own concept later.
+- The guest gets one email per published public host reply (Task 4b). Never for edits, private replies (Messages notifies those) or replies held for a check, and never when the guest turned review emails off.
 
 ## Review Focus
 
@@ -164,6 +164,34 @@ Behaviour:
 - [ ] **Step 2: Run** `cd apps/business && bun test lib/reviews/actions` — FAIL.
 - [ ] **Step 3: Implement `actions.ts`.** Run — PASS. `bun run typecheck` in apps/business — clean.
 - [ ] **Step 4: Commit** `feat(business): reply to reviews publicly or privately`.
+
+### Task 4b: Email the guest about a public reply
+
+**Files:**
+- Modify: `packages/mailing/src/review-mail.ts`, `packages/mailing/src/review-mail.test.ts`, `packages/mailing/src/review-send.ts`
+- Modify: `apps/business/lib/reviews/actions.ts` (call the sender)
+
+**Interfaces:**
+- Produces:
+  - `guestReviewReplied(i: { guestFirstName: string; propertyName: string; replyBody: string; manageUrl: string; settingsUrl: string }): ActionMail`
+  - `sendReviewReplied(reviewId: string, i: { report?: (error: unknown) => void }, deps?: ReviewSendDeps): Promise<void>` — never throws; loads the guest's email and first name, the property name, the booking id and the latest published host reply's body for `reviewId`; returns without sending when the review has no `guest_user_id` (anonymized), the account has no email, or `reviewEmailsEnabled` is false.
+
+Wording, exact (same `composeActionMail` look as the other review mails):
+- subject: `{Property} replied to your review`
+- preheader: `Read their reply, and answer it if you like.`
+- eyebrow: `Review`
+- headline: `{Property} replied<br />to your review.` (escaped)
+- body: `Hi {FirstName}, ${STRONG(property)} answered the review you wrote. Their reply is public, under your review on their page:`
+- details: the reply text in a quoted block (`border-left:2px solid #444444;padding-left:12px;color:#CCCCCC;white-space:pre-line`), escaped.
+- ctaLabel: `See the reply`, ctaUrl: `reviewManageUrl(webUrl, bookingId)`
+- footnote: `You can answer once, under your review. Your answer is public too.<br /><br />${LINK(settingsUrl, "Turn off review emails")}. ${SUPPORT}` with `settingsUrl = ${webUrl}/account/privacy`.
+
+- [ ] **Step 1: Write failing tests** in `review-mail.test.ts`: `the reply mail quotes the reply and escapes it` (body `"Thanks <b>Anna</b>"` → html contains `Thanks &lt;b&gt;Anna&lt;/b&gt;`, subject `Hotel replied to your review`), `the reply mail links to the review page and the email setting`.
+- [ ] **Step 2: Run** `cd packages/mailing && bun test review-mail` — FAIL. **Implement `guestReviewReplied`.** Run — PASS.
+- [ ] **Step 3: Write failing tests** for `sendReviewReplied` with a fake `db` and `transport` (pattern: `deps`): sends one mail to the guest; sends nothing when opted out; sends nothing for an anonymized review; a transport error goes to `report`, not thrown.
+- [ ] **Step 4: Implement `sendReviewReplied`.** Run — PASS.
+- [ ] **Step 5: Call it** in `replyToReview` only when `mode === "public"` and `status === "published"`, with `report` → Sentry (`tags: { area: "reviews", mail: "review_replied" }`). Typecheck apps/business — clean.
+- [ ] **Step 6: Commit** `feat(mailing): tell the guest about a public reply`.
 
 ### Task 5: Business Reviews page
 
