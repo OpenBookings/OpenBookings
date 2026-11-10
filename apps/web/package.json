@@ -31,7 +31,7 @@
     "@sentry/nextjs": "^10.76.2",
     "@shadcn/react": "^0.3.1",
     "@stripe/react-stripe-js": "^6",
-    "@stripe/stripe-js": "^9",
+    "@stripe/stripe-js": "^10",
     "algoliasearch": "^5.61.0",
     "better-auth": "1.7.16",
     "class-variance-authority": "^0.7.1",
