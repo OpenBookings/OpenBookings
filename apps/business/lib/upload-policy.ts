@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
  * /api/upload/confirm so the two cannot drift apart.
  */
 
-/** Matches the 10 MB the upload widgets already advertise (RoomImageUploader, image-manager). */
+/** Matches the 10 MB the upload widgets already advertise (image-manager). */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export const EXT_BY_TYPE: Record<string, string> = {
