@@ -1,0 +1,129 @@
+# Dependabot: dependency and security updates.
+#
+# Version updates arrive weekly, grouped, and only for releases that are at
+# least 3 days old (the cooldown). Security updates ignore the schedule and the
+# cooldown: they open as soon as an advisory is published. Turn on "Dependabot
+# security updates" under Settings -> Code security for those.
+#
+# Nothing is auto-merged. Next/React, Better Auth, Drizzle, Stripe, Hono and
+# TypeScript get their own group, because they need a human to read the
+# release notes.
+version: 2
+
+updates:
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Next, React and their types move together.
+      framework:
+        patterns:
+          - "next"
+          - "@next/*"
+          - "eslint-config-next"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      # Security, database, payments and language core: reviewed by hand.
+      needs-review:
+        patterns:
+          - "better-auth"
+          - "@better-auth/*"
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "stripe"
+          - "hono"
+          - "@mistralai/mistralai"
+          - "typescript"
+      # Everything else, minor and patch only, in one PR a week.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
+        exclude-patterns:
+          - "next"
+          - "@next/*"
+          - "eslint-config-next"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "better-auth"
+          - "@better-auth/*"
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "stripe"
+          - "hono"
+          - "@mistralai/mistralai"
+          - "typescript"
+    ignore:
+      # @types/node follows the Node runtime (22: engines.node and the
+      # Dockerfiles), not the newest Node. Raise it together with the runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    cooldown:
+      default-days: 3
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directories:
+      - "/apps/web"
+      - "/apps/business"
+      - "/apps/docs"
+      - "/apps/support-bot"
+      - "/apps/invoice-job"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    cooldown:
+      default-days: 3
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(docker)"
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # Node and Bun majors change the runtime; raise them by hand.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "oven/bun"
+        update-types: ["version-update:semver-major"]
+
+  # The Postgres image the local test database runs on. Majors are ignored:
+  # it has to stay on the same major as the hosted database (see testing/README.md).
+  - package-ecosystem: "docker-compose"
+    directory: "/testing"
+    schedule:
+      interval: "monthly"
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(testing)"
+    ignore:
+      - dependency-name: "postgis/postgis"
+        update-types: ["version-update:semver-major"]
