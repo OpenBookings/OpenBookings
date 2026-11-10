@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement or a new feature.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write code for a large change, please wait until we've agreed on the approach
+        here. Some choices are fixed on purpose (EU and EUR only, prepayment on the platform,
+        tax-inclusive rates). See GOVERNANCE.md.
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who is it for?
+      options:
+        - Guests
+        - Hotels / hosts
+        - Self-hosters and developers
+        - Integrators (PMS, channel managers, agencies)
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: Describe the situation and why it's a problem today. Start from the problem, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this myself.

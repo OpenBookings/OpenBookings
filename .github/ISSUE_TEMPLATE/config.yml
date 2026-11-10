@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/OpenBookings/OpenBookings/security/advisories/new
+    about: Please report security problems privately, never in a public issue. See SECURITY.md.
+  - name: Help with a hotel account on openbookings.co
+    url: mailto:support@openbookings.co
+    about: For questions about your own bookings, payouts or account on the hosted service, contact support instead of opening an issue.
+  - name: Documentation
+    url: https://github.com/OpenBookings/OpenBookings/tree/main/apps/docs/content/docs
+    about: Setup guides, configuration reference and how OpenBookings works.
