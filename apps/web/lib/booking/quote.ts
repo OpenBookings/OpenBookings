@@ -135,6 +135,8 @@ plans AS (
     p.cancellation_tier, p.timezone, to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     r.id AS room_id, r.name AS room_name, r.description AS room_description, r.room_type,
     r.base_occupancy, r.max_adults, r.max_children, r.sort_order AS room_sort,
+    -- bigint comes back as a string from node-postgres; the resolver adds these.
+    r.extra_adult_fee::int, r.extra_child_fee::int, r.cot_fee::int, r.extra_bed_fee::int,
     rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay, rp.sort_order AS plan_sort,
     rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner

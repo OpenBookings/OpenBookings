@@ -62,6 +62,14 @@ describeWithDb("stay quote against Postgres", () => {
     return (rows[0] as { id: string }).id;
   }
 
+  test("a guest above base occupancy pays the room's extra-adult fee every night", async () => {
+    await db.query(`UPDATE rooms SET max_adults = 3, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    const q = await quoteStay(db, { propertyId: ids.propertyId, stay: { ...STAY, adults: 3 }, now: NOW, testing: false });
+    const plan = q!.rooms[0].ratePlans[0];
+    expect(plan.stayTotal).toBe(3 * (100 + 20));
+    expect(plan.nights.map((n) => n.price)).toEqual([120, 120, 120]);
+  });
+
   test("an override of 2 and one confirmed booking leave one unit", async () => {
     await db.query(
       `INSERT INTO room_inventory (room_id, date, available_override)
