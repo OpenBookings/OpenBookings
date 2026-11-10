@@ -71,6 +71,12 @@ updates:
       # Dockerfiles), not the newest Node. Raise it together with the runtime.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # TypeScript stays on 5.x. Since 6.0 tsconfig no longer picks up @types
+      # packages by default, so bun:test and process stop resolving in most
+      # packages (seen in #164). Move to 6/7 by hand: add "types": ["bun"] to
+      # every tsconfig and check that the Next.js builds still pass.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
