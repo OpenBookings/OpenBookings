@@ -28,6 +28,8 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   ratePlanId,
   adults: 2,
   children: 0,
+  cots: 0,
+  extraBeds: 0,
   nights: [
     { date: "2031-11-10", price: 100 },
     { date: "2031-11-11", price: 100 },
@@ -186,7 +188,10 @@ describeWithDb("booking intents against Postgres", () => {
   });
 
   test("the intent stores what was quoted, room by room", async () => {
-    const rooms = [room(ids.roomId, ids.ratePlanId), { ...room(ids.roomId, ids.ratePlanId), adults: 1, children: 1 }];
+    const rooms = [
+      room(ids.roomId, ids.ratePlanId),
+      { ...room(ids.roomId, ids.ratePlanId), adults: 1, children: 1, cots: 1, extraBeds: 1 },
+    ];
     const { intentId } = await created(guest, rooms);
     const intent = await loadIntent(db, { intentId, userId: guest });
     expect(intent).not.toBeNull();

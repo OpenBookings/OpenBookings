@@ -24,10 +24,15 @@ describe("splitParty", () => {
     expect(r).toEqual({
       ok: true,
       rooms: [
-        { roomId: "a", ratePlanId: "flex", adults: 1, children: 0 },
-        { roomId: "b", ratePlanId: "nr", adults: 1, children: 0 },
+        { roomId: "a", ratePlanId: "flex", adults: 1, children: 0, cots: 0, extraBeds: 0 },
+        { roomId: "b", ratePlanId: "nr", adults: 1, children: 0, cots: 0, extraBeds: 0 },
       ],
     });
+  });
+
+  test("a unit's cots and extra beds go with its room", () => {
+    const r = splitParty(2, 0, [{ ...unit("a"), cots: 1 }, { ...unit("b"), extraBeds: 1 }]);
+    expect(r.ok && r.rooms.map((x) => [x.cots, x.extraBeds])).toEqual([[1, 0], [0, 1]]);
   });
 
   test("every room needs an adult", () => {

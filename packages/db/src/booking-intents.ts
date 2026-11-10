@@ -15,6 +15,9 @@ export type IntentRoomInput = {
   ratePlanId: string;
   adults: number;
   children: number;
+  /** Cots and extra beds booked with the room; their fees are already in `nights` (0040). */
+  cots: number;
+  extraBeds: number;
   nights: { date: string; price: number }[];
   stayTotal: number;
   touristTax: number;
@@ -186,8 +189,8 @@ export async function createBookingIntent(
         await tx.query(
           `INSERT INTO booking_intent_rooms
              (intent_id, room_id, rate_plan_id, adults, children, nights, stay_total,
-              tourist_tax_amount, tourist_tax_lines, sort_order)
-           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10)`,
+              tourist_tax_amount, tourist_tax_lines, sort_order, cots, extra_beds)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12)`,
           [
             intentId,
             r.roomId,
@@ -199,6 +202,8 @@ export async function createBookingIntent(
             r.touristTax,
             JSON.stringify(r.touristTaxLines),
             sortOrder,
+            r.cots,
+            r.extraBeds,
           ],
         );
       }
@@ -241,6 +246,8 @@ SELECT
       'ratePlanId',      r.rate_plan_id,
       'adults',          r.adults,
       'children',        r.children,
+      'cots',            r.cots,
+      'extraBeds',       r.extra_beds,
       'nights',          r.nights,
       'stayTotal',       r.stay_total,
       'touristTax',      r.tourist_tax_amount,
@@ -538,8 +545,8 @@ export async function convertIntentToBooking(
       const { rows: reservationRows } = await tx.query(
         `INSERT INTO reservations
            (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night,
-            total_amount, tourist_tax_amount, tourist_tax_lines)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+            total_amount, tourist_tax_amount, tourist_tax_lines, cots, extra_beds)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
          RETURNING id`,
         [
           bookingId,
@@ -552,6 +559,8 @@ export async function convertIntentToBooking(
           Math.round(r.stayTotal),
           r.touristTax,
           JSON.stringify(r.touristTaxLines),
+          r.cots,
+          r.extraBeds,
         ],
       );
       const reservationId = (reservationRows[0] as { id: string }).id;

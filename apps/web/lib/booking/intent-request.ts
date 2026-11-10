@@ -11,6 +11,8 @@ export type IntentRequest = {
   expectedTotal: number;
 };
 
+/** The most cots, or extra beds, any room takes (rooms.cots_max / extra_beds_max). */
+const MAX_EXTRAS = 4;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -47,11 +49,18 @@ export function parseIntentRequest(body: unknown): { ok: true; value: IntentRequ
         errors.push(`rooms[${n}] needs a roomId, a ratePlanId, at least one adult and a whole number of children`);
         return;
       }
+      // What the room takes is priceSelection's check; this is only the shape.
+      if (!wholeIn(room.cots ?? 0, 0, MAX_EXTRAS) || !wholeIn(room.extraBeds ?? 0, 0, MAX_EXTRAS)) {
+        errors.push(`rooms[${n}] cots and extraBeds must be whole numbers from 0 to ${MAX_EXTRAS}`);
+        return;
+      }
       selection.push({
         roomId: room.roomId,
         ratePlanId: room.ratePlanId,
         adults: room.adults as number,
         children: (room.children ?? 0) as number,
+        cots: (room.cots ?? 0) as number,
+        extraBeds: (room.extraBeds ?? 0) as number,
       });
     });
   }

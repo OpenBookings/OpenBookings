@@ -40,6 +40,8 @@ describeWithDb("payment session of a booking intent", () => {
       ratePlanId: ids.ratePlanId,
       adults: 2,
       children: 0,
+      cots: 0,
+      extraBeds: 0,
       nights: [{ date: "2031-11-10", price: 100 }],
       stayTotal: 100,
       touristTax: 0,

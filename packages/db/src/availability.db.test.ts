@@ -241,7 +241,7 @@ describeWithDb("availability against Postgres", () => {
   });
 
   test("search reason: too many guests, unless spread over rooms", async () => {
-    await db.query(`UPDATE rooms SET max_adults = 1, total_units = 2 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rooms SET max_adults = 1, base_occupancy = 1, total_units = 2 WHERE id = $1`, [ids.roomId]);
     expect(await search({ adults: 2, rooms: 1 })).toEqual({
       propertyId: ids.propertyId,
       bookable: false,

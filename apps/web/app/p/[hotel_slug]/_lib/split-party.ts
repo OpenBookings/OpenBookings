@@ -1,7 +1,14 @@
 import type { SelectedRoom } from "@/lib/booking/quote";
 
-/** One room picked: which room and rate, and how many it sleeps. */
-export type Unit = { roomId: string; ratePlanId: string; maxAdults: number; maxChildren: number };
+/** One room picked: which room and rate, how many it sleeps, and the cots and extra beds asked for. */
+export type Unit = {
+  roomId: string;
+  ratePlanId: string;
+  maxAdults: number;
+  maxChildren: number;
+  cots?: number;
+  extraBeds?: number;
+};
 
 export type SplitResult =
   | { ok: true; rooms: SelectedRoom[] }
@@ -49,6 +56,13 @@ export function splitParty(adults: number, children: number, units: Unit[]): Spl
 
   return {
     ok: true,
-    rooms: units.map((u, i) => ({ roomId: u.roomId, ratePlanId: u.ratePlanId, adults: a[i], children: c[i] })),
+    rooms: units.map((u, i) => ({
+      roomId: u.roomId,
+      ratePlanId: u.ratePlanId,
+      adults: a[i],
+      children: c[i],
+      cots: u.cots ?? 0,
+      extraBeds: u.extraBeds ?? 0,
+    })),
   };
 }

@@ -25,6 +25,8 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   ratePlanId,
   adults: 2,
   children: 0,
+  cots: 1,
+  extraBeds: 0,
   nights: [
     { date: "2031-11-10", price: 99.5 },
     { date: "2031-11-11", price: 120 },
@@ -244,7 +246,7 @@ describeWithDb("converting a paid booking intent", () => {
 
     const reservations = (
       await db.query(
-        `SELECT room_id, rate_plan_id, adults, children, total_nights, price_per_night, total_amount,
+        `SELECT room_id, rate_plan_id, adults, children, cots, extra_beds, total_nights, price_per_night, total_amount,
                 tourist_tax_amount, tourist_tax_lines, cancellation_tier, nights
          FROM reservations WHERE booking_id = $1`,
         [result.bookingId],
@@ -252,7 +254,15 @@ describeWithDb("converting a paid booking intent", () => {
     ).rows;
     expect(reservations).toHaveLength(2);
     for (const r of reservations) {
-      expect(r).toMatchObject({ room_id: ids.roomId, rate_plan_id: ids.ratePlanId, adults: 2, children: 0, total_nights: 2 });
+      expect(r).toMatchObject({
+        room_id: ids.roomId,
+        rate_plan_id: ids.ratePlanId,
+        adults: 2,
+        children: 0,
+        cots: 1,
+        extra_beds: 0,
+        total_nights: 2,
+      });
       expect(Number(r.price_per_night)).toBe(Math.round(219.5 / 2));
       expect(Number(r.total_amount)).toBe(Math.round(219.5));
       expect(Number(r.tourist_tax_amount)).toBe(12);

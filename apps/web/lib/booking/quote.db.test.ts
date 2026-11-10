@@ -51,6 +51,8 @@ describeWithDb("stay quote against Postgres", () => {
     ratePlanId: ids.ratePlanId,
     adults: 2,
     children: 0,
+    cots: 0,
+    extraBeds: 0,
     ...over,
   });
 
@@ -175,6 +177,37 @@ describeWithDb("stay quote against Postgres", () => {
     const r = await select([double({ adults: 3 })]);
     expect(r).toMatchObject({ ok: false, error: "too_many_guests" });
     if (!r.ok) expect(r.detail).toContain("Double");
+  });
+
+  test("selection: more cots or extra beds than the room takes are invalid", async () => {
+    await db.query(`UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 0 WHERE id = $1`, [ids.roomId]);
+    const tooManyCots = await select([double({ cots: 2 })]);
+    expect(tooManyCots).toMatchObject({ ok: false, error: "invalid_selection", detail: "Double: at most 1 cot" });
+    const noBeds = await select([double({ extraBeds: 1 })]);
+    expect(noBeds).toMatchObject({ ok: false, error: "invalid_selection", detail: "Double: no extra beds" });
+  });
+
+  test("selection: a cot and an extra bed together only where the room allows it", async () => {
+    await db.query(
+      `UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 1, extra_bed_fee = 25,
+                        cot_and_extra_bed_together = false WHERE id = $1`,
+      [ids.roomId],
+    );
+    const both = await select([double({ cots: 1, extraBeds: 1 })]);
+    expect(both).toMatchObject({
+      ok: false,
+      error: "invalid_selection",
+      detail: "Double: a cot and an extra bed cannot be combined",
+    });
+  });
+
+  test("selection: an extra bed is priced into every night and kept on the intent room", async () => {
+    await db.query(`UPDATE rooms SET extra_beds_max = 1, extra_bed_fee = 25 WHERE id = $1`, [ids.roomId]);
+    const r = await select([double({ extraBeds: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotal: 3 * 125 });
+    expect(r.rooms[0].nights.map((n) => n.price)).toEqual([125, 125, 125]);
+    expect(r.snapshot.roomsTotal).toBe(375);
   });
 
   test("selection: two units of a room with one left is unavailable", async () => {

@@ -64,7 +64,15 @@ export type QuotedRoom = {
 
 export type StayQuote = { propertyId: string; slug: string; currency: "EUR"; stay: StayInput; rooms: QuotedRoom[] };
 
-export type SelectedRoom = { roomId: string; ratePlanId: string; adults: number; children: number };
+export type SelectedRoom = {
+  roomId: string;
+  ratePlanId: string;
+  adults: number;
+  children: number;
+  /** Cots and extra beds for this room, checked against what it takes. */
+  cots: number;
+  extraBeds: number;
+};
 
 export type VisibleProperty = {
   id: string;
@@ -112,6 +120,9 @@ export async function loadVisibleProperty(
 
 type PlanRow = RoomRow & {
   room_type: string | null;
+  cots_max: number;
+  extra_beds_max: number;
+  cot_and_extra_bed_together: boolean;
   includes_breakfast: boolean;
   includes_lunch: boolean;
   includes_dinner: boolean;
@@ -137,6 +148,7 @@ plans AS (
     r.base_occupancy, r.max_adults, r.max_children, r.sort_order AS room_sort,
     -- bigint comes back as a string from node-postgres; the resolver adds these.
     r.extra_adult_fee::int, r.extra_child_fee::int, r.cot_fee::int, r.extra_bed_fee::int,
+    r.cots_max, r.extra_beds_max, r.cot_and_extra_bed_together,
     rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay, rp.sort_order AS plan_sort,
     rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner
@@ -250,7 +262,7 @@ type PricedRoom = {
 function priceRooms(
   rows: PlanRow[],
   byRoom: Map<string, RoomAvailability>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; cots?: number; extraBeds?: number },
   arrivalDate: string,
   today: string,
 ): PricedRoom[] {
@@ -321,6 +333,22 @@ export async function quoteStay(
   return { propertyId: property.id, slug: property.slug, currency: "EUR", stay: i.stay, rooms };
 }
 
+/** Why a room can't take the cots and extra beds asked for, or null when it can. */
+function extrasError(room: PlanRow, s: SelectedRoom): string | null {
+  const name = room.room_name;
+  const limit = (asked: number, max: number, one: string, many: string) => {
+    if (asked <= max) return null;
+    return max === 0 ? `${name}: no ${many}` : `${name}: at most ${max} ${max === 1 ? one : many}`;
+  };
+  return (
+    limit(s.cots, room.cots_max, "cot", "cots") ??
+    limit(s.extraBeds, room.extra_beds_max, "extra bed", "extra beds") ??
+    (s.cots > 0 && s.extraBeds > 0 && !room.cot_and_extra_bed_together
+      ? `${name}: a cot and an extra bed cannot be combined`
+      : null)
+  );
+}
+
 type SelectionResult =
   | { ok: true; rooms: IntentRoomInput[]; snapshot: IntentSnapshot }
   | { ok: false; error: "invalid_selection" | "too_many_guests" | "unavailable"; detail: string };
@@ -376,7 +404,15 @@ export async function priceSelection(
     const roomRows = rows.filter((r) => r.room_id === s.roomId);
     const a = byRoom.get(s.roomId);
     if (roomRows.length === 0 || !a) return invalid(`room ${s.roomId} is not offered at this property`);
-    const [room] = priceRooms(roomRows, byRoom, { adults: s.adults, children: s.children }, i.checkIn, today);
+    const extrasProblem = extrasError(roomRows[0], s);
+    if (extrasProblem) return invalid(extrasProblem);
+    const [room] = priceRooms(
+      roomRows,
+      byRoom,
+      { adults: s.adults, children: s.children, cots: s.cots, extraBeds: s.extraBeds },
+      i.checkIn,
+      today,
+    );
     const plan = room?.plans.find((p) => p.row.rate_plan_id === s.ratePlanId);
     if (!room || !plan) return invalid(`rate ${s.ratePlanId} is not offered for ${roomRows[0].room_name}`);
     picked.push({ s, room, plan, a });
@@ -413,6 +449,8 @@ export async function priceSelection(
     ratePlanId: s.ratePlanId,
     adults: s.adults,
     children: s.children,
+    cots: s.cots,
+    extraBeds: s.extraBeds,
     nights: plan.priced.priced_nights,
     stayTotal: plan.priced.room_price,
     touristTax: plan.priced.tourist_tax.total,

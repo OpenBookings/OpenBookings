@@ -7,7 +7,7 @@ const valid = {
   propertyId: "33333333-3333-4333-8333-333333333333",
   checkIn: "2031-11-10",
   checkOut: "2031-11-12",
-  rooms: [{ roomId: ROOM, ratePlanId: PLAN, adults: 2, children: 1 }],
+  rooms: [{ roomId: ROOM, ratePlanId: PLAN, adults: 2, children: 1, cots: 1, extraBeds: 0 }],
   expectedTotal: 206.5,
 };
 
@@ -17,6 +17,14 @@ describe("parseIntentRequest", () => {
     const noChildren = { ...valid, rooms: [{ roomId: ROOM, ratePlanId: PLAN, adults: 1 }] };
     const parsed = parseIntentRequest(noChildren);
     expect(parsed.ok && parsed.value.rooms[0].children).toBe(0);
+  });
+
+  test("cots and extra beds are whole numbers from 0 to 4, defaulting to 0", () => {
+    const parsed = parseIntentRequest({ ...valid, rooms: [{ roomId: ROOM, ratePlanId: PLAN, adults: 1 }] });
+    expect(parsed.ok && parsed.value.rooms[0]).toMatchObject({ cots: 0, extraBeds: 0 });
+    for (const bad of [{ cots: 5 }, { cots: 1.5 }, { cots: -1 }, { extraBeds: 5 }, { extraBeds: "1" }]) {
+      expect(parseIntentRequest({ ...valid, rooms: [{ ...valid.rooms[0], ...bad }] }).ok).toBe(false);
+    }
   });
 
   test("1 to 9 rooms", () => {

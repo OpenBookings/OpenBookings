@@ -90,6 +90,8 @@ describeWithDb("checkout summary of a booking intent", () => {
     ratePlanId,
     adults: 2,
     children: 0,
+    cots: 0,
+    extraBeds: 0,
     nights: NIGHTS.map((date) => ({ date, price })),
     stayTotal: price * NIGHTS.length,
     touristTax: tax,

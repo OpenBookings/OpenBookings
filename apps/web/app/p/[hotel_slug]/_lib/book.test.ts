@@ -99,8 +99,8 @@ describe("buildBooking", () => {
     expect(buildBooking([room], [view], { [FLEX]: 1, [NR]: 1 }, { adults: 3, children: 0 })).toEqual({
       ok: true,
       rooms: [
-        { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0 },
-        { roomId: ROOM_A, ratePlanId: NR, adults: 1, children: 0 },
+        { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0, cots: 0, extraBeds: 0 },
+        { roomId: ROOM_A, ratePlanId: NR, adults: 1, children: 0, cots: 0, extraBeds: 0 },
       ],
       expectedTotal: 570.3,
     });
