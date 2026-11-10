@@ -13,7 +13,7 @@
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
-    "@sentry/bun": "10.76.2"
+    "@sentry/bun": "11.11.0"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
