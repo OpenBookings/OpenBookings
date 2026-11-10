@@ -5,7 +5,9 @@ import { getPool } from '@openbookings/db';
 import { getReviewContext } from '@openbookings/db/reviews';
 import { getServerSession } from '@/lib/auth';
 import { AuthFormFields, AuthFormPhaseProvider } from '@/components/auth/AuthFormFields';
+import { nextReplyRole } from '@openbookings/pricing';
 import { DeleteReviewButton } from '@/app/review/_components/ReviewActions';
+import { ReplyAnswerForm } from '@/app/review/_components/ReplyAnswerForm';
 import { ReviewForm } from '@/app/review/_components/ReviewForm';
 import { formatStayMonth, ReviewShell } from '@/app/review/_components/ReviewShell';
 
@@ -71,6 +73,25 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
           </p>
           {review.body ? <p className="text-[15px] whitespace-pre-line text-white/85">{review.body}</p> : null}
           <p className="text-sm text-white/55">{STATUS[review.status] ?? ''}</p>
+          {review.replies.length > 0 ? (
+            <div className="flex flex-col gap-4 border-t border-white/10 pt-5">
+              {review.replies.map((r) => (
+                <div key={r.id} className={`flex flex-col gap-1.5 border-l border-white/15 pl-4 ${r.role === 'guest' ? 'ml-4' : ''}`}>
+                  <p className="text-xs text-white/55">
+                    <span className="font-medium text-white/85">
+                      {r.role === 'host' ? `Response from ${context.propertyName}` : 'Your answer'}
+                    </span>
+                    {r.editedAt ? ' · Edited' : ''}
+                    {r.status === 'pending' ? ' · Waiting for a person to check it.' : ''}
+                  </p>
+                  <p className="text-[15px] whitespace-pre-line text-white/85">{r.body}</p>
+                </div>
+              ))}
+              {review.status === 'published' && nextReplyRole(review.replies.map((r) => r.role)) === 'guest' ? (
+                <ReplyAnswerForm bookingId={bookingId} propertyName={context.propertyName} />
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 border-t border-white/10 pt-5">
             <DeleteReviewButton bookingId={bookingId} />
             {back}

@@ -11,6 +11,7 @@ const review = (id: string, score: number, publishedAt: string, body: string | n
   stayMonth: "2026-10-01",
   roomLabel: null,
   publishedAt,
+  replies: [],
 });
 
 const reviews = [

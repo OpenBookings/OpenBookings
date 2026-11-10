@@ -29,8 +29,15 @@ export function propertyPageKey(slug: string): string {
  * property, and a slug can change.
  */
 export function propertyReviewsKey(propertyId: string): string {
-  return `ob:${CACHE_SCHEMA_VERSION}:prop-reviews:${propertyId.toLowerCase()}`;
+  return `ob:${CACHE_SCHEMA_VERSION}:prop-reviews:${REVIEWS_SHAPE}:${propertyId.toLowerCase()}`;
 }
+
+/**
+ * The reviews payload's own shape version, bumped on its own so a change
+ * there doesn't throw away every cached property page as well.
+ * r2: each review carries its `replies` (0039).
+ */
+const REVIEWS_SHAPE = "r2";
 
 /**
  * The key marking that `key` was purged, and when.
