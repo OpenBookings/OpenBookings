@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  nextReplyRole,
+  REPLY_THREAD_MAX,
   displayedAverage,
   hostNoShowDeadline,
   isReviewSendHour,
@@ -103,5 +105,15 @@ describe("reviewBand", () => {
     expect(reviewBand(5).label).toBe("Okay");
     expect(reviewBand(4.9).label).toBe("Bad");
     expect(reviewBand(1).id).toBe("bad");
+  });
+});
+
+describe("nextReplyRole", () => {
+  test("nextReplyRole follows host, guest, host and then closes", () => {
+    expect(nextReplyRole([])).toBe("host");
+    expect(nextReplyRole(["host"])).toBe("guest");
+    expect(nextReplyRole(["host", "guest"])).toBe("host");
+    expect(nextReplyRole(["host", "guest", "host"])).toBeNull();
+    expect(REPLY_THREAD_MAX).toBe(3);
   });
 });
