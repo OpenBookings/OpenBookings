@@ -1,34 +1,13 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 /**
- * Migrations the code in this branch reads but that may not be on the database
- * the DB-backed tests run against yet.
+ * The business suites use the shared pending-migrations replay from
+ * @openbookings/db/testing. List new migrations in
+ * packages/db/src/testing/pending-migrations.ts, not here.
  *
- * Those suites run on a throwaway Neon branch of the dev database, and
- * migrations are applied by the deploy, after CI. So a change that adds a
- * column and a query that reads it would fail its own CI until someone applied
- * the SQL by hand. Running the files inside the test's own transaction closes
- * that gap: every file here is idempotent, so on a database that already has
- * them this is a no-op, and the ROLLBACK after each test discards it either
- * way.
- *
- * Remove an entry once that migration is on the dev database.
- *
- * Each file replays inside every test's transaction, and even a no-op
- * `ALTER TABLE ... IF NOT EXISTS` holds an exclusive table lock until the
- * ROLLBACK. Turbo runs the DB suites of several packages at once on the same
- * branch, so a long list here makes them queue behind each other's locks.
+ * This file used to keep its own list and replay it in every test's
+ * transaction. That skipped the shared helper's two safeguards: in CI it
+ * does nothing (PENDING_MIGRATIONS_APPLIED=1, the Verify job applies the
+ * files once up front), and locally it takes an advisory lock so suites take
+ * turns. Without them the no-op DDL took table locks in parallel suites and
+ * deadlocked them.
  */
-const PENDING: string[] = ["0038_guest_reviews.sql", "0039_review_replies.sql"];
-
-const DRIZZLE_DIR = new URL("../../../../../../../packages/db/drizzle/", import.meta.url);
-
-export const PENDING_MIGRATIONS_SQL = PENDING.map((file) =>
-  readFileSync(fileURLToPath(new URL(file, DRIZZLE_DIR)), "utf8"),
-);
-
-/** Apply the pending migrations on `db`. Call inside the test's transaction. */
-export async function applyPendingMigrations(db: { query: (sql: string) => Promise<unknown> }) {
-  for (const sql of PENDING_MIGRATIONS_SQL) await db.query(sql);
-}
+export { applyPendingMigrations } from "@openbookings/db/testing";
