@@ -27,64 +27,39 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Create a throwaway database branch
-        id: neon
-        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          parent_branch: br-frosty-wildflower-alcqwefl
-          branch_name: ci-latency-${{ github.run_id }}-${{ github.run_attempt }}
-          api_key: ${{ secrets.NEON_API_KEY }}
-
-      - name: What does Neon run?
-        id: versions
-        env:
-          NEON_URL: ${{ steps.neon.outputs.db_url }}
+      - name: Start a local Postgres with Neon's major and PostGIS
         run: |
           set -euo pipefail
-          for i in $(seq 1 30); do
-            PGCONNECT_TIMEOUT=10 psql "$NEON_URL" -XAtqc 'select 1' >/dev/null 2>&1 && break
-            sleep 2
-          done
-          psql "$NEON_URL" -XAtc "select version()"
-          psql "$NEON_URL" -XAtc "select extname || ' ' || extversion from pg_extension order by 1"
-          psql "$NEON_URL" -XAtc "select 'db size: ' || pg_size_pretty(pg_database_size(current_database()))"
-          psql "$NEON_URL" -XAtc "select 'tables with rows: ' || count(*) from pg_stat_user_tables where n_live_tup > 0"
-          psql "$NEON_URL" -XAtc "select relname || ' ' || n_live_tup from pg_stat_user_tables where n_live_tup > 0 order by n_live_tup desc limit 40"
-          major=$(psql "$NEON_URL" -XAtc "show server_version_num" | cut -c1-2)
-          postgis=$(psql "$NEON_URL" -XAtc "select extversion from pg_extension where extname='postgis'" | cut -d. -f1,2)
-          echo "image=postgis/postgis:${major}-${postgis}" >> "$GITHUB_OUTPUT"
-
-      - name: Start a local Postgres with the same major and PostGIS
-        run: |
-          set -euo pipefail
-          docker run -d --name pg -e POSTGRES_PASSWORD=pg -p 5432:5432 "${{ steps.versions.outputs.image }}"
-          for i in $(seq 1 60); do
-            docker exec pg pg_isready -U postgres -h localhost >/dev/null 2>&1 && break
-            sleep 1
-          done
-          # postgis images restart once after init; wait for the second start.
-          sleep 3
+          docker run -d --name pg -e POSTGRES_PASSWORD=pg -p 5432:5432 postgis/postgis:17-3.5
           for i in $(seq 1 60); do
             psql "$LOCAL_URL" -XAtqc 'select 1' >/dev/null 2>&1 && break
             sleep 1
           done
-          psql "$LOCAL_URL" -XAtc "select version()"
 
-      - name: Copy the schema (timed)
+      - name: Fetch the parent branch's schema from the Neon API (timed)
         env:
-          NEON_URL: ${{ steps.neon.outputs.db_url }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          start=$(date +%s%N)
+          curl -fsS --retry 3 \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/br-frosty-wildflower-alcqwefl/schema?db_name=neondb" \
+            | jq -r .sql > schema.sql
+          echo "fetch: $(( ($(date +%s%N) - start) / 1000000 )) ms, $(wc -l < schema.sql) lines"
+          echo "## statement kinds that mention roles"
+          grep -oE '^(ALTER [A-Z ]+ OWNER TO|GRANT|REVOKE|SET ROLE|CREATE ROLE|ALTER DEFAULT PRIVILEGES)' schema.sql | sort | uniq -c || true
+          grep -oE 'OWNER TO [a-z_"]+|TO [a-z_"]+;' schema.sql | sort | uniq -c | head -20 || true
+
+      - name: Restore it locally (timed)
         run: |
           set -uo pipefail
-          start=$(date +%s)
-          # pg_dump from inside the container, so the client matches the server major.
-          docker exec pg pg_dump "$NEON_URL" --schema-only --no-owner --no-privileges > schema.sql
-          echo "dump: $(( $(date +%s) - start ))s, $(wc -l < schema.sql) lines"
-          start=$(date +%s)
+          start=$(date +%s%N)
           psql "$LOCAL_URL" -X -q -f schema.sql > restore.log 2>&1
-          echo "restore: $(( $(date +%s) - start ))s"
+          echo "restore: $(( ($(date +%s%N) - start) / 1000000 )) ms"
           echo "## restore errors"
-          grep -i 'error' restore.log | sort | uniq -c | head -40 || true
+          grep 'ERROR' restore.log | sed -E 's/^psql:schema.sql:[0-9]+: //' | sort | uniq -c | head -40 || true
           psql "$LOCAL_URL" -XAtc "select 'local tables: ' || count(*) from pg_tables where schemaname='public'"
 
       - name: Apply this branch's pending migrations locally
@@ -99,18 +74,11 @@ jobs:
             | grep -o 'Time: [0-9.]*' | awk '{print $2}' | sort -n \
             | awk '{a[NR]=$1; s+=$1} END {printf "local select 1: median %.2f ms\n", a[int((NR+1)/2)]}'
 
-      - name: Run the billing and db suites against local Postgres (timed)
+      - name: Run every suite against local Postgres (timed)
         continue-on-error: true
         env:
           DATABASE_URL: ${{ env.LOCAL_URL }}
           DATABASE_URL_DIRECT: ${{ env.LOCAL_URL }}
           PENDING_MIGRATIONS_APPLIED: "1"
-        run: bunx turbo run test --filter=@openbookings/billing --filter=@openbookings/db --concurrency=4 --no-cache 2>&1 | grep -E '\(fail\)|Ran [0-9]+ tests|[0-9]+ (pass|fail|skip)$|error:|Tasks:|Time:' | head -80
+        run: bunx turbo run test --filter='!@openbookings/demo' --concurrency=4 --no-cache 2>&1 | grep -E '\(fail\)|Ran [0-9]+ tests|[0-9]+ (pass|fail|skip)$|error:|Tasks:|Time:|Failed:' | head -120
 
-      - name: Delete the throwaway database branch
-        if: ${{ always() && steps.neon.outputs.branch_id != '' }}
-        uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          branch: ${{ steps.neon.outputs.branch_id }}
-          api_key: ${{ secrets.NEON_API_KEY }}
