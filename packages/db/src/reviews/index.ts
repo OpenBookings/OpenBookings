@@ -239,6 +239,11 @@ export async function deleteGuestReview(
  * goes. Name and country are replaced, the link to the account removed.
  */
 export async function anonymizeGuestReviews(db: Queryable, guestUserId: string): Promise<number> {
+  // Their answers under property replies stay too, without the link to them.
+  await db.query(
+    `UPDATE review_replies SET author_user_id = NULL, updated_at = NOW() WHERE author_role = 'guest' AND author_user_id = $1`,
+    [guestUserId],
+  );
   const { rows } = await db.query(
     `UPDATE reviews
         SET guest_user_id = NULL, author_name = 'Former guest', author_country = NULL, updated_at = NOW()

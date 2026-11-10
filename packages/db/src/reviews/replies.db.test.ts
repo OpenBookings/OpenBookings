@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:te
 import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedGuest, seedProperty } from "../testing/db-harness";
 import {
+  anonymizeGuestReviews,
   deleteGuestReview,
   deleteHostReply,
   editHostReply,
@@ -211,5 +212,16 @@ describeWithDb("review replies against Postgres", () => {
   test("a deleted review can't be marked", async () => {
     await deleteGuestReview(db, { bookingId, guestUserId: guestId, now: NOW });
     expect(await setReplySkipped(db, { reviewId, userId: hostId, skipped: true, now: NOW })).toEqual({ ok: false, error: "review_deleted" });
+  });
+
+  test("a deleted account's answers lose their author link", async () => {
+    await reply("host");
+    await reply("guest");
+    await anonymizeGuestReviews(db, guestId);
+    const rows = (await db.query(`SELECT author_role, author_user_id FROM review_replies WHERE review_id = $1 ORDER BY created_at`, [reviewId])).rows;
+    expect(rows).toEqual([
+      { author_role: "host", author_user_id: hostId },
+      { author_role: "guest", author_user_id: null },
+    ]);
   });
 });
