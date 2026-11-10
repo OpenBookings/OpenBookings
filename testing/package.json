@@ -1,0 +1,27 @@
+{
+  "name": "@openbookings/testing",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A local Postgres, a schema snapshot and seed data for trying and testing OpenBookings.",
+  "scripts": {
+    "db:up": "docker compose -f docker-compose.yml up -d --wait",
+    "db:down": "docker compose -f docker-compose.yml down -v",
+    "setup": "bun scripts/setup.ts",
+    "schema:dump": "bash scripts/dump-schema.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openbookings/authz": "workspace:*",
+    "@openbookings/billing": "workspace:*",
+    "@openbookings/db": "workspace:*",
+    "@openbookings/stripe": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@openbookings/config": "workspace:*",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.9.3"
+  }
+}

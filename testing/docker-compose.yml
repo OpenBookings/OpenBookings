@@ -1,0 +1,32 @@
+# A local Postgres for trying and testing OpenBookings.
+#
+#   bun run testing:db      # start it (port 5433)
+#   bun run testing:setup   # load the schema and the seed data
+#   bun run testing:down    # stop it and delete its data
+#
+# Same image as CI: Postgres 17 with PostGIS 3.5, the major the hosted database
+# runs. Keep the major in step with it, since the schema snapshot is a pg_dump of it.
+name: openbookings-testing
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+    # postgis/postgis is published for amd64 only. On Apple Silicon, Docker
+    # Desktop runs it under emulation (Rosetta): slower, but the same image as CI.
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: openbookings
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d openbookings"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  pgdata:
