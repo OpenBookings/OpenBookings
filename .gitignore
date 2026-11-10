@@ -66,3 +66,6 @@ apps/*/public/maplibre/
 
 # brainstorming mockups (local only)
 .superpowers/
+
+# local planning notes (specs, plans): kept out of the public repo
+/docs/

@@ -13,8 +13,7 @@ export const dynamic = "force-dynamic";
  * It only ever updates two columns of `bookings`. It never reads or writes the
  * billing tables (`billing_profiles`, `commission_entries`, `invoices`,
  * `invoice_sequences`, `invoice_runs`): those are fiscal records, kept 7 years
- * as a legal obligation and left out of every deletion run (see
- * docs/privacy/data-map.md, 2.4a). Keep it that way.
+ * as a legal obligation and left out of every deletion run. Keep it that way.
  *
  * Cloud Scheduler target, same pattern as messaging-retention:
  *

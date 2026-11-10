@@ -1,6 +1,6 @@
 # invoice-job
 
-The monthly commission-invoice job (spec: `docs/superpowers/specs/2026-11-08-commission-invoices.md`).
+The monthly commission-invoice job.
 A Bun CLI that runs **one step per invocation** and exits. It wires the database, Stripe, VIES, R2,
 Lettermint, Slack and Sentry into the steps in `@openbookings/billing`. In production it runs as a
 Scaleway Serverless Job.
