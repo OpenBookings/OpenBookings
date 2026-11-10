@@ -5,7 +5,6 @@ import {
   IconListCheck,
   IconSparkles,
   IconHelp,
-  IconMessageCircle,
   IconBook,
   IconX,
   IconTrash,

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { buildPolicySnapshot, type CancellationTier } from "./cancellation";
 import { describePolicy, formatDeadline, TIER_LABELS, TIER_SUMMARIES } from "./cancellation-copy";
 
-const DAY = 86_400_000;
 const TZ = "Europe/Amsterdam";
 const snapshot = (tier: CancellationTier) =>
   buildPolicySnapshot({

@@ -1,19 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { getIP } from "better-auth/api";
 import {
-  accountTypeMismatchMessage,
   advancedConfig,
   buildAccountTypeHooks,
-  IP_ADDRESS_HEADERS,
   isAccountTypeAllowed,
-  isStepUpFresh,
   portalForAccountType,
   sessionVerificationStamp,
   sessionCookieNames,
   sessionForApp,
   stepUpRequiredForRequest,
-  stepUpSatisfied,
-  isFactorStepUpFresh,
 } from "./server";
 
 // These hooks are what Better Auth runs on every sign-in path — password,

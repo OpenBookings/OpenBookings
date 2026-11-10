@@ -4,12 +4,6 @@ import { SiteHeader } from "@/components/dashboard/site-header";
 import { GetHelpButton } from "@/components/support/get-help-button";
 import { getServerSession } from "@/lib/auth";
 
-const TABS = [
-  { label: "Rates & Availability", href: "/dashboard/listings/rates-availability" },
-  { label: "Property", href: "/dashboard/listings/property" },
-  { label: "Rooms", href: "/dashboard/listings/rooms" },
-];
-
 /**
  * The host's listing, for the contextual "Get help". Same choice as the
  * editors and the sidebar brand: one property per host today, first by name.

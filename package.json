@@ -20,11 +20,13 @@
     "test": "turbo run test",
     "testing:db": "bun run --cwd testing db:up",
     "testing:setup": "bun run --cwd testing setup",
-    "testing:down": "bun run --cwd testing db:down"
+    "testing:down": "bun run --cwd testing db:down",
+    "knip": "knip --include dependencies,unlisted,unresolved,binaries"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@openbookings/db": "workspace:*",
+    "knip": "6.45.0",
     "turbo": "2.11.10"
   },
   "overrides": {
