@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@upstash/redis": "^1.36.0"
+    "@upstash/redis": "^1.41.0"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
