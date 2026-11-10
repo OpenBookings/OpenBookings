@@ -71,6 +71,12 @@ updates:
       # Dockerfiles), not the newest Node. Raise it together with the runtime.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # TypeScript stays on 5.x. Since 6.0 tsconfig no longer picks up @types
+      # packages by default, so bun:test and process stop resolving in most
+      # packages (seen in #164). Move to 6/7 by hand: add "types": ["bun"] to
+      # every tsconfig and check that the Next.js builds still pass.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -115,8 +121,10 @@ updates:
       - dependency-name: "oven/bun"
         update-types: ["version-update:semver-major"]
 
-  # The Postgres image the local test database runs on. Majors are ignored:
-  # it has to stay on the same major as the hosted database (see testing/README.md).
+  # The Postgres image the local test database runs on. Majors and minors are
+  # ignored: the tag (17-3.5) has to match the hosted database's Postgres major
+  # and PostGIS minor (see testing/README.md). Raise it by hand, together with
+  # the copy in .github/workflows/ci.yml, when Neon moves.
   - package-ecosystem: "docker-compose"
     directory: "/testing"
     schedule:
@@ -126,4 +134,4 @@ updates:
       prefix: "chore(testing)"
     ignore:
       - dependency-name: "postgis/postgis"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
