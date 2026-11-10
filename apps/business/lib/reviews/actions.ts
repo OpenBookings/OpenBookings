@@ -10,6 +10,7 @@ import {
   insertPrivateReviewReply,
   postReviewReply,
 } from "@openbookings/db/reviews";
+import { sendReviewReplied } from "@openbookings/mailing/review-send";
 import { deliverMessageToRecipient, detectCircumvention, screenReview } from "@openbookings/messaging";
 import { getServerSession } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -71,7 +72,13 @@ export async function replyToReview(
     postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, flaggedReason: screenReview(body), now }),
   );
   if (!result.ok) return fail(result.error);
-  if (result.status === "published") await refreshPropertyPage(result.propertyId);
+  if (result.status === "published") {
+    await refreshPropertyPage(result.propertyId);
+    // Once per published reply. Edits, held replies and private ones don't email.
+    await sendReviewReplied(reviewId, {
+      report: (error) => Sentry.captureException(error, { tags: { area: "reviews", mail: "review_replied" } }),
+    });
+  }
   revalidatePath(REVIEWS);
   return { ok: true, status: result.status };
 }
