@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
 
   let row: HotelPageData | null;
   try {
-    const result = await getDb().execute(buildHeroQuery(slug, isTestingMode()));
-    row = (result.rows[0] as unknown as HotelPageData) ?? null;
+    const result = await getDb().execute<HotelPageData>(buildHeroQuery(slug, isTestingMode()));
+    row = result.rows[0] ?? null;
   } catch (err) {
     // Logged, not returned — see the note in ../route.ts.
     console.error("[property]", err instanceof Error ? err.message : err);

@@ -147,8 +147,8 @@ type PropertyPageRow = HotelPageData & {
 
 /** One round trip, so one connection; see buildPropertyPageQuery. */
 async function loadFromDb(slug: string): Promise<PropertyPagePayload | null> {
-  const result = await getDb().execute(buildPropertyPageQuery(slug));
-  const row = (result.rows[0] as unknown as PropertyPageRow | undefined) ?? null;
+  const result = await getDb().execute<PropertyPageRow>(buildPropertyPageQuery(slug));
+  const row = result.rows[0] ?? null;
   // `null` is the caller's 404 *and* the cache's negative entry. Returning the
   // amenities and rooms of a property that does not exist would be worse than
   // useless — it would be cached.
