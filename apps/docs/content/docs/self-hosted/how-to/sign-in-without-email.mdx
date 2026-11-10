@@ -1,0 +1,43 @@
+---
+title: Sign in without an email provider
+description: Print sign-in links to the terminal instead of sending them.
+---
+
+Everyone signs in to OpenBookings with an email link, or with a passkey or Google once they've
+signed in. Locally you usually don't want to set up an email provider just to get that link.
+
+## Print emails to the terminal
+
+1. In the `.env.local` of the app you're signing in to (`apps/web` or `apps/business`), set:
+
+   ```bash
+   EMAIL_TRANSPORT=console
+   ```
+
+2. Restart the dev server.
+3. Request a sign-in link as usual.
+4. In the dev server's terminal, find the block that starts with
+   `──── email (EMAIL_TRANSPORT=console, not sent) ────` and open the link under **Links**.
+
+This applies to every email the app sends (booking confirmations, invitations, security alerts),
+so you can check those the same way.
+
+`EMAIL_TRANSPORT=console` is refused when `NODE_ENV=production`. A deployed app has to send real
+email.
+
+## Which account to use
+
+The seed in `testing/` has host accounts (`owner@`, `admin@` and `manager@openbookings.test`)
+and guest accounts (`guest@` and `guest2@openbookings.test`). Host accounts only work on the host
+dashboard, and guest accounts only on the guest site. See the
+[test data reference](/self-hosted/reference/test-data).
+
+## Send real email instead
+
+Unset `EMAIL_TRANSPORT` and set a [Lettermint](https://lettermint.co) project token, plus a
+sender address on a domain you've verified there:
+
+```bash
+LETTERMINT_PROJECT_TOKEN=...
+EMAIL_FROM_ADDRESS="Your Hotel Platform <noreply@example.com>"
+```

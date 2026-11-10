@@ -1,0 +1,71 @@
+---
+title: Test data
+description: The accounts, hotels and bookings that testing:setup loads.
+---
+
+`bun run testing:setup` loads the files in `testing/seed/`. IDs are fixed and dates are relative
+to the day you run it. `testing/README.md` has the same information, next to the files.
+
+## Accounts
+
+All of them sign in with an email link. With `EMAIL_TRANSPORT=console` the link is printed in
+the dev server's terminal.
+
+| Email | Name | Portal | Role |
+| --- | --- | --- | --- |
+| `owner@openbookings.test` | Sanne de Vries | Host dashboard | Owner of Lantern Hotels: every property |
+| `admin@openbookings.test` | Lotte Jansen | Host dashboard | Admin: every property |
+| `manager@openbookings.test` | Daan Bakker | Host dashboard | Manager: Canal Lantern Hotel only |
+| `guest@openbookings.test` | Emma Visser | Guest site | Guest, the Netherlands |
+| `guest2@openbookings.test` | Lukas Schneider | Guest site | Guest, Germany |
+
+## Hotels
+
+All three belong to **Lantern Hotels B.V.**, a Dutch organisation with a complete billing profile
+and the inclusive-rates confirmation.
+
+| Hotel | City | State | Cancellation tier | Rooms (units) |
+| --- | --- | --- | --- | --- |
+| Canal Lantern Hotel | Amsterdam | live | Flex: free until 24 h before | Classic Double (8), Canal View Double (4), Family Room (2) |
+| Dom Garden Suites | Utrecht | live | Standard: free until 7 days before | Garden Studio (6), Dom View Suite (2) |
+| Singel Loft House | Amsterdam | draft | Standard | Loft (3). Legal details missing, so not ready. |
+
+On the rates grid, relative to today:
+
+- **Classic Double:** Flexible €165 and Non-refundable €149; +€30 on Fridays and Saturdays (Flexible).
+- **Family Room:** bed and breakfast, €260, 2-night minimum.
+- **Canal View Double:** one unit out of service, days +7 to +10.
+- **Garden Studio:** 3-night minimum, days +28 to +34.
+- **Dom View Suite:** closed, days +60 to +62.
+- **Tourist tax:** Amsterdam 12.5% of the room price before 9% VAT; Utrecht €3.50 per adult per night.
+
+## Bookings
+
+| ID | Status | Guest | Hotel and room | Stay | Use it to test |
+| --- | --- | --- | --- | --- | --- |
+| `5eed4000-…-000000000001` | confirmed | Emma | Canal Lantern, Classic Double | +14 → +17 | Free cancellation; an unread guest message |
+| `5eed4000-…-000000000002` | confirmed | Emma | Canal Lantern, Classic Double (Non-refundable) | +30 → +32 | A non-refundable booking |
+| `5eed4000-…-000000000003` | confirmed | Lukas | Dom Garden, 2 × Garden Studio | +45 → +48 | Two rooms in one booking |
+| `5eed4000-…-000000000004` | checked in | Lukas | Canal Lantern, Canal View Double | −1 → +2 | A guest in house |
+| `5eed4000-…-000000000005` | completed | Emma | Canal Lantern, Family Room | −40 → −37 | A 9/10 review with a host reply |
+| `5eed4000-…-000000000006` | completed | Lukas | Dom Garden, Dom View Suite | −20 → −18 | A 7/10 review waiting for a reply |
+| `5eed4000-…-000000000007` | completed | Emma | Dom Garden, Garden Studio | −3 → −1 | A stay that just ended |
+| `5eed4000-…-000000000008` | cancelled | Emma | Canal Lantern, Classic Double | +20 → +22 | A guest cancellation |
+| `5eed4000-…-000000000009` | no-show | Lukas | Dom Garden, Garden Studio | −10 → −8 | A no-show |
+
+Each booking goes through the same policy code as a real checkout, so it has cancellation
+windows, per-night prices, tourist tax and a 4.5% commission. None has a Stripe payment or a
+commission-ledger entry.
+
+## ID patterns
+
+| Table | Prefix |
+| --- | --- |
+| `properties` | `5eed1000-0000-4000-8000-…` |
+| `rooms` | `5eed2000-0000-4000-8000-…` |
+| `rate_plans` | `5eed3000-0000-4000-8000-…` |
+| `bookings` | `5eed4000-0000-4000-8000-…` |
+| `reservations` | `5eed5000-0000-4000-8000-…` |
+| `reviews` | `5eed6000-0000-4000-8000-…` |
+| `message_threads` | `5eed7000-0000-4000-8000-…` |
+| `user`, `organization`, `member` | `seed-user-…`, `seed-org-lantern`, `seed-member-…` |

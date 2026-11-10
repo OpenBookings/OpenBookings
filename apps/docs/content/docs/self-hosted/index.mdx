@@ -1,10 +1,32 @@
 ---
-title: Self-hosted
-description: Deploy and operate your own OpenBookings instance.
+title: Self-hosting
+description: Run, develop and operate your own OpenBookings instance.
 ---
 
-Self-hosting documentation is not written yet.
+OpenBookings is open source: you can run it on your own machine to work on it, or on your own
+infrastructure to run it for real. These pages are for developers, agencies and operators. Hotels
+using the hosted service will find their guides under **Business**.
 
-This area will cover deployment, configuration, upgrades and backups for running OpenBookings on your own infrastructure.
+The documentation follows the [Diátaxis](https://diataxis.fr) framework. Pick the section that
+matches what you're trying to do:
 
-In the meantime, the source is on [GitHub](https://github.com/OpenBookings/OpenBookings).
+| Section | Use it when you want to… | Start with |
+| --- | --- | --- |
+| **Tutorials** | learn by doing, from nothing to a working setup | [Run OpenBookings locally](/self-hosted/tutorials/run-locally) |
+| **How-to guides** | get one specific task done | [Sign in without an email provider](/self-hosted/how-to/sign-in-without-email) |
+| **Reference** | look up an exact name, value or command | [Environment variables](/self-hosted/reference/environment-variables) |
+| **Explanation** | understand how it works and why it's built that way | [Architecture](/self-hosted/explanation/architecture) |
+
+## Before you start
+
+- **OpenBookings is pre-release.** The schema and configuration can still change between
+  versions. Read the [changelog](https://github.com/OpenBookings/OpenBookings/blob/main/CHANGELOG.md)
+  before you upgrade.
+- **It's built for the EU.** Prices are in euros only, properties must be in an EU member state,
+  and every booking is prepaid online through Stripe Connect.
+- **It's licensed under the AGPL-3.0.** Self-hosting and changing it is free. If you run a
+  modified version for other people (guests or hotels), you must offer them the source code of
+  your version. See the [license](https://github.com/OpenBookings/OpenBookings/blob/main/LICENSE).
+- **The name is a trademark.** You may run the code, but a public service built on it needs its
+  own name and branding. See the
+  [trademark policy](https://github.com/OpenBookings/OpenBookings/blob/main/TRADEMARKS.md).

@@ -2,9 +2,11 @@
   "name": "openbookings",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "testing"
   ],
   "engines": {
     "node": ">=22.20.0"
@@ -15,7 +17,10 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "testing:db": "bun run --cwd testing db:up",
+    "testing:setup": "bun run --cwd testing setup",
+    "testing:down": "bun run --cwd testing db:down"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",

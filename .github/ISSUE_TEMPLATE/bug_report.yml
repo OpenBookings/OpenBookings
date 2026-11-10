@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in OpenBookings doesn't work the way it should.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **Security problems go through
+        [private reporting](https://github.com/OpenBookings/OpenBookings/security/advisories/new),
+        not here.** Please leave out real guest data, API keys and other secrets.
+  - type: dropdown
+    id: app
+    attributes:
+      label: Where does it happen?
+      options:
+        - Guest site (apps/web)
+        - Host dashboard (apps/business)
+        - Support bot (apps/support-bot)
+        - Invoice job (apps/invoice-job)
+        - Docs site (apps/docs)
+        - Admin console (apps/admin)
+        - Database / migrations (packages/db)
+        - Local setup or seed data (testing/)
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Locally (bun run dev)
+        - Self-hosted
+        - The hosted service (openbookings.co)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If you can, use the seed data from `testing/` (for example "sign in as owner@openbookings.test, open …").
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The release, or the output of `git rev-parse --short HEAD`.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant server or browser console output. This is shown as code, so no backticks are needed.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, operating system, Bun and Node versions, where they matter.

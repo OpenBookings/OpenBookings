@@ -1,0 +1,40 @@
+---
+title: Money, tax and commission
+description: How prices, tourist tax, commission and VAT relate.
+---
+
+OpenBookings operates in the EU, in euros, and every price a guest sees is the full price.
+
+## Rates include tax
+
+A rate entered by a hotel **includes VAT and any mandatory fees**. Every organisation confirms
+that before its hotels can be booked. The one exception is **tourist tax**, which towns set
+differently. It's computed from each property's tourist tax rules (a percentage of the room price,
+or a fixed amount per person, night or room) and added on top. Guests see it before they pay.
+
+## Prepayment, always
+
+Every booking is paid in full, online, at checkout. There's no pay-at-the-hotel option. The
+payment is a Stripe **direct charge** on the hotel's own connected account. The money belongs to
+the hotel from the start, and OpenBookings takes its commission as an application fee.
+
+## Commission
+
+The commission is **4.5% of the room price**. It's never taken on tourist tax, which passes
+straight to the hotel. The fee itself includes VAT: Dutch VAT for a Dutch hotel, and reverse
+charge for a hotel elsewhere in the EU with a verified VAT number. Each booking stores the fee
+and its net/VAT split at the moment it's made.
+
+## Cancellation
+
+Each property has a tier: **Flex** (free cancellation until 24 hours before arrival) or
+**Standard** (free until 7 days before). A rate plan can be **non-refundable**, which overrides
+the tier. When a booking is paid, the exact deadlines are worked out in the property's time zone
+and stored on each reservation, so a later change to the policy never changes an existing booking.
+A no-show keeps the full amount, tax included.
+
+## Reporting
+
+From the commission ledger, `apps/invoice-job` makes a monthly invoice per hotel, and quarterly
+CSVs for the VAT return, the ICP listing (EU reverse-charge customers) and DAC7 (platform income
+reporting).

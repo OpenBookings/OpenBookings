@@ -1,0 +1,41 @@
+---
+title: Commands
+description: The scripts you run from the repository root and in individual packages.
+---
+
+## From the repository root
+
+| Command | What it does |
+| --- | --- |
+| `bun install` | Installs every workspace |
+| `bun run dev` | Every app in watch mode (needs every app's `.env.local`) |
+| `bunx turbo run dev --filter=@openbookings/web --filter=@openbookings/business` | Only the guest site and host dashboard |
+| `bun run build` | Builds everything |
+| `bun run lint` | Lints everything |
+| `bun run typecheck` | Type-checks everything |
+| `bun run test` | Runs every test suite. DB suites need `DATABASE_URL`, and skip without it. |
+| `bun run testing:db` | Starts the local Postgres (Docker, port 5433) |
+| `bun run testing:setup` | Wipes the local database and loads the schema, migrations and seed |
+| `bun run testing:down` | Stops the local Postgres and deletes its data |
+
+Add `--filter=<package>` to any `turbo` command to limit it to one package, and `--affected`
+to limit it to what changed since `main`.
+
+## In packages
+
+| Command | What it does |
+| --- | --- |
+| `bun run --cwd testing schema:dump` | Refreshes `testing/schema/schema.sql` from `SCHEMA_SOURCE_URL` |
+| `bun run --cwd packages/demo demo:reset` | Deletes the demo hotels and their bookings (testing mode only) |
+| `bun run --cwd packages/db db:generate` | Generates SQL from changes to `schema.ts`, to review and apply by hand |
+| `bun run --cwd packages/db db:studio` | Opens Drizzle Studio on the root `.env.local` database |
+| `bun run --cwd packages/db db:push` | **Don't use on a shared database.** It offers to drop tables `schema.ts` doesn't declare. |
+| `bun run apps/invoice-job/src/main.ts --step=<step>` | Runs one step of the invoice job. See its README. |
+
+## Test variables
+
+| Variable | Effect |
+| --- | --- |
+| `DATABASE_URL` | The database DB suites run against. Each test rolls back its own fixtures. |
+| `PENDING_MIGRATIONS_APPLIED=1` | Tells the test harness the pending migrations are already applied (`testing:setup` does this), so it doesn't replay them in every test |
+| `CI` | A DB suite fails, instead of skipping, when there is no database |

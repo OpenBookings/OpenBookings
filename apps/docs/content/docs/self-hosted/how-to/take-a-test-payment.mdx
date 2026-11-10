@@ -1,0 +1,81 @@
+---
+title: Take a test payment
+description: Book a room through Stripe checkout in test mode.
+---
+
+Checkout charges guests through Stripe Connect: the payment goes to the hotel's connected
+account. To book locally you need a Stripe account in test mode, a test connected account, and a
+Cloudflare Turnstile widget.
+
+## 1. Stripe keys
+
+1. In the [Stripe dashboard](https://dashboard.stripe.com/test/apikeys), with **Test mode** on,
+   copy the secret key and the publishable key.
+2. In `apps/web/.env.local`, set:
+
+   ```bash
+   STRIPE_SECRET_KEY=sk_test_...
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+   ```
+
+   Use the same `STRIPE_SECRET_KEY` in `apps/business/.env.local` and the root `.env.local`.
+
+## 2. A test connected account
+
+1. In the Stripe dashboard, under **Connected accounts**, create a test account and finish its
+   onboarding with Stripe's test data.
+2. Copy its id (`acct_...`) into `apps/web/.env.local`:
+
+   ```bash
+   STRIPE_CONNECT_ACCOUNT_ID=acct_...
+   ```
+
+   Outside production, checkout at **demo hotels** charges this account.
+
+3. To book a **seeded** hotel as well, rebuild the test database with the account:
+
+   ```bash
+   STRIPE_CONNECT_ACCOUNT_ID=acct_... bun run testing:setup
+   ```
+
+   This puts it on Canal Lantern Hotel.
+
+## 3. Webhooks
+
+Bookings are confirmed by Stripe's webhook. Forward it to your machine with the
+[Stripe CLI](https://stripe.com/docs/stripe-cli):
+
+```bash
+stripe listen --forward-connect-to web.localhost:3002/api/stripe/webhook
+```
+
+Copy the `whsec_...` it prints into `STRIPE_WEBHOOK_SECRET` in `apps/web/.env.local`.
+
+## 4. Turnstile
+
+Checkout is protected by Cloudflare Turnstile and refuses every request until it's configured.
+
+1. In the Cloudflare dashboard, create a Turnstile widget with `web.localhost` as a hostname.
+2. In `apps/web/.env.local`, set:
+
+   ```bash
+   NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x...
+   TURNSTILE_SECRET=0x...
+   TURNSTILE_HOSTNAMES=web.localhost
+   ```
+
+## 5. Book
+
+1. Restart the dev servers.
+2. On [http://web.localhost:3002](http://web.localhost:3002), search near Amsterdam and open
+   **Canal Lantern Hotel**, or one of the demo hotels.
+3. Choose dates, a room and a rate, and pay with the test card `4242 4242 4242 4242`, any future
+   expiry date and any CVC.
+
+The booking appears under the guest's bookings and in the host dashboard. To test a failed or
+3D Secure payment, use Stripe's other [test cards](https://docs.stripe.com/testing).
+
+## Commission
+
+By default no commission is taken. To take OpenBookings' 4.5% as a Stripe application fee, set
+`STRIPE_APPLICATION_FEE_ENABLED=true` in `apps/web/.env.local`.

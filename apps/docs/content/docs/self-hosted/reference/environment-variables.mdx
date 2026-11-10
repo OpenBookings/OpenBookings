@@ -1,0 +1,140 @@
+---
+title: Environment variables
+description: Every variable the apps read, which app reads it, and what it does.
+---
+
+Each app reads its own `.env.local`: `apps/web`, `apps/business`, `apps/admin` and
+`apps/support-bot`. Scripts run from the repository root (`packages/db`, `packages/demo`,
+`apps/invoice-job`) read the root `.env.local`. Every location has a commented `.env.example` to
+copy from.
+
+**Apps:** W = guest site, B = host dashboard, A = admin console, S = support bot,
+I = invoice job, R = root scripts.
+
+## Database
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | all | yes | Postgres 17 + PostGIS connection string. On Neon, the pooled (`-pooler`) host. |
+| `DATABASE_URL_DIRECT` | B, A, R | for migrations and scripts | A direct (non-pooled) connection, for long transactions and drizzle-kit. |
+| `ENV_TYPE` | R | no | `dev` makes `packages/db` use `DEV_DATABASE_URL` instead of `DATABASE_URL`. |
+| `DEV_DATABASE_URL` | R | with `ENV_TYPE=dev` | The development database. |
+| `PGPOOL_MAX` | all | no | Application pool size. Default `10`. |
+| `AUTH_PGPOOL_MAX` | W, B | no | Better Auth's pool size. Default `5`. |
+| `PGPOOL_IDLE_TIMEOUT_MS` | all | no | How long idle connections are kept. Default `240000` (4 minutes). |
+| `PG_STATEMENT_TIMEOUT_MS` | all | no | Per-statement limit. Default `15000`; the invoice job uses `120000`. |
+| `PG_IDLE_TX_TIMEOUT_MS` | all | no | Idle-in-transaction limit. Default `15000`; the invoice job uses `300000`. |
+| `TESTING_DATABASE_URL` | `testing/` | no | The database `testing:setup` rebuilds. Must be on `localhost`. |
+
+## URLs and sign-in
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_WEB_URL` | W, B | yes | Public URL of the guest site. Build-time. |
+| `NEXT_PUBLIC_BUSINESS_URL` | W, B | yes | Public URL of the host dashboard. Build-time. |
+| `AUTH_BASE_URL` | W, B | yes | The app's own public URL, for Better Auth. `https://` turns on secure cookies. (`BETTER_AUTH_URL` is accepted as an older name.) |
+| `BETTER_AUTH_SECRET` | W, B | yes | At least 32 characters. Use a different one for each app. |
+| `AUTH_COOKIE_PREFIX` | W, B | yes | Exactly `ob-guest` (guest site) or `ob-host` (host dashboard). Keeps the two sessions apart. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | W | no | Google sign-in for guests. |
+| `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET` | W | no | Sign in with Apple for guests. |
+| `GOOGLE_CLIENT_ID_BUSINESS` / `GOOGLE_CLIENT_SECRET_BUSINESS` | B | no | Google sign-in for hosts (a separate OAuth client). |
+| `TIRRENO_URL` / `TIRRENO_API_KEY` | B | no | Sign-in risk scoring with Tirreno. Off when unset. |
+
+## Payments (Stripe)
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `STRIPE_SECRET_KEY` | W, B, A, S, I | yes | The platform's secret key. `sk_test_` for testing, `sk_live_` in production. |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | W | yes | The publishable key. Build-time. |
+| `STRIPE_WEBHOOK_SECRET` | W, B | yes | Signing secret of the app's Connect webhook endpoint (`/api/stripe/webhook`). |
+| `STRIPE_PLATFORM_WEBHOOK_SECRET` | B | yes | Signing secret of the platform webhook (`/api/stripe/platform-webhook`). |
+| `STRIPE_CONNECT_ACCOUNT_ID` | W | no | Outside production, the connected account that checkout at demo hotels charges. |
+| `STRIPE_APPLICATION_FEE_ENABLED` | W | no | `true` takes the commission as a Stripe application fee. Off otherwise. |
+| `STRIPE_PAYMENT_METHOD_CONFIGURATION` | W | no | A Stripe payment method configuration id for checkout. |
+| `PROPERTY_READINESS_ENFORCE` | W, B | no | `off` disables the readiness gate (Stripe account, legal details, billing profile). On by default. |
+
+## Checkout protection
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | W | for checkout | Cloudflare Turnstile site key. Build-time. |
+| `TURNSTILE_SECRET` | W | for checkout | Turnstile secret key. Checkout refuses every token without it. |
+| `TURNSTILE_HOSTNAMES` | W | for checkout | Comma-separated hostnames whose tokens are accepted. Never `localhost` in production. |
+
+## Email
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `EMAIL_TRANSPORT` | W, B, S, I | no | `console` prints emails to the terminal instead of sending them. Refused when `NODE_ENV=production`. |
+| `LETTERMINT_PROJECT_TOKEN` | W, B, S, I | to send email | Lettermint project token. |
+| `EMAIL_FROM_ADDRESS` | W, B, S, I | no | Sender, e.g. `"Platform <noreply@example.com>"`. (`MAGIC_LINK_FROM` is an older name.) |
+
+## Storage, cache and media
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | B, I | for uploads | An S3-compatible store (Cloudflare R2). |
+| `R2_BUCKET_NAME` | B | for uploads | The public bucket for property and room photos. |
+| `MEDIA_BASE_URL` | B | for uploads | The public URL that bucket is served from. |
+| `R2_INVOICES_BUCKET_NAME` | B, A, I | for invoices | The private bucket for invoice PDFs and CSVs. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B | no | Upstash Redis cache. The cache is off when unset. |
+| `CACHE_TTL_PROPERTY_PAGE_S`, `CACHE_TTL_PROPERTY_PAGE_MISS_S`, `CACHE_TTL_PROPERTY_REVIEWS_S`, `CACHE_MAX_AGE_PROPERTY_PAGE_S`, `CACHE_MAX_AGE_PROPERTY_REVIEWS_S` | W | no | Cache lifetimes, in seconds. |
+| `REVALIDATE_SECRET` | W, B | no | Shared secret the host dashboard uses to refresh a public property page. |
+| `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_PURGE_TOKEN` | B | no | Purge Cloudflare's cache for a property page after an edit. |
+| `NEXT_PUBLIC_MAPTILER_API_KEY` / `NEXT_PUBLIC_MAPTILER_STYLE_ID` | W, B | for maps | MapTiler key and style. Build-time. |
+
+## Messaging and jobs
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `REALTIME_WORKER_URL` / `NEXT_PUBLIC_REALTIME_WORKER_URL` | W, B | no | The realtime worker that pushes new messages. Without it, messages save but don't push live. |
+| `REALTIME_TOKEN_SECRET` / `REALTIME_SERVICE_SECRET` | W, B | with realtime | Secrets shared with the realtime worker. |
+| `MESSAGE_RETENTION_DAYS` | W, B | no | How long message text is kept before it's redacted. |
+| `CRON_SECRET` | W, B | for jobs | Bearer token for `/api/cron/*`. See [Schedule the background jobs](/self-hosted/how-to/schedule-the-background-jobs). |
+| `PII_RETENTION_MONTHS` | B | no | Months after a stay before guest notes are redacted. Default `18`. |
+
+## Billing and invoices
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `VIES_REQUESTER_VAT` | B, I | for VAT checks | The platform's own VAT number, sent with VIES checks. |
+| `INVOICE_DB_ENV` | A, I | for invoices | Exactly `production` or `test`: which database `DATABASE_URL` is. |
+| `INVOICE_REPORT_EMAIL` | I | for drafts | Where the run report goes. |
+| `INVOICE_TEST_RECIPIENT` | I | in test mode | Every invoice email goes here in test mode. |
+| `SLACK_WEBHOOK_URL` | I | no | Run summaries and alerts. |
+| `SELLER_*` | I | in live mode | The platform's seller details on invoices. See `apps/invoice-job/README.md`. |
+
+## Testing and admin
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `TESTING` | W, B, R | no | `true`, with an `sk_test_` key, turns on testing mode: demo hotels and test-only behaviour. Refused with a live key. |
+| `ADMIN_SUPER_MODE` | A | no | `1` enables super-admin actions, only with `NODE_ENV=development`. |
+
+## Support bot
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `MISTRAL_API_KEY` / `MISTRAL_MODEL` | yes | The language model. |
+| `CHATWOOT_BASE_URL` / `CHATWOOT_ACCOUNT_ID` | yes | The Chatwoot instance and account. |
+| `CHATWOOT_BOT_ACCESS_TOKEN` / `CHATWOOT_BOT_WEBHOOK_SECRET` | yes | The agent bot's token and webhook secret. |
+| `CHATWOOT_VERIFIED_INBOX_IDS` | no | Inboxes with mandatory identity validation, where a guest's email is trusted. |
+| `SERVICE_BASE_URL` | yes | The bot's own public URL. |
+| `TASKS_INLINE` / `TASKS_AUTH_DISABLED` | local only | Run tasks in-process without a queue. Only accepted with a local `SERVICE_BASE_URL`. |
+| `QSTASH_URL` / `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | when deployed | Upstash QStash task queue. |
+| `SUPPORT_CHAT_ENABLED` / `SUPPORT_ASSISTANT_ENABLED` | no | Host support chat and its assistant (also read by the host dashboard). |
+| `CHATWOOT_BUSINESS_INBOX_ID` / `CHATWOOT_ACCOUNT_WEBHOOK_SECRET` / `BUSINESS_APP_URL` | with host support | The host-support inbox. |
+| `REFUND_ESCALATION_THRESHOLD_EUR` | no | Refunds above this amount go to a human. |
+
+The host dashboard's chat widget also reads `NEXT_PUBLIC_CHATWOOT_BASE_URL`,
+`CHATWOOT_BUSINESS_INBOX_IDENTIFIER` and `CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN`.
+
+## Observability
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | W, B, I | no | Error reporting. Off when unset. |
+| `SENTRY_AUTH_TOKEN` | W, B | no | Uploads source maps at build time. Pass it as a Docker build secret. |
+| `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | W, B | no | Product analytics. Off when unset. |
+| `NEXT_PUBLIC_COOKIE_VERSION` | W, B | no | Raise it to ask every visitor for cookie consent again. Default `1`. |
+| `NEXT_PUBLIC_RELEASE_SHA` | W, B | no | The release shown in error reports. Set by CI at build time. |

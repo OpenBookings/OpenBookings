@@ -1,0 +1,46 @@
+---
+title: Two portals, two sessions
+description: Why guests and hotel staff sign in to separate apps with separate accounts.
+---
+
+OpenBookings has two front doors: the guest site and the host dashboard. They run as separate
+apps, on separate host names, with separate sign-in sessions, even though they share one database
+and one `user` table.
+
+## Accounts belong to one portal
+
+Every user has an `account_type`: `private` for guests, `business` for hotel staff. A guest
+account can't sign in to the host dashboard, and a hotel account can't sign in to the guest site.
+A missing type is refused, never guessed.
+
+This keeps two kinds of risk apart. A guest session can only see that guest's own bookings. A host
+session can change prices, refund payments and move payouts, so it carries extra protection:
+passkeys, two-factor and a fresh check ("step-up") before sensitive actions.
+
+## Cookies that can't mix
+
+Each app runs its own Better Auth instance with its own secret and its own cookie prefix
+(`ob-guest` and `ob-host`). Even on the same parent domain, one app's session cookie means
+nothing to the other.
+
+That's also why local development uses `web.localhost` and `business.localhost` rather than two
+ports on `localhost`. Browsers share cookies across ports on the same host name, and two names
+keep the sessions apart the same way they are in production.
+
+## Organisations and roles
+
+Hotel staff work inside an **organisation**, which owns properties. A member's role decides what
+they can do, and on which properties:
+
+| Role | Shown as | Can | Properties |
+| --- | --- | --- | --- |
+| `owner` | Owner | everything a general manager can, plus closing the account | all |
+| `admin` | General manager | bookings, refunds, rates, listings and the team | all |
+| `manager` | Manager | listings, rates and bookings; no refunds beyond the policy, no team or payouts | chosen |
+| `reservations` | Reservations | bookings, check-ins and cancellations; sees rates but can't change them | chosen |
+| `frontdesk` | Front desk | sees bookings, checks guests in, marks no-shows and early departures | chosen |
+| `finance` | Back office | bookings, rates, payout status, commission invoices and billing details | all |
+
+"Chosen" properties are the ones the member has been given access to. The rules live in
+`@openbookings/authz` (`role-guide.ts` and `permissions.ts`), and every request on the host
+dashboard goes through it.
