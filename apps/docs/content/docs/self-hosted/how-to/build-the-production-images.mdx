@@ -1,0 +1,61 @@
+---
+title: Build the production images
+description: Build and run the Docker images for the guest site, host dashboard, docs, support bot and invoice job.
+---
+
+Every deployable app has a `Dockerfile` in its own folder, built from the **repository root**.
+Each one prunes the monorepo down to that app first, so an image only contains what the app needs.
+
+| App | Dockerfile | Listens on |
+| --- | --- | --- |
+| Guest site | `apps/web/Dockerfile` | 8080 |
+| Host dashboard | `apps/business/Dockerfile` | 8081 |
+| Docs | `apps/docs/Dockerfile` | 8082 |
+| Support bot | `apps/support-bot/Dockerfile` | 8080 |
+| Invoice job | `apps/invoice-job/Dockerfile` | — (runs and exits) |
+
+`apps/admin` is local-only and has no image.
+
+## Build
+
+`NEXT_PUBLIC_*` values are compiled into the browser bundle, so they're **build arguments**, not
+runtime variables. Pass the ones the app's Dockerfile declares (`ARG NEXT_PUBLIC_...`):
+
+```bash
+docker build -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_WEB_URL=https://book.example.com \
+  --build-arg NEXT_PUBLIC_BUSINESS_URL=https://business.example.com \
+  --build-arg NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_... \
+  -t my-platform/web .
+```
+
+To upload source maps to Sentry, pass the token as a build secret, which keeps it out of the image:
+
+```bash
+docker build -f apps/web/Dockerfile --secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN ... .
+```
+
+## Run
+
+Everything else is a runtime variable. Give each container the variables from the matching
+`.env.example` (see the [environment variables reference](/self-hosted/reference/environment-variables)):
+
+```bash
+docker run --env-file web.env -p 8080:8080 my-platform/web
+```
+
+In production:
+
+- Use `https://` URLs. Secure cookies follow from an `https` `AUTH_BASE_URL`.
+- Don't set `TESTING` or `EMAIL_TRANSPORT`.
+- Give the guest site and the host dashboard different `BETTER_AUTH_SECRET`s, and keep
+  `AUTH_COOKIE_PREFIX` at `ob-guest` and `ob-host`.
+- Use a connection string with `sslmode=require`.
+
+## Before you go live
+
+- Apply every migration to the production database (see [Add a database migration](/self-hosted/how-to/add-a-migration)).
+- Register the Stripe webhooks and copy their signing secrets.
+- [Schedule the background jobs](/self-hosted/how-to/schedule-the-background-jobs).
+- Replace the OpenBookings name and logo with your own. See the
+  [trademark policy](https://github.com/OpenBookings/OpenBookings/blob/main/TRADEMARKS.md).

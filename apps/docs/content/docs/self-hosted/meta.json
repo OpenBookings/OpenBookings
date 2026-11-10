@@ -1,6 +1,7 @@
 {
-  "title": "Self-hosted",
+  "title": "Self-hosting",
   "icon": "Server",
   "root": true,
-  "pagesIndex": "index"
+  "pagesIndex": "index",
+  "pages": ["index", "tutorials", "how-to", "reference", "explanation"]
 }

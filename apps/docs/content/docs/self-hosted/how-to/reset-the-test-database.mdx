@@ -1,0 +1,46 @@
+---
+title: Reset the test database
+description: Get the local database back to a clean seed, or remove it entirely.
+---
+
+The local database from `testing/` is disposable. Rebuild it whenever a test or an experiment has
+left it in a state you don't want.
+
+## Reset to the seed
+
+```bash
+bun run testing:setup
+```
+
+This drops every table, loads the schema snapshot, applies newer migrations, and loads the seed
+again. Seeded dates are relative to today, so upcoming bookings stay upcoming.
+
+`testing:setup` only connects to `localhost`. To use a different local database, set
+`TESTING_DATABASE_URL`:
+
+```bash
+TESTING_DATABASE_URL=postgres://me@localhost:5432/openbookings_test bun run testing:setup
+```
+
+It never reads `DATABASE_URL`, because that often points at a shared database.
+
+## Remove only the demo hotels
+
+With testing mode on, searching creates demo hotels. To delete them and their bookings without
+touching the seed:
+
+```bash
+bun run --cwd packages/demo demo:reset
+```
+
+This reads the root `.env.local` and refuses to run unless `TESTING=true` and `STRIPE_SECRET_KEY`
+is a test key.
+
+## Remove the database
+
+```bash
+bun run testing:down
+```
+
+This stops the container and deletes its volume. Run `testing:db` and `testing:setup` to start
+again.

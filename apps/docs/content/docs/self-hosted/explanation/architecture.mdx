@@ -1,0 +1,74 @@
+---
+title: Architecture
+description: How the apps, packages and outside services fit together.
+---
+
+OpenBookings is a TypeScript monorepo: a handful of apps that share packages and one Postgres
+database. There's no internal API between the apps. Each reads and writes the database directly,
+through the same shared packages, so the rules live in one place.
+
+```text
+             guests                         hotel staff
+               │                                 │
+        ┌──────▼──────┐                  ┌───────▼──────┐
+        │  apps/web   │                  │ apps/business│
+        │ guest site  │                  │host dashboard│
+        └──┬───────┬──┘                  └──┬───────┬───┘
+           │       │    shared packages     │       │
+           │  ┌────▼────────────────────────▼────┐  │
+           │  │ db · auth · authz · pricing ·    │  │
+           │  │ stripe · billing · mailing · …   │  │
+           │  └────────────────┬─────────────────┘  │
+           │                   │                    │
+           │          ┌────────▼────────┐           │
+           │          │ Postgres + PostGIS│◄──── apps/invoice-job
+           │          └─────────────────┘◄──── apps/support-bot
+           │                                        │
+           └──────────────► Stripe Connect ◄────────┘
+```
+
+## Apps
+
+- **`apps/web`**: the guest site, built with Next.js. Search (PostGIS distance queries, MapTiler
+  maps), property pages, checkout, and the guest's account and bookings.
+- **`apps/business`**: the host dashboard, also Next.js. Onboarding, the property and room
+  editors, the rates-and-availability grid, reservations, messages, reviews, team and payouts.
+- **`apps/support-bot`**: a Bun + Hono service that answers Chatwoot conversations, using the same
+  database to look up bookings.
+- **`apps/invoice-job`**: a command-line job that drafts, issues, stores and sends monthly
+  commission invoices.
+- **`apps/docs`**: this site.
+- **`apps/admin`**: an internal console that only runs on a developer's machine.
+
+## Shared packages
+
+The packages hold the rules that must not differ between apps:
+
+- **`authz`** is the single place that decides whether a user may touch an organisation,
+  property, room or rate plan. The database has no row-level security, so this check is what
+  keeps one hotel's data away from another.
+- **`pricing`** computes nightly prices, restrictions, cancellation windows and tourist tax.
+  Checkout and the host dashboard show the same number because they call the same function.
+- **`db`** holds the schema and the booking lifecycle: confirming, cancelling, refunding and
+  no-shows.
+- **`billing`** turns bookings into a commission ledger, invoices and tax reports.
+
+## Outside services
+
+| Service | Used for | Needed locally? |
+| --- | --- | --- |
+| Postgres 17 + PostGIS (Neon in production) | Everything | Yes, from `testing/` |
+| Stripe Connect | Payments, payouts, commission | Only to take a payment |
+| Lettermint | Email | No, use `EMAIL_TRANSPORT=console` |
+| Cloudflare Turnstile | Bot protection on checkout | Only to take a payment |
+| Cloudflare R2 | Photos and invoice files | Only to upload photos |
+| Upstash Redis | Page cache | No |
+| MapTiler | Maps | No (maps stay empty) |
+| Chatwoot + Mistral | Support chat | Only for the support bot |
+| Sentry, PostHog | Errors, analytics | No |
+
+## Where to read next
+
+- [Two portals, two sessions](/self-hosted/explanation/two-portals): why guests and hosts sign in separately.
+- [Database and migrations](/self-hosted/explanation/database-and-migrations)
+- [Money, tax and commission](/self-hosted/explanation/money-and-tax)

@@ -1,0 +1,37 @@
+---
+title: Testing mode and demo data
+description: How testing mode, demo hotels and the seed data relate, and how they're kept away from real money.
+---
+
+There are two kinds of fake data in OpenBookings. They do different jobs.
+
+## The seed (`testing/`)
+
+The seed is a fixed set of accounts, hotels and bookings, loaded by `bun run testing:setup` into
+a local database. It's there so that every developer, every bug report and every test run starts
+from the same known state: "sign in as `owner@openbookings.test`, open booking `…0006`".
+
+It only ever runs against `localhost`, and it wipes the database first.
+
+## Demo hotels (testing mode)
+
+Testing mode is on when **both** `TESTING=true` **and** the Stripe key is a test key (`sk_test_`).
+Setting `TESTING=true` with a live key is refused at startup. Testing mode can never be on next to
+real payments.
+
+In testing mode, the first search near any point creates eight **demo hotels** there, each built
+around one edge case the booking flow must handle: a normal hotel, one with a single room left, one
+sold out, one with a minimum stay, one closed to arrival, one non-refundable, one with weekend
+prices, and one with small rooms. Every host who signs in becomes an owner of the demo
+organisation, so they can see the bookings made at those hotels.
+
+Demo hotels are marked `is_demo` and charge the `STRIPE_CONNECT_ACCOUNT_ID` test account, so
+checkout works end to end without a real connected account. `demo:reset` deletes them.
+
+## Which to use
+
+| You want to… | Use |
+| --- | --- |
+| reproduce a bug with known data | the seed |
+| click through the booking flow's edge cases | demo hotels |
+| write an automated test | neither: tests create and roll back their own fixtures |

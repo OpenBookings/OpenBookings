@@ -1,0 +1,49 @@
+---
+title: Database and migrations
+description: Why migrations are plain SQL applied by hand, and how the schema snapshot fits in.
+---
+
+## One database, more than one owner
+
+The database holds tables that this repository creates, and tables it doesn't: Better Auth's
+(`user`, `session`, `organization`, `member`, …) and a few early tables that predate the repository.
+`packages/db/src/schema.ts` describes the tables the code queries through Drizzle, not the whole
+database.
+
+That has two consequences:
+
+- **`drizzle-kit push` is dangerous here.** It would see the tables `schema.ts` doesn't declare,
+  and offer to drop them.
+- **The migrations alone can't build the database.** The first ones exist only in the database
+  they were applied to.
+
+## Migrations: idempotent SQL, applied by hand
+
+Every change is a numbered SQL file in `packages/db/drizzle`, written so it can safely run twice
+(`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`). There's no migration journal. You apply a file with
+`psql` before deploying the code that needs it. That's a little more work, but nothing ever runs
+against production that nobody read.
+
+## The schema snapshot
+
+Since the migrations can't build a database from nothing, `testing/schema/schema.sql` holds a
+`pg_dump` of the full schema: structure only, no data. To build a fresh database:
+
+1. load the snapshot,
+2. apply the migrations newer than it (the `PENDING_MIGRATIONS` list), and
+3. load the seed.
+
+`bun run testing:setup` does exactly that. CI does the same with a schema fetched from the
+development database, so tests always run against the schema that's really there.
+
+## No row-level security
+
+No table has row-level security, and the apps connect as a role that would bypass it anyway.
+Tenant isolation is done in the application, by `@openbookings/authz`. Any query that filters on
+an id taken from a request must go through it.
+
+## Money columns
+
+Older money columns hold **whole euros** (`bigint`), and newer ones end in `_cents`. A booking
+carries both: `total_amount` in euros and `rooms_total_cents`, `tourist_tax_cents` and
+`total_cents` for the exact split. New columns always use cents.

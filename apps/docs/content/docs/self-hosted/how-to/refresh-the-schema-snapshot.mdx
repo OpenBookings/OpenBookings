@@ -1,0 +1,36 @@
+---
+title: Refresh the schema snapshot
+description: Update testing/schema/schema.sql from a database that has every migration applied.
+---
+
+`testing/schema/schema.sql` is a `pg_dump` of the full schema: structure only, with no rows,
+owners or grants. Refresh it after migrations have been applied to the development database, so
+the pending list stays short.
+
+## Steps
+
+1. Make sure the source database has every migration in `PENDING_MIGRATIONS` applied.
+2. Dump it, using a **direct** (non-pooled) connection string. You need `pg_dump` 17 or newer:
+
+   ```bash
+   SCHEMA_SOURCE_URL=postgres://... bun run --cwd testing schema:dump
+   ```
+
+   The script removes the two Neon-only extensions (`pg_session_jwt`, `vector`) and the
+   `\restrict` lines that newer versions of `pg_dump` add.
+
+3. Empty `PENDING_MIGRATIONS` in `packages/db/src/testing/pending-migrations.ts`, or remove the
+   entries the new snapshot includes.
+4. Check that it loads:
+
+   ```bash
+   bun run testing:setup
+   ```
+
+5. Commit the snapshot and the shorter list together.
+
+## Check the diff
+
+The diff of `schema.sql` should only contain the changes from your migrations. Anything else
+means the source database has drifted from the migrations in the repository. Find out why
+before you commit.

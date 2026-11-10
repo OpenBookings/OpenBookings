@@ -1,0 +1,32 @@
+---
+title: Apps and ports
+description: The apps in the monorepo, where they run locally and in their images.
+---
+
+| App | Package | Local URL | Image port | Deployed |
+| --- | --- | --- | --- | --- |
+| Guest site | `@openbookings/web` | `http://web.localhost:3002` | 8080 | yes |
+| Host dashboard | `@openbookings/business` | `http://business.localhost:3001` | 8081 | yes |
+| Support bot | `@openbookings/support-bot` | `http://localhost:3003` | 8080 | yes |
+| Docs | `@openbookings/docs` | `http://localhost:3004` | 8082 | yes |
+| Admin console | `@openbookings/admin` | `http://127.0.0.1:3005` | — | never |
+| Invoice job | `@openbookings/invoice-job` | — (a CLI) | — | as a scheduled job |
+| Test database | — | `postgres://…@127.0.0.1:5433/openbookings` | — | never |
+
+## Shared packages
+
+| Package | What it holds |
+| --- | --- |
+| `@openbookings/db` | The Postgres pool, Drizzle schema, migrations, booking lifecycle and the test harness |
+| `@openbookings/auth` | Better Auth for both portals: magic links, passkeys, two-factor, social sign-in |
+| `@openbookings/authz` | Tenant isolation: who may see or change which organisation, property, room or rate |
+| `@openbookings/pricing` | Rates, availability, cancellation policy and tourist tax maths |
+| `@openbookings/stripe` | Stripe Connect accounts, payments and the commission fee |
+| `@openbookings/billing` | Commission ledger, invoices, VAT, ICP and DAC7 reporting, readiness |
+| `@openbookings/mailing` | Email client and templates |
+| `@openbookings/messaging` | Guest-host messaging, realtime tokens and retention |
+| `@openbookings/support` | Support tickets shared by the host dashboard and the support bot |
+| `@openbookings/demo` | Demo hotels generated in testing mode |
+| `@openbookings/mode` | Testing-mode detection and its safety checks |
+| `@openbookings/cache`, `images`, `maps`, `analytics`, `config` | Supporting code |
+| `@openbookings/testing` | The local test database: schema snapshot, seed data and setup script |

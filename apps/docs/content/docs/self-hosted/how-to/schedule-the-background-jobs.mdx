@@ -1,0 +1,44 @@
+---
+title: Schedule the background jobs
+description: Set up the HTTP jobs that reconcile payments, send review invitations and enforce data retention.
+---
+
+A few jobs run on a schedule. Each one is an HTTP `POST` endpoint on one of the apps,
+authenticated with `Authorization: Bearer $CRON_SECRET`. Any scheduler that can send an HTTP
+request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actions, or cron on a VM.
+
+## The jobs
+
+| Job | Endpoint | Suggested schedule | What it does |
+| --- | --- | --- | --- |
+| Reconcile payments | `POST {web}/api/cron/reconcile-payments` | every 15 minutes | Settles checkouts the Stripe webhook missed |
+| Review invitations | `POST {web}/api/cron/review-invitations` | hourly | Warns the host at check-out, invites the guest about 24 hours later |
+| Message retention | `POST {business}/api/cron/messaging-retention` | daily, 03:00 | Redacts the text of messages older than `MESSAGE_RETENTION_DAYS` |
+| PII retention | `POST {business}/api/cron/pii-retention` | daily, 03:30 | Redacts guest notes and cancellation reasons on stays that ended more than `PII_RETENTION_MONTHS` ago (default 18) |
+
+`{web}` and `{business}` are the public URLs of the guest site and the host dashboard.
+
+## Steps
+
+1. Generate a secret and set it as `CRON_SECRET` on **both** apps:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+2. Create one scheduled job per row in the table. With cron and `curl`, for example:
+
+   ```text
+   */15 * * * *  curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://book.example.com/api/cron/reconcile-payments
+   0 * * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://book.example.com/api/cron/review-invitations
+   0 3 * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/messaging-retention
+   30 3 * * *    curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/pii-retention
+   ```
+
+3. Check that a request without the header returns `401`.
+
+## The monthly invoice job
+
+Commission invoices are made by `apps/invoice-job`, a command-line job that runs one step and exits:
+draft, issue, store, deliver. Run its image on a schedule after each month closes. Its README
+describes the steps, the guards and the variables it needs.

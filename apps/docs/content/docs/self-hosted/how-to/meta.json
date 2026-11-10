@@ -1,0 +1,12 @@
+{
+  "title": "How-to guides",
+  "pages": [
+    "reset-the-test-database",
+    "sign-in-without-email",
+    "take-a-test-payment",
+    "add-a-migration",
+    "refresh-the-schema-snapshot",
+    "build-the-production-images",
+    "schedule-the-background-jobs"
+  ]
+}

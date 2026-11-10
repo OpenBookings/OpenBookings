@@ -1,0 +1,142 @@
+---
+title: Run OpenBookings locally
+description: From a fresh clone to signing in as a hotel and as a guest, in about fifteen minutes.
+---
+
+In this tutorial you'll start a local database, load it with test hotels, run the guest site and
+the host dashboard, and sign in to both. At the end you'll cancel a booking as a guest and watch
+it show up in the host dashboard.
+
+You don't need any outside accounts for this. Email is printed to your terminal, and payments
+stay out of it until the [test payment guide](/self-hosted/how-to/take-a-test-payment).
+
+## What you need
+
+- [Bun](https://bun.sh) 1.3
+- [Node.js](https://nodejs.org) 22.20 or newer
+- [Docker](https://www.docker.com/products/docker-desktop/), running
+- `git`
+
+## 1. Get the code
+
+```bash
+git clone https://github.com/OpenBookings/OpenBookings.git
+cd OpenBookings
+bun install
+```
+
+`bun install` installs every app and package in the monorepo at once.
+
+## 2. Start the database
+
+```bash
+bun run testing:db
+```
+
+This starts Postgres 17 with PostGIS in Docker, on port **5433** so it doesn't clash with a
+Postgres you may already have. The first run downloads the image, which takes a minute or two.
+
+## 3. Load the schema and the test data
+
+```bash
+bun run testing:setup
+```
+
+You should see:
+
+```text
+Setting up 127.0.0.1:5433/openbookings
+  schema       63 tables
+  migrations   8 applied on top of the snapshot
+  seed         01_accounts.sql, 02_properties.sql, 03_bookings.sql, 04_reviews_and_messages.sql
+  bookings     9 run through the booking policy
+```
+
+The number of migrations can differ. Your database now holds two live hotels in Amsterdam and
+Utrecht, five accounts and nine bookings.
+
+## 4. Configure the two apps
+
+Copy the example environment files:
+
+```bash
+cp .env.example .env.local
+cp apps/web/.env.example apps/web/.env.local
+cp apps/business/.env.example apps/business/.env.local
+```
+
+The examples already point at the local database and turn on `EMAIL_TRANSPORT=console`. Two
+values still need filling in. Each app needs its **own** auth secret, at least 32 characters
+long:
+
+```bash
+openssl rand -base64 32   # paste into BETTER_AUTH_SECRET in apps/web/.env.local
+openssl rand -base64 32   # paste into BETTER_AUTH_SECRET in apps/business/.env.local
+```
+
+Leave the Stripe placeholders as they are for now.
+
+## 5. Start the apps
+
+```bash
+bunx turbo run dev --filter=@openbookings/web --filter=@openbookings/business
+```
+
+Wait until both report `Ready`, then open the host dashboard:
+
+**[http://business.localhost:3001](http://business.localhost:3001)**
+
+<Callout title="Why business.localhost?">
+  The guest site and the host dashboard keep their sign-in cookies separate, which needs two
+  different host names. Browsers send every `*.localhost` name to your own machine, so there's
+  nothing to set up. Plain `localhost:3001` won't keep you signed in.
+</Callout>
+
+## 6. Sign in as the hotel owner
+
+1. On the sign-in page, enter `owner@openbookings.test` and send the link.
+2. Switch to the terminal running the apps. You'll find a block like this:
+
+   ```text
+   ──── email (EMAIL_TRANSPORT=console, not sent) ────
+   To:      owner@openbookings.test
+   Subject: Your sign-in link for OpenBookings
+
+   Links:
+     http://business.localhost:3001/api/auth/magic-link/verify?token=…
+   ```
+
+3. Open that link. You're now in the dashboard of **Lantern Hotels**, as Sanne de Vries.
+
+Look around: **Canal Lantern Hotel** and **Dom Garden Suites** are live, and **Singel Loft House**
+is a draft that isn't ready yet. Under reservations you'll find upcoming, in-house, past,
+cancelled and no-show bookings.
+
+## 7. Sign in as a guest and cancel a booking
+
+1. Open the guest site in a private window: **[http://web.localhost:3002](http://web.localhost:3002)**.
+2. Sign in as `guest@openbookings.test`, taking the link from the terminal again.
+3. Open your bookings. Find the stay at **Canal Lantern Hotel** about two weeks from now (three
+   nights in a Classic Double). It's on the Flex policy, so cancelling is free.
+4. Cancel it.
+
+Back in the host dashboard, the same booking now shows as cancelled.
+
+## 8. Start over whenever you like
+
+```bash
+bun run testing:setup
+```
+
+This wipes the local database and loads everything again, with dates moved to today.
+
+## What you've done
+
+You've run the guest site and the host dashboard against a local database, signed in without an
+email provider, and gone through a cancellation from both sides.
+
+## Next steps
+
+- [Take a test payment](/self-hosted/how-to/take-a-test-payment) to book a room through Stripe checkout.
+- See every seeded account, hotel and booking in the [test data reference](/self-hosted/reference/test-data).
+- Read [how the pieces fit together](/self-hosted/explanation/architecture).

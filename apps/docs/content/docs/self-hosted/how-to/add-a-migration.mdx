@@ -1,0 +1,75 @@
+---
+title: Add a database migration
+description: Change the schema safely, so CI, the test database and every deployment pick it up.
+---
+
+Migrations are plain SQL files in `packages/db/drizzle`, applied by hand. They aren't tracked by
+`drizzle-kit migrate`. [Why it works this way](/self-hosted/explanation/database-and-migrations).
+
+## 1. Write the migration
+
+1. Create the next numbered file, for example `packages/db/drizzle/0040_room_notes.sql`.
+2. Make it **idempotent**, so running it twice changes nothing the second time:
+
+   ```sql
+   ALTER TABLE rooms ADD COLUMN IF NOT EXISTS internal_note text;
+
+   CREATE INDEX IF NOT EXISTS idx_rooms_property_active
+     ON rooms (property_id) WHERE is_active;
+   ```
+
+   Use `IF NOT EXISTS`, `ON CONFLICT DO NOTHING`, and `DO $$ ... $$` blocks with an existence
+   check for anything that has no `IF NOT EXISTS` (constraints, enum values).
+
+3. If code reads the new column, declare it in `packages/db/src/schema.ts` too.
+
+## 2. Register it as pending
+
+Add the file name to the end of `PENDING_MIGRATIONS` in
+`packages/db/src/testing/pending-migrations.ts`:
+
+```ts
+export const PENDING_MIGRATIONS: string[] = [
+  // ...
+  "0040_room_notes.sql",
+];
+```
+
+That list is applied:
+
+- by `bun run testing:setup`, on top of the schema snapshot,
+- by CI, once, before the tests run, and
+- by the DB test harness locally, inside each test's transaction.
+
+## 3. Test it
+
+```bash
+bun run testing:setup
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/openbookings \
+DATABASE_URL_DIRECT=postgres://postgres:postgres@127.0.0.1:5433/openbookings \
+PENDING_MIGRATIONS_APPLIED=1 \
+  bun run test
+```
+
+Run `testing:setup` twice in a row. The second run should behave exactly like the first.
+
+## 4. Apply it to a deployment
+
+Apply the file to each database with `psql` (or your provider's SQL editor), **before** you deploy
+code that depends on it:
+
+```bash
+psql "$DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 -f packages/db/drizzle/0040_room_notes.sql
+```
+
+<Callout type="warn">
+  Never run `bun run --cwd packages/db db:push` against a shared database. It diffs `schema.ts`
+  against the database and offers to drop the tables `schema.ts` doesn't declare, including the
+  auth tables.
+</Callout>
+
+## 5. Once it's everywhere
+
+When the migration is on the development database, it can leave the pending list: refresh the
+snapshot (see [Refresh the schema snapshot](/self-hosted/how-to/refresh-the-schema-snapshot))
+and remove its entry in the same pull request.
