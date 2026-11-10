@@ -44,7 +44,7 @@ const byline = (r: PublicReview) => `${r.authorName}${r.authorCountry ? `, ${r.a
  * every review in a card over the blurred page (list and filters on the left,
  * the chosen review on the right; one at a time on a phone).
  */
-export function ReviewsCard({ data }: { data: PropertyReviews }) {
+export function ReviewsCard({ data, propertyName }: { data: PropertyReviews; propertyName: string }) {
   const [open, setOpen] = useState(false);
   const featured = featuredReview(data.reviews);
 
@@ -119,13 +119,13 @@ export function ReviewsCard({ data }: { data: PropertyReviews }) {
       </div>
 
       <FocusOverlay open={open} onClose={() => setOpen(false)} contentClassName="max-w-6xl px-3 sm:px-8">
-        <ReviewsPanel data={data} onClose={() => setOpen(false)} />
+        <ReviewsPanel data={data} propertyName={propertyName} onClose={() => setOpen(false)} />
       </FocusOverlay>
     </>
   );
 }
 
-function ReviewsPanel({ data, onClose }: { data: PropertyReviews; onClose: () => void }) {
+function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; propertyName: string; onClose: () => void }) {
   const titleId = useId();
   const [band, setBand] = useState<ReviewBand | "all">("all");
   const [sort, setSort] = useState<ReviewSort>("newest");
@@ -305,6 +305,8 @@ function ReviewsPanel({ data, onClose }: { data: PropertyReviews; onClose: () =>
                 <p className="text-[15px] text-white/55">{selected.authorName} gave a score without writing a review.</p>
               )}
 
+              {selected.replies.length > 0 ? <ReplyThread review={selected} propertyName={propertyName} /> : null}
+
               <div className="mt-auto flex items-center justify-between pt-2">
                 <span className="hidden text-xs text-white/40 md:inline">
                   {position} of {list.length}
@@ -321,5 +323,25 @@ function ReviewsPanel({ data, onClose }: { data: PropertyReviews; onClose: () =>
         </article>
       </div>
     </Card>
+  );
+}
+
+/** Replies under a review: the property's, and the guest's answer, oldest first. */
+function ReplyThread({ review, propertyName }: { review: PublicReview; propertyName: string }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {review.replies.map((r) => (
+        <div key={r.id} className={cn("flex flex-col gap-1.5 border-l border-white/15 pl-4", r.role === "guest" && "ml-4")}>
+          <p className="text-xs text-white/50">
+            <span className="font-medium text-white/80">
+              {r.role === "host" ? `Response from ${propertyName}` : `${review.authorName} answered`}
+            </span>
+            {r.publishedAt ? ` · ${postedLabel(r.publishedAt)}` : ""}
+            {r.editedAt ? " · Edited" : ""}
+          </p>
+          <p className="text-[15px] leading-relaxed whitespace-pre-line text-white/75">{r.body}</p>
+        </div>
+      ))}
+    </div>
   );
 }

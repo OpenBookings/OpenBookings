@@ -872,10 +872,13 @@ export const messages = pgTable(
     readAt: timestamp("read_at", { withTimezone: true }),
     /** Set once the per-thread NOTIFY has fired for this message; also the retention-sweep cursor. */
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    /** Set when the message is a host's private reply to a review (0039). */
+    reviewId: uuid("review_id").references((): AnyPgColumn => reviews.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("idx_messages_thread_id_created_at").on(table.threadId, table.createdAt),
+    index("idx_messages_review").on(table.reviewId).where(sql`${table.reviewId} IS NOT NULL`),
     index("idx_messages_unread_sweep").on(table.createdAt),
     index("idx_messages_flagged").on(table.threadId),
   ],
@@ -1131,6 +1134,9 @@ export const reviews = pgTable(
     submittedVia: text("submitted_via").notNull(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** The host marked it as needing no reply (0039). Cleared on undo. */
+    replySkippedAt: timestamp("reply_skipped_at", { withTimezone: true }),
+    replySkippedBy: text("reply_skipped_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1163,6 +1169,41 @@ export const reviewInvitations = pgTable(
     index("idx_review_invitations_reminder")
       .on(table.sentAt)
       .where(sql`${table.reminderSentAt} IS NULL AND ${table.sentAt} IS NOT NULL`),
+  ],
+);
+
+/**
+ * Replies to a review (0039): the public thread under it, host then guest
+ * then host (nextReplyRole in @openbookings/pricing). A deleted reply keeps
+ * its row without content. Private replies are messages with review_id.
+ *
+ * Mirrors packages/db/drizzle/0039_review_replies.sql; keep the two in sync.
+ */
+export const reviewReplies = pgTable(
+  "review_replies",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    /** 'host' | 'guest', enforced by a DB check. */
+    authorRole: text("author_role").notNull(),
+    /** Who wrote or last edited it. Never shown publicly. */
+    authorUserId: text("author_user_id"),
+    /** Up to 1,000 characters. NULL only on a deleted reply. */
+    body: text("body"),
+    /** 'pending' | 'published' | 'hidden' | 'deleted', enforced by a DB check. */
+    status: text("status").notNull(),
+    flaggedReason: text("flagged_reason"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_review_replies_review").on(table.reviewId, table.createdAt),
+    check("review_replies_body_unless_deleted", sql`${table.status} = 'deleted' OR ${table.body} IS NOT NULL`),
   ],
 );
 

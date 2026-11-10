@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { screenReview } from "./screen";
+import { screenReview } from "./screen-review";
 
 describe("screenReview", () => {
   test("lets ordinary reviews through", () => {

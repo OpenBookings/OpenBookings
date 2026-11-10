@@ -21,7 +21,9 @@ import type { Queryable } from "../reservation-policy";
 
 export * from "./shared";
 export * from "./invitations";
-import { firstName } from "./shared";
+export * from "./replies";
+import { firstName, normalizeReviewBody } from "./shared";
+import { loadReviewReplies, type ReviewReply } from "./replies";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,6 +55,8 @@ export type GuestReview = {
   body: string | null;
   status: ReviewStatus;
   createdAt: Date;
+  /** The public thread: published replies, plus the guest's own answer while it is held. */
+  replies: ReviewReply[];
 };
 
 type ContextRow = {
@@ -125,6 +129,7 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
           body: row.review_body,
           status: row.review_status!,
           createdAt: row.review_created_at!,
+          replies: [],
         }
       : null,
   };
@@ -134,7 +139,14 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
 export async function getReviewContext(db: Queryable, bookingId: string, now: Date): Promise<ReviewContext | null> {
   if (!UUID.test(bookingId)) return null;
   const row = (await db.query(CONTEXT_SQL, [bookingId])).rows[0] as ContextRow | undefined;
-  return row ? toContext(row, now) : null;
+  if (!row) return null;
+  const context = toContext(row, now);
+  if (context.review && context.review.status !== "deleted") {
+    const thread = (await loadReviewReplies(db, [context.review.id], { publicOnly: false })).get(context.review.id) ?? [];
+    // A host reply held for a check isn't shown to the guest yet; their own held answer is.
+    context.review.replies = thread.filter((r) => r.status === "published" || r.role === "guest");
+  }
+  return context;
 }
 
 // ── Writing ───────────────────────────────────────────────────────────────────
@@ -153,11 +165,6 @@ export type SubmitReviewResult =
   | { ok: true; reviewId: string; status: "published" | "pending"; context: ReviewContext }
   | { ok: false; error: "not_found" | "invalid" | Exclude<ReviewEligibility, { ok: true }>["reason"] };
 
-/** Trims a review text; empty means none. */
-export function normalizeReviewBody(body: string | null | undefined): string | null {
-  const text = (body ?? "").replace(/\r\n/g, "\n").trim();
-  return text.length > 0 ? text : null;
-}
 
 /**
  * Stores a review for the booking's guest. The caller has already proved the
@@ -232,6 +239,11 @@ export async function deleteGuestReview(
  * goes. Name and country are replaced, the link to the account removed.
  */
 export async function anonymizeGuestReviews(db: Queryable, guestUserId: string): Promise<number> {
+  // Their answers under property replies stay too, without the link to them.
+  await db.query(
+    `UPDATE review_replies SET author_user_id = NULL, updated_at = NOW() WHERE author_role = 'guest' AND author_user_id = $1`,
+    [guestUserId],
+  );
   const { rows } = await db.query(
     `UPDATE reviews
         SET guest_user_id = NULL, author_name = 'Former guest', author_country = NULL, updated_at = NOW()
@@ -272,6 +284,8 @@ export type PublicReview = {
   roomLabel: string | null;
   /** ISO timestamp: the value is cached as JSON. */
   publishedAt: string;
+  /** Published replies under it, oldest first: host, guest, host. */
+  replies: ReviewReply[];
 };
 
 export type PropertyReviews = {
@@ -310,6 +324,7 @@ export async function loadPropertyReviews(
     db.query(`SELECT count(*)::int AS n FROM reviews WHERE property_id = $1::uuid AND status = 'published'`, [propertyId]),
   ]);
   const scores = (recent as { score: number }[]).map((r) => Number(r.score));
+  const replies = await loadReviewReplies(db, (list as { id: string }[]).map((r) => r.id), { publicOnly: true });
   return {
     reviews: (list as Record<string, unknown>[]).map((r) => ({
       id: r.id as string,
@@ -320,6 +335,7 @@ export async function loadPropertyReviews(
       stayMonth: r.stay_month as string,
       roomLabel: (r.room_label as string | null) ?? null,
       publishedAt: new Date(r.published_at as Date).toISOString(),
+      replies: replies.get(r.id as string) ?? [],
     })),
     total: (totals[0] as { n: number }).n,
     recentCount: scores.length,

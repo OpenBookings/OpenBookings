@@ -11,6 +11,12 @@ export function firstName(name: string | null): string {
   return first.slice(0, 40) || "Guest";
 }
 
+/** Trims a review or reply text; empty means none. */
+export function normalizeReviewBody(body: string | null | undefined): string | null {
+  const text = (body ?? "").replace(/\r\n/g, "\n").trim();
+  return text.length > 0 ? text : null;
+}
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 
 export function hashReviewToken(token: string): Buffer {

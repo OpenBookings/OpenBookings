@@ -24,7 +24,7 @@ export function OverviewSection({
 
         {reviews ? (
           <div className="grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-12 lg:gap-16 items-start mb-14">
-            <ReviewsCard data={reviews} />
+            <ReviewsCard data={reviews} propertyName={hotel.name} />
             <div className="flex flex-col gap-8 text-white/75 text-lg leading-relaxed pt-2">
               <p>{hotel.overview_description}</p>
             </div>

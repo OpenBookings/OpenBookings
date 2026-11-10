@@ -13,6 +13,7 @@ import { getReadiness } from "@/lib/analytics/readiness-query";
 import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "@/lib/analytics/readiness";
 import type { AnyPageData, PageData } from "@/lib/analytics/types";
 import { getServerSession } from "@/lib/auth";
+import { AnalyticsBody } from "./analytics-body";
 import { DemoBanner } from "./demo-banner";
 import { EmptyProvider } from "./empty-context";
 import { FilteredPanel, NeverBookedCover } from "./empty-state";
@@ -90,11 +91,13 @@ export async function AnalyticsPage<P extends PageId>({
     return (
       <>
         {header}
-        <NeverBookedCover variant={variant} readiness={readiness}>
-          <EmptyProvider variant={variant}>
-            <View data={data} />
-          </EmptyProvider>
-        </NeverBookedCover>
+        <AnalyticsBody page={page}>
+          <NeverBookedCover variant={variant} readiness={readiness}>
+            <EmptyProvider variant={variant}>
+              <View data={data} />
+            </EmptyProvider>
+          </NeverBookedCover>
+        </AnalyticsBody>
       </>
     );
   }
@@ -104,18 +107,20 @@ export async function AnalyticsPage<P extends PageId>({
     <>
       {demo ? <DemoBanner /> : null}
       {header}
-      <EmptyProvider
-        variant={filtered ? "filtered" : undefined}
-        panel={
-          filtered ? (
-            <FilteredPanel
-              action={filteredAction(meta.path, new URLSearchParams(carryQuery(search)), period, today)}
-            />
-          ) : undefined
-        }
-      >
-        <View data={data} />
-      </EmptyProvider>
+      <AnalyticsBody page={page}>
+        <EmptyProvider
+          variant={filtered ? "filtered" : undefined}
+          panel={
+            filtered ? (
+              <FilteredPanel
+                action={filteredAction(meta.path, new URLSearchParams(carryQuery(search)), period, today)}
+              />
+            ) : undefined
+          }
+        >
+          <View data={data} />
+        </EmptyProvider>
+      </AnalyticsBody>
     </>
   );
 }

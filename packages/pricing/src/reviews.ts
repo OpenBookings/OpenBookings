@@ -126,3 +126,22 @@ export type ReviewBand = (typeof REVIEW_BANDS)[number]["id"];
 export function reviewBand(score: number): (typeof REVIEW_BANDS)[number] {
   return REVIEW_BANDS.find((b) => score >= b.min) ?? REVIEW_BANDS[REVIEW_BANDS.length - 1]!;
 }
+
+// ── Replies ───────────────────────────────────────────────────────────────────
+
+/** A reply's text, after trimming. */
+export const REPLY_BODY_MAX = 1000;
+/** The public thread under a review: host, guest, host. Then it closes. */
+export const REPLY_THREAD_MAX = 3;
+
+export type ReplyRole = "host" | "guest";
+
+/**
+ * Whose turn it is in a review's public thread, given the roles of its
+ * replies so far (oldest first, deleted ones left out). The host opens, the
+ * review's guest may answer once, the host has the last word. Null = closed.
+ */
+export function nextReplyRole(thread: readonly ReplyRole[]): ReplyRole | null {
+  if (thread.length >= REPLY_THREAD_MAX) return null;
+  return thread.length % 2 === 0 ? "host" : "guest";
+}
