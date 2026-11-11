@@ -1,12 +1,22 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreDependencies": ["@types/geojson"],
+  "ignoreIssues": {
+    "apps/*/components/ui/**": ["exports", "types"]
+  },
   "workspaces": {
     ".": {
       "ignoreDependencies": ["@openbookings/config", "@openbookings/db"]
     },
+    "apps/*": {
+      "entry": ["scripts/**/*.ts"]
+    },
+    "packages/*": {
+      "entry": ["scripts/**/*.ts"]
+    },
     "packages/db": {
-      "drizzle": false
+      "drizzle": false,
+      "entry": ["scripts/**/*.ts", "seed/**/*.ts", "drizzle.config.ts"]
     }
   }
 }
