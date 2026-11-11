@@ -16,6 +16,7 @@ import {
   STRIPE_JS_UNAVAILABLE,
   type CheckoutErrorCopy,
 } from '../_lib/errors';
+import { payReassurance } from '../_lib/reassurance';
 import { useHoldCountdown } from '../_lib/useHoldCountdown';
 import { useTurnstileToken } from '../_lib/useTurnstileToken';
 import { Backdrop } from './Backdrop';
@@ -52,6 +53,8 @@ function stripeFor(stripeAccountId: string): Promise<Stripe | null> | null {
 /** Everything the summary renders, plus the photograph behind the whole page. */
 export type CheckoutClientProps = TripSummaryProps & {
   heroImageUrl: string;
+  /** "+ €75.00 at the property for the extra bed": under the Pay button. Null when nothing is paid there. */
+  payAtPropertyLine: string | null;
   /**
    * The signed-in guest, read on the server so the gate knows on first paint
    * whether sign-in is still owed. Null means nobody is signed in.
@@ -279,7 +282,7 @@ function CheckoutSession({
   // Non-refundable rates (Annex B B.4.3): nothing to do with paying is shown
   // until the guest has ticked that they understand.
   const [consented, setConsented] = useState(false);
-  const holdLapsed = useHoldCountdown({
+  const { lapsed: holdLapsed, expiresAt: holdExpiresAt } = useHoldCountdown({
     intentId: props.intentId,
     holdExpiresAt: props.holdExpiresAt,
     open: props.intentStatus === 'open',
@@ -448,6 +451,9 @@ function CheckoutSession({
                 backHref={props.backHref}
                 details={details}
                 propertyName={props.propertyName}
+                holdExpiresAt={holdExpiresAt}
+                reassurance={payReassurance(props.cancellations.map((c) => c.steps))}
+                payAtPropertyLine={props.payAtPropertyLine}
               />
             </PaymentCardBoundary>
           )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Lock } from 'lucide-react';
+import { Clock, Loader2, Lock, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import * as Sentry from '@sentry/nextjs';
 import { ExpressCheckoutElement, PaymentElement, useCheckoutElements } from '@stripe/react-stripe-js/checkout';
 import type {
@@ -21,6 +21,7 @@ import {
   unexpectedPaymentError,
 } from '../_lib/errors';
 import { toStripeContact } from '../_lib/guest-details';
+import { holdLabel } from '../_lib/reassurance';
 import { CheckoutNotice } from './CheckoutNotice';
 import { CHECKOUT_CARD } from './DetailsCard';
 import type { CheckoutDetailsController } from './useCheckoutDetails';
@@ -50,7 +51,43 @@ export type PaymentCardProps = {
   details: CheckoutDetailsController;
   /** Named in the trust line: the hotel is the merchant (a direct charge). */
   propertyName: string;
+  /** Unix milliseconds the hold ends, for the header label. */
+  holdExpiresAt: number;
+  /** The cancellation line above Pay. */
+  reassurance: { tone: 'free' | 'neutral'; text: string };
+  /** "+ €75.00 at the property for the extra bed", under Pay; null when nothing is paid there. */
+  payAtPropertyLine: string | null;
 };
+
+/** How often the hold label re-reads the clock. */
+const HOLD_TICK_MS = 15_000;
+
+/** "14:30", 24-hour whatever the browser's locale. */
+const clockTime = (ms: number) =>
+  new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+function HoldLabel({ expiresAt }: { expiresAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), HOLD_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+  const { text, urgent } = holdLabel(expiresAt, now, clockTime);
+  return (
+    <span
+      className={`flex items-center gap-1.5 text-xs font-normal ${urgent ? 'text-amber-700' : 'text-muted-foreground'}`}
+    >
+      <Clock aria-hidden className="size-3.5" />
+      {text}
+    </span>
+  );
+}
+
+const NEXT_STEPS = (propertyName: string) => [
+  { Icon: Mail, text: 'Confirmation by email straight away.' },
+  { Icon: UserRound, text: 'Change, cancel or message the hotel from your account.' },
+  { Icon: Lock, text: `You pay ${propertyName} directly. Stripe handles your card; OpenBookings never sees it.` },
+];
 
 /**
  * Stripe's elements show nothing until they have loaded. If one never says it
@@ -75,7 +112,16 @@ function Skeleton() {
   );
 }
 
-export function PaymentCard({ holdLapsed, onRestart, backHref, details, propertyName }: PaymentCardProps) {
+export function PaymentCard({
+  holdLapsed,
+  onRestart,
+  backHref,
+  details,
+  propertyName,
+  holdExpiresAt,
+  reassurance,
+  payAtPropertyLine,
+}: PaymentCardProps) {
   const checkoutState = useCheckoutElements();
   // Stripe refusing a confirm because the session expired; the countdown
   // covers the hold itself.
@@ -269,10 +315,13 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
 
   return (
     <section aria-labelledby="checkout-payment-heading" className={CHECKOUT_CARD}>
-      <h2 id="checkout-payment-heading" className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Lock aria-hidden className="size-3.5" />
-        Payment
-      </h2>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 id="checkout-payment-heading" className="flex items-center gap-2 text-sm font-semibold">
+          <Lock aria-hidden className="size-3.5" />
+          Payment
+        </h2>
+        <HoldLabel expiresAt={holdExpiresAt} />
+      </div>
 
       <div className="relative">
         {!ready && <Skeleton />}
@@ -314,6 +363,13 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
               {shownError}
             </p>
 
+            <p
+              className={`flex items-center gap-1.5 text-[13px] ${reassurance.tone === 'free' ? 'font-medium text-green-700' : 'text-muted-foreground'}`}
+            >
+              <ShieldCheck aria-hidden className={`size-4 shrink-0 ${reassurance.tone === 'free' ? 'text-green-600' : ''}`} />
+              {reassurance.text}
+            </p>
+
             {/*
               Not disabled on an incomplete form: pressing it should say what is
               missing. The amount is Stripe's, so it can't differ from the charge.
@@ -335,13 +391,21 @@ export function PaymentCard({ holdLapsed, onRestart, backHref, details, property
                 </>
               )}
             </button>
+            {payAtPropertyLine && (
+              <p className="-mt-1 text-center text-xs text-muted-foreground">{payAtPropertyLine}</p>
+            )}
           </form>
         </div>
       </div>
 
-      <p className="mt-4 text-center text-xs leading-relaxed text-pretty text-muted-foreground">
-        You pay {propertyName} directly. Stripe handles the payment securely; OpenBookings never sees your card details.
-      </p>
+      <ul className="mt-5 space-y-2.5 border-t border-black/10 pt-4">
+        {NEXT_STEPS(propertyName).map(({ Icon, text }) => (
+          <li key={text} className="flex items-start gap-2.5 text-xs leading-relaxed text-pretty text-muted-foreground">
+            <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+            {text}
+          </li>
+        ))}
+      </ul>
       {/* Decorative to a screen reader: the fields above announce themselves as Stripe's. */}
       {/* eslint-disable-next-line @next/next/no-img-element -- a static badge, nothing to optimise */}
       <img

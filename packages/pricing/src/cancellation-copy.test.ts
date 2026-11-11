@@ -84,6 +84,8 @@ describe("describePolicySteps", () => {
         kind: "free",
         title: "Free until Mon 9 Nov, 15:00",
         detail: "Cancel before then and you get everything you paid back.",
+        until: "2026-11-09T14:00:00.000Z",
+        deadlineLabel: "Mon 9 Nov, 15:00",
       },
       {
         kind: "after",

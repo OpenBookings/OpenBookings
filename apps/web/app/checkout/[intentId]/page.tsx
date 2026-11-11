@@ -17,6 +17,7 @@ import {
   type StayRoom,
 } from '../_lib/booking';
 import { payAtPropertyNote } from '../_lib/party';
+import { payAtPropertyLine } from '../_lib/reassurance';
 
 export const metadata: Metadata = {
   title: 'Complete your booking',
@@ -151,6 +152,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
       nightsLabel={formatNights(summary.nights)}
       cancellations={groupCancellations(summary.rooms)}
       payAtPropertyNote={payAtPropertyNote(summary.rooms)}
+      payAtPropertyLine={payAtPropertyLine(summary.rooms)}
       requiresNonRefundableConsent={summary.rooms.some((room) => room.cancellation.requiresNonRefundableConsent)}
     />
   );

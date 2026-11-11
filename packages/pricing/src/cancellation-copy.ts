@@ -79,6 +79,10 @@ export type PolicyStep = {
   kind: "free" | "after" | "no_show" | "non_refundable";
   title: string;
   detail: string;
+  /** `free` steps only: the deadline as an ISO instant, to compare across rooms. */
+  until?: string;
+  /** `free` steps only: the deadline as the title words it, e.g. "Thu 10 Dec, 14:00". */
+  deadlineLabel?: string;
 };
 
 const NO_SHOW_STEP: PolicyStep = {
@@ -105,10 +109,13 @@ export function describePolicySteps(s: PolicySnapshot, timeZone: string, now: Da
   const steps: PolicyStep[] = [];
   if (s.fullRefundUntil && s.fullRefundUntil.getTime() > now.getTime()) {
     const p = deadlineParts(s.fullRefundUntil, timeZone);
+    const deadlineLabel = `${p.weekday} ${p.day} ${p.month}, ${p.time}`;
     steps.push({
       kind: "free",
-      title: `Free until ${p.weekday} ${p.day} ${p.month}, ${p.time}`,
+      title: `Free until ${deadlineLabel}`,
       detail: "Cancel before then and you get everything you paid back.",
+      until: s.fullRefundUntil.toISOString(),
+      deadlineLabel,
     });
   }
   steps.push({

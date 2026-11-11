@@ -7,17 +7,26 @@ export function partyFacts(r: { adults: number; children: number; infants: numbe
   return facts;
 }
 
-/**
- * The line under the schedule about cots and extra beds, which are paid at the
- * property and so never cost anything to cancel. Null when nothing is paid there.
- */
-export function payAtPropertyNote(rooms: { payAtProperty: number; cots: number; extraBeds: number }[]): string | null {
+type PayAtPropertyRoom = { payAtProperty: number; cots: number; extraBeds: number };
+
+/** What is paid at the property: "cot", "extra beds", "cot and extra bed"; null when nothing is. */
+export function payAtPropertyNoun(rooms: PayAtPropertyRoom[]): { text: string; plural: boolean } | null {
   const paying = rooms.filter((r) => r.payAtProperty > 0);
   if (paying.length === 0) return null;
   const cots = paying.reduce((n, r) => n + r.cots, 0);
   const beds = paying.reduce((n, r) => n + r.extraBeds, 0);
-  const noun = cots > 0 && beds > 0 ? 'cot and extra bed' : cots > 0 ? 'cot' : 'extra bed';
   const plural = cots + beds > 1;
-  const nounText = cots > 0 && beds > 0 ? 'cot and extra bed' : noun + (plural ? 's' : '');
-  return `The ${nounText} ${plural ? 'are' : 'is'} paid at the property, so cancelling never costs you for ${plural ? 'them' : 'it'}.`;
+  const text = cots > 0 && beds > 0 ? 'cot and extra bed' : (cots > 0 ? 'cot' : 'extra bed') + (plural ? 's' : '');
+  return { text, plural };
+}
+
+/**
+ * The line under the schedule about cots and extra beds, which are paid at the
+ * property and so never cost anything to cancel. Null when nothing is paid there.
+ */
+export function payAtPropertyNote(rooms: PayAtPropertyRoom[]): string | null {
+  const noun = payAtPropertyNoun(rooms);
+  if (!noun) return null;
+  const { text, plural } = noun;
+  return `The ${text} ${plural ? 'are' : 'is'} paid at the property, so cancelling never costs you for ${plural ? 'them' : 'it'}.`;
 }
