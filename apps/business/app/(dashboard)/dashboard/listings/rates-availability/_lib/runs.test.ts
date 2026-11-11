@@ -223,6 +223,7 @@ describe("openPlanSummary", () => {
     minStay: 1,
     maxStay: null,
     modifiers: [],
+    rules: [],
     hasStayDiscount: false,
     cells: [],
     status,

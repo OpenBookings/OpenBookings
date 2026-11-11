@@ -8,6 +8,7 @@ import {
   type Modifier,
 } from "@openbookings/pricing";
 import { applyLowestRates, deriveStatus, resolveStatus } from "./derive";
+import type { PricingRule } from "./rule-copy";
 import type {
   AriGridData,
   AvailabilityCell,
@@ -169,9 +170,12 @@ interface RateQueryRow {
   restriction_at: string | null;
 }
 
+/** Every rule on a plan, switched off ones too; only active ones are priced. */
+type ModifierWithId = Modifier & { id: string; is_active: boolean };
+
 interface ModifierQueryRow {
   rate_plan_id: string;
-  modifiers: Modifier[] | string;
+  modifiers: ModifierWithId[] | string;
 }
 
 interface PropertyRow {
@@ -389,11 +393,14 @@ LEFT JOIN "user" ru ON ru.id = rs.created_by
 ORDER BY sp.room_name, sp.name, d.d
 `;
 
-const MODIFIERS_SQL = `
+/** Every rule on each plan, switched off ones too (the editor lists them); pricing keeps the active ones. */
+export const MODIFIERS_SQL = `
 SELECT
   m.rate_plan_id,
   jsonb_agg(
     jsonb_build_object(
+      'id',                m.id,
+      'is_active',         m.is_active,
       'type',              m.type,
       'adjustment_type',   m.adjustment_type,
       'adjustment_value',  m.adjustment_value,
@@ -408,7 +415,6 @@ JOIN rooms r       ON r.id = rp.room_id
 JOIN properties p  ON p.id = r.property_id
 WHERE ${propertyReadAccessSql("$1")}
   AND p.id = $2
-  AND m.is_active
 GROUP BY m.rate_plan_id
 `;
 
@@ -523,8 +529,19 @@ export function addDays(isoDate: string, days: number): string {
   return toIsoDate(date);
 }
 
-function parseModifiers(value: Modifier[] | string): Modifier[] {
-  return typeof value === "string" ? (JSON.parse(value) as Modifier[]) : value;
+function parseModifiers(value: ModifierWithId[] | string): ModifierWithId[] {
+  return typeof value === "string" ? (JSON.parse(value) as ModifierWithId[]) : value;
+}
+
+function toPricingRule(m: ModifierWithId): PricingRule {
+  return {
+    id: m.id,
+    type: m.type,
+    adjustmentType: m.adjustment_type,
+    adjustmentValue: Number(m.adjustment_value),
+    triggerCondition: m.trigger_condition,
+    active: m.is_active,
+  };
 }
 
 function ruleFrom(
@@ -593,8 +610,11 @@ export async function loadAriGrid(
 
   const dates = enumerateDates(range);
   const dateIndex = new Map(dates.map((d, i) => [d, i]));
-  const modifiersByPlan = new Map<string, Modifier[]>(
+  const rulesByPlan = new Map<string, ModifierWithId[]>(
     modifierRows.map((row) => [row.rate_plan_id, parseModifiers(row.modifiers)]),
+  );
+  const modifiersByPlan = new Map<string, Modifier[]>(
+    [...rulesByPlan].map(([planId, rules]) => [planId, rules.filter((rule) => rule.is_active)]),
   );
 
   // ── Availability, keyed for the price pass to read back ──
@@ -760,6 +780,7 @@ export async function loadAriGrid(
         minStay: head.plan_min_stay,
         maxStay: head.plan_max_stay,
         modifiers,
+        rules: (rulesByPlan.get(head.rate_plan_id) ?? []).map(toPricingRule),
         hasStayDiscount: planHasStayDiscount,
         cells,
         status: deriveStatus(cells),

@@ -25,7 +25,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import { applyPendingMigrations } from "../../_lib/pending-migrations";
-import { AVAILABILITY_SQL, buildAvailabilityCell } from "./ari-query";
+import { AVAILABILITY_SQL, MODIFIERS_SQL, buildAvailabilityCell } from "./ari-query";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -335,6 +335,26 @@ describeWithDb("AVAILABILITY_SQL", () => {
     const all = await rows();
     expect(all).toHaveLength(5);
     expect(all.every((r) => r.on_sale === false)).toBe(true);
+  });
+
+  test("pricing rules: switched-off ones are listed for the editor, with their id", async () => {
+    const plan = (await db.query<{ id: string }>(`SELECT id FROM rate_plans WHERE room_id = $1 LIMIT 1`, [roomId])).rows[0];
+    await db.query(
+      `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
+       VALUES ($1, 'day_of_week', '{"days_of_week": [5, 6]}', 'flat', 30, true, 0),
+              ($1, 'length_of_stay', '{"min_nights": 7}', 'percent', -10, false, 1)`,
+      [plan.id],
+    );
+    const { rows: planRows } = await db.query<{ rate_plan_id: string; modifiers: { id: string; is_active: boolean; type: string }[] }>(
+      MODIFIERS_SQL,
+      [ownerUserId, propertyId],
+    );
+    const rules = planRows.find((r) => r.rate_plan_id === plan.id)?.modifiers ?? [];
+    expect(rules.map((r) => [r.type, r.is_active])).toEqual([
+      ["day_of_week", true],
+      ["length_of_stay", false],
+    ]);
+    expect(rules.every((r) => typeof r.id === "string")).toBe(true);
   });
 
   test("a published room is on sale", async () => {
