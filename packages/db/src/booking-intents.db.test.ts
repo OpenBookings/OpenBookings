@@ -46,6 +46,7 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   stayTotal: 200,
   touristTax: 6.5,
   touristTaxLines: [],
+  vatSplit: null,
 });
 
 const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({

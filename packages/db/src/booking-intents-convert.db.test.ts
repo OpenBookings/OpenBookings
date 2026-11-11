@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import type { VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import type { LifecycleDb } from "./booking-lifecycle";
 import {
@@ -43,6 +44,7 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   stayTotal: 219.5,
   touristTax: 12,
   touristTaxLines: [{ label: "€3.00 per person per night", amount: 12, effectiveFrom: "2026-01-01" }],
+  vatSplit: null,
 });
 
 const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
@@ -165,6 +167,39 @@ describeWithDb("converting a paid booking intent", () => {
     expect(Number(booking.tourist_tax_cents)).toBe(2400);
     expect(Number(booking.total_cents)).toBe(46300);
     expect(Number(booking.commission_cents)).toBe(1976);
+  });
+
+  test("convertIntentToBooking copies vat_split to the reservation unchanged", async () => {
+    const vatSplit: VatSplit = {
+      nights: [
+        {
+          date: "2031-11-10",
+          room: { gross: 81.5, rate: 9, vat: 6.73 },
+          breakfast: { gross: 18, rate: 9, vat: 1.49 },
+        },
+        { date: "2031-11-11", room: { gross: 120, rate: 9, vat: 9.91 }, breakfast: null },
+      ],
+      totals: [{ part: "accommodation", gross: 201.5, rate: 9, vat: 16.64 }],
+      breakfastValueMissing: false,
+    };
+    const rooms = [{ ...room(ids.roomId, ids.ratePlanId), vatSplit }];
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: snapshot(rooms),
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    const result = await convert(created.intentId);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+    const { rows } = await db.query(`SELECT vat_split FROM reservations WHERE booking_id = $1`, [result.bookingId]);
+    expect(rows[0].vat_split).toEqual(vatSplit);
+    // And the intent read back carries it too.
+    const { rows: ir } = await db.query(`SELECT vat_split FROM booking_intent_rooms WHERE intent_id = $1`, [created.intentId]);
+    expect(ir[0].vat_split).toEqual(vatSplit);
   });
 
   test("the booking keeps the commission split the intent recorded", async () => {

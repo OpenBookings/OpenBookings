@@ -218,6 +218,27 @@ describeWithDb("stay quote against Postgres", () => {
     expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotal: 300 });
   });
 
+  test("selection: stores a VAT split for an NL breakfast rate", async () => {
+    await db.query(`UPDATE properties SET breakfast_value = 18 WHERE id = $1`, [ids.propertyId]);
+    await db.query(`UPDATE rooms SET max_children = 1 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [ids.ratePlanId]);
+    const r = await select([double({ children: 1, infants: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    const split = r.rooms[0].vatSplit;
+    expect(split).not.toBeNull();
+    expect(split!.nights).toHaveLength(3);
+    // 3 people (infants don't count) x EUR 18 = 54 of the night's price goes to breakfast.
+    expect(split!.nights[0].breakfast!.gross).toBe(54);
+    expect(split!.breakfastValueMissing).toBe(false);
+  });
+
+  test("selection: a property in an unlisted country books fine with vat_split null", async () => {
+    await db.query(`UPDATE properties SET country = 'CH' WHERE id = $1`, [ids.propertyId]);
+    const r = await select([double()]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0].vatSplit).toBeNull();
+  });
+
   test("quote: each rate says which discount applied", async () => {
     await db.query(
       `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)

@@ -102,6 +102,7 @@ describeWithDb("checkout summary of a booking intent", () => {
     stayTotal: price * NIGHTS.length,
     touristTax: tax,
     touristTaxLines: [{ label: "€3.25 per person per night", amount: tax, effectiveFrom: "2031-01-01" }],
+    vatSplit: null,
   });
 
   /** A Double on "Room only" and a Garden Suite on "Non-refundable", in that order. */

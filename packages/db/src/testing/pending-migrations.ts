@@ -28,6 +28,7 @@ export const PENDING_MIGRATIONS: string[] = [
   "0042_infants_pay_at_property.sql",
   "0043_drop_property_beds.sql",
   "0044_intent_breakdown.sql",
+  "0045_vat_split.sql",
 ];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import {
   loadStayAvailability,
   roomReasons,
@@ -12,6 +13,7 @@ import {
   perRoomParty,
   resolveRoom,
   snapshotTier,
+  splitVat,
   type AppliedDiscount,
   type PropertyCancellationTier,
   type ResolvedRoom,
@@ -86,6 +88,10 @@ export type VisibleProperty = {
   checkInTime: string | null;
   cancellationTier: PropertyCancellationTier;
   commissionRate: string;
+  country: string;
+  accommodationType: "hotel";
+  /** Euros per person per night, VAT-inclusive; null = not given. */
+  breakfastValue: number | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,14 +109,15 @@ export async function loadVisibleProperty(
   const column = "id" in by ? "id" : "slug";
   const { rows } = await db.query(
     `SELECT id, slug, timezone, to_char(check_in_time, 'HH24:MI') AS check_in_time,
-            cancellation_tier, commission_rate::text AS commission_rate
+            cancellation_tier, commission_rate::text AS commission_rate,
+            country, accommodation_type, breakfast_value::text AS breakfast_value
      FROM properties
      WHERE ${column} = $1 AND is_active AND (NOT is_demo OR $2::boolean)
      LIMIT 1`,
     ["id" in by ? by.id : by.slug, testing],
   );
   const row = rows[0] as
-    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string }
+    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string; country: string; accommodation_type: "hotel"; breakfast_value: string | null }
     | undefined;
   if (!row) return null;
   return {
@@ -120,6 +127,9 @@ export async function loadVisibleProperty(
     checkInTime: row.check_in_time,
     cancellationTier: row.cancellation_tier,
     commissionRate: row.commission_rate,
+    country: row.country,
+    accommodationType: row.accommodation_type,
+    breakfastValue: row.breakfast_value === null ? null : Number(row.breakfast_value),
   };
 }
 
@@ -450,24 +460,43 @@ export async function priceSelection(
     }
   }
 
-  const rooms: IntentRoomInput[] = picked.map(({ s, plan }) => ({
-    roomId: s.roomId,
-    ratePlanId: s.ratePlanId,
-    adults: s.adults,
-    children: s.children,
-    infants: s.infants,
-    cots: s.cots,
-    extraBeds: s.extraBeds,
-    payAtProperty: plan.priced.pay_at_property_total,
-    discount: plan.priced.discount && { label: plan.priced.discount.label, amount: plan.priced.discount.amount },
-    rateNights: plan.priced.rate_nights,
-    extraGuests: plan.priced.extra_guests,
-    payAtPropertyLines: plan.priced.pay_at_property,
-    nights: plan.priced.priced_nights,
-    stayTotal: plan.priced.room_price,
-    touristTax: plan.priced.tourist_tax.total,
-    touristTaxLines: plan.priced.tourist_tax.lines,
-  }));
+  const rooms: IntentRoomInput[] = picked.map(({ s, plan }) => {
+    // The split covers the charged nights; infants take no breakfast value.
+    const vatSplit = splitVat({
+      country: property.country,
+      type: property.accommodationType,
+      nights: plan.priced.priced_nights,
+      includesBreakfast: plan.row.includes_breakfast,
+      breakfastValue: property.breakfastValue,
+      people: s.adults + s.children,
+    });
+    if (!vatSplit) {
+      Sentry.captureMessage("vat split unavailable", {
+        level: "warning",
+        tags: { area: "booking" },
+        extra: { propertyId: property.id, country: property.country },
+      });
+    }
+    return {
+      roomId: s.roomId,
+      ratePlanId: s.ratePlanId,
+      adults: s.adults,
+      children: s.children,
+      infants: s.infants,
+      cots: s.cots,
+      extraBeds: s.extraBeds,
+      payAtProperty: plan.priced.pay_at_property_total,
+      discount: plan.priced.discount && { label: plan.priced.discount.label, amount: plan.priced.discount.amount },
+      rateNights: plan.priced.rate_nights,
+      extraGuests: plan.priced.extra_guests,
+      payAtPropertyLines: plan.priced.pay_at_property,
+      nights: plan.priced.priced_nights,
+      stayTotal: plan.priced.room_price,
+      touristTax: plan.priced.tourist_tax.total,
+      touristTaxLines: plan.priced.tourist_tax.lines,
+      vatSplit,
+    };
+  });
   const roomsTotal = round2(rooms.reduce((sum, r) => sum + r.stayTotal, 0));
   const touristTaxTotal = round2(rooms.reduce((sum, r) => sum + r.touristTax, 0));
 

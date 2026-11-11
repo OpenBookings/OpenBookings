@@ -102,6 +102,10 @@ export const properties = pgTable(
     city: varchar("city", { length: 100 }).notNull(),
     postalCode: varchar("postal_code", { length: 20 }),
     country: char("country", { length: 2 }).notNull(),
+    /** Sets the VAT rates for the split (0045). */
+    accommodationType: text("accommodation_type").notNull().default("hotel"),
+    /** Euros per person per night, VAT-inclusive, for the breakfast part of the split (0045). */
+    breakfastValue: numeric("breakfast_value", { precision: 10, scale: 2 }),
     timezone: varchar("timezone", { length: 50 }).notNull(),
     location: geographyPoint("location").notNull(),
     /**
@@ -684,6 +688,8 @@ export const reservations = pgTable(
     extraBeds: smallint("extra_beds").notNull().default(0),
     /** What the guest owes the hotel for the cots and extra beds, fixed at booking. Not in `totalAmount` (0042). */
     payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** VAT inside each night, copied from the intent. Null for bookings from before 0045. */
+    vatSplit: jsonb("vat_split"),
     totalNights: integer("total_nights").notNull(),
     pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
@@ -846,6 +852,8 @@ export const bookingIntentRooms = pgTable(
     extraGuests: jsonb("extra_guests").notNull().default(sql`'[]'::jsonb`),
     /** Cot and extra bed lines behind `payAtPropertyAmount` (0044). */
     payAtPropertyLines: jsonb("pay_at_property_lines").notNull().default(sql`'[]'::jsonb`),
+    /** VAT inside each night, room and breakfast, for the host's books. Null when unknown (0045). */
+    vatSplit: jsonb("vat_split"),
     stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),

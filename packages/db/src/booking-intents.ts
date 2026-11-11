@@ -1,4 +1,4 @@
-import type { ExtraGuestLine, PayAtPropertyLine, TouristTaxLine } from "@openbookings/pricing";
+import type { ExtraGuestLine, PayAtPropertyLine, TouristTaxLine, VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import { recordBookingEvent } from "./booking-events";
 import type { VatTreatment } from "./billing-types";
@@ -34,6 +34,8 @@ export type IntentRoomInput = {
   stayTotal: number;
   touristTax: number;
   touristTaxLines: TouristTaxLine[];
+  /** VAT inside each night, for the host's books; null when the country has no rates (0045). */
+  vatSplit: VatSplit | null;
 };
 
 /**
@@ -203,9 +205,9 @@ export async function createBookingIntent(
              (intent_id, room_id, rate_plan_id, adults, children, nights, stay_total,
               tourist_tax_amount, tourist_tax_lines, sort_order, cots, extra_beds,
               infants, pay_at_property_amount, discount_label, discount_amount,
-              rate_nights, extra_guests, pay_at_property_lines)
+              rate_nights, extra_guests, pay_at_property_lines, vat_split)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16,
-                   $17::jsonb, $18::jsonb, $19::jsonb)`,
+                   $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb)`,
           [
             intentId,
             r.roomId,
@@ -226,6 +228,7 @@ export async function createBookingIntent(
             JSON.stringify(r.rateNights),
             JSON.stringify(r.extraGuests),
             JSON.stringify(r.payAtPropertyLines),
+            r.vatSplit && JSON.stringify(r.vatSplit),
           ],
         );
       }
@@ -280,7 +283,8 @@ SELECT
       'nights',          r.nights,
       'stayTotal',       r.stay_total,
       'touristTax',      r.tourist_tax_amount,
-      'touristTaxLines', r.tourist_tax_lines
+      'touristTaxLines', r.tourist_tax_lines,
+      'vatSplit',        r.vat_split
     ) ORDER BY r.sort_order, r.id)
     FROM booking_intent_rooms r WHERE r.intent_id = bi.id
   ), '[]'::json) AS rooms
@@ -575,8 +579,8 @@ export async function convertIntentToBooking(
         `INSERT INTO reservations
            (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night,
             total_amount, tourist_tax_amount, tourist_tax_lines, cots, extra_beds,
-            infants, pay_at_property_amount)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14)
+            infants, pay_at_property_amount, vat_split)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15::jsonb)
          RETURNING id`,
         [
           bookingId,
@@ -593,6 +597,7 @@ export async function convertIntentToBooking(
           r.extraBeds,
           r.infants,
           r.payAtProperty,
+          r.vatSplit && JSON.stringify(r.vatSplit),
         ],
       );
       const reservationId = (reservationRows[0] as { id: string }).id;
