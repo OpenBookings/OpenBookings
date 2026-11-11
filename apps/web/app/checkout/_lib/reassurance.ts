@@ -29,6 +29,7 @@ export function payReassurance(steps: PolicyStep[][]): { tone: 'free' | 'neutral
   if (steps.length > 0 && steps.every((s) => s.some((step) => step.kind === 'non_refundable'))) {
     return { tone: 'neutral', text: 'Non-refundable · you confirmed this above' };
   }
+  if (steps.length > 0 && frees.every((f) => !f)) return { tone: 'neutral', text: 'No free cancellation. See the summary.' };
   return { tone: 'neutral', text: 'Cancellation terms differ per room. See the summary.' };
 }
 

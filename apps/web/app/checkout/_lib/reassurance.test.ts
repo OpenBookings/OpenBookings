@@ -9,6 +9,9 @@ describe("holdLabel", () => {
   test("10 minutes left: the clock time, not urgent", () => {
     expect(holdLabel(10 * MIN, 0, format)).toEqual({ text: "Room held until 14:30", urgent: false });
   });
+  test("121 s left: still the clock time", () => {
+    expect(holdLabel(121_000, 0, format)).toEqual({ text: "Room held until 14:30", urgent: false });
+  });
   test("exactly 120 s left is already urgent", () => {
     expect(holdLabel(120_000, 0, format)).toEqual({ text: "2 min left", urgent: true });
   });
@@ -43,6 +46,19 @@ describe("payReassurance", () => {
     expect(payReassurance([[nonRefundable], [nonRefundable]])).toEqual({
       tone: "neutral",
       text: "Non-refundable · you confirmed this above",
+    });
+  });
+  const noFree = "No free cancellation. See the summary.";
+  test("one room past its deadline: no free cancellation", () => {
+    expect(payReassurance([[after]])).toEqual({ tone: "neutral", text: noFree });
+  });
+  test("past-deadline room plus a non-refundable room", () => {
+    expect(payReassurance([[after], [nonRefundable]])).toEqual({ tone: "neutral", text: noFree });
+  });
+  test("one free room plus one past-deadline room differ", () => {
+    expect(payReassurance([[free("2026-12-10T13:00:00.000Z", "Thu 10 Dec, 14:00"), after], [after]])).toEqual({
+      tone: "neutral",
+      text: "Cancellation terms differ per room. See the summary.",
     });
   });
   test("mixed", () => {
