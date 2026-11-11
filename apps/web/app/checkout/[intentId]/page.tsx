@@ -129,6 +129,14 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
         ratePlanName: room.ratePlanName,
         guestsLabel: formatGuests(room.adults, room.children),
       }))}
+      ledgerRooms={summary.rooms.map((room) => ({
+        roomName: room.roomName,
+        rateNights: room.rateNights,
+        extraGuests: room.extraGuests,
+        discount: room.discount,
+        touristTaxLines: room.touristTaxLines,
+        payAtPropertyLines: room.payAtPropertyLines,
+      }))}
       checkInDay={formatDayNumber(summary.checkIn)}
       checkInMonth={formatWeekdayMonth(summary.checkIn)}
       checkOutDay={formatDayNumber(summary.checkOut)}

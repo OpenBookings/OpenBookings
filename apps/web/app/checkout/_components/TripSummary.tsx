@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { ShieldCheck } from 'lucide-react';
+import * as Sentry from '@sentry/nextjs';
 import { useCheckoutElements } from '@stripe/react-stripe-js/checkout';
+import { buildLedger, formatMoney, ledgerPayNowCents, type LedgerRoom } from '../_lib/ledger';
 
 /**
  * The left half of checkout: what the guest is about to buy.
@@ -56,6 +59,9 @@ export type TripSummaryProps = {
   checkInTime: string | null;
   checkOutTime: string | null;
   nightsLabel: string;
+
+  /** Each room's price breakdown, for the ledger. In the same order as `rooms`. */
+  ledgerRooms: LedgerRoom[];
 
   /** One entry per distinct set of terms: rooms on the same terms share one. */
   cancellations: TripSummaryCancellation[];
@@ -291,38 +297,89 @@ function LedgerSkeleton() {
 }
 
 /**
- * Read back out of the Checkout Session rather than from our own booking rows,
- * so the split shown here cannot disagree with the one being charged.
+ * The total is Stripe's. The rows come from our own snapshot of the booking and
+ * are shown only when they add up to it to the cent; otherwise Stripe's own
+ * line items are shown, so the ledger can never disagree with the charge.
  */
-function Ledger() {
+function Ledger({ propertyName, ledgerRooms }: { propertyName: string; ledgerRooms: LedgerRoom[] }) {
   const checkoutState = useCheckoutElements();
+  const reported = useRef(false);
+
+  const stripeTotalCents =
+    checkoutState.type === 'success' ? checkoutState.checkout.total.total.minorUnitsAmount : null;
+  const ledger = stripeTotalCents === null ? null : buildLedger(ledgerRooms, propertyName, stripeTotalCents);
+  // Old intents have no breakdown to show; that is expected, not a mismatch.
+  const hasBreakdown = ledgerRooms.length > 0 && ledgerRooms.every((room) => room.rateNights.length > 0);
+  const mismatch = stripeTotalCents !== null && hasBreakdown && ledger === null;
+
+  useEffect(() => {
+    if (!mismatch || reported.current) return;
+    reported.current = true;
+    Sentry.captureMessage('checkout ledger mismatch', {
+      level: 'warning',
+      tags: { area: 'checkout' },
+      extra: { payNowCents: ledgerPayNowCents(ledgerRooms), stripeTotalCents },
+    });
+  }, [mismatch, ledgerRooms, stripeTotalCents]);
 
   if (checkoutState.type !== 'success') return <LedgerSkeleton />;
 
   const { checkout } = checkoutState;
 
+  if (!ledger) {
+    return (
+      <div>
+        <div className="space-y-3.5">
+          {checkout.lineItems.map((item) => (
+            <LedgerRow
+              key={item.id}
+              name={item.name}
+              // Stripe returns the unit price already localised. The quantity is
+              // only worth showing when there is more than one of something.
+              detail={item.quantity > 1 ? `${item.unitAmount.amount} × ${item.quantity}` : undefined}
+              amount={item.total.amount}
+            />
+          ))}
+        </div>
+
+        {/* The one rule the ledger keeps: it separates the parts from the sum. */}
+        <div className="mt-5 flex items-baseline justify-between gap-6 border-t border-white/20 pt-5">
+          <span className="text-[15px] font-medium text-white/70">Total incl. tax &amp; fees</span>
+          <span className="font-serif text-3xl leading-none text-white tabular-nums sm:text-4xl">
+            {checkout.total.total.amount}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="space-y-3.5">
-        {checkout.lineItems.map((item) => (
-          <LedgerRow
-            key={item.id}
-            name={item.name}
-            // Stripe returns the unit price already localised. The quantity is
-            // only worth showing when there is more than one of something.
-            detail={item.quantity > 1 ? `${item.unitAmount.amount} × ${item.quantity}` : undefined}
-            amount={item.total.amount}
-          />
+        {ledger.rows.map((row, i) => (
+          <LedgerRow key={`${row.kind}-${i}`} name={row.label} detail={row.detail} amount={formatMoney(row.amount)} />
         ))}
       </div>
 
-      {/* The one rule the ledger keeps: it separates the parts from the sum. */}
       <div className="mt-5 flex items-baseline justify-between gap-6 border-t border-white/20 pt-5">
-        <span className="text-[15px] font-medium text-white/70">Total incl. tax &amp; fees</span>
+        <span className="text-[15px] font-medium text-white/70">Total for your stay</span>
         <span className="font-serif text-3xl leading-none text-white tabular-nums sm:text-4xl">
-          {checkout.total.total.amount}
+          {formatMoney(ledger.totalForStay)}
         </span>
       </div>
+
+      {ledger.atProperty && (
+        <div className="mt-5 space-y-3 rounded-2xl border border-white/15 bg-white/[0.06] p-5 backdrop-blur-md">
+          <LedgerRow name={`Pay now · charged by ${propertyName}`} amount={formatMoney(ledger.payNow)} />
+          <LedgerRow
+            name={ledger.atProperty.label}
+            detail={ledger.atProperty.detail}
+            amount={formatMoney(ledger.atProperty.amount)}
+          />
+        </div>
+      )}
+
+      <p className="mt-4 text-xs text-white/60">Incl. VAT. No booking or card fees.</p>
     </div>
   );
 }
@@ -451,7 +508,7 @@ export function TripSummary(props: TripSummaryProps) {
         nightsLabel={props.nightsLabel}
       />
 
-      <Ledger />
+      <Ledger propertyName={props.propertyName} ledgerRooms={props.ledgerRooms} />
 
       <PolicyFooter cancellations={props.cancellations} />
     </section>
