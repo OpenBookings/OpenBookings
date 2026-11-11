@@ -26,7 +26,6 @@ export const SECTION_LABELS: Record<SectionId, string> = {
 
 export type ImageGroup = "hero-image" | "logo" | "gallery";
 
-export type CotPolicy = "free" | "paid" | "unavailable";
 
 /** Columns of `properties` this editor reads or writes. Times are "HH:MM". */
 export interface PropertyRecord {
@@ -64,9 +63,6 @@ export interface PropertyContentRecord {
   prepaymentRequired: boolean;
   childrenWelcome: boolean;
   minCheckInAge: number | null;
-  cotPolicy: CotPolicy | null;
-  cotFee: number | null;
-  extraBedFee: number | null;
   petsAllowed: boolean;
   paymentMethods: string[];
   legalCompanyName: string | null;

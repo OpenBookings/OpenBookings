@@ -59,10 +59,6 @@ interface PropertyRow {
   prepayment_required: boolean | null;
   children_welcome: boolean | null;
   min_check_in_age: number | null;
-  cot_policy: "free" | "paid" | "unavailable" | null;
-  /** bigint — node-postgres hands int8 back as a string. */
-  cot_fee: string | null;
-  extra_bed_fee: string | null;
   pets_allowed: boolean | null;
   payment_methods: string[] | null;
   legal_company_name: string | null;
@@ -83,9 +79,6 @@ interface CollectionsRow {
   /** json_build_object keeps numeric as a JSON number; the date as "YYYY-MM-DD". */
   tourist_tax_rules: TouristTaxRuleRecord[] | null;
 }
-
-/** int8 arrives as a string; `+` on it concatenates. Convert deliberately. */
-const money = (v: string | null): number | null => (v === null ? null : Number(v));
 
 export async function loadEditorData(
   session: SessionLike,
@@ -108,7 +101,7 @@ export async function loadEditorData(
        c.cta_headline, c.cta_body, c.fine_print,
        c.reception_24h, c.prepayment_required,
        c.children_welcome, c.min_check_in_age,
-       c.cot_policy, c.cot_fee, c.extra_bed_fee, c.pets_allowed, c.payment_methods,
+       c.pets_allowed, c.payment_methods,
        c.legal_company_name, c.contact_email, c.contact_phone,
        c.company_registration, c.vat_number,
        p.commission_rate,
@@ -183,9 +176,6 @@ export async function loadEditorData(
     prepaymentRequired: property.prepayment_required ?? true,
     childrenWelcome: property.children_welcome ?? true,
     minCheckInAge: property.min_check_in_age,
-    cotPolicy: property.cot_policy,
-    cotFee: money(property.cot_fee),
-    extraBedFee: money(property.extra_bed_fee),
     petsAllowed: property.pets_allowed ?? false,
     paymentMethods: property.payment_methods ?? [],
     legalCompanyName: property.legal_company_name,

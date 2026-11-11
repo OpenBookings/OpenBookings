@@ -30,21 +30,6 @@ const optionalTime = z
   .transform((v) => (v === "" ? null : v));
 
 /**
- * An optional money input. Whole currency units only — the column is bigint and
- * every consumer treats it as an integer. "" is NULL, not 0: "no extra-bed fee
- * stated" and "extra beds are free" are different claims to a guest.
- */
-const optionalMoney = z
-  .union([
-    z.literal(""),
-    z.coerce
-      .number({ error: "Enter an amount in whole euros." })
-      .int("Enter a whole amount, without cents.")
-      .min(0, "An amount cannot be negative."),
-  ])
-  .transform((v) => (v === "" ? null : v));
-
-/**
  * An HTML checkbox posts "on" when ticked and nothing at all when not — so a
  * missing key is a real answer (unticked), not a malformed submission.
  */
@@ -90,18 +75,11 @@ export const policiesSchema = z
       .int("Enter a whole number.")
       .min(1, "Enter a plausible minimum age.")
       .max(99, "Enter a plausible minimum age."),
-    cotPolicy: z.enum(["free", "paid", "unavailable"]).nullable().catch(null),
-    cotFee: optionalMoney,
-    extraBedFee: optionalMoney,
     petsAllowed: checkbox,
     paymentMethods: z
       .array(z.enum(PAYMENT_METHODS))
       .min(1, "Pick at least one payment method."),
     finePrint: textRows("Add at least one line of fine print."),
-  })
-  .refine((v) => v.cotPolicy !== "paid" || v.cotFee !== null, {
-    path: ["cotFee"],
-    message: "State what you charge for a cot, or change the cot policy.",
   });
 
 export const locationSchema = z.object({
