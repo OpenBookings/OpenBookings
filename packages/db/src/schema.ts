@@ -840,6 +840,12 @@ export const bookingIntentRooms = pgTable(
     discountLabel: text("discount_label"),
     discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }),
     nights: jsonb("nights").notNull(),
+    /** Base rate per night, before extra guests and discount, for checkout (0044). Empty on older intents. */
+    rateNights: jsonb("rate_nights").notNull().default(sql`'[]'::jsonb`),
+    /** Guests above base occupancy, already in `stayTotal` (0044). */
+    extraGuests: jsonb("extra_guests").notNull().default(sql`'[]'::jsonb`),
+    /** Cot and extra bed lines behind `payAtPropertyAmount` (0044). */
+    payAtPropertyLines: jsonb("pay_at_property_lines").notNull().default(sql`'[]'::jsonb`),
     stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),

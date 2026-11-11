@@ -33,6 +33,12 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   extraBeds: 0,
   payAtProperty: 0,
   discount: null,
+  rateNights: [
+    { date: "2031-11-10", price: 100 },
+    { date: "2031-11-11", price: 100 },
+  ],
+  extraGuests: [],
+  payAtPropertyLines: [],
   nights: [
     { date: "2031-11-10", price: 100 },
     { date: "2031-11-11", price: 100 },
@@ -218,6 +224,35 @@ describeWithDb("booking intents against Postgres", () => {
     expect(intent!.bookingId).toBeNull();
     expect(intent!.rooms.map(({ id: _id, ...r }) => r)).toEqual(rooms);
     expect(await held()).toEqual([2, 2]);
+  });
+
+  test("an intent round-trips rateNights, extraGuests and payAtPropertyLines", async () => {
+    const r: IntentRoomInput = {
+      ...room(ids.roomId, ids.ratePlanId),
+      adults: 3,
+      children: 1,
+      cots: 1,
+      extraBeds: 1,
+      payAtProperty: 70,
+      rateNights: [
+        { date: "2031-11-10", price: 90 },
+        { date: "2031-11-11", price: 90 },
+      ],
+      extraGuests: [
+        { kind: "adult", count: 1, per_night: 10, nights: 2, amount: 20 },
+        { kind: "child", count: 1, per_night: 0, nights: 2, amount: 0 },
+      ],
+      payAtPropertyLines: [
+        { label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 },
+        { label: "Extra beds", count: 1, fee_per_night: 25, nights: 2, amount: 50 },
+      ],
+    };
+    const { intentId } = await created(guest, [r]);
+    const intent = await loadIntent(db, { intentId, userId: guest });
+    const { id: _id, ...stored } = intent!.rooms[0]!;
+    expect(stored.rateNights).toEqual(r.rateNights);
+    expect(stored.extraGuests).toEqual(r.extraGuests);
+    expect(stored.payAtPropertyLines).toEqual(r.payAtPropertyLines);
   });
 
   test("new intent abandons the previous open one", async () => {

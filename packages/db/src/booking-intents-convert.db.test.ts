@@ -30,6 +30,12 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   extraBeds: 0,
   payAtProperty: 20,
   discount: { label: "Weekly discount", amount: 10 },
+  rateNights: [
+    { date: "2031-11-10", price: 99.5 },
+    { date: "2031-11-11", price: 120 },
+  ],
+  extraGuests: [],
+  payAtPropertyLines: [{ label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 }],
   nights: [
     { date: "2031-11-10", price: 99.5 },
     { date: "2031-11-11", price: 120 },
