@@ -67,7 +67,7 @@ export function buildBooking(
   rooms: DbRoom[],
   views: RoomView[],
   sel: Record<string, number>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; infants?: number },
 ): Booking {
   const units: Unit[] = [];
   let total = 0;
@@ -88,7 +88,7 @@ export function buildBooking(
     }
   });
   if (Number.isNaN(total)) return { ok: false, reason: "unpriced" };
-  const split = splitParty(party.adults, party.children, units);
+  const split = splitParty(party, units);
   if (!split.ok) return split;
   return { ok: true, rooms: split.rooms, expectedTotal: Math.round(total * 100) / 100 };
 }
@@ -102,7 +102,7 @@ export function bookingMessage(
   rooms: DbRoom[],
   views: RoomView[],
   sel: Record<string, number>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; infants?: number },
 ): string | null {
   if (b.ok || b.reason === "unpriced") return null;
   if (b.reason === "too_many_rooms") return "One room per adult at most";

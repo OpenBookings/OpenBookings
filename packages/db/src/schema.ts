@@ -332,6 +332,11 @@ export const rateModifiers = pgTable(
       "rate_modifiers_discount_sign",
       sql`${table.type} NOT IN ('length_of_stay', 'early_bird') OR ${table.adjustmentValue} < 0`,
     ),
+    // Discounts are a percentage; fixed amounts are per-night surcharges only (0042).
+    check(
+      "rate_modifiers_discount_percent",
+      sql`${table.type} NOT IN ('length_of_stay', 'early_bird') OR ${table.adjustmentType} = 'percent'`,
+    ),
   ],
 );
 
@@ -677,9 +682,13 @@ export const reservations = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull().default(1),
     children: integer("children").notNull().default(0),
-    /** Cots and extra beds booked with the room, priced into `nights` (0040). */
+    /** Under 2: no place, no fee (0042). */
+    infants: smallint("infants").notNull().default(0),
+    /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
     cots: smallint("cots").notNull().default(0),
     extraBeds: smallint("extra_beds").notNull().default(0),
+    /** What the guest owes the hotel for the cots and extra beds, fixed at booking. Not in `totalAmount` (0042). */
+    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
     totalNights: integer("total_nights").notNull(),
     pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
@@ -825,9 +834,16 @@ export const bookingIntentRooms = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull(),
     children: integer("children").notNull().default(0),
-    /** Cots and extra beds booked with the room, priced into `nights` (0040). */
+    /** Under 2: no place, no fee (0042). */
+    infants: smallint("infants").notNull().default(0),
+    /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
     cots: smallint("cots").notNull().default(0),
     extraBeds: smallint("extra_beds").notNull().default(0),
+    /** What the guest owes the hotel for the cots and extra beds. Not in `stayTotal` (0042). */
+    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** The stay discount already in `stayTotal`, for checkout: "Weekly discount", 42.00 (0042). */
+    discountLabel: text("discount_label"),
+    discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }),
     nights: jsonb("nights").notNull(),
     stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),

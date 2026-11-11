@@ -1,5 +1,5 @@
 import type { SelectedRoom } from "./quote";
-import { MAX_ADULTS, MAX_CHILDREN, MAX_ROOMS } from "./stay-input";
+import { MAX_ADULTS, MAX_CHILDREN, MAX_INFANTS_PER_ROOM, MAX_ROOMS } from "./stay-input";
 
 /** The body of `POST /api/booking-intents`, after shape checks. Prices and stay rules are `priceSelection`'s job. */
 export type IntentRequest = {
@@ -49,6 +49,10 @@ export function parseIntentRequest(body: unknown): { ok: true; value: IntentRequ
         errors.push(`rooms[${n}] needs a roomId, a ratePlanId, at least one adult and a whole number of children`);
         return;
       }
+      if (!wholeIn(room.infants ?? 0, 0, MAX_INFANTS_PER_ROOM)) {
+        errors.push(`rooms[${n}] infants must be a whole number from 0 to ${MAX_INFANTS_PER_ROOM}`);
+        return;
+      }
       // What the room takes is priceSelection's check; this is only the shape.
       if (!wholeIn(room.cots ?? 0, 0, MAX_EXTRAS) || !wholeIn(room.extraBeds ?? 0, 0, MAX_EXTRAS)) {
         errors.push(`rooms[${n}] cots and extraBeds must be whole numbers from 0 to ${MAX_EXTRAS}`);
@@ -59,6 +63,7 @@ export function parseIntentRequest(body: unknown): { ok: true; value: IntentRequ
         ratePlanId: room.ratePlanId,
         adults: room.adults as number,
         children: (room.children ?? 0) as number,
+        infants: (room.infants ?? 0) as number,
         cots: (room.cots ?? 0) as number,
         extraBeds: (room.extraBeds ?? 0) as number,
       });

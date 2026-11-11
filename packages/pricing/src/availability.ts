@@ -92,12 +92,17 @@ export function stayRuleReasons(i: {
 }
 
 /** The party one room has to hold when a booking spreads over several rooms. */
-export function perRoomParty(i: { adults: number; children: number; rooms: number }): {
+export function perRoomParty(i: { adults: number; children: number; infants?: number; rooms: number }): {
   adults: number
   children: number
+  infants: number
 } {
   const rooms = Math.max(1, i.rooms)
-  return { adults: Math.ceil(i.adults / rooms), children: Math.ceil(i.children / rooms) }
+  return {
+    adults: Math.ceil(i.adults / rooms),
+    children: Math.ceil(i.children / rooms),
+    infants: Math.ceil((i.infants ?? 0) / rooms),
+  }
 }
 
 /** The highest-priority reason among those given, or null. */

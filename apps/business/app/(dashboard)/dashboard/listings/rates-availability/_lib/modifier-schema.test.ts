@@ -43,8 +43,17 @@ describe("modifierSchema", () => {
   });
 
   test("the direction becomes the sign, and a discount kind always lowers the price", () => {
-    expect(modifierSchema.parse(rule({ direction: "down" })).adjustmentValue).toBe(-30);
-    expect(modifierSchema.parse(rule({ kind: "length_of_stay", direction: "up", minNights: "3" })).adjustmentValue).toBe(-30);
+    expect(modifierSchema.parse(rule({ direction: "down", adjustmentType: "percent", amount: "10" })).adjustmentValue).toBe(-10);
+    expect(
+      modifierSchema.parse(rule({ kind: "length_of_stay", direction: "up", adjustmentType: "percent", minNights: "3" })).adjustmentValue,
+    ).toBe(-30);
+  });
+
+  test("a fixed amount is only a per-night surcharge: anything that lowers the price is a percentage", () => {
+    expect(errorOn({ kind: "length_of_stay", minNights: "7" }, "adjustmentType")).toBe("A discount is a percentage.");
+    expect(errorOn({ kind: "early_bird", daysBeforeArrival: "30" }, "adjustmentType")).toBe("A discount is a percentage.");
+    expect(errorOn({ direction: "down" }, "adjustmentType")).toBe("A discount is a percentage.");
+    expect(modifierSchema.safeParse(rule({ kind: "last_minute", daysTillArrival: "3" })).success).toBe(true);
   });
 
   test("a percentage is 1 to 90, a flat amount 1 to 9999 euros", () => {

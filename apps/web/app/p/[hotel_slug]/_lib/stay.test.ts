@@ -12,6 +12,7 @@ describe("stayFromParams", () => {
       nights: 3,
       adults: 2,
       children: 0,
+      infants: 0,
       rooms: 1,
     });
   });
@@ -47,12 +48,13 @@ describe("stayFromParams", () => {
 
 describe("stayToParams", () => {
   test("round-trips through stayFromParams", () => {
-    const stay = { checkIn: "2026-12-16", checkOut: "2026-12-20", adults: 3, children: 1, rooms: 2 };
+    const stay = { checkIn: "2026-12-16", checkOut: "2026-12-20", adults: 3, children: 1, infants: 1, rooms: 2 };
     expect(stayFromParams(stayToParams(stay), TODAY)).toEqual({ ...stay, nights: 4 });
+    expect(stayToParams({ ...stay, infants: 0 }).has("infants")).toBe(false);
   });
 
   test("leaves out children when there are none", () => {
-    const p = stayToParams({ checkIn: "2026-12-16", checkOut: "2026-12-20", adults: 2, children: 0, rooms: 1 });
+    const p = stayToParams({ checkIn: "2026-12-16", checkOut: "2026-12-20", adults: 2, children: 0, infants: 0, rooms: 1 });
     expect(p.toString()).toBe("checkin=2026-12-16&checkout=2026-12-20&adults=2&rooms=1");
   });
 });
@@ -85,10 +87,19 @@ describe("withStay", () => {
       checkOut: "2026-12-22",
       adults: 3,
       children: 1,
+      infants: 1,
       rooms: 2,
     });
     expect(next.get("utm")).toBe("x");
-    expect(stayFromParams(next, TODAY)).toEqual({ checkIn: "2026-12-20", checkOut: "2026-12-22", nights: 2, adults: 3, children: 1, rooms: 2 });
+    expect(stayFromParams(next, TODAY)).toEqual({
+      checkIn: "2026-12-20",
+      checkOut: "2026-12-22",
+      nights: 2,
+      adults: 3,
+      children: 1,
+      infants: 1,
+      rooms: 2,
+    });
   });
 
   test("a party without dates is kept for when dates are picked", () => {

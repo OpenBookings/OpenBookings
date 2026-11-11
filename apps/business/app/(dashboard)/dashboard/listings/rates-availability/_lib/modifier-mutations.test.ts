@@ -65,11 +65,11 @@ describe("the owner", () => {
 
   test("creates a rule at the end of the plan's list, with the derived sign and condition", async () => {
     const { deps, writes } = fakeDeps();
-    const r = await saveModifier(owner, { ratePlanId: PLAN, ...weekend, direction: "down" }, deps);
+    const r = await saveModifier(owner, { ratePlanId: PLAN, ...weekend, direction: "down", adjustmentType: "percent", amount: "10" }, deps);
     expect(r).toEqual({ ok: true, id: RULE, roomId: ROOM });
     const [insert] = writes();
     expect(insert.sql).toMatch(/INSERT INTO rate_modifiers/);
-    expect(insert.values).toEqual([PLAN, "day_of_week", JSON.stringify({ days_of_week: [5, 6] }), "flat", -30]);
+    expect(insert.values).toEqual([PLAN, "day_of_week", JSON.stringify({ days_of_week: [5, 6] }), "percent", -10]);
   });
 
   test("updates a rule in place", async () => {

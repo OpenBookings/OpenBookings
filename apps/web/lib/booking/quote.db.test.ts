@@ -18,7 +18,7 @@ import { priceSelection, quoteStay, type SelectedRoom } from "./quote";
 const CHECK_IN = "2031-11-10";
 const CHECK_OUT = "2031-11-13"; // 3 nights
 const NOW = new Date("2031-10-01T10:00:00Z");
-const STAY = { checkIn: CHECK_IN, checkOut: CHECK_OUT, adults: 2, children: 0, rooms: 1 };
+const STAY = { checkIn: CHECK_IN, checkOut: CHECK_OUT, adults: 2, children: 0, infants: 0, rooms: 1 };
 
 describeWithDb("stay quote against Postgres", () => {
   let db: Client;
@@ -51,6 +51,7 @@ describeWithDb("stay quote against Postgres", () => {
     ratePlanId: ids.ratePlanId,
     adults: 2,
     children: 0,
+    infants: 0,
     cots: 0,
     extraBeds: 0,
     ...over,
@@ -201,13 +202,31 @@ describeWithDb("stay quote against Postgres", () => {
     });
   });
 
-  test("selection: an extra bed is priced into every night and kept on the intent room", async () => {
+  test("selection: an extra bed is kept on the intent room and paid at the property, not charged", async () => {
     await db.query(`UPDATE rooms SET extra_beds_max = 1, extra_bed_fee = 25 WHERE id = $1`, [ids.roomId]);
     const r = await select([double({ extraBeds: 1 })]);
     if (!r.ok) throw new Error(r.detail);
-    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotal: 3 * 125 });
-    expect(r.rooms[0].nights.map((n) => n.price)).toEqual([125, 125, 125]);
-    expect(r.snapshot.roomsTotal).toBe(375);
+    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotal: 300, payAtProperty: 75 });
+    expect(r.rooms[0].nights.map((n) => n.price)).toEqual([100, 100, 100]);
+    expect(r.snapshot.roomsTotal).toBe(300);
+    expect(r.snapshot.total).toBe(300);
+  });
+
+  test("selection: an infant needs no free place and pays nothing", async () => {
+    const r = await select([double({ infants: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotal: 300 });
+  });
+
+  test("selection: the discount that applied is kept for checkout", async () => {
+    await db.query(
+      `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
+       VALUES ($1, 'length_of_stay', '{"min_nights": 3}'::jsonb, 'percent', -10, true, 0)`,
+      [ids.ratePlanId],
+    );
+    const r = await select([double()]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ stayTotal: 270, discount: { label: "3+ night discount", amount: 30 } });
   });
 
   test("selection: two units of a room with one left is unavailable", async () => {

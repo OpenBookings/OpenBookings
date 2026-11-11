@@ -15,9 +15,15 @@ export type IntentRoomInput = {
   ratePlanId: string;
   adults: number;
   children: number;
-  /** Cots and extra beds booked with the room; their fees are already in `nights` (0040). */
+  /** Under 2: no place, no fee (0042). */
+  infants: number;
+  /** Cots and extra beds booked with the room (0040). */
   cots: number;
   extraBeds: number;
+  /** What the cots and extra beds cost, paid at the property: never in `nights` or `stayTotal` (0042). */
+  payAtProperty: number;
+  /** The stay discount already in `nights`, for checkout to show (0042). */
+  discount: { label: string; amount: number } | null;
   nights: { date: string; price: number }[];
   stayTotal: number;
   touristTax: number;
@@ -189,8 +195,9 @@ export async function createBookingIntent(
         await tx.query(
           `INSERT INTO booking_intent_rooms
              (intent_id, room_id, rate_plan_id, adults, children, nights, stay_total,
-              tourist_tax_amount, tourist_tax_lines, sort_order, cots, extra_beds)
-           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12)`,
+              tourist_tax_amount, tourist_tax_lines, sort_order, cots, extra_beds,
+              infants, pay_at_property_amount, discount_label, discount_amount)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)`,
           [
             intentId,
             r.roomId,
@@ -204,6 +211,10 @@ export async function createBookingIntent(
             sortOrder,
             r.cots,
             r.extraBeds,
+            r.infants,
+            r.payAtProperty,
+            r.discount?.label ?? null,
+            r.discount?.amount ?? null,
           ],
         );
       }
@@ -246,8 +257,12 @@ SELECT
       'ratePlanId',      r.rate_plan_id,
       'adults',          r.adults,
       'children',        r.children,
+      'infants',         r.infants,
       'cots',            r.cots,
       'extraBeds',       r.extra_beds,
+      'payAtProperty',   r.pay_at_property_amount,
+      'discount',        CASE WHEN r.discount_label IS NULL THEN NULL
+                              ELSE json_build_object('label', r.discount_label, 'amount', r.discount_amount) END,
       'nights',          r.nights,
       'stayTotal',       r.stay_total,
       'touristTax',      r.tourist_tax_amount,
@@ -545,8 +560,9 @@ export async function convertIntentToBooking(
       const { rows: reservationRows } = await tx.query(
         `INSERT INTO reservations
            (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night,
-            total_amount, tourist_tax_amount, tourist_tax_lines, cots, extra_beds)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
+            total_amount, tourist_tax_amount, tourist_tax_lines, cots, extra_beds,
+            infants, pay_at_property_amount)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14)
          RETURNING id`,
         [
           bookingId,
@@ -561,6 +577,8 @@ export async function convertIntentToBooking(
           JSON.stringify(r.touristTaxLines),
           r.cots,
           r.extraBeds,
+          r.infants,
+          r.payAtProperty,
         ],
       );
       const reservationId = (reservationRows[0] as { id: string }).id;

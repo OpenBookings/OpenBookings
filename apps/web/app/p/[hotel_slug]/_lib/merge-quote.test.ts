@@ -57,7 +57,7 @@ const ready = (rooms: QuotedRoom[]): QuoteState => {
     propertyId: "p",
     slug: "s",
     currency: "EUR",
-    stay: { checkIn: "2026-12-16", checkOut: "2026-12-19", adults: 2, children: 0, rooms: 1 },
+    stay: { checkIn: "2026-12-16", checkOut: "2026-12-19", adults: 2, children: 0, infants: 0, rooms: 1 },
     rooms,
   };
   return { status: "ready", quote };

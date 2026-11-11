@@ -69,7 +69,9 @@ export type SelectedRoom = {
   ratePlanId: string;
   adults: number;
   children: number;
-  /** Cots and extra beds for this room, checked against what it takes. */
+  /** Under 2: no place, no fee. */
+  infants: number;
+  /** Cots and extra beds for this room, checked against what it takes; paid at the property. */
   cots: number;
   extraBeds: number;
 };
@@ -262,7 +264,7 @@ type PricedRoom = {
 function priceRooms(
   rows: PlanRow[],
   byRoom: Map<string, RoomAvailability>,
-  party: { adults: number; children: number; cots?: number; extraBeds?: number },
+  party: { adults: number; children: number; infants?: number; cots?: number; extraBeds?: number },
   arrivalDate: string,
   today: string,
 ): PricedRoom[] {
@@ -409,7 +411,7 @@ export async function priceSelection(
     const [room] = priceRooms(
       roomRows,
       byRoom,
-      { adults: s.adults, children: s.children, cots: s.cots, extraBeds: s.extraBeds },
+      { adults: s.adults, children: s.children, infants: s.infants, cots: s.cots, extraBeds: s.extraBeds },
       i.checkIn,
       today,
     );
@@ -449,8 +451,11 @@ export async function priceSelection(
     ratePlanId: s.ratePlanId,
     adults: s.adults,
     children: s.children,
+    infants: s.infants,
     cots: s.cots,
     extraBeds: s.extraBeds,
+    payAtProperty: plan.priced.pay_at_property_total,
+    discount: plan.priced.discount && { label: plan.priced.discount.label, amount: plan.priced.discount.amount },
     nights: plan.priced.priced_nights,
     stayTotal: plan.priced.room_price,
     touristTax: plan.priced.tourist_tax.total,

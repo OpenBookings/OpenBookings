@@ -6,7 +6,9 @@ import { z } from "zod";
  * Hosts pick a kind and say "up" or "down" by an amount; the sign and the
  * trigger condition are derived here, so the pricing engine never sees a
  * rule it reads differently from how it was entered. Discount kinds always
- * go down: the database refuses a positive one (0041).
+ * go down: the database refuses a positive one (0041). Anything that lowers
+ * the price is a percentage; a fixed amount is only a per-night surcharge
+ * (0042).
  */
 
 export const RULE_KINDS = ["weekend", "length_of_stay", "early_bird", "last_minute"] as const;
@@ -51,6 +53,9 @@ export const modifierSchema = z
   })
   .superRefine((v, ctx) => {
     const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+
+    const lowers = DISCOUNT_KINDS.has(v.kind) || v.direction === "down";
+    if (lowers && v.adjustmentType === "flat") issue("adjustmentType", "A discount is a percentage.");
 
     const amount = whole(v.amount);
     const limits = RULE_LIMITS[v.adjustmentType];

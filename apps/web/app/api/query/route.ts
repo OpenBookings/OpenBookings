@@ -310,6 +310,7 @@ async function runSearch(input: SearchInput, testing: boolean) {
   const results = resolveSearchResults(priceCandidates(roomRows, rooms, availability, party), {
     adults: party.adults,
     children: party.children,
+    infants: party.infants,
     arrivalDate: input.checkIn,
   }).map(result => {
     const until =
@@ -341,6 +342,7 @@ function searchProperties(i: SearchInput) {
     checkout: i.checkOut,
     adults: i.adults,
     children: i.children,
+    infants: i.infants,
     rooms: i.rooms,
   }
 }
