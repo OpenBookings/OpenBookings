@@ -35,9 +35,6 @@ const fixture: PropertyPagePayload = {
     prepayment_required: null,
     children_welcome: null,
     min_check_in_age: null,
-    cot_policy: null,
-    cot_fee: null,
-    extra_bed_fee: null,
     pets_allowed: null,
     payment_methods: [
       { code: "visa", label: "Visa", artwork_url: "https://cdn.example/visa.svg", note: null },

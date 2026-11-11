@@ -28,6 +28,7 @@ export function HomeClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
   const [checkOut, setCheckOut] = useState("");
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
+  const [infants, setInfants] = useState(0);
   const [rooms, setRooms] = useState(1);
   const [destination, setDestination] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export function HomeClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
     if (checkOut) params.set("departure", checkOut);
     if (adults) params.set("adults", adults.toString());
     if (children) params.set("children", children.toString());
+    if (infants) params.set("infants", infants.toString());
     if (rooms) params.set("rooms", rooms.toString());
 
     const searchUrl = `/search?${params.toString()}`;
@@ -114,6 +116,8 @@ export function HomeClient({ backdrops }: { backdrops: readonly Backdrop[] }) {
             setAdults={setAdults}
             childCount={children}
             setChildCount={setChildren}
+            infants={infants}
+            setInfants={setInfants}
             rooms={rooms}
             setRooms={setRooms}
             openSearchBar={openSearchBar}

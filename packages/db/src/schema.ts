@@ -353,8 +353,6 @@ export const propertyAmenities = pgTable(
   (table) => [primaryKey({ columns: [table.propertyId, table.amenityId] })],
 );
 
-export const cotPolicyEnum = pgEnum("cot_policy", ["free", "paid", "unavailable"]);
-
 /**
  * Guest-facing listing content, 1:1 with `properties`.
  *
@@ -383,10 +381,7 @@ export const propertyContent = pgTable("property_content", {
   prepaymentRequired: boolean("prepayment_required").notNull().default(true),
   childrenWelcome: boolean("children_welcome").notNull().default(true),
   minCheckInAge: integer("min_check_in_age"),
-  cotPolicy: cotPolicyEnum("cot_policy"),
-  /** Whole currency units, like rate_plans.bar. Read back as a string; convert explicitly. */
-  cotFee: bigint("cot_fee", { mode: "number" }),
-  extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+  // Cots and extra beds are per room (rooms.cots_max …, 0040); the property-wide columns went in 0043.
   petsAllowed: boolean("pets_allowed").notNull().default(false),
   paymentMethods: text("payment_methods").array(),
 

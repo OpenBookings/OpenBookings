@@ -98,6 +98,15 @@ function buildPropertyPageQuery(slug: string) {
         'size_sqm', r.size_sqm::text,
         'max_adults', r.max_adults,
         'base_occupancy', r.base_occupancy,
+        -- What goes on top of the rate (0040): extra guests are prepaid, cots
+        -- and extra beds are paid at the hotel. Fees are whole euros.
+        'extra_adult_fee', r.extra_adult_fee::int,
+        'extra_child_fee', r.extra_child_fee::int,
+        'cots_max', r.cots_max,
+        'cot_fee', r.cot_fee::int,
+        'extra_beds_max', r.extra_beds_max,
+        'extra_bed_fee', r.extra_bed_fee::int,
+        'cot_and_extra_bed_together', r.cot_and_extra_bed_together,
         'images', COALESCE(
           (SELECT json_agg(ri.url ORDER BY ri.sort_order ASC, ri.created_at ASC)
            FROM room_images ri WHERE ri.room_id = r.id),

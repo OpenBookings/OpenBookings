@@ -20,6 +20,7 @@ import { useStayQuote } from "../_lib/useStayQuote";
 import { StayPickers, type StayPanel } from "./StayPickers";
 import { BookSignIn } from "./BookSignIn";
 import { useBookNow } from "./useBookNow";
+import { extrasLimits, suggestedExtras, type RoomExtras } from "../_lib/book";
 
 type ViewMode = "images" | "rates";
 
@@ -97,6 +98,16 @@ type StayFields = {
   guestsLabel: string;
   onOpenDates: () => void;
   onOpenGuests: () => void;
+  /** A room's cots and extra beds: what is chosen (or suggested for an infant) and the most it can take. */
+  extrasFor: (room: DbRoom) => RoomExtrasState;
+  onExtrasChange: (roomId: string, next: RoomExtras) => void;
+};
+
+type RoomExtrasState = {
+  value: RoomExtras;
+  limits: RoomExtras;
+  /** The cots are the infant suggestion, not yet the guest's own choice. */
+  suggested: boolean;
 };
 
 // Panel geometry, shared by the panel itself and the rates area beside it.
@@ -195,6 +206,7 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
           <p className="text-sm text-white/60 mt-1">
             {[room.size_sqm != null ? `${room.size_sqm} m²` : null, room.bed_type].filter(Boolean).join(" · ") || "—"}
           </p>
+          {occupancyLine(room, view) && <p className="text-xs text-white/60 mt-1.5">{occupancyLine(room, view)}</p>}
         </div>
 
         {room.description && (
@@ -281,11 +293,119 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
                 <span>{stayFields.guestsLabel}</span>
                 <Users className="size-3.5 shrink-0 text-white/60" strokeWidth={1.8} />
               </button>
+              <ExtrasControls room={room} state={stayFields.extrasFor(room)} onChange={(e) => stayFields.onExtrasChange(room.id, e)} />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * "Sleeps 3 · price includes 2 guests": why a third guest moves the price.
+ * Only said when the rate is for fewer guests than the room sleeps.
+ */
+function occupancyLine(room: DbRoom, view: RoomView): string | null {
+  const sleeps = view.maxAdults !== null ? view.maxAdults + (view.maxChildren ?? 0) : room.max_occupancy;
+  const base = room.base_occupancy;
+  if (!sleeps || !base || base >= sleeps) return null;
+  return `Sleeps ${sleeps} · price includes ${base} ${base === 1 ? "guest" : "guests"}`;
+}
+
+/** "Free" or "€25 / night". */
+function extraFee(fee: number | null | undefined): string {
+  return fee ? `${euro(fee)} / night` : "Free";
+}
+
+/**
+ * Cots and extra beds for this room, paid at the hotel. Only what the room
+ * offers is shown; where a unit takes one or the other, the other stepper
+ * stops at what is left.
+ */
+function ExtrasControls({ room, state, onChange }: {
+  room: DbRoom;
+  state: RoomExtrasState;
+  onChange: (next: RoomExtras) => void;
+}) {
+  const offersCots = (room.cots_max ?? 0) > 0;
+  const offersBeds = (room.extra_beds_max ?? 0) > 0;
+  if (!offersCots && !offersBeds) return null;
+  const { value, limits } = state;
+  const oneOrOther = room.cot_and_extra_bed_together === false && offersCots && offersBeds;
+  const blockedBy = (mine: number, other: number, limit: number) => oneOrOther && other > 0 && mine >= limit;
+
+  return (
+    <div className="flex flex-col gap-2.5 border-t border-white/10 pt-3">
+      {offersCots && (
+        <ExtraStepper
+          label="Cot"
+          plural="cots"
+          fee={extraFee(room.cot_fee)}
+          value={value.cots}
+          max={limits.cots}
+          onChange={(cots) => onChange({ ...value, cots })}
+        />
+      )}
+      {offersCots && state.suggested && value.cots > 0 && (
+        <p className="text-[11px] leading-snug text-amber-200/90">Added for your infant. You can remove it.</p>
+      )}
+      {offersBeds && (
+        <ExtraStepper
+          label="Extra bed"
+          plural="extra beds"
+          fee={extraFee(room.extra_bed_fee)}
+          value={value.extraBeds}
+          max={limits.extraBeds}
+          onChange={(extraBeds) => onChange({ ...value, extraBeds })}
+        />
+      )}
+      {(blockedBy(value.extraBeds, value.cots, limits.extraBeds) || blockedBy(value.cots, value.extraBeds, limits.cots)) && (
+        <p className="text-[11px] leading-snug text-white/60">This room takes a cot or an extra bed, not both.</p>
+      )}
+      <p className="text-[11px] leading-snug text-white/60">Paid at the hotel, not now.</p>
+    </div>
+  );
+}
+
+function ExtraStepper({ label, plural, fee, value, max, onChange }: {
+  label: string;
+  plural: string;
+  fee: string;
+  value: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm text-white/90 leading-tight">{label}</p>
+        <p className="text-[11px] text-white/60 leading-tight mt-0.5">{fee}</p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={`Fewer ${plural}`}
+          onClick={() => onChange(Math.max(0, value - 1))}
+          disabled={value === 0}
+          className="size-7 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/90 hover:bg-white/15 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Minus className="size-3" strokeWidth={2} />
+        </button>
+        <span aria-live="polite" aria-label={`${value} ${plural}`} className="w-5 text-center text-sm font-medium text-white tabular-nums">
+          {value}
+        </span>
+        <button
+          type="button"
+          aria-label={`More ${plural}`}
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+          className="size-7 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/90 hover:bg-white/15 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Plus className="size-3" strokeWidth={2} />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -324,6 +444,12 @@ function RateRow({ rate, priced, hasStay, leftCaption, canAdd, maxOccupancy, qty
           {saving > 0 && (
             <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-400/15 border border-emerald-400/25 text-emerald-300 leading-tight">
               Save {euro(saving)} / night
+            </span>
+          )}
+          {/* Already in the price: says why it is lower for these dates. */}
+          {priced?.discount && (
+            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-400/15 border border-emerald-400/25 text-emerald-300 leading-tight">
+              {priced.discount.label} −{priced.discount.percent}%
             </span>
           )}
         </div>
@@ -598,6 +724,8 @@ type BookBar = {
   totalOverride: number | null;
   /** Keeps the bar up with nothing picked, so its message is still seen. */
   keepOpen: boolean;
+  /** What the picked rooms' cots and extra beds cost, paid at the hotel; null when none are added. */
+  atHotel: number | null;
   canBook: boolean;
   pending: boolean;
   onBook: () => void;
@@ -760,6 +888,11 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
                       ? `total · ${stay.nights} ${stay.nights === 1 ? "night" : "nights"} · incl. tax`
                       : "Pick your dates")}
                 </p>
+                {ratesConfirmed && !bookBar.message && bookBar.atHotel !== null && (
+                  <p className="text-[11px] text-amber-200/90 mt-1 leading-none">
+                    {bookBar.atHotel > 0 ? `+ ${euro(bookBar.atHotel)} at the hotel` : "+ free at the hotel"}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -934,6 +1067,8 @@ function RoomsStage({
 type RoomsSectionProps = {
   rooms: DbRoom[];
   ratesConfirmed: boolean;
+  /** False on an adults-only property: the guest picker offers no children or infants. */
+  childrenWelcome: boolean;
   slug: string;
   propertyId: string;
   /** The property's zone: "today" for its dates. */
@@ -961,7 +1096,7 @@ function RoomsSectionWithStay(props: RoomsSectionProps) {
   return <RoomsSectionView {...props} search={search} />;
 }
 
-function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, search }: RoomsSectionProps & {
+function RoomsSectionView({ rooms, ratesConfirmed, childrenWelcome, slug, propertyId, timeZone, search }: RoomsSectionProps & {
   search: URLSearchParams | null;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("images");
@@ -977,7 +1112,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, s
   );
   // The guest picker's starting point: the stay's party, or the URL's without dates.
   const party = useMemo(() => {
-    if (stay) return { adults: stay.adults, children: stay.children, rooms: stay.rooms };
+    if (stay) return { adults: stay.adults, children: stay.children, infants: stay.infants, rooms: stay.rooms };
     return partyFromParams(new URLSearchParams(searchKey));
   }, [stay, searchKey]);
   const [reload, setReload] = useState(0);
@@ -1003,12 +1138,49 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, s
     router.replace(`${pathname}?${withStay(new URLSearchParams(searchKey), next).toString()}`, { scroll: false });
   }, [router, pathname, searchKey]);
 
+  // Cots and extra beds per room. Until the guest touches a room's steppers,
+  // an infant in the party suggests a cot where the room has them.
+  const [chosenExtras, setChosenExtras] = useState<Record<string, RoomExtras>>({});
+  const unitsOf = useCallback(
+    (room: DbRoom) => room.rate_plans.reduce((n, rate) => n + (quantities[rate.id] ?? 0), 0),
+    [quantities],
+  );
+  // One cot per infant across the rooms picked, in page order; a room not
+  // picked yet previews what it would suggest.
+  const suggested = useMemo(() => {
+    let infantsLeft = party.infants;
+    const out: Record<string, RoomExtras> = {};
+    for (const room of rooms) {
+      const units = unitsOf(room);
+      if (units === 0) continue;
+      const s = chosenExtras[room.id] ? { cots: 0, extraBeds: 0 } : suggestedExtras(room, infantsLeft, units);
+      infantsLeft -= chosenExtras[room.id]?.cots ?? s.cots;
+      out[room.id] = s;
+    }
+    return out;
+  }, [rooms, unitsOf, chosenExtras, party.infants]);
+  const extrasFor = useCallback((room: DbRoom): RoomExtrasState => {
+    const units = unitsOf(room);
+    const chosen = chosenExtras[room.id];
+    const wanted = chosen ?? suggested[room.id] ?? suggestedExtras(room, party.infants, units);
+    const limits = extrasLimits(room, units, wanted);
+    // Fewer rooms picked than when chosen: trimmed to what is left.
+    const value = { cots: Math.min(wanted.cots, limits.cots), extraBeds: Math.min(wanted.extraBeds, limits.extraBeds) };
+    return { value, limits: extrasLimits(room, units, value), suggested: chosen === undefined };
+  }, [chosenExtras, suggested, unitsOf, party.infants]);
+  const extras = useMemo(
+    () => Object.fromEntries(rooms.map((room) => [room.id, extrasFor(room).value])),
+    [rooms, extrasFor],
+  );
+
   const stayFields: StayFields = {
     hasStay: stay !== null,
     datesLabel: stay ? stayDatesLabel(stay) : "Pick dates",
     guestsLabel: guestsLabel(party),
     onOpenDates: () => setPanel("dates"),
     onOpenGuests: () => setPanel("guests"),
+    extrasFor,
+    onExtrasChange: (roomId, next) => setChosenExtras((prev) => ({ ...prev, [roomId]: next })),
   };
 
   const navigate = useCallback((i: number) => {
@@ -1038,6 +1210,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, s
     shownViews,
     quantities,
     setQuantities,
+    extras,
     searchKey,
     pathname,
     askDates: useCallback(() => setPanel("dates"), []),
@@ -1112,7 +1285,14 @@ function RoomsSectionView({ rooms, ratesConfirmed, slug, propertyId, timeZone, s
             ratesConfirmed={ratesConfirmed}
           />
         )}
-        <StayPickers stay={stay} party={party} openPanel={panel} onClose={closePanel} onChange={applyStay} />
+        <StayPickers
+          stay={stay}
+          party={party}
+          childrenWelcome={childrenWelcome}
+          openPanel={panel}
+          onClose={closePanel}
+          onChange={applyStay}
+        />
         <BookSignIn callbackURL={bookNow.signInURL} onClose={bookNow.closeSignIn} />
         {likes.signIn}
       </section>

@@ -43,6 +43,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
     checkOut: searchParams.get("departure") ?? "",
     adults: Number(searchParams.get("adults") ?? 2),
     children: Number(searchParams.get("children") ?? 0),
+    infants: Number(searchParams.get("infants") ?? 0),
     rooms: Number(searchParams.get("rooms") ?? 1),
     lat: searchParams.get("lat"),
     lon: searchParams.get("lon"),
@@ -53,6 +54,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
   const [checkOut, setCheckOut] = useState(committed.checkOut);
   const [adults, setAdults] = useState(committed.adults);
   const [childCount, setChildCount] = useState(committed.children);
+  const [infants, setInfants] = useState(committed.infants);
   const [rooms, setRooms] = useState(committed.rooms);
 
   const [openSearchBar, setOpenSearchBar] = useState(false);
@@ -93,6 +95,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
           checkout: committed.checkOut,
           adults: String(committed.adults),
           children: String(committed.children),
+          infants: String(committed.infants),
           rooms: String(committed.rooms),
         });
         // The server resolves the name; coordinates only if the URL carries them.
@@ -120,7 +123,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
 
     runSearch();
     return () => controller.abort();
-  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.rooms, committed.destination]);
+  }, [committed.lat, committed.lon, committed.checkIn, committed.checkOut, committed.adults, committed.children, committed.infants, committed.rooms, committed.destination]);
 
   // The property page reads the stay under the same names as /api/query.
   const stayQuery = useMemo(() => {
@@ -132,6 +135,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
       children: String(committed.children),
       rooms: String(committed.rooms),
     });
+    if (committed.infants > 0) params.set("infants", String(committed.infants));
     return `?${params.toString()}`;
   }, [committed]);
 
@@ -148,6 +152,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
     checkOut !== committed.checkOut ||
     adults !== committed.adults ||
     childCount !== committed.children ||
+    infants !== committed.infants ||
     rooms !== committed.rooms;
 
 
@@ -158,6 +163,7 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
     if (checkOut) params.set("departure", checkOut);
     if (adults) params.set("adults", adults.toString());
     if (childCount) params.set("children", childCount.toString());
+    if (infants) params.set("infants", infants.toString());
     if (rooms) params.set("rooms", rooms.toString());
 
     const searchUrl = `/search?${params.toString()}`;
@@ -184,6 +190,8 @@ function SearchPageInner({ backdrops }: { backdrops: readonly Backdrop[] }) {
             setAdults={setAdults}
             childCount={childCount}
             setChildCount={setChildCount}
+            infants={infants}
+            setInfants={setInfants}
             rooms={rooms}
             setRooms={setRooms}
             openSearchBar={openSearchBar}
@@ -314,6 +322,8 @@ function SearchPageFallback({ backdrops }: { backdrops: readonly Backdrop[] }) {
             setAdults={noop}
             childCount={0}
             setChildCount={noop}
+            infants={0}
+            setInfants={noop}
             rooms={1}
             setRooms={noop}
             openSearchBar={false}

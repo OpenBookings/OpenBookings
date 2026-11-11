@@ -218,6 +218,16 @@ describeWithDb("stay quote against Postgres", () => {
     expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotal: 300 });
   });
 
+  test("quote: each rate says which discount applied", async () => {
+    await db.query(
+      `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
+       VALUES ($1, 'length_of_stay', '{"min_nights": 3}'::jsonb, 'percent', -10, true, 0)`,
+      [ids.ratePlanId],
+    );
+    const plan = (await quote())!.rooms[0].ratePlans[0];
+    expect(plan.discount).toEqual({ label: "3+ night discount", percent: 10, amount: 30 });
+  });
+
   test("selection: the discount that applied is kept for checkout", async () => {
     await db.query(
       `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)

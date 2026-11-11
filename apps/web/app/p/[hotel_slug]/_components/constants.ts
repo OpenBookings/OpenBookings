@@ -47,6 +47,16 @@ export type DbRoom = {
   max_occupancy: number | null;
   /** Guests the base rate is for. The listing's all-in price is quoted at this. */
   base_occupancy?: number;
+  /** Per extra guest per night, whole euros; null = not charged (0040). Absent on demo data. */
+  extra_adult_fee?: number | null;
+  extra_child_fee?: number | null;
+  /** Cots and extra beds per unit (0 = not offered) and their fee per night, paid at the hotel. */
+  cots_max?: number;
+  cot_fee?: number | null;
+  extra_beds_max?: number;
+  extra_bed_fee?: number | null;
+  /** False: one unit takes a cot or an extra bed, not both. */
+  cot_and_extra_bed_together?: boolean;
   images: string[];
   rate_plans: DbRatePlan[];
   tags: string[];

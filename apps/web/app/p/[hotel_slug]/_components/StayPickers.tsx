@@ -9,6 +9,9 @@ import type { Stay, StayDraft } from "../_lib/stay";
 
 export type StayPanel = "dates" | "guests" | null;
 
+const sameParty = (a: Guests, b: Guests) =>
+  a.adults === b.adults && a.children === b.children && a.infants === b.infants && a.rooms === b.rooms;
+
 /** YYYY-MM-DD for a date picked in the calendar, which works in local time. */
 function formatDate(date: Date): string {
   const year = date.getFullYear();
@@ -22,10 +25,12 @@ function formatDate(date: Date): string {
  * pick is a draft until the overlay closes; then a changed, complete pick is
  * handed to `onChange`, which writes it to the URL.
  */
-export function StayPickers({ stay, party, openPanel, onClose, onChange }: {
+export function StayPickers({ stay, party, childrenWelcome, openPanel, onClose, onChange }: {
   stay: Stay | null;
   /** The party in the URL, also when it has no dates. */
   party: Guests;
+  /** False on an adults-only property: the picker offers adults and rooms only. */
+  childrenWelcome: boolean;
   openPanel: StayPanel;
   onClose: () => void;
   onChange: (next: StayDraft) => void;
@@ -54,17 +59,15 @@ export function StayPickers({ stay, party, openPanel, onClose, onChange }: {
   }, [checkIn, checkOut, stay, party, onChange, onClose]);
 
   const closeGuests = useCallback(() => {
-    if (guests.adults !== party.adults || guests.children !== party.children || guests.rooms !== party.rooms) {
+    if (!sameParty(guests, party)) {
       onChange({ checkIn: stay?.checkIn ?? null, checkOut: stay?.checkOut ?? null, ...guests });
     }
     onClose();
   }, [guests, party, stay, onChange, onClose]);
 
   // GuestSelector reports on every render of its own; only a change is kept.
-  const pickGuests = useCallback((adults: number, children: number, rooms: number) => {
-    setGuests((prev) =>
-      prev.adults === adults && prev.children === children && prev.rooms === rooms ? prev : { adults, children, rooms },
-    );
+  const pickGuests = useCallback((next: Guests) => {
+    setGuests((prev) => (sameParty(prev, next) ? prev : next));
   }, []);
 
   return (
@@ -84,10 +87,7 @@ export function StayPickers({ stay, party, openPanel, onClose, onChange }: {
 
       <FocusOverlay open={openPanel === "guests"} onClose={closeGuests}>
         <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <GuestSelector
-            value={`${guests.adults} adults, ${guests.children} children, ${guests.rooms} rooms`}
-            onChange={pickGuests}
-          />
+          <GuestSelector initial={guests} childrenWelcome={childrenWelcome} onChange={pickGuests} />
         </div>
       </FocusOverlay>
     </>

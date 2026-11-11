@@ -12,6 +12,7 @@ import {
   perRoomParty,
   resolveRoom,
   snapshotTier,
+  type AppliedDiscount,
   type PropertyCancellationTier,
   type ResolvedRoom,
   type RoomRow,
@@ -47,6 +48,8 @@ export type QuotedRatePlan = {
   stayTotal: number;
   touristTax: TouristTaxResult;
   freeCancellationUntil: string | null;
+  /** The stay discount already in `stayTotal`, for the rate row's chip. */
+  discount: AppliedDiscount | null;
   reasons: UnavailableReason[];
 };
 
@@ -327,6 +330,7 @@ export async function quoteStay(
         stayTotal: priced.room_price,
         touristTax: priced.tourist_tax,
         freeCancellationUntil: cancellationUntil(property, row.is_refundable, checkIn, i.now),
+        discount: priced.discount,
         reasons: a.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"],
       })),
     });

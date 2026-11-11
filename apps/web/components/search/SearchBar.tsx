@@ -20,6 +20,8 @@ interface SearchBarOverlayProps {
   setAdults: (value: number) => void;
   childCount: number;
   setChildCount: (value: number) => void;
+  infants: number;
+  setInfants: (value: number) => void;
   rooms: number;
   setRooms: (value: number) => void;
   openSearchBar: boolean;
@@ -43,6 +45,8 @@ export function SearchBarOverlay({
   setAdults,
   childCount,
   setChildCount,
+  infants,
+  setInfants,
   rooms,
   setRooms,
   openSearchBar,
@@ -116,7 +120,8 @@ export function SearchBarOverlay({
             >
               <PersonIcon />
               <span className="text-sm text-white font-medium truncate">
-                {adults} {adults === 1 ? "adult" : "adults"} · {childCount} {childCount === 1 ? "child" : "children"} · {rooms} {rooms === 1 ? "room" : "rooms"}
+                {adults} {adults === 1 ? "adult" : "adults"} · {childCount} {childCount === 1 ? "child" : "children"}
+                {infants > 0 && <> · {infants} {infants === 1 ? "infant" : "infants"}</>} · {rooms} {rooms === 1 ? "room" : "rooms"}
               </span>
             </div>
 
@@ -136,6 +141,7 @@ export function SearchBarOverlay({
                   check_out: checkOut,
                   adults,
                   children: childCount,
+                  infants,
                   rooms,
                 });
                 onSearch();
@@ -174,11 +180,12 @@ export function SearchBarOverlay({
       <FocusOverlay open={openGuestSelector} onClose={() => setOpenGuestSelector(false)}>
         <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
           <GuestSelector
-            value={`${adults} adults, ${childCount} children, ${rooms} rooms`}
-            onChange={(nextAdults: number, nextChildren: number, nextRooms: number) => {
-              setAdults(nextAdults);
-              setChildCount(nextChildren);
-              setRooms(nextRooms);
+            initial={{ adults, children: childCount, infants, rooms }}
+            onChange={(next) => {
+              setAdults(next.adults);
+              setChildCount(next.children);
+              setInfants(next.infants);
+              setRooms(next.rooms);
             }}
           />
         </div>

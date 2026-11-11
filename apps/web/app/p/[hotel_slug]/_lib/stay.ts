@@ -18,7 +18,7 @@ export type Stay = {
 };
 
 const DAY_MS = 86_400_000;
-const DEFAULT_PARTY: Guests = { adults: 2, children: 0, rooms: 1 };
+const DEFAULT_PARTY: Guests = { adults: 2, children: 0, infants: 0, rooms: 1 };
 
 /** Nights between two real YYYY-MM-DD dates. */
 function nightsBetween(checkIn: string, checkOut: string): number {
@@ -56,7 +56,7 @@ export function partyFromParams(p: URLSearchParams): Guests {
     const v = p.get(key);
     return v !== null && /^\d+$/.test(v) ? Number(v) : DEFAULT_PARTY[key];
   };
-  return clampGuests({ adults: read("adults"), children: read("children"), rooms: read("rooms") });
+  return clampGuests({ adults: read("adults"), children: read("children"), infants: read("infants"), rooms: read("rooms") });
 }
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -67,11 +67,12 @@ export function stayDatesLabel(s: { checkIn: string; checkOut: string }): string
   return `${day(s.checkIn)} – ${day(s.checkOut)}`;
 }
 
-/** "2 adults", "1 adult, 1 child". */
-export function guestsLabel(g: { adults: number; children: number }): string {
-  const adults = `${g.adults} ${g.adults === 1 ? "adult" : "adults"}`;
-  if (g.children === 0) return adults;
-  return `${adults}, ${g.children} ${g.children === 1 ? "child" : "children"}`;
+/** "2 adults", "1 adult, 1 child", "2 adults, 1 child, 1 infant". */
+export function guestsLabel(g: { adults: number; children: number; infants?: number }): string {
+  const parts = [`${g.adults} ${g.adults === 1 ? "adult" : "adults"}`];
+  if (g.children > 0) parts.push(`${g.children} ${g.children === 1 ? "child" : "children"}`);
+  if ((g.infants ?? 0) > 0) parts.push(`${g.infants} ${g.infants === 1 ? "infant" : "infants"}`);
+  return parts.join(", ");
 }
 
 /** What the date and guest pickers hand back: dates may still be missing. */

@@ -59,9 +59,6 @@ export interface HotelPageData {
   prepayment_required: boolean | null;
   children_welcome: boolean | null;
   min_check_in_age: number | null;
-  cot_policy: "free" | "paid" | "unavailable" | null;
-  cot_fee: string | null;
-  extra_bed_fee: string | null;
   pets_allowed: boolean | null;
   /**
    * Resolved from the `payment_methods` catalogue, not the raw codes the host
@@ -119,8 +116,7 @@ export function buildHeroQuery(slug: string, testing: boolean) {
     c.overview_headline, c.overview_description, c.location_about,
     c.cta_headline, c.cta_body, c.fine_print,
     c.reception_24h, c.prepayment_required,
-    c.children_welcome, c.min_check_in_age, c.cot_policy, c.cot_fee,
-    c.extra_bed_fee, c.pets_allowed,
+    c.children_welcome, c.min_check_in_age, c.pets_allowed,
     c.legal_company_name, c.contact_email, c.contact_phone,
     c.company_registration, c.vat_number,
     (

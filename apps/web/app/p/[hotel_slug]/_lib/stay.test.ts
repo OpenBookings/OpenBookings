@@ -61,10 +61,10 @@ describe("stayToParams", () => {
 
 describe("partyFromParams", () => {
   test("reads the party without dates and clamps it", () => {
-    expect(partyFromParams(params("adults=3&children=1&rooms=2"))).toEqual({ adults: 3, children: 1, rooms: 2 });
-    expect(partyFromParams(params(""))).toEqual({ adults: 2, children: 0, rooms: 1 });
-    expect(partyFromParams(params("adults=1&rooms=4"))).toEqual({ adults: 1, children: 0, rooms: 1 });
-    expect(partyFromParams(params("adults=abc"))).toEqual({ adults: 2, children: 0, rooms: 1 });
+    expect(partyFromParams(params("adults=3&children=1&infants=1&rooms=2"))).toEqual({ adults: 3, children: 1, infants: 1, rooms: 2 });
+    expect(partyFromParams(params(""))).toEqual({ adults: 2, children: 0, infants: 0, rooms: 1 });
+    expect(partyFromParams(params("adults=1&rooms=4"))).toEqual({ adults: 1, children: 0, infants: 0, rooms: 1 });
+    expect(partyFromParams(params("adults=abc"))).toEqual({ adults: 2, children: 0, infants: 0, rooms: 1 });
   });
 });
 
@@ -77,6 +77,8 @@ describe("labels", () => {
     expect(guestsLabel({ adults: 2, children: 0 })).toBe("2 adults");
     expect(guestsLabel({ adults: 1, children: 1 })).toBe("1 adult, 1 child");
     expect(guestsLabel({ adults: 2, children: 3 })).toBe("2 adults, 3 children");
+    expect(guestsLabel({ adults: 2, children: 1, infants: 1 })).toBe("2 adults, 1 child, 1 infant");
+    expect(guestsLabel({ adults: 2, children: 0, infants: 2 })).toBe("2 adults, 2 infants");
   });
 });
 
