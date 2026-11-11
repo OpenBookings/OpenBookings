@@ -396,13 +396,6 @@ export function formatWeekdayMonth(date: Date): string {
   return `${weekday}, ${month}`;
 }
 
-/** "2 adults · 1 child" — only naming what is actually there. */
-export function formatGuests(adults: number, children = 0): string {
-  const parts = [`${adults} ${adults === 1 ? 'adult' : 'adults'}`];
-  if (children > 0) parts.push(`${children} ${children === 1 ? 'child' : 'children'}`);
-  return parts.join(' · ');
-}
-
 /** "3 nights". */
 export function formatNights(nights: number): string {
   return `${nights} ${nights === 1 ? 'night' : 'nights'}`;
