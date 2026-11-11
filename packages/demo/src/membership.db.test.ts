@@ -96,7 +96,7 @@ describeWithDb("demo membership and reset", () => {
       propertyId: demo.propertyId,
       checkIn: "2031-11-10",
       checkOut: "2031-11-11",
-      rooms: [{ roomId, ratePlanId, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, payAtProperty: 0, discount: null, nights: [{ date: "2031-11-10", price: 100 }], stayTotal: 100, touristTax: 0, touristTaxLines: [] }],
+      rooms: [{ roomId, ratePlanId, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, payAtProperty: 0, discount: null, rateNights: [{ date: "2031-11-10", price: 100 }], extraGuests: [], payAtPropertyLines: [], nights: [{ date: "2031-11-10", price: 100 }], stayTotal: 100, touristTax: 0, touristTaxLines: [], vatSplit: null }],
       snapshot: {
         roomsTotal: 100,
         touristTaxTotal: 0,

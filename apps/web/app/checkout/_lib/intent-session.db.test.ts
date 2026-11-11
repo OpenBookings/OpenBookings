@@ -45,10 +45,14 @@ describeWithDb("payment session of a booking intent", () => {
       extraBeds: 0,
       payAtProperty: 0,
       discount: null,
+      rateNights: [{ date: "2031-11-10", price: 100 }],
+      extraGuests: [],
+      payAtPropertyLines: [],
       nights: [{ date: "2031-11-10", price: 100 }],
       stayTotal: 100,
       touristTax: 0,
       touristTaxLines: [],
+      vatSplit: null,
     };
     const query = (text: string, values?: unknown[]) => db.query(text, values);
     const created = await createBookingIntent(

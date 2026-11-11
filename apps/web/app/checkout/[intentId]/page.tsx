@@ -11,12 +11,13 @@ import type { TripSummaryCancellation } from '../_components/TripSummary';
 import {
   BookingNotFoundError,
   formatDayNumber,
-  formatGuests,
   formatNights,
   formatWeekdayMonth,
   getBookingSummary,
   type StayRoom,
 } from '../_lib/booking';
+import { payAtPropertyNote } from '../_lib/party';
+import { payAtPropertyLine } from '../_lib/reassurance';
 
 export const metadata: Metadata = {
   title: 'Complete your booking',
@@ -53,9 +54,9 @@ async function getViewer(): Promise<(GateViewer & { id: string }) | null> {
 function groupCancellations(rooms: StayRoom[]): TripSummaryCancellation[] {
   const groups = new Map<string, TripSummaryCancellation>();
   for (const room of rooms) {
-    const { tierLabel, policyLines } = room.cancellation;
-    const key = JSON.stringify([tierLabel, policyLines]);
-    const group = groups.get(key) ?? { tierLabel, policyLines, roomNames: [] };
+    const { tierLabel, steps } = room.cancellation;
+    const key = JSON.stringify([tierLabel, steps]);
+    const group = groups.get(key) ?? { steps, roomNames: [] };
     if (!group.roomNames.includes(room.roomName)) group.roomNames.push(room.roomName);
     groups.set(key, group);
   }
@@ -127,7 +128,20 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
         sizeSqm: room.sizeSqm,
         roomImageUrl: room.roomImageUrl,
         ratePlanName: room.ratePlanName,
-        guestsLabel: formatGuests(room.adults, room.children),
+        adults: room.adults,
+        children: room.children,
+        infants: room.infants,
+        includesBreakfast: room.includesBreakfast,
+        cots: room.cots,
+        extraBeds: room.extraBeds,
+      }))}
+      ledgerRooms={summary.rooms.map((room) => ({
+        roomName: room.roomName,
+        rateNights: room.rateNights,
+        extraGuests: room.extraGuests,
+        discount: room.discount,
+        touristTaxLines: room.touristTaxLines,
+        payAtPropertyLines: room.payAtPropertyLines,
       }))}
       checkInDay={formatDayNumber(summary.checkIn)}
       checkInMonth={formatWeekdayMonth(summary.checkIn)}
@@ -137,6 +151,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
       checkOutTime={summary.checkOutTime}
       nightsLabel={formatNights(summary.nights)}
       cancellations={groupCancellations(summary.rooms)}
+      payAtPropertyNote={payAtPropertyNote(summary.rooms)}
+      payAtPropertyLine={payAtPropertyLine(summary.rooms)}
       requiresNonRefundableConsent={summary.rooms.some((room) => room.cancellation.requiresNonRefundableConsent)}
     />
   );

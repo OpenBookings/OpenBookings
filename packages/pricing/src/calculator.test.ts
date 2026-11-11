@@ -253,6 +253,35 @@ describe("occupancy & extras", () => {
     expect(r.pay_at_property_total).toBe(70);
   });
 
+  test("rate_nights + extra_guests - discount add up to room_price", () => {
+    const r = resolveRoom(
+      room(
+        {
+          extra_child_fee: 15,
+          nights: [
+            { date: "2026-07-01", base_price: 195 },
+            { date: "2026-07-02", base_price: 195 },
+            { date: "2026-07-03", base_price: 165 },
+          ] as unknown as Night[],
+          modifiers: [
+            { type: "early_bird", adjustment_type: "percent", adjustment_value: -10, trigger_condition: { days_before_arrival: 30 }, sort_order: 1 },
+          ] as unknown as Modifier[],
+        },
+      ),
+      stay(2, 1),
+      "2026-05-01",
+    );
+    expect(r.rate_nights.map((n) => n.price)).toEqual([195, 195, 165]);
+    expect(r.extra_guests).toEqual([{ kind: "child", count: 1, per_night: 15, nights: 3, amount: 45 }]);
+    expect(r.discount?.amount).toBe(55.5);
+    const sum = r.rate_nights.reduce((s, n) => s + n.price, 0) + 45 - 55.5;
+    expect(Math.round(sum * 100)).toBe(Math.round(r.room_price * 100));
+  });
+
+  test("no extra guests: extra_guests is []", () => {
+    expect(resolveRoom(room(), stay(2), "2026-06-01").extra_guests).toEqual([]);
+  });
+
   test("a free cot is listed at 0, so the hotel still prepares it", () => {
     const r = resolveRoom(room(), stay(2, 0, { cots: 1 }), "2026-06-01");
     expect(r.pay_at_property).toEqual([{ label: "Cots", count: 1, fee_per_night: 0, nights: 1, amount: 0 }]);

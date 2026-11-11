@@ -17,6 +17,8 @@ type Country = { code: string; name: string };
 /** The light card both of checkout's own blocks sit in, matching the payment card. */
 export const CHECKOUT_CARD = 'checkout-light rounded-3xl bg-white/70 p-4 shadow-2xl backdrop-blur-md sm:p-5';
 
+const CONFIRMATION_HINT = 'Your confirmation goes here, right after paying.';
+
 function addressLine(saved: CheckoutDetailsController['saved'], countries: Country[]): string {
   const a = saved.address;
   if (!a) return '';
@@ -64,6 +66,7 @@ function Summary({ saved, countries }: { saved: CheckoutDetailsController['saved
           </div>
         ))}
       </dl>
+      <p className="text-xs text-muted-foreground">{CONFIRMATION_HINT}</p>
     </div>
   );
 }
@@ -120,6 +123,7 @@ export function DetailsCard({
             <p id="checkout-email-hint" className="sr-only">
               Your account email. It can&apos;t be changed here.
             </p>
+            <p className="text-xs text-muted-foreground">{CONFIRMATION_HINT}</p>
           </div>
           <PhoneField
             country={saved.phone.country}

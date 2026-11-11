@@ -16,7 +16,7 @@ import { getPool, loadIntent, type BookingIntentStatus, type Queryable } from '@
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
 import { isTestingMode } from '@openbookings/demo';
 import { buildIntentLines, type BookingLine } from './booking-lines';
-import type { PropertyCancellationTier } from '@openbookings/pricing';
+import type { ExtraGuestLine, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine } from '@openbookings/pricing';
 import { checkoutCancellationTerms, type CheckoutCancellationTerms } from './cancellation-terms';
 
 export type { BookingLine } from './booking-lines';
@@ -37,9 +37,24 @@ export type StayRoom = {
   isRefundable: boolean;
   adults: number;
   children: number;
+  /** Under 2: no place, no fee. */
+  infants: number;
+  cots: number;
+  extraBeds: number;
   nights: number;
   /** Euros, the nights summed. */
   stayTotal: number;
+  /** Base rate per night, before extra guests and discount. Empty on intents made before 0044. */
+  rateNights: { date: string; price: number }[];
+  /** Guests above base occupancy, already in `stayTotal`. Empty on older intents. */
+  extraGuests: ExtraGuestLine[];
+  /** The stay discount already in `stayTotal`, if any. */
+  discount: { label: string; amount: number } | null;
+  /** Euros the guest pays the hotel for cots and extra beds; not in `stayTotal`. */
+  payAtProperty: number;
+  payAtPropertyLines: PayAtPropertyLine[];
+  touristTaxLines: TouristTaxLine[];
+  includesBreakfast: boolean;
   /** Tier, exact deadlines and whether the guest must confirm Non-refundable. */
   cancellation: CheckoutCancellationTerms;
 };
@@ -154,6 +169,7 @@ type RoomRow = {
   size_sqm: string | null;
   rate_plan_name: string;
   is_refundable: boolean;
+  includes_breakfast: boolean;
   room_image_url: string | null;
 };
 
@@ -161,7 +177,7 @@ type RoomRow = {
 const ROOMS_QUERY = `
   select
     r.id as room_id, rp.id as rate_plan_id, r.name as room_name, r.room_type, r.bed_type, r.size_sqm,
-    rp.name as rate_plan_name, rp.is_refundable, room_img.url as room_image_url
+    rp.name as rate_plan_name, rp.is_refundable, rp.includes_breakfast, room_img.url as room_image_url
   from rate_plans rp
   join rooms r on r.id = rp.room_id
   left join lateral (
@@ -247,8 +263,19 @@ export async function getBookingSummary(
       isRefundable,
       adults: room.adults,
       children: room.children,
+      infants: room.infants,
+      cots: room.cots,
+      extraBeds: room.extraBeds,
       nights: room.nights.length,
       stayTotal: room.stayTotal,
+      // Intents made before 0044 have none of these: they read as empty.
+      rateNights: room.rateNights ?? [],
+      extraGuests: room.extraGuests ?? [],
+      discount: room.discount,
+      payAtProperty: room.payAtProperty,
+      payAtPropertyLines: room.payAtPropertyLines ?? [],
+      touristTaxLines: room.touristTaxLines,
+      includesBreakfast: plan.includes_breakfast === true,
       cancellation: checkoutCancellationTerms({
         propertyTier: property.cancellation_tier,
         isRefundable,
@@ -367,13 +394,6 @@ export function formatWeekdayMonth(date: Date): string {
   const weekday = dateParts(date, { weekday: 'short' });
   const month = dateParts(date, { month: 'short' });
   return `${weekday}, ${month}`;
-}
-
-/** "2 adults · 1 child" — only naming what is actually there. */
-export function formatGuests(adults: number, children = 0): string {
-  const parts = [`${adults} ${adults === 1 ? 'adult' : 'adults'}`];
-  if (children > 0) parts.push(`${children} ${children === 1 ? 'child' : 'children'}`);
-  return parts.join(' · ');
 }
 
 /** "3 nights". */
