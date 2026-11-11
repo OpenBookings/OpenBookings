@@ -23,7 +23,7 @@ export interface Night {
 interface NightWithSurcharge extends Night {
   /** Rate modifiers' surcharges on this night. Stay discounts are spread over these. */
   _surcharge: number
-  /** Extra guests, cots and extra beds on this night. Never discounted. */
+  /** Extra adults and children on this night. Never discounted. */
   _extra: number
 }
 
@@ -70,7 +70,7 @@ export interface RoomRow {
    */
   extra_adult_fee?: number | null
   extra_child_fee?: number | null
-  /** Per cot / extra bed per night, whole euros. 0 = free. */
+  /** Per cot / extra bed per night, whole euros, paid at the property. 0 = free. */
   cot_fee?: number | null
   extra_bed_fee?: number | null
 }
@@ -78,10 +78,31 @@ export interface RoomRow {
 interface SearchParams {
   adults: number
   children: number
+  /** Under 2: no place, no fee. Counted with the children for tourist tax only. */
+  infants?: number
   arrivalDate: string
-  /** Cots and extra beds booked with the room. Checked against the room's limits by the caller. */
+  /**
+   * Cots and extra beds booked with the room, paid at the property (so never in
+   * the room price). Checked against the room's limits by the caller.
+   */
   cots?: number
   extraBeds?: number
+}
+
+/** A cot or extra bed line the guest pays at the property, fixed at booking. */
+export interface PayAtPropertyLine {
+  label: 'Cots' | 'Extra beds'
+  count: number
+  fee_per_night: number
+  nights: number
+  amount: number
+}
+
+/** The one discount that applied, for the guest's checkout. `amount` is positive. */
+export interface AppliedDiscount {
+  label: string
+  percent: number
+  amount: number
 }
 
 /** The calendar date it is now at the property, as YYYY-MM-DD. */
@@ -189,6 +210,8 @@ interface CalculationState {
   applied: Set<ModifierType>
   /** Built as the executor runs. Modifiers that never fire leave no step. */
   trace: PriceStep[]
+  /** The stay discount kept by executeModifiers, if any. */
+  discount?: Modifier
 }
 
 /**
@@ -364,9 +387,9 @@ function applyLengthOfStay(
   const dummyContext = { ...context, date: context.arrivalDate }
   if (!isEligible(modifier, dummyContext)) return state
 
-  const discount = modifier.adjustment_type === 'flat'
-    ? modifier.adjustment_value
-    : (state.subtotal * modifier.adjustment_value) / 100
+  // Discounts are a percentage (0042); a flat row is not one and is ignored.
+  if (modifier.adjustment_type !== 'percent') return state
+  const discount = (state.subtotal * modifier.adjustment_value) / 100
 
   return {
     ...state,
@@ -386,9 +409,9 @@ function applyEarlyBird(
   const dummyContext = { ...context, date: context.arrivalDate }
   if (!isEligible(modifier, dummyContext)) return state
 
-  const discount = modifier.adjustment_type === 'flat'
-    ? modifier.adjustment_value
-    : (state.subtotal * modifier.adjustment_value) / 100
+  // Discounts are a percentage (0042); a flat row is not one and is ignored.
+  if (modifier.adjustment_type !== 'percent') return state
+  const discount = (state.subtotal * modifier.adjustment_value) / 100
 
   return {
     ...state,
@@ -445,7 +468,7 @@ function executeModifiers(
     const stepFn = stepFunctions[modifier.type]
     if (!stepFn) continue
     const discounted = stepFn(state, { ...modifier, adjustment_value: -Math.abs(modifier.adjustment_value) }, context)
-    if (discounted.total < best.total) best = discounted
+    if (discounted.total < best.total) best = { ...discounted, discount: modifier }
   }
 
   return best
@@ -480,6 +503,11 @@ export interface ResolvedRoom
    * night absorbs rounding so the nights sum to `room_price` exactly.
    */
   priced_nights: { date: string; price: number }[]
+  /** Cots and extra beds, paid at the property: not in `room_price` or `total_price`. */
+  pay_at_property: PayAtPropertyLine[]
+  pay_at_property_total: number
+  /** The stay discount that applied, or null. Already in `room_price`. */
+  discount: AppliedDiscount | null
   applied_modifiers: ModifierType[]
   /** Ordered build-up of `total_price`. See PriceStep. */
   trace: PriceStep[]
@@ -494,18 +522,16 @@ export function resolveRoom(
   const today = todayAtProperty ?? todayInZone(row.timezone ?? 'UTC')
   const { adults, children, arrivalDate } = params
   const numNights = row.nights.length
+  const modifiersRun = executeModifiers(row.nights, row.modifiers, { numNights, arrivalDate, today })
 
-  const state = applyOccupancyAndExtras(
-    executeModifiers(row.nights, row.modifiers, { numNights, arrivalDate, today }),
-    row,
-    params,
-  )
+  const state = applyExtraGuests(modifiersRun, row, params)
+  const payAtProperty = payAtPropertyLines(row, params, numNights)
 
   const roomPrice = round2(state.total)
   const touristTax = calculateTouristTax(row.tourist_tax_rules ?? [], {
     nights: pricedNights(state),
     adults,
-    children,
+    children: children + (params.infants ?? 0),
     rooms: 1,
   })
 
@@ -519,6 +545,9 @@ export function resolveRoom(
     tourist_tax: touristTax,
     total_price: round2(roomPrice + touristTax.total),
     priced_nights: roundedPricedNights(pricedNights(state), roomPrice),
+    pay_at_property: payAtProperty,
+    pay_at_property_total: round2(payAtProperty.reduce((sum, l) => sum + l.amount, 0)),
+    discount: appliedDiscount(state),
     applied_modifiers: [...state.applied],
     trace: roundTrace(state.trace),
   }
@@ -531,11 +560,11 @@ export function resolveRoom(
 const extrasTotal = (state: CalculationState) => state.nights.reduce((sum, n) => sum + n._extra, 0)
 
 /**
- * Add what the room charges on top of its rate: guests above base occupancy,
- * cots and extra beds, each per night. Runs after every rate modifier, so no
- * discount reaches these fees. One trace line per fee that adds something.
+ * Add guests above base occupancy, per night, on top of the rate. Runs after
+ * every rate modifier, so no discount reaches these fees. Infants take no
+ * place. One trace line per fee that adds something.
  */
-function applyOccupancyAndExtras(
+function applyExtraGuests(
   state: CalculationState,
   row: RoomRow,
   params: SearchParams
@@ -544,8 +573,6 @@ function applyOccupancyAndExtras(
   const lines: { label: string; fee: number | null | undefined; count: number }[] = [
     { label: 'Extra adults', fee: row.extra_adult_fee, count: extra.adults },
     { label: 'Extra children', fee: row.extra_child_fee, count: extra.children },
-    { label: 'Cots', fee: row.cot_fee, count: params.cots ?? 0 },
-    { label: 'Extra beds', fee: row.extra_bed_fee, count: params.extraBeds ?? 0 },
   ]
 
   let next = state
@@ -562,6 +589,39 @@ function applyOccupancyAndExtras(
     }
   }
   return next
+}
+
+/**
+ * Cots and extra beds the guest booked, priced for the hotel to collect. A free
+ * one is still listed so the property knows to prepare it.
+ */
+function payAtPropertyLines(row: RoomRow, params: SearchParams, nights: number): PayAtPropertyLine[] {
+  const lines: PayAtPropertyLine[] = []
+  const add = (label: PayAtPropertyLine['label'], count: number, fee: number | null | undefined) => {
+    if (count <= 0) return
+    const perNight = fee ?? 0
+    lines.push({ label, count, fee_per_night: perNight, nights, amount: round2(perNight * count * nights) })
+  }
+  add('Cots', params.cots ?? 0, row.cot_fee)
+  add('Extra beds', params.extraBeds ?? 0, row.extra_bed_fee)
+  return lines
+}
+
+/** The guest-facing name of a discount: "Weekly discount", "Early booking discount"… */
+export function discountLabel(modifier: Pick<Modifier, 'type' | 'trigger_condition'>): string {
+  if (modifier.type === 'early_bird') return 'Early booking discount'
+  const minNights = Number(modifier.trigger_condition.min_nights)
+  if (minNights >= 28) return 'Monthly discount'
+  if (minNights >= 7) return 'Weekly discount'
+  return `${minNights}+ night discount`
+}
+
+/** The discount executeModifiers kept, with what it took off. */
+function appliedDiscount(state: CalculationState): AppliedDiscount | null {
+  const modifier = state.discount
+  const step = state.trace.find(s => s.modifier_type === modifier?.type)
+  if (!modifier || !step) return null
+  return { label: discountLabel(modifier), percent: Math.abs(modifier.adjustment_value), amount: round2(-step.delta) }
 }
 
 /**
