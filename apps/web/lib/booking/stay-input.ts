@@ -3,14 +3,20 @@ import { stayBoundErrors } from "@/app/api/query/search-bounds";
 /**
  * The stay a guest asks about: dates and party, as search and the stay quote
  * read them from the URL (`checkin`, `checkout`, `adults`, `children`,
- * `rooms`). Dates stay YYYY-MM-DD strings.
+ * `infants`, `rooms`). Dates stay YYYY-MM-DD strings.
+ *
+ * Age bands, the same at every hotel: adults 13+, children 2–12, infants
+ * under 2. Infants take no place in a room and pay no fee.
  */
-export type StayInput = { checkIn: string; checkOut: string; adults: number; children: number; rooms: number };
+export type StayInput = { checkIn: string; checkOut: string; adults: number; children: number; infants: number; rooms: number };
 
 /** Booking intents take 1–9 rooms; a quote for more could never be booked. */
 export const MAX_ROOMS = 9;
 export const MAX_ADULTS = 30;
 export const MAX_CHILDREN = 20;
+/** Infants per room (booking_intent_rooms.infants, 0042). */
+export const MAX_INFANTS_PER_ROOM = 4;
+const MAX_INFANTS = MAX_INFANTS_PER_ROOM * MAX_ROOMS;
 
 /** Today's calendar date in `timeZone`, as YYYY-MM-DD. */
 export function todayInZone(timeZone: string, now: Date = new Date()): string {
@@ -53,10 +59,15 @@ export function parseStayInput(
 
   const adults = count(read(p, "adults"), 1, MAX_ADULTS);
   const children = read(p, "children") === null ? 0 : count(read(p, "children"), 0, MAX_CHILDREN);
+  const infants = read(p, "infants") === null ? 0 : count(read(p, "infants"), 0, MAX_INFANTS);
   const rooms = count(read(p, "rooms"), 1, MAX_ROOMS);
   if (adults === null) errors.push(`adults must be a whole number from 1 to ${MAX_ADULTS}`);
   if (children === null) errors.push(`children must be a whole number from 0 to ${MAX_CHILDREN}`);
+  if (infants === null) errors.push(`infants must be a whole number from 0 to ${MAX_INFANTS}`);
   if (rooms === null) errors.push(`rooms must be a whole number from 1 to ${MAX_ROOMS}`);
+  if (infants !== null && rooms !== null && infants > rooms * MAX_INFANTS_PER_ROOM) {
+    errors.push(`at most ${MAX_INFANTS_PER_ROOM} infants per room`);
+  }
   if (adults !== null && rooms !== null && rooms > adults) errors.push("every room needs an adult");
 
   if (errors.length > 0) return { ok: false, errors };
@@ -67,6 +78,7 @@ export function parseStayInput(
       checkOut: checkOut as string,
       adults: adults as number,
       children: children as number,
+      infants: infants as number,
       rooms: rooms as number,
     },
   };

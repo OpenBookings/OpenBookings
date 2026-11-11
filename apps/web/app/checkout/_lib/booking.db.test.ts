@@ -90,10 +90,19 @@ describeWithDb("checkout summary of a booking intent", () => {
     ratePlanId,
     adults: 2,
     children: 0,
+    infants: 0,
+    cots: 0,
+    extraBeds: 0,
+    payAtProperty: 0,
+    discount: null,
+    rateNights: NIGHTS.map((date) => ({ date, price })),
+    extraGuests: [],
+    payAtPropertyLines: [],
     nights: NIGHTS.map((date) => ({ date, price })),
     stayTotal: price * NIGHTS.length,
     touristTax: tax,
     touristTaxLines: [{ label: "€3.25 per person per night", amount: tax, effectiveFrom: "2031-01-01" }],
+    vatSplit: null,
   });
 
   /** A Double on "Room only" and a Garden Suite on "Non-refundable", in that order. */
@@ -155,6 +164,58 @@ describeWithDb("checkout summary of a booking intent", () => {
     expect(totalCents(s.lines)).toBe(toCents(snapshot.total));
     expect(s.intentTotal).toBe(snapshot.total);
     expect(s.currency).toBe("eur");
+  });
+
+  test("getBookingSummary returns includesBreakfast and the breakdown per room", async () => {
+    await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [nrPlanId]);
+    const extra = {
+      ...room(suiteId, nrPlanId, 140, 13),
+      adults: 3,
+      infants: 1,
+      cots: 1,
+      extraBeds: 1,
+      payAtProperty: 70,
+      discount: { label: "Weekly discount", amount: 28 },
+      rateNights: NIGHTS.map((date) => ({ date, price: 150 })),
+      extraGuests: [{ kind: "adult" as const, count: 1, per_night: 10, nights: 2, amount: 20 }],
+      payAtPropertyLines: [{ label: "Cots" as const, count: 1, fee_per_night: 10, nights: 2, amount: 20 }],
+    };
+    const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13), extra];
+    const created = await createBookingIntent(savepointDb(db), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: {
+        roomsTotal: 480,
+        touristTaxTotal: 26,
+        total: 506,
+        commissionCents: 0,
+        commissionRate: 0.1,
+        commissionVatTreatment: null,
+        commissionNetCents: null,
+        commissionVatCents: null,
+        currency: "EUR",
+        rooms: [],
+      },
+      now: NOW,
+    });
+    if (!created.ok) throw new Error("intent not created");
+    const s = await summary(created.intentId);
+    expect(s.rooms[0]).toMatchObject({ includesBreakfast: false, rateNights: rooms[0]!.rateNights, discount: null, payAtProperty: 0 });
+    expect(s.rooms[1]).toMatchObject({
+      includesBreakfast: true,
+      infants: 1,
+      cots: 1,
+      extraBeds: 1,
+      payAtProperty: 70,
+      discount: { label: "Weekly discount", amount: 28 },
+      rateNights: extra.rateNights,
+      extraGuests: extra.extraGuests,
+      payAtPropertyLines: extra.payAtPropertyLines,
+      touristTaxLines: extra.touristTaxLines,
+    });
   });
 
   test("the fee is the commission the intent recorded, not one from today's rate", async () => {

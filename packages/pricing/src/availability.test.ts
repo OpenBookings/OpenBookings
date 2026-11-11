@@ -93,10 +93,11 @@ describe("stayRuleReasons", () => {
 
 describe("perRoomParty", () => {
   test("ceil-divides across rooms", () => {
-    expect(perRoomParty({ adults: 3, children: 1, rooms: 2 })).toEqual({ adults: 2, children: 1 });
+    expect(perRoomParty({ adults: 3, children: 1, rooms: 2 })).toEqual({ adults: 2, children: 1, infants: 0 });
+    expect(perRoomParty({ adults: 2, children: 0, infants: 3, rooms: 2 })).toEqual({ adults: 1, children: 0, infants: 2 });
   });
   test("zero rooms is treated as one", () => {
-    expect(perRoomParty({ adults: 2, children: 0, rooms: 0 })).toEqual({ adults: 2, children: 0 });
+    expect(perRoomParty({ adults: 2, children: 0, rooms: 0 })).toEqual({ adults: 2, children: 0, infants: 0 });
   });
 });
 

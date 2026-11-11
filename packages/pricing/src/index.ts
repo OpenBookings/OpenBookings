@@ -9,3 +9,5 @@ export * from "./tourist-tax";
 export * from "./cancellation";
 export * from "./cancellation-copy";
 export * from "./reviews";
+export * from "./vat-rates";
+export * from "./vat-split";

@@ -24,6 +24,13 @@ import { dateRange, isoDate, MAX_RANGE_DAYS } from "./date-range";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
 import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
+import {
+  deleteModifier,
+  saveModifier,
+  setModifierActive,
+  type ModifierForm,
+  type ModifierResult,
+} from "./modifier-mutations";
 
 /**
  * Bulk mutations behind the ARI toolbar modals. Every one of them writes a
@@ -905,4 +912,32 @@ async function applyChange(
   }
 
   return affected;
+}
+
+// ─────────────────────────────────────────────
+// Pricing rules (rate modifiers)
+// ─────────────────────────────────────────────
+
+/**
+ * After a rule changes, the grid re-prices and the public listing (which
+ * shows "from" prices) is purged for the room the rule belongs to.
+ */
+async function afterRuleChange(result: ModifierResult): Promise<ModifierResult> {
+  if (result.ok) {
+    revalidatePath(ROUTE);
+    await purgePropertyPage({ roomId: result.roomId });
+  }
+  return result;
+}
+
+export async function saveRule(form: ModifierForm): Promise<ModifierResult> {
+  return afterRuleChange(await saveModifier(await requireSession(), form));
+}
+
+export async function setRuleActive(modifierId: string, active: boolean): Promise<ModifierResult> {
+  return afterRuleChange(await setModifierActive(await requireSession(), modifierId, active));
+}
+
+export async function deleteRule(modifierId: string): Promise<ModifierResult> {
+  return afterRuleChange(await deleteModifier(await requireSession(), modifierId));
 }

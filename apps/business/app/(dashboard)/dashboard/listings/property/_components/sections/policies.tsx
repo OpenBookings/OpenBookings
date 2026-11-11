@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { savePolicies } from "../../_lib/actions";
 import { PAYMENT_METHODS } from "../../_lib/schema";
@@ -47,14 +46,6 @@ const FINE_PRINT_SUGGESTIONS = [
   "The name on the booking must match the guest checking in.",
   "Special requests are subject to availability.",
 ];
-
-type FeeMode = "unavailable" | "free" | "paid";
-
-/** "" (not offered) and 0 (free) are different answers; the select makes that visible. */
-function feeModeOf(fee: number | null): FeeMode {
-  if (fee === null) return "unavailable";
-  return fee === 0 ? "free" : "paid";
-}
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return <p className="text-muted-foreground text-xs uppercase tracking-wide">{children}</p>;
@@ -101,8 +92,6 @@ function PoliciesFields({
   markDirty: () => void;
 }) {
   const { property, content } = data;
-  const [cotPolicy, setCotPolicy] = React.useState(content.cotPolicy ?? "");
-  const [extraBed, setExtraBed] = React.useState<FeeMode>(feeModeOf(content.extraBedFee));
   // Filtered to what the form still accepts, so a row saved before cash was
   // retired cannot post a code the save schema rejects.
   const [methods, setMethods] = React.useState<string[]>(() =>
@@ -216,126 +205,6 @@ function PoliciesFields({
         {state.errors?.cancellationTier && <FieldError>{state.errors.cancellationTier[0]}</FieldError>}
       </Field>
 
-      {/* ── Children & beds ─────────────────────────────────────────────── */}
-      <FieldSeparator />
-      <SectionHeading>Children &amp; beds</SectionHeading>
-
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldLabel htmlFor="childrenWelcome">Children welcome</FieldLabel>
-          <FieldDescription>
-            Guests may bring children of any age. Turn off if your property is adults-only.
-          </FieldDescription>
-        </FieldContent>
-        <Switch
-          id="childrenWelcome"
-          name="childrenWelcome"
-          defaultChecked={content.childrenWelcome}
-          disabled={pending}
-        />
-      </Field>
-
-      <Field orientation="horizontal" data-invalid={!!state.errors?.cotFee}>
-        <FieldContent>
-          <FieldLabel htmlFor="cotPolicy">Baby cots</FieldLabel>
-          <FieldDescription>A cot placed in the room for an infant, on request.</FieldDescription>
-          {state.errors?.cotFee && <FieldError>{state.errors.cotFee[0]}</FieldError>}
-        </FieldContent>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <Select
-            name="cotPolicy"
-            value={cotPolicy}
-            onValueChange={(v) => {
-              setCotPolicy(v);
-              markDirty();
-            }}
-            disabled={pending}
-          >
-            <SelectTrigger id="cotPolicy" className="w-52">
-              <SelectValue placeholder="Not stated" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unavailable">Not available</SelectItem>
-              <SelectItem value="free">Free of charge</SelectItem>
-              <SelectItem value="paid">For a fee</SelectItem>
-            </SelectContent>
-          </Select>
-          {cotPolicy === "paid" && (
-            <InputGroup className="w-52">
-              <InputGroupAddon>
-                <InputGroupText>€</InputGroupText>
-              </InputGroupAddon>
-              <InputGroupInput
-                id="cotFee"
-                name="cotFee"
-                type="number"
-                min={0}
-                step={1}
-                defaultValue={content.cotFee ?? ""}
-                disabled={pending}
-                aria-label="Cot fee"
-                aria-invalid={!!state.errors?.cotFee}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupText>per night</InputGroupText>
-              </InputGroupAddon>
-            </InputGroup>
-          )}
-        </div>
-      </Field>
-
-      <Field orientation="horizontal" data-invalid={!!state.errors?.extraBedFee}>
-        <FieldContent>
-          <FieldLabel htmlFor="extraBedMode">Extra beds</FieldLabel>
-          <FieldDescription>A rollaway bed added to a room, for an extra guest.</FieldDescription>
-          {state.errors?.extraBedFee && <FieldError>{state.errors.extraBedFee[0]}</FieldError>}
-        </FieldContent>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <Select
-            value={extraBed}
-            onValueChange={(v) => {
-              setExtraBed(v as FeeMode);
-              markDirty();
-            }}
-            disabled={pending}
-          >
-            <SelectTrigger id="extraBedMode" className="w-52">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unavailable">Not available</SelectItem>
-              <SelectItem value="free">Free of charge</SelectItem>
-              <SelectItem value="paid">For a fee</SelectItem>
-            </SelectContent>
-          </Select>
-          {/* Stored as one nullable fee: blank is "not offered", 0 is "free". */}
-          {extraBed === "paid" ? (
-            <InputGroup className="w-52">
-              <InputGroupAddon>
-                <InputGroupText>€</InputGroupText>
-              </InputGroupAddon>
-              <InputGroupInput
-                id="extraBedFee"
-                name="extraBedFee"
-                type="number"
-                min={1}
-                step={1}
-                required
-                defaultValue={content.extraBedFee || ""}
-                disabled={pending}
-                aria-label="Extra bed fee"
-                aria-invalid={!!state.errors?.extraBedFee}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupText>per night</InputGroupText>
-              </InputGroupAddon>
-            </InputGroup>
-          ) : (
-            <input type="hidden" name="extraBedFee" value={extraBed === "free" ? "0" : ""} />
-          )}
-        </div>
-      </Field>
-
       {/* ── Payment ─────────────────────────────────────────────────────── */}
       <FieldSeparator />
       <SectionHeading>Payment</SectionHeading>
@@ -353,7 +222,9 @@ function PoliciesFields({
           <p className="font-medium text-sm">Guests pay online when they book</p>
           <p className="text-muted-foreground text-sm">
             Every booking is paid through OpenBookings at the time of booking, so prepayment is
-            always required. Payments at the property, including cash, are not possible.
+            always required. The one exception is cots and extra beds: guests pay you for those at
+            check-in, at the price set on each room. No other payments at the property, cash
+            included.
           </p>
         </div>
       </div>
@@ -388,6 +259,23 @@ function PoliciesFields({
       {/* ── Other ───────────────────────────────────────────────────────── */}
       <FieldSeparator />
       <SectionHeading>Other</SectionHeading>
+
+      {/* Cots and extra beds are set per room (Rooms → Space); only this stays property-wide. */}
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor="childrenWelcome">Children welcome</FieldLabel>
+          <FieldDescription>
+            Guests may bring children (2–12) and infants (under 2). Turn off if your property is
+            adults-only.
+          </FieldDescription>
+        </FieldContent>
+        <Switch
+          id="childrenWelcome"
+          name="childrenWelcome"
+          defaultChecked={content.childrenWelcome}
+          disabled={pending}
+        />
+      </Field>
 
       <Field orientation="horizontal" data-invalid={!!state.errors?.minCheckInAge}>
         <FieldContent>

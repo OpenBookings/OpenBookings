@@ -22,6 +22,12 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   check_out_date: "2031-11-12",
   guest_name: "Emma de Vries",
   guests: 2,
+  adults: 2,
+  children: 0,
+  infants: 0,
+  cots: 0,
+  extra_beds: 0,
+  pay_at_property: 0,
   total_amount: 206,
   timezone: "Europe/Amsterdam",
   check_in_time: "15:00",
@@ -52,6 +58,17 @@ describe("toHostReservation", () => {
     expect(r.actions).toEqual(["cancel", "goodwill_refund"]);
     expect(r.rooms[0]).toMatchObject({ reservationId: "r1", tierLabel: "Flex", paid: 206, cancelledAt: null });
     expect(r.rooms[0].policyLines[0]).toBe("Free cancellation until Sun 9 Nov 2031, 15:00.");
+  });
+
+  test("the party by age band, and what the hotel prepares and collects", () => {
+    const r = toHostReservation(row({ guests: 3, adults: 2, children: 1, infants: 1, cots: 1, extra_beds: 1, pay_at_property: 175 }), NOW);
+    expect(r.partyLabel).toBe("2 adults, 1 child, 1 infant");
+    expect(r.extrasLabel).toBe("1 cot · 1 extra bed");
+    expect(r.atHotelAmount).toBe(175);
+    const plain = toHostReservation(row(), NOW);
+    expect(plain.partyLabel).toBe("2 adults");
+    expect(plain.extrasLabel).toBeNull();
+    expect(plain.atHotelAmount).toBe(0);
   });
 
   test("completed shows as checked out", () => {

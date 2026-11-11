@@ -101,6 +101,16 @@ describeWithDb("loadHostReservations against Postgres", () => {
     expect(booking?.guestName).toBe("Emma Test");
   });
 
+  test("the party by age band, the cots and beds, and what the hotel collects", async () => {
+    await db.query(
+      `UPDATE reservations SET infants = 1, cots = 1, pay_at_property_amount = 50
+       WHERE id = (SELECT id FROM reservations WHERE booking_id = $1 LIMIT 1)`,
+      [bookingId],
+    );
+    const booking = (await loadHostReservations(session(owner), hostDb(session(owner)))).find((r) => r.id === bookingId);
+    expect(booking).toMatchObject({ guests: 4, partyLabel: "4 adults, 1 infant", extrasLabel: "1 cot", atHotelAmount: 50 });
+  });
+
   test("another host sees nothing", async () => {
     const list = await loadHostReservations(session(stranger), hostDb(session(stranger)));
     expect(list.find((r) => r.id === bookingId)).toBeUndefined();

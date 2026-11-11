@@ -21,7 +21,10 @@ export interface Night {
 }
 
 interface NightWithSurcharge extends Night {
+  /** Rate modifiers' surcharges on this night. Stay discounts are spread over these. */
   _surcharge: number
+  /** Extra adults and children on this night. Never discounted. */
+  _extra: number
 }
 
 export interface Modifier {
@@ -61,12 +64,65 @@ export interface RoomRow {
   modifiers: Modifier[]
   /** The property's tourist tax rules. Absent or empty = no tourist tax. */
   tourist_tax_rules?: TouristTaxRule[]
+  /**
+   * Per extra guest per night, whole euros. Guests above `base_occupancy`
+   * pay it (see `extraGuests`). Absent or null = not charged.
+   */
+  extra_adult_fee?: number | null
+  extra_child_fee?: number | null
+  /** Per cot / extra bed per night, whole euros, paid at the property. 0 = free. */
+  cot_fee?: number | null
+  extra_bed_fee?: number | null
 }
 
 interface SearchParams {
   adults: number
   children: number
+  /** Under 2: no place, no fee. Counted with the children for tourist tax only. */
+  infants?: number
   arrivalDate: string
+  /**
+   * Cots and extra beds booked with the room, paid at the property (so never in
+   * the room price). Checked against the room's limits by the caller.
+   */
+  cots?: number
+  extraBeds?: number
+}
+
+/** A cot or extra bed line the guest pays at the property, fixed at booking. */
+export interface PayAtPropertyLine {
+  label: 'Cots' | 'Extra beds'
+  count: number
+  fee_per_night: number
+  nights: number
+  amount: number
+}
+
+/** The one discount that applied, for the guest's checkout. `amount` is positive. */
+export interface AppliedDiscount {
+  label: string
+  percent: number
+  amount: number
+}
+
+/** The calendar date it is now at the property, as YYYY-MM-DD. */
+export function todayInZone(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(now)
+}
+
+/**
+ * How many of the party are above the room's base occupancy. Adults fill the
+ * included places first, so a family of two adults and a child in a room for
+ * two has one extra child.
+ */
+export function extraGuests(
+  baseOccupancy: number,
+  adults: number,
+  children: number
+): { adults: number; children: number } {
+  const extraAdults = Math.max(0, adults - baseOccupancy)
+  const placesLeft = Math.max(0, baseOccupancy - adults)
+  return { adults: extraAdults, children: Math.max(0, children - placesLeft) }
 }
 
 // ─────────────────────────────────────────────
@@ -78,21 +134,21 @@ function isEligible(
   context: {
     date: string
     numNights: number
-    totalGuests: number
-    baseOccupancy: number
     arrivalDate: string
     today: string
   }
 ): boolean {
   const { type, trigger_condition: tc } = modifier
-  const { date, numNights, totalGuests, baseOccupancy, arrivalDate, today } = context
+  const { date, numNights, arrivalDate, today } = context
 
   const daysUntilArrival =
     (new Date(arrivalDate).getTime() - new Date(today).getTime()) / 86_400_000
 
   switch (type) {
     case 'day_of_week': {
-      const dow = new Date(date).getDay()
+      // The date's own weekday: parsed and read in UTC, so the server's
+      // time zone cannot move it to the day before.
+      const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
       return (tc.days_of_week as number[]).includes(dow)
     }
 
@@ -106,10 +162,6 @@ function isEligible(
 
     case 'last_minute': {
       return daysUntilArrival <= (tc.days_till_arrival as number)
-    }
-
-    case 'extra_guest': {
-      return totalGuests > (tc.guests_above_base as number)
     }
 
     default:
@@ -140,7 +192,7 @@ export interface PriceStep {
    * rate_overrides row replaced the plan's BAR. `percent` and `flat` are the
    * two ways a modifier adjusts it.
    */
-  op: 'base' | 'set' | 'percent' | 'flat'
+  op: 'base' | 'set' | 'percent' | 'flat' | 'extra'
   /** The figure behind the op: the amount itself, or the modifier's adjustment_value. */
   value: number
   /** Signed contribution to the running total. */
@@ -158,6 +210,8 @@ interface CalculationState {
   applied: Set<ModifierType>
   /** Built as the executor runs. Modifiers that never fire leave no step. */
   trace: PriceStep[]
+  /** The stay discount kept by executeModifiers, if any. */
+  discount?: Modifier
 }
 
 /**
@@ -239,10 +293,7 @@ function roundTrace(trace: PriceStep[]): PriceStep[] {
 }
 
 interface ModifierContext {
-  extraGuests: number
   numNights: number
-  totalGuests: number
-  baseOccupancy: number
   arrivalDate: string
   today: string
 }
@@ -256,42 +307,6 @@ type ModifierStepFn = (
 // ─────────────────────────────────────────────
 // Step functions (ordered by sort_order)
 // ─────────────────────────────────────────────
-
-function applyExtraGuest(
-  state: CalculationState,
-  modifier: Modifier,
-  context: ModifierContext
-): CalculationState {
-  if (modifier.type !== 'extra_guest') return state
-  if (!context.extraGuests) return state
-
-  const dummyContext = { ...context, date: context.arrivalDate }
-  if (!isEligible(modifier, dummyContext)) return state
-
-  // Apply surcharge to each night
-  const updatedNights = state.nights.map(night => {
-    const surcharge = modifier.adjustment_type === 'flat'
-      ? modifier.adjustment_value * context.extraGuests
-      : (night.base_price * modifier.adjustment_value * context.extraGuests) / 100
-
-    return {
-      ...night,
-      _surcharge: night._surcharge + surcharge,
-    }
-  })
-
-  const totalSurcharge = updatedNights.reduce((sum, n) => sum + n._surcharge, 0)
-    - state.nights.reduce((sum, n) => sum + n._surcharge, 0)
-
-  return {
-    ...state,
-    nights: updatedNights,
-    subtotal: state.subtotal + totalSurcharge,
-    total: state.total + totalSurcharge,
-    applied: new Set([...state.applied, 'extra_guest']),
-    trace: traceModifier(state, 'Extra guest', modifier, totalSurcharge),
-  }
-}
 
 function applyDayOfWeek(
   state: CalculationState,
@@ -372,9 +387,9 @@ function applyLengthOfStay(
   const dummyContext = { ...context, date: context.arrivalDate }
   if (!isEligible(modifier, dummyContext)) return state
 
-  const discount = modifier.adjustment_type === 'flat'
-    ? modifier.adjustment_value
-    : (state.subtotal * modifier.adjustment_value) / 100
+  // Discounts are a percentage (0042); a flat row is not one and is ignored.
+  if (modifier.adjustment_type !== 'percent') return state
+  const discount = (state.subtotal * modifier.adjustment_value) / 100
 
   return {
     ...state,
@@ -394,9 +409,9 @@ function applyEarlyBird(
   const dummyContext = { ...context, date: context.arrivalDate }
   if (!isEligible(modifier, dummyContext)) return state
 
-  const discount = modifier.adjustment_type === 'flat'
-    ? modifier.adjustment_value
-    : (state.subtotal * modifier.adjustment_value) / 100
+  // Discounts are a percentage (0042); a flat row is not one and is ignored.
+  if (modifier.adjustment_type !== 'percent') return state
+  const discount = (state.subtotal * modifier.adjustment_value) / 100
 
   return {
     ...state,
@@ -419,45 +434,61 @@ function executeModifiers(
   const initialSubtotal = nights.reduce((sum, n) => sum + n.base_price, 0)
 
   let state: CalculationState = {
-    nights: nights.map(n => ({ ...n, _surcharge: 0 })),
+    nights: nights.map(n => ({ ...n, _surcharge: 0, _extra: 0 })),
     subtotal: initialSubtotal,
     total: initialSubtotal,
     applied: new Set(),
     trace: baseSteps(nights),
   }
 
-  // Sort by sort_order and execute each modifier
   const sortedModifiers = [...modifiers].sort((a, b) => a.sort_order - b.sort_order)
 
-  // Only one discount may fire — the eligible one with the lowest sort_order
-  const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
-
-  const stepFunctions: Record<ModifierType, ModifierStepFn> = {
-    extra_guest: applyExtraGuest,
+  // `extra_guest` rows are no longer a rate rule: extra guests are priced from
+  // the room (applyOccupancyAndExtras), so such a row is skipped.
+  const stepFunctions: Partial<Record<ModifierType, ModifierStepFn>> = {
     day_of_week: applyDayOfWeek,
     last_minute: applyLastMinute,
     length_of_stay: applyLengthOfStay,
     early_bird: applyEarlyBird,
   }
 
+  // Date surcharges first, in rule order, so a percentage discount is always
+  // taken from the same figure whatever order the rules were added in.
   for (const modifier of sortedModifiers) {
-    // Skip discount modifiers once one has already been applied
-    if (DISCOUNT_TYPES.has(modifier.type) && [...state.applied].some(t => DISCOUNT_TYPES.has(t))) {
-      continue
-    }
-
+    if (DISCOUNT_TYPES.has(modifier.type)) continue
     const stepFn = stepFunctions[modifier.type]
-    if (stepFn) {
-      state = stepFn(state, modifier, context)
-    }
+    if (stepFn) state = stepFn(state, modifier, context)
   }
 
-  return state
+  // Then one discount: the one that takes the most off for this guest. A
+  // discount always lowers the price, whatever sign it was stored with.
+  let best = state
+  for (const modifier of sortedModifiers) {
+    if (!DISCOUNT_TYPES.has(modifier.type)) continue
+    const stepFn = stepFunctions[modifier.type]
+    if (!stepFn) continue
+    const discounted = stepFn(state, { ...modifier, adjustment_value: -Math.abs(modifier.adjustment_value) }, context)
+    if (discounted.total < best.total) best = { ...discounted, discount: modifier }
+  }
+
+  return best
 }
+
+/** Rules that lower the price. Only one applies per stay; see executeModifiers. */
+const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
 
 // ─────────────────────────────────────────────
 // Main resolver
 // ─────────────────────────────────────────────
+
+/** Guests above base occupancy, as one checkout line. Already in `room_price`, never discounted. */
+export interface ExtraGuestLine {
+  kind: 'adult' | 'child'
+  count: number
+  per_night: number
+  nights: number
+  amount: number
+}
 
 export interface ResolvedRoom
   extends Omit<RoomRow, 'nights' | 'modifiers' | 'tourist_tax_rules'> {
@@ -481,6 +512,18 @@ export interface ResolvedRoom
    * night absorbs rounding so the nights sum to `room_price` exactly.
    */
   priced_nights: { date: string; price: number }[]
+  /**
+   * Each night's rate plus date surcharges, before the stay discount and extra
+   * guests, in cents. Adds up with `extra_guests` and `discount` to `room_price`.
+   */
+  rate_nights: { date: string; price: number }[]
+  /** Extra adults and children in `room_price`. Empty when nobody is extra. */
+  extra_guests: ExtraGuestLine[]
+  /** Cots and extra beds, paid at the property: not in `room_price` or `total_price`. */
+  pay_at_property: PayAtPropertyLine[]
+  pay_at_property_total: number
+  /** The stay discount that applied, or null. Already in `room_price`. */
+  discount: AppliedDiscount | null
   applied_modifiers: ModifierType[]
   /** Ordered build-up of `total_price`. See PriceStep. */
   trace: PriceStep[]
@@ -489,43 +532,132 @@ export interface ResolvedRoom
 export function resolveRoom(
   row: RoomRow,
   params: SearchParams,
-  today: string = new Date().toISOString().split('T')[0]
+  /** Defaults to today at the property (its `timezone`), so lead time matches the guest's arrival date. */
+  todayAtProperty?: string
 ): ResolvedRoom {
+  const today = todayAtProperty ?? todayInZone(row.timezone ?? 'UTC')
   const { adults, children, arrivalDate } = params
-  const totalGuests = adults + children
-  const extraGuests = Math.max(0, totalGuests - row.base_occupancy)
   const numNights = row.nights.length
+  const modifiersRun = executeModifiers(row.nights, row.modifiers, { numNights, arrivalDate, today })
 
-  const state = executeModifiers(row.nights, row.modifiers, {
-    extraGuests,
-    numNights,
-    totalGuests,
-    baseOccupancy: row.base_occupancy,
-    arrivalDate,
-    today,
-  })
+  const state = applyExtraGuests(modifiersRun, row, params)
+  const payAtProperty = payAtPropertyLines(row, params, numNights)
 
   const roomPrice = round2(state.total)
   const touristTax = calculateTouristTax(row.tourist_tax_rules ?? [], {
     nights: pricedNights(state),
     adults,
-    children,
+    children: children + (params.infants ?? 0),
     rooms: 1,
   })
+
+  const discount = appliedDiscount(state)
+  const extraLines = extraGuestLines(row, params, numNights)
+  const extraAmount = extraLines.reduce((sum, l) => sum + l.amount, 0)
 
   const { tourist_tax_rules: _rules, ...rest } = row
   return {
     ...rest,
     nights: row.nights, // return original nights (drop _surcharge)
     modifiers: row.modifiers,
-    subtotal: round2(state.subtotal),
+    subtotal: round2(state.subtotal + extrasTotal(state)),
     room_price: roomPrice,
     tourist_tax: touristTax,
     total_price: round2(roomPrice + touristTax.total),
     priced_nights: roundedPricedNights(pricedNights(state), roomPrice),
+    rate_nights: roundedRateNights(state, round2(roomPrice - extraAmount + (discount?.amount ?? 0))),
+    extra_guests: extraLines,
+    pay_at_property: payAtProperty,
+    pay_at_property_total: round2(payAtProperty.reduce((sum, l) => sum + l.amount, 0)),
+    discount,
     applied_modifiers: [...state.applied],
     trace: roundTrace(state.trace),
   }
+}
+
+// ─────────────────────────────────────────────
+// Occupancy & extras (after the rate modifiers, never discounted)
+// ─────────────────────────────────────────────
+
+const extrasTotal = (state: CalculationState) => state.nights.reduce((sum, n) => sum + n._extra, 0)
+
+/**
+ * Add guests above base occupancy, per night, on top of the rate. Runs after
+ * every rate modifier, so no discount reaches these fees. Infants take no
+ * place. One trace line per fee that adds something.
+ */
+function applyExtraGuests(
+  state: CalculationState,
+  row: RoomRow,
+  params: SearchParams
+): CalculationState {
+  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
+  const lines: { label: string; fee: number | null | undefined; count: number }[] = [
+    { label: 'Extra adults', fee: row.extra_adult_fee, count: extra.adults },
+    { label: 'Extra children', fee: row.extra_child_fee, count: extra.children },
+  ]
+
+  let next = state
+  for (const { label, fee, count } of lines) {
+    const perNight = (fee ?? 0) * count
+    if (perNight <= 0) continue
+    const delta = perNight * next.nights.length
+    const previous = next.trace[next.trace.length - 1]?.result ?? 0
+    next = {
+      ...next,
+      nights: next.nights.map(n => ({ ...n, _extra: n._extra + perNight })),
+      total: next.total + delta,
+      trace: [...next.trace, { label, op: 'extra', value: fee ?? 0, delta, result: previous + delta }],
+    }
+  }
+  return next
+}
+
+/** One line per kind of extra guest that is charged. Matches applyExtraGuests. */
+function extraGuestLines(row: RoomRow, params: SearchParams, nights: number): ExtraGuestLine[] {
+  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
+  const lines: ExtraGuestLine[] = []
+  const add = (kind: ExtraGuestLine['kind'], count: number, fee: number | null | undefined) => {
+    const perNight = round2((fee ?? 0) * count)
+    if (perNight <= 0) return
+    lines.push({ kind, count, per_night: perNight, nights, amount: round2(perNight * nights) })
+  }
+  add('adult', extra.adults, row.extra_adult_fee)
+  add('child', extra.children, row.extra_child_fee)
+  return lines
+}
+
+/**
+ * Cots and extra beds the guest booked, priced for the hotel to collect. A free
+ * one is still listed so the property knows to prepare it.
+ */
+function payAtPropertyLines(row: RoomRow, params: SearchParams, nights: number): PayAtPropertyLine[] {
+  const lines: PayAtPropertyLine[] = []
+  const add = (label: PayAtPropertyLine['label'], count: number, fee: number | null | undefined) => {
+    if (count <= 0) return
+    const perNight = fee ?? 0
+    lines.push({ label, count, fee_per_night: perNight, nights, amount: round2(perNight * count * nights) })
+  }
+  add('Cots', params.cots ?? 0, row.cot_fee)
+  add('Extra beds', params.extraBeds ?? 0, row.extra_bed_fee)
+  return lines
+}
+
+/** The guest-facing name of a discount: "Weekly discount", "Early booking discount"… */
+export function discountLabel(modifier: Pick<Modifier, 'type' | 'trigger_condition'>): string {
+  if (modifier.type === 'early_bird') return 'Early booking discount'
+  const minNights = Number(modifier.trigger_condition.min_nights)
+  if (minNights >= 28) return 'Monthly discount'
+  if (minNights >= 7) return 'Weekly discount'
+  return `${minNights}+ night discount`
+}
+
+/** The discount executeModifiers kept, with what it took off. */
+function appliedDiscount(state: CalculationState): AppliedDiscount | null {
+  const modifier = state.discount
+  const step = state.trace.find(s => s.modifier_type === modifier?.type)
+  if (!modifier || !step) return null
+  return { label: discountLabel(modifier), percent: Math.abs(modifier.adjustment_value), amount: round2(-step.delta) }
 }
 
 /**
@@ -534,10 +666,21 @@ export function resolveRoom(
  * Surcharges are per night, but a stay discount (length of stay, early bird)
  * comes off the total. Spreading the discount over the nights in proportion
  * keeps every night's share honest and makes the nights add up to the total.
+ * Extras are never discounted, so each night carries its own in full.
  */
 function pricedNights(state: CalculationState): { date: string; price: number }[] {
-  const scale = state.subtotal > 0 ? state.total / state.subtotal : 0
-  return state.nights.map(n => ({ date: n.date, price: (n.base_price + n._surcharge) * scale }))
+  const discounted = state.total - extrasTotal(state)
+  const scale = state.subtotal > 0 ? discounted / state.subtotal : 0
+  return state.nights.map(n => ({ date: n.date, price: (n.base_price + n._surcharge) * scale + n._extra }))
+}
+
+/** Rate plus surcharges per night; the last night absorbs rounding so they sum to `target`. */
+function roundedRateNights(state: CalculationState, target: number): { date: string; price: number }[] {
+  const rounded = state.nights.map(n => ({ date: n.date, price: round2(n.base_price + n._surcharge) }))
+  if (rounded.length === 0) return rounded
+  const head = rounded.slice(0, -1).reduce((sum, n) => sum + n.price, 0)
+  rounded[rounded.length - 1].price = round2(target - head)
+  return rounded
 }
 
 function roundedPricedNights(
@@ -593,9 +736,9 @@ export function hasStayLengthDiscount(modifiers: Modifier[]): boolean {
  * `stayLength` defaults to 1, the extranet convention. Raising it lets a host
  * see the rates a longer booking would actually get, because stay-length
  * discounts (`length_of_stay`, and any `early_bird` gated on nights) only fire
- * once the probe is long enough to qualify. `extra_guest` never fires here —
- * the probe is at base occupancy, and occupancy is a booking property rather
- * than a date one. Date-intrinsic modifiers (`day_of_week`, `last_minute`,
+ * once the probe is long enough to qualify. Extra-guest fees, cots and extra
+ * beds never appear here — the probe is at base occupancy with no extras, and
+ * those are booking properties rather than date ones. Date-intrinsic modifiers (`day_of_week`, `last_minute`,
  * lead-time `early_bird`) resolve normally at any stay length, since the
  * cell's date is the arrival date.
  *
@@ -616,10 +759,7 @@ export function resolveNightlyRates(
     const numNights = window.length
 
     const state = executeModifiers(window, modifiers, {
-      extraGuests: 0,
       numNights,
-      totalGuests: options.baseOccupancy,
-      baseOccupancy: options.baseOccupancy,
       arrivalDate: night.date,
       today,
     })

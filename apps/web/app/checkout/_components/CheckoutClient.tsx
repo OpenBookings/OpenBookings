@@ -16,9 +16,11 @@ import {
   STRIPE_JS_UNAVAILABLE,
   type CheckoutErrorCopy,
 } from '../_lib/errors';
+import { payReassurance } from '../_lib/reassurance';
 import { useHoldCountdown } from '../_lib/useHoldCountdown';
 import { useTurnstileToken } from '../_lib/useTurnstileToken';
 import { Backdrop } from './Backdrop';
+import { CheckoutPhoneBar, PAYMENT_COLUMN_ID } from './CheckoutStickyBar';
 import { CheckoutGate, type GateViewer } from './CheckoutGate';
 import { CheckoutNotice } from './CheckoutNotice';
 import { CHECKOUT_CARD, DetailsCard } from './DetailsCard';
@@ -52,6 +54,8 @@ function stripeFor(stripeAccountId: string): Promise<Stripe | null> | null {
 /** Everything the summary renders, plus the photograph behind the whole page. */
 export type CheckoutClientProps = TripSummaryProps & {
   heroImageUrl: string;
+  /** "+ €75.00 at the property for the extra bed": under the Pay button. Null when nothing is paid there. */
+  payAtPropertyLine: string | null;
   /**
    * The signed-in guest, read on the server so the gate knows on first paint
    * whether sign-in is still owed. Null means nobody is signed in.
@@ -81,7 +85,7 @@ function Shell({ heroImageUrl, children }: { heroImageUrl: string; children: Rea
   return (
     <>
       <Backdrop heroImageUrl={heroImageUrl} />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:py-16">
+      <main className="mx-auto w-full max-w-6xl px-4 pt-10 pb-28 sm:px-6 lg:py-16">
         {/*
           Summary first on narrow screens, matching the design's reading order;
           side by side from lg up.
@@ -279,7 +283,7 @@ function CheckoutSession({
   // Non-refundable rates (Annex B B.4.3): nothing to do with paying is shown
   // until the guest has ticked that they understand.
   const [consented, setConsented] = useState(false);
-  const holdLapsed = useHoldCountdown({
+  const { lapsed: holdLapsed, expiresAt: holdExpiresAt } = useHoldCountdown({
     intentId: props.intentId,
     holdExpiresAt: props.holdExpiresAt,
     open: props.intentStatus === 'open',
@@ -424,7 +428,7 @@ function CheckoutSession({
           guest's details, then payment. The details card stays usable before
           the tick; payment appears only after it.
         */}
-        <div className="flex flex-col gap-4">
+        <div id={PAYMENT_COLUMN_ID} className="flex scroll-mt-4 flex-col gap-4">
           {props.requiresNonRefundableConsent && (
             <label className={`${CHECKOUT_CARD} flex cursor-pointer items-start gap-3 text-sm`}>
               <input
@@ -448,11 +452,18 @@ function CheckoutSession({
                 backHref={props.backHref}
                 details={details}
                 propertyName={props.propertyName}
+                holdExpiresAt={holdExpiresAt}
+                reassurance={payReassurance(props.cancellations.map((c) => c.steps))}
+                payAtPropertyLine={props.payAtPropertyLine}
               />
             </PaymentCardBoundary>
           )}
         </div>
       </Shell>
+      <CheckoutPhoneBar
+        payAtPropertyLine={props.payAtPropertyLine}
+        reassurance={payReassurance(props.cancellations.map((c) => c.steps))}
+      />
     </CheckoutElementsProvider>
   );
 }

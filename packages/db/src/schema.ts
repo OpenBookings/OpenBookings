@@ -102,6 +102,10 @@ export const properties = pgTable(
     city: varchar("city", { length: 100 }).notNull(),
     postalCode: varchar("postal_code", { length: 20 }),
     country: char("country", { length: 2 }).notNull(),
+    /** Sets the VAT rates for the split (0045). */
+    accommodationType: text("accommodation_type").notNull().default("hotel"),
+    /** Euros per person per night, VAT-inclusive, for the breakfast part of the split (0045). */
+    breakfastValue: numeric("breakfast_value", { precision: 10, scale: 2 }),
     timezone: varchar("timezone", { length: 50 }).notNull(),
     location: geographyPoint("location").notNull(),
     /**
@@ -212,12 +216,31 @@ export const rooms = pgTable(
     amenityKeys: text("amenity_keys").array(),
     /** Up to six of `amenityKeys`, featured on the guest room card (0023). */
     featuredAmenityKeys: text("featured_amenity_keys").array().notNull().default(sql`'{}'::text[]`),
+    /**
+     * Per extra guest per night, whole euros (0040). Guests above
+     * `baseOccupancy` pay it, adults filling the included places first.
+     * NULL = not charged. Never discounted.
+     */
+    extraAdultFee: bigint("extra_adult_fee", { mode: "number" }),
+    extraChildFee: bigint("extra_child_fee", { mode: "number" }),
+    /** How many cots fit (0040). 0 = not offered. */
+    cotsMax: smallint("cots_max").notNull().default(0),
+    /** Per cot per night, whole euros; 0 = free, NULL when not offered (0040). */
+    cotFee: bigint("cot_fee", { mode: "number" }),
+    extraBedsMax: smallint("extra_beds_max").notNull().default(0),
+    extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+    /** false = a guest gets cots or extra beds, not both (0040). */
+    cotAndExtraBedTogether: boolean("cot_and_extra_bed_together").notNull().default(true),
   },
   (table) => [
     index("idx_rooms_hotel_id").on(table.propertyId),
     index("idx_rooms_property_order").on(table.propertyId, table.sortOrder),
     check("rooms_featured_amenities_max", sql`cardinality(${table.featuredAmenityKeys}) <= 6`),
     check("rooms_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
+    check(
+      "rooms_base_occupancy_within_max",
+      sql`${table.baseOccupancy} <= ${table.maxAdults} + ${table.maxChildren}`,
+    ),
   ],
 );
 
@@ -306,7 +329,19 @@ export const rateModifiers = pgTable(
     sortOrder: smallint("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("idx_rate_modifiers_plan_active").on(table.ratePlanId, table.isActive)],
+  (table) => [
+    index("idx_rate_modifiers_plan_active").on(table.ratePlanId, table.isActive),
+    // Discounts lower the price, so they are stored negative (0041).
+    check(
+      "rate_modifiers_discount_sign",
+      sql`${table.type} NOT IN ('length_of_stay', 'early_bird') OR ${table.adjustmentValue} < 0`,
+    ),
+    // Discounts are a percentage; fixed amounts are per-night surcharges only (0042).
+    check(
+      "rate_modifiers_discount_percent",
+      sql`${table.type} NOT IN ('length_of_stay', 'early_bird') OR ${table.adjustmentType} = 'percent'`,
+    ),
+  ],
 );
 
 export const propertyAmenities = pgTable(
@@ -321,8 +356,6 @@ export const propertyAmenities = pgTable(
   },
   (table) => [primaryKey({ columns: [table.propertyId, table.amenityId] })],
 );
-
-export const cotPolicyEnum = pgEnum("cot_policy", ["free", "paid", "unavailable"]);
 
 /**
  * Guest-facing listing content, 1:1 with `properties`.
@@ -352,10 +385,7 @@ export const propertyContent = pgTable("property_content", {
   prepaymentRequired: boolean("prepayment_required").notNull().default(true),
   childrenWelcome: boolean("children_welcome").notNull().default(true),
   minCheckInAge: integer("min_check_in_age"),
-  cotPolicy: cotPolicyEnum("cot_policy"),
-  /** Whole currency units, like rate_plans.bar. Read back as a string; convert explicitly. */
-  cotFee: bigint("cot_fee", { mode: "number" }),
-  extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+  // Cots and extra beds are per room (rooms.cots_max …, 0040); the property-wide columns went in 0043.
   petsAllowed: boolean("pets_allowed").notNull().default(false),
   paymentMethods: text("payment_methods").array(),
 
@@ -651,6 +681,15 @@ export const reservations = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull().default(1),
     children: integer("children").notNull().default(0),
+    /** Under 2: no place, no fee (0042). */
+    infants: smallint("infants").notNull().default(0),
+    /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
+    cots: smallint("cots").notNull().default(0),
+    extraBeds: smallint("extra_beds").notNull().default(0),
+    /** What the guest owes the hotel for the cots and extra beds, fixed at booking. Not in `totalAmount` (0042). */
+    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** VAT inside each night, copied from the intent. Null for bookings from before 0045. */
+    vatSplit: jsonb("vat_split"),
     totalNights: integer("total_nights").notNull(),
     pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
     totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
@@ -796,7 +835,25 @@ export const bookingIntentRooms = pgTable(
       .references(() => ratePlans.id),
     adults: integer("adults").notNull(),
     children: integer("children").notNull().default(0),
+    /** Under 2: no place, no fee (0042). */
+    infants: smallint("infants").notNull().default(0),
+    /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
+    cots: smallint("cots").notNull().default(0),
+    extraBeds: smallint("extra_beds").notNull().default(0),
+    /** What the guest owes the hotel for the cots and extra beds. Not in `stayTotal` (0042). */
+    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** The stay discount already in `stayTotal`, for checkout: "Weekly discount", 42.00 (0042). */
+    discountLabel: text("discount_label"),
+    discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }),
     nights: jsonb("nights").notNull(),
+    /** Base rate per night, before extra guests and discount, for checkout (0044). Empty on older intents. */
+    rateNights: jsonb("rate_nights").notNull().default(sql`'[]'::jsonb`),
+    /** Guests above base occupancy, already in `stayTotal` (0044). */
+    extraGuests: jsonb("extra_guests").notNull().default(sql`'[]'::jsonb`),
+    /** Cot and extra bed lines behind `payAtPropertyAmount` (0044). */
+    payAtPropertyLines: jsonb("pay_at_property_lines").notNull().default(sql`'[]'::jsonb`),
+    /** VAT inside each night, room and breakfast, for the host's books. Null when unknown (0045). */
+    vatSplit: jsonb("vat_split"),
     stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),

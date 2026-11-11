@@ -19,9 +19,14 @@ export type ReservationSummary = {
   roomName: string;
   checkInDate: string;
   checkOutDate: string;
+  /** Adults and children; infants take no place. */
   guests: number;
   status: ReservationStatus;
   totalAmount: number;
+  /** "1 cot · 1 extra bed" for housekeeping; absent or null when none. */
+  extrasLabel?: string | null;
+  /** Collected at the hotel for cots and extra beds, outside `totalAmount`. */
+  atHotelAmount?: number;
 };
 
 export type ReservationBuckets<T extends ReservationSummary = ReservationSummary> = {

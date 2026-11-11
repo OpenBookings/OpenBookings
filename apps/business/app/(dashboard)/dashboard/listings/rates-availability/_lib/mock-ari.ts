@@ -514,6 +514,15 @@ export function buildMockAriGrid(
         minStay: planMinStay,
         maxStay: planSpec.maxStay ?? null,
         modifiers,
+        // Mock rules aren't editable: ids only so the rules list can render them.
+        rules: modifiers.map((m, i) => ({
+          id: `${planId}-rule-${i}`,
+          type: m.type,
+          adjustmentType: m.adjustment_type,
+          adjustmentValue: m.adjustment_value,
+          triggerCondition: m.trigger_condition,
+          active: true,
+        })),
         hasStayDiscount: planHasStayDiscount,
         cells,
         status: deriveStatus(cells),

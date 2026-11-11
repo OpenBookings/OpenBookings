@@ -74,9 +74,6 @@ describe("policiesSchema", () => {
     cancellationTier: "standard",
     childrenWelcome: "on",
     minCheckInAge: "18",
-    cotPolicy: "free",
-    cotFee: "",
-    extraBedFee: "60",
     petsAllowed: "",
     paymentMethods: ["visa", "mastercard"],
     finePrint: ["A security deposit of EUR 500 is required upon arrival."],
@@ -99,10 +96,11 @@ describe("policiesSchema", () => {
     expect(r.data!.checkInUntil).toBeNull();
   });
 
-  test("turns an empty optional money field into null, not zero", () => {
-    const r = policiesSchema.safeParse(valid);
-    expect(r.data!.cotFee).toBeNull();
-    expect(r.data!.extraBedFee).toBe(60);
+  test("cots and extra beds are no longer property policies: they are set per room", () => {
+    const r = policiesSchema.safeParse({ ...valid, cotPolicy: "paid", cotFee: "", extraBedFee: "60" });
+    expect(r.success).toBe(true);
+    expect(r.data).not.toHaveProperty("cotPolicy");
+    expect(r.data).not.toHaveProperty("extraBedFee");
   });
 
   test("rejects cash: every payment goes through the platform", () => {
@@ -140,15 +138,6 @@ describe("policiesSchema", () => {
     expect(policiesSchema.safeParse({ ...valid, checkInTime: "25:00" }).success).toBe(false);
   });
 
-  test("rejects a negative fee", () => {
-    const r = policiesSchema.safeParse({ ...valid, extraBedFee: "-5" });
-    expect(r.success).toBe(false);
-  });
-
-  test("rejects a fractional fee — money is whole currency units", () => {
-    expect(policiesSchema.safeParse({ ...valid, extraBedFee: "60.5" }).success).toBe(false);
-  });
-
   test("rejects an implausible minimum age", () => {
     expect(policiesSchema.safeParse({ ...valid, minCheckInAge: "0" }).success).toBe(false);
     expect(policiesSchema.safeParse({ ...valid, minCheckInAge: "130" }).success).toBe(false);
@@ -173,12 +162,6 @@ describe("policiesSchema", () => {
     const r = policiesSchema.safeParse({ ...valid, finePrint: ["Real bullet.", "   ", ""] });
     expect(r.success).toBe(true);
     expect(r.data!.finePrint).toEqual(["Real bullet."]);
-  });
-
-  test("requires a cot fee when the cot policy is paid", () => {
-    const r = policiesSchema.safeParse({ ...valid, cotPolicy: "paid", cotFee: "" });
-    expect(r.success).toBe(false);
-    expect(r.error!.flatten().fieldErrors.cotFee?.[0]).toContain("charge");
   });
 });
 

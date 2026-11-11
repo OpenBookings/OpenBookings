@@ -1,4 +1,5 @@
 import type { Modifier, ModifierType, PriceStep } from "@openbookings/pricing";
+import type { PricingRule } from "./rule-copy";
 
 /**
  * Shapes the ARI grid renders. Deliberately flat and serialisable: the page is
@@ -205,6 +206,8 @@ export interface RatePlanRow {
   maxStay: number | null;
   /** All active modifiers on the plan — the detail panel lists them in order. */
   modifiers: Modifier[];
+  /** Every pricing rule on the plan, switched off ones too, for the rules editor. */
+  rules: PricingRule[];
   /** The plan has a length-of-stay discount somewhere in its modifiers. */
   hasStayDiscount: boolean;
   cells: RateCell[];

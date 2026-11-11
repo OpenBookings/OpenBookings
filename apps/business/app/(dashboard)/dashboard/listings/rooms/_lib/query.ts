@@ -132,6 +132,14 @@ interface RoomRow {
   max_adults: number;
   max_children: number;
   total_units: number;
+  base_occupancy: number;
+  extra_adult_fee: number | null;
+  extra_child_fee: number | null;
+  cots_max: number;
+  cot_fee: number | null;
+  extra_beds_max: number;
+  extra_bed_fee: number | null;
+  cot_and_extra_bed_together: boolean;
   amenity_keys: string[] | null;
   featured_amenity_keys: string[];
   sort_order: number;
@@ -211,7 +219,10 @@ export async function loadRoomEditor(
     `SELECT
        r.id, r.property_id, p.name AS property_name, p.cancellation_tier,
        r.name, r.description, r.size_sqm, r.bed_config, r.bed_type,
-       r.max_adults, r.max_children, r.total_units,
+       r.max_adults, r.max_children, r.total_units, r.base_occupancy,
+       -- bigint comes back as a string from node-postgres
+       r.extra_adult_fee::int, r.extra_child_fee::int, r.cots_max, r.cot_fee::int,
+       r.extra_beds_max, r.extra_bed_fee::int, r.cot_and_extra_bed_together,
        r.amenity_keys, r.featured_amenity_keys, r.sort_order,
        r.is_active, r.archived_at
      FROM rooms r
@@ -261,6 +272,14 @@ export async function loadRoomEditor(
       maxAdults: room.max_adults,
       maxChildren: room.max_children,
       units: room.total_units,
+      baseOccupancy: room.base_occupancy,
+      extraAdultFee: room.extra_adult_fee,
+      extraChildFee: room.extra_child_fee,
+      cotsMax: room.cots_max,
+      cotFee: room.cot_fee,
+      extraBedsMax: room.extra_beds_max,
+      extraBedFee: room.extra_bed_fee,
+      cotAndExtraBedTogether: room.cot_and_extra_bed_together,
       amenityKeys: amenities.amenityKeys,
       featuredAmenityKeys: amenities.featuredAmenityKeys,
       sortOrder: room.sort_order,

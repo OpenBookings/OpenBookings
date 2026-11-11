@@ -145,6 +145,11 @@ export const LIMITS = {
   children: { min: 0, max: 10 },
   bedsPerType: { max: 20 },
   units: { min: 1, max: 99 },
+  /** rooms.cots_max / extra_beds_max (0040). */
+  cots: { max: 4 },
+  extraBeds: { max: 4 },
+  /** Extra-guest, cot and extra-bed fees, whole euros per night. */
+  fee: { max: 9999 },
   minPhotos: 3,
   rateName: { min: 2, max: 60 },
   rateDescription: { max: 200 },

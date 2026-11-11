@@ -19,6 +19,11 @@ describe("checkoutCancellationTerms", () => {
     expect(terms.requiresNonRefundableConsent).toBe(false);
   });
 
+  test("carries the same policy as steps", () => {
+    const terms = checkoutCancellationTerms({ ...stay, isRefundable: true });
+    expect(terms.steps.map((s) => s.kind)).toEqual(["free", "after", "no_show"]);
+  });
+
   test("a non-refundable rate asks the guest to confirm before paying", () => {
     const terms = checkoutCancellationTerms({ ...stay, isRefundable: false });
     expect(terms.cancellationTier).toBe("non_refundable");

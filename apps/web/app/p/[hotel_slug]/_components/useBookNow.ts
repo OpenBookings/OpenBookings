@@ -8,6 +8,7 @@ import type { QuoteState, RoomView } from "../_lib/merge-quote";
 import { pruneQuantities } from "../_lib/merge-quote";
 import { guestsLabel, stayToParams, type Stay } from "../_lib/stay";
 import {
+  atHotelTotal,
   bookingMessage,
   buildBooking,
   encodeSelection,
@@ -15,6 +16,7 @@ import {
   nextBookStep,
   takePendingBook,
   type BookOutcome,
+  type RoomExtras,
 } from "../_lib/book";
 
 /** A line for the bar that holds while the selection and stay stay as they were. */
@@ -40,6 +42,8 @@ export function useBookNow(i: {
   shownViews: RoomView[];
   quantities: Record<string, number>;
   setQuantities: (q: Record<string, number>) => void;
+  /** Cots and extra beds per room id, paid at the hotel. */
+  extras: Record<string, RoomExtras>;
   /** The URL's search params as a string, and the page's path. */
   searchKey: string;
   pathname: string;
@@ -47,7 +51,7 @@ export function useBookNow(i: {
   showRates: () => void;
   reloadQuote: () => void;
 }) {
-  const { propertyId, stay, quote, rooms, views, shownRooms, shownViews, quantities, setQuantities, searchKey, pathname, askDates, showRates, reloadQuote } = i;
+  const { propertyId, stay, quote, rooms, views, shownRooms, shownViews, quantities, setQuantities, extras, searchKey, pathname, askDates, showRates, reloadQuote } = i;
   const router = useRouter();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const signedIn = Boolean(session?.user);
@@ -65,7 +69,7 @@ export function useBookNow(i: {
     const step = nextBookStep({ hasStay: stay !== null, pending: pendingRef.current });
     if (step === "ask_dates") return askDates();
     if (step === "ignore" || !stay) return;
-    const booking = buildBooking(shownRooms, shownViews, sel, stay);
+    const booking = buildBooking(shownRooms, shownViews, sel, stay, extras);
     if (!booking.ok) return;
 
     const key = keyOf(sel);
@@ -112,7 +116,7 @@ export function useBookNow(i: {
       return;
     }
     setNotice({ key, text: outcome.message });
-  }, [stay, askDates, shownRooms, shownViews, keyOf, notice, searchKey, pathname, sessionPending, signedIn, propertyId, router, rooms, setQuantities, reloadQuote]);
+  }, [stay, askDates, shownRooms, shownViews, extras, keyOf, notice, searchKey, pathname, sessionPending, signedIn, propertyId, router, rooms, setQuantities, reloadQuote]);
 
   // Back from signing in: restore the picks, take `book` out of the URL, and
   // press Book now once, if there is a session now.
@@ -133,16 +137,31 @@ export function useBookNow(i: {
   }, [bookParam, sessionPending, signedIn, quote.status, searchKey, pathname, router, rooms, views, setQuantities, showRates, book]);
 
   // What the bar shows.
-  const booking = stay ? buildBooking(shownRooms, shownViews, quantities, stay) : null;
+  const booking = stay ? buildBooking(shownRooms, shownViews, quantities, stay, extras) : null;
   const pickGuests: Record<string, string> = {};
+  let anyExtras = false;
   if (booking?.ok) {
-    const byRate = new Map<string, { adults: number; children: number }>();
+    const byRate = new Map<string, { adults: number; children: number; infants: number; cots: number; extraBeds: number }>();
     for (const r of booking.rooms) {
-      const g = byRate.get(r.ratePlanId) ?? { adults: 0, children: 0 };
-      byRate.set(r.ratePlanId, { adults: g.adults + r.adults, children: g.children + r.children });
+      const g = byRate.get(r.ratePlanId) ?? { adults: 0, children: 0, infants: 0, cots: 0, extraBeds: 0 };
+      byRate.set(r.ratePlanId, {
+        adults: g.adults + r.adults,
+        children: g.children + r.children,
+        infants: g.infants + r.infants,
+        cots: g.cots + r.cots,
+        extraBeds: g.extraBeds + r.extraBeds,
+      });
     }
-    for (const [rateId, g] of byRate) pickGuests[rateId] = guestsLabel(g);
+    for (const [rateId, g] of byRate) {
+      const beds = [
+        g.cots > 0 && `${g.cots} ${g.cots === 1 ? "cot" : "cots"}`,
+        g.extraBeds > 0 && `${g.extraBeds} extra ${g.extraBeds === 1 ? "bed" : "beds"}`,
+      ].filter(Boolean);
+      if (beds.length > 0) anyExtras = true;
+      pickGuests[rateId] = [guestsLabel(g), ...beds].join(" · ");
+    }
   }
+  const atHotel = anyExtras && stay ? atHotelTotal(shownRooms, quantities, extras, stay.nights) : null;
   const problem = booking && stay ? bookingMessage(booking, shownRooms, shownViews, quantities, stay) : null;
 
   return {
@@ -151,6 +170,7 @@ export function useBookNow(i: {
       message: shownNotice?.text ?? problem,
       totalOverride: shownNotice?.total ?? null,
       keepOpen: shownNotice !== null,
+      atHotel,
       // Without dates Book now asks for them; with dates the selection must be bookable.
       canBook: booking === null || booking.ok,
       pending,

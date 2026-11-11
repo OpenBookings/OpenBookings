@@ -78,6 +78,7 @@ export default async function HotelPage({
       <RoomsSection
         rooms={rooms}
         ratesConfirmed={hotel.rates_confirmed === true}
+        childrenWelcome={hotel.children_welcome ?? true}
         slug={slug}
         propertyId={hotel.id}
         // Pages cached before the zone was stored: the EU's earliest today, as
@@ -87,6 +88,10 @@ export default async function HotelPage({
       <PoliciesSection
         hotel={hotel}
         hasNonRefundable={rooms.some((room) => room.rate_plans.some((plan) => !plan.is_refundable))}
+        extras={{
+          cots: rooms.some((room) => (room.cots_max ?? 0) > 0),
+          extraBeds: rooms.some((room) => (room.extra_beds_max ?? 0) > 0),
+        }}
       />
       <LocationSection hotel={hotel} />
       <FootnoteSection hotel={hotel} />

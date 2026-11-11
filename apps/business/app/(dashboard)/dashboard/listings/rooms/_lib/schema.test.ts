@@ -20,6 +20,7 @@ const space = (over: Record<string, unknown> = {}) => ({
   sizeM2: "35",
   maxAdults: "2",
   maxChildren: "0",
+  baseOccupancy: "2",
   units: "4",
   beds: { single: "0", double: "0", queen: "0", king: "1", sofa_bed: "0", bunk_bed: "0" },
   ...over,
@@ -101,6 +102,54 @@ describe("spaceSchema", () => {
     expect(spaceSchema.safeParse(space({ units: "0" })).success).toBe(false);
     expect(spaceSchema.safeParse(space({ units: "100" })).success).toBe(false);
     expect(spaceSchema.safeParse(space({ units: "2.5" })).success).toBe(false);
+  });
+
+  const errorOn = (input: Record<string, unknown>, field: string) =>
+    (spaceSchema.safeParse(space(input)).error?.flatten().fieldErrors as Record<string, string[] | undefined>)?.[field]?.[0];
+
+  test("guests included can't be more than max guests", () => {
+    expect(errorOn({ baseOccupancy: "3" }, "baseOccupancy")).toBe(
+      "Guests included can be at most 2, your max guests.",
+    );
+    expect(errorOn({ baseOccupancy: "0" }, "baseOccupancy")).toBeDefined();
+    expect(spaceSchema.parse(space({ maxChildren: "1", baseOccupancy: "3" })).baseOccupancy).toBe(3);
+  });
+
+  test("an extra-guest fee is kept only where an extra guest can come", () => {
+    // Base 2 = max adults 2, no children: nobody can be extra.
+    const full = spaceSchema.parse(space({ extraAdultFee: "20", extraChildFee: "10" }));
+    expect([full.extraAdultFee, full.extraChildFee]).toEqual([null, null]);
+
+    const roomy = spaceSchema.parse(space({ maxAdults: "3", maxChildren: "1", extraAdultFee: "20", extraChildFee: "" }));
+    expect([roomy.extraAdultFee, roomy.extraChildFee]).toEqual([20, 0]);
+  });
+
+  test("cots and extra beds switched off store nothing, whatever was posted", () => {
+    const d = spaceSchema.parse(space({ cotsMax: "2", cotFee: "15", extraBedsMax: "1", extraBedFee: "25" }));
+    expect(d).toMatchObject({ cotsMax: 0, cotFee: null, extraBedsMax: 0, extraBedFee: null });
+  });
+
+  test("cots and extra beds switched on need a count; a blank fee is free", () => {
+    expect(errorOn({ cotsOn: "on", cotsMax: "0" }, "cotsMax")).toBe("Set how many cots fit, or turn cots off.");
+    expect(errorOn({ extraBedsOn: "on", extraBedsMax: "0" }, "extraBedsMax")).toBe(
+      "Set how many extra beds fit, or turn extra beds off.",
+    );
+    expect(errorOn({ cotsOn: "on", cotsMax: "5" }, "cotsMax")).toBeDefined();
+    const d = spaceSchema.parse(space({ cotsOn: "on", cotsMax: "2", cotFee: "", extraBedsOn: "on", extraBedsMax: "1", extraBedFee: "25" }));
+    expect(d).toMatchObject({ cotsMax: 2, cotFee: 0, extraBedsMax: 1, extraBedFee: 25 });
+  });
+
+  test("a cot and an extra bed can be combined unless both are on and the host says no", () => {
+    expect(spaceSchema.parse(space()).cotAndExtraBedTogether).toBe(true);
+    const both = { cotsOn: "on", cotsMax: "1", extraBedsOn: "on", extraBedsMax: "1" };
+    expect(spaceSchema.parse(space(both)).cotAndExtraBedTogether).toBe(false);
+    expect(spaceSchema.parse(space({ ...both, cotAndExtraBedTogether: "on" })).cotAndExtraBedTogether).toBe(true);
+    expect(spaceSchema.parse(space({ cotsOn: "on", cotsMax: "1" })).cotAndExtraBedTogether).toBe(true);
+  });
+
+  test("fees are whole euros up to 9999", () => {
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "10000" }, "extraAdultFee")).toBeDefined();
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "12.5" }, "extraAdultFee")).toBeDefined();
   });
 });
 

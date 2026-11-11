@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import {
   loadStayAvailability,
   roomReasons,
@@ -12,6 +13,8 @@ import {
   perRoomParty,
   resolveRoom,
   snapshotTier,
+  splitVat,
+  type AppliedDiscount,
   type PropertyCancellationTier,
   type ResolvedRoom,
   type RoomRow,
@@ -47,6 +50,8 @@ export type QuotedRatePlan = {
   stayTotal: number;
   touristTax: TouristTaxResult;
   freeCancellationUntil: string | null;
+  /** The stay discount already in `stayTotal`, for the rate row's chip. */
+  discount: AppliedDiscount | null;
   reasons: UnavailableReason[];
 };
 
@@ -64,7 +69,17 @@ export type QuotedRoom = {
 
 export type StayQuote = { propertyId: string; slug: string; currency: "EUR"; stay: StayInput; rooms: QuotedRoom[] };
 
-export type SelectedRoom = { roomId: string; ratePlanId: string; adults: number; children: number };
+export type SelectedRoom = {
+  roomId: string;
+  ratePlanId: string;
+  adults: number;
+  children: number;
+  /** Under 2: no place, no fee. */
+  infants: number;
+  /** Cots and extra beds for this room, checked against what it takes; paid at the property. */
+  cots: number;
+  extraBeds: number;
+};
 
 export type VisibleProperty = {
   id: string;
@@ -73,6 +88,10 @@ export type VisibleProperty = {
   checkInTime: string | null;
   cancellationTier: PropertyCancellationTier;
   commissionRate: string;
+  country: string;
+  accommodationType: "hotel";
+  /** Euros per person per night, VAT-inclusive; null = not given. */
+  breakfastValue: number | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -90,14 +109,15 @@ export async function loadVisibleProperty(
   const column = "id" in by ? "id" : "slug";
   const { rows } = await db.query(
     `SELECT id, slug, timezone, to_char(check_in_time, 'HH24:MI') AS check_in_time,
-            cancellation_tier, commission_rate::text AS commission_rate
+            cancellation_tier, commission_rate::text AS commission_rate,
+            country, accommodation_type, breakfast_value::text AS breakfast_value
      FROM properties
      WHERE ${column} = $1 AND is_active AND (NOT is_demo OR $2::boolean)
      LIMIT 1`,
     ["id" in by ? by.id : by.slug, testing],
   );
   const row = rows[0] as
-    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string }
+    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string; country: string; accommodation_type: "hotel"; breakfast_value: string | null }
     | undefined;
   if (!row) return null;
   return {
@@ -107,11 +127,17 @@ export async function loadVisibleProperty(
     checkInTime: row.check_in_time,
     cancellationTier: row.cancellation_tier,
     commissionRate: row.commission_rate,
+    country: row.country,
+    accommodationType: row.accommodation_type,
+    breakfastValue: row.breakfast_value === null ? null : Number(row.breakfast_value),
   };
 }
 
 type PlanRow = RoomRow & {
   room_type: string | null;
+  cots_max: number;
+  extra_beds_max: number;
+  cot_and_extra_bed_together: boolean;
   includes_breakfast: boolean;
   includes_lunch: boolean;
   includes_dinner: boolean;
@@ -135,6 +161,9 @@ plans AS (
     p.cancellation_tier, p.timezone, to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
     r.id AS room_id, r.name AS room_name, r.description AS room_description, r.room_type,
     r.base_occupancy, r.max_adults, r.max_children, r.sort_order AS room_sort,
+    -- bigint comes back as a string from node-postgres; the resolver adds these.
+    r.extra_adult_fee::int, r.extra_child_fee::int, r.cot_fee::int, r.extra_bed_fee::int,
+    r.cots_max, r.extra_beds_max, r.cot_and_extra_bed_together,
     rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay, rp.sort_order AS plan_sort,
     rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner
@@ -248,7 +277,7 @@ type PricedRoom = {
 function priceRooms(
   rows: PlanRow[],
   byRoom: Map<string, RoomAvailability>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; infants?: number; cots?: number; extraBeds?: number },
   arrivalDate: string,
   today: string,
 ): PricedRoom[] {
@@ -311,12 +340,29 @@ export async function quoteStay(
         stayTotal: priced.room_price,
         touristTax: priced.tourist_tax,
         freeCancellationUntil: cancellationUntil(property, row.is_refundable, checkIn, i.now),
+        discount: priced.discount,
         reasons: a.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"],
       })),
     });
   }
 
   return { propertyId: property.id, slug: property.slug, currency: "EUR", stay: i.stay, rooms };
+}
+
+/** Why a room can't take the cots and extra beds asked for, or null when it can. */
+function extrasError(room: PlanRow, s: SelectedRoom): string | null {
+  const name = room.room_name;
+  const limit = (asked: number, max: number, one: string, many: string) => {
+    if (asked <= max) return null;
+    return max === 0 ? `${name}: no ${many}` : `${name}: at most ${max} ${max === 1 ? one : many}`;
+  };
+  return (
+    limit(s.cots, room.cots_max, "cot", "cots") ??
+    limit(s.extraBeds, room.extra_beds_max, "extra bed", "extra beds") ??
+    (s.cots > 0 && s.extraBeds > 0 && !room.cot_and_extra_bed_together
+      ? `${name}: a cot and an extra bed cannot be combined`
+      : null)
+  );
 }
 
 type SelectionResult =
@@ -374,7 +420,15 @@ export async function priceSelection(
     const roomRows = rows.filter((r) => r.room_id === s.roomId);
     const a = byRoom.get(s.roomId);
     if (roomRows.length === 0 || !a) return invalid(`room ${s.roomId} is not offered at this property`);
-    const [room] = priceRooms(roomRows, byRoom, { adults: s.adults, children: s.children }, i.checkIn, today);
+    const extrasProblem = extrasError(roomRows[0], s);
+    if (extrasProblem) return invalid(extrasProblem);
+    const [room] = priceRooms(
+      roomRows,
+      byRoom,
+      { adults: s.adults, children: s.children, infants: s.infants, cots: s.cots, extraBeds: s.extraBeds },
+      i.checkIn,
+      today,
+    );
     const plan = room?.plans.find((p) => p.row.rate_plan_id === s.ratePlanId);
     if (!room || !plan) return invalid(`rate ${s.ratePlanId} is not offered for ${roomRows[0].room_name}`);
     picked.push({ s, room, plan, a });
@@ -406,16 +460,43 @@ export async function priceSelection(
     }
   }
 
-  const rooms: IntentRoomInput[] = picked.map(({ s, plan }) => ({
-    roomId: s.roomId,
-    ratePlanId: s.ratePlanId,
-    adults: s.adults,
-    children: s.children,
-    nights: plan.priced.priced_nights,
-    stayTotal: plan.priced.room_price,
-    touristTax: plan.priced.tourist_tax.total,
-    touristTaxLines: plan.priced.tourist_tax.lines,
-  }));
+  const rooms: IntentRoomInput[] = picked.map(({ s, plan }) => {
+    // The split covers the charged nights; infants take no breakfast value.
+    const vatSplit = splitVat({
+      country: property.country,
+      type: property.accommodationType,
+      nights: plan.priced.priced_nights,
+      includesBreakfast: plan.row.includes_breakfast,
+      breakfastValue: property.breakfastValue,
+      people: s.adults + s.children,
+    });
+    if (!vatSplit) {
+      Sentry.captureMessage("vat split unavailable", {
+        level: "warning",
+        tags: { area: "booking" },
+        extra: { propertyId: property.id, country: property.country },
+      });
+    }
+    return {
+      roomId: s.roomId,
+      ratePlanId: s.ratePlanId,
+      adults: s.adults,
+      children: s.children,
+      infants: s.infants,
+      cots: s.cots,
+      extraBeds: s.extraBeds,
+      payAtProperty: plan.priced.pay_at_property_total,
+      discount: plan.priced.discount && { label: plan.priced.discount.label, amount: plan.priced.discount.amount },
+      rateNights: plan.priced.rate_nights,
+      extraGuests: plan.priced.extra_guests,
+      payAtPropertyLines: plan.priced.pay_at_property,
+      nights: plan.priced.priced_nights,
+      stayTotal: plan.priced.room_price,
+      touristTax: plan.priced.tourist_tax.total,
+      touristTaxLines: plan.priced.tourist_tax.lines,
+      vatSplit,
+    };
+  });
   const roomsTotal = round2(rooms.reduce((sum, r) => sum + r.stayTotal, 0));
   const touristTaxTotal = round2(rooms.reduce((sum, r) => sum + r.touristTax, 0));
 

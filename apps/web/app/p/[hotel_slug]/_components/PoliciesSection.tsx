@@ -1,22 +1,23 @@
 import { cdnImageUrl } from "@openbookings/images";
 import {
-  LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog,
+  LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog, Info,
 } from "lucide-react";
 import { TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import { BusinessDetailsButton } from "./BusinessDetailsButton";
 
-/** Fees are stored in whole euros (`optionalMoney` in the editor's schema). */
-const money = (v: string | null) => (v === null ? null : `€${Number(v)}`);
-
 export function PoliciesSection({
   hotel,
   hasNonRefundable,
+  extras,
 }: {
   hotel: HotelPageData;
   /** Some rates on the page are Non-refundable. */
   hasNonRefundable: boolean;
+  /** Whether any room offers cots, or extra beds. Each room sets its own. */
+  extras: { cots: boolean; extraBeds: boolean };
 }) {
+  const extrasOffered = [extras.cots && "cots", extras.extraBeds && "extra beds"].filter(Boolean).join(" and ");
   // Formatting lives here rather than in the editor so every property phrases
   // these the same way, and so the wording survives a future translation pass.
   const arrival = [
@@ -43,26 +44,36 @@ export function PoliciesSection({
       ? [{ Icon: XCircle, title: "Non-refundable rates", body: "Some rates are non-refundable and cheaper." }]
       : []),
     ...(hotel.prepayment_required
-      ? [{ Icon: CreditCard, title: "Prepayment", body: "Required to secure your booking." }]
+      ? [
+          {
+            Icon: CreditCard,
+            title: "Prepayment",
+            body: extrasOffered
+              ? `Required to secure your booking. ${extrasOffered[0].toUpperCase()}${extrasOffered.slice(1)} are paid at the hotel.`
+              : "Required to secure your booking.",
+          },
+        ]
       : []),
   ];
 
+  // Age bands are the same at every hotel (guest-limits AGE_BANDS); prices
+  // for cots and extra beds differ per room, so they stay on the room card.
+  const childrenWelcome = hotel.children_welcome ?? true;
   const childrenAndBeds = [
-    { Icon: Baby, text: hotel.children_welcome ? "Children of all ages welcome" : "Adults only" },
-    ...(hotel.cot_policy === "free"
-      ? [{ Icon: BedDouble, text: "Cots available on request — free of charge" }]
-      : hotel.cot_policy === "paid"
-        ? [{ Icon: BedDouble, text: `Cots available on request — ${money(hotel.cot_fee)} per night` }]
-        : []),
-    ...(hotel.extra_bed_fee !== null
+    { Icon: Baby, text: childrenWelcome ? "Children of all ages welcome" : "Adults only" },
+    ...(childrenWelcome
+      ? [
+          {
+            Icon: Info,
+            text: "Adults are 13 or over, children 2–12, infants under 2. Infants stay free and don't take a place in the room.",
+          },
+        ]
+      : []),
+    ...(extrasOffered
       ? [
           {
             Icon: BedDouble,
-            // The host editor offers "Free of charge", stored as 0.
-            text:
-              Number(hotel.extra_bed_fee) === 0
-                ? "Extra beds available — free of charge"
-                : `Extra beds available — ${money(hotel.extra_bed_fee)} per night`,
+            text: `Some rooms have ${extrasOffered}. Add them when you book; you pay for them at the hotel.`,
           },
         ]
       : []),

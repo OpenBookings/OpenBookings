@@ -35,6 +35,7 @@ const quoted = (ratePlanId: string, over: Partial<QuotedRatePlan> = {}): QuotedR
   stayTotal: 360,
   touristTax: { total: 9, lines: [] },
   freeCancellationUntil: "2026-12-15T14:00:00.000Z",
+  discount: null,
   reasons: [],
   ...over,
 });
@@ -57,7 +58,7 @@ const ready = (rooms: QuotedRoom[]): QuoteState => {
     propertyId: "p",
     slug: "s",
     currency: "EUR",
-    stay: { checkIn: "2026-12-16", checkOut: "2026-12-19", adults: 2, children: 0, rooms: 1 },
+    stay: { checkIn: "2026-12-16", checkOut: "2026-12-19", adults: 2, children: 0, infants: 0, rooms: 1 },
     rooms,
   };
   return { status: "ready", quote };
@@ -89,7 +90,14 @@ describe("mergeQuote", () => {
       perNight: 123,
       freeCancellationUntil: "2026-12-15T14:00:00.000Z",
       saving: 0,
+      discount: null,
     });
+  });
+
+  test("the stay discount that applied is kept for the rate row", () => {
+    const discount = { label: "Weekly discount", percent: 10, amount: 40 };
+    const [a] = mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1", { discount })])]));
+    expect(a.rates.a1?.discount).toEqual(discount);
   });
 
   test("per night is rounded to cents", () => {

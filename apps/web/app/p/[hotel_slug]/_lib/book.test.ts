@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { DbRoom } from "../_components/constants";
-import { bookingMessage, buildBooking, decodeSelection, encodeSelection, interpretBookResponse, nextBookStep, takePendingBook } from "./book";
+import {
+  atHotelTotal,
+  bookingMessage,
+  buildBooking,
+  decodeSelection,
+  encodeSelection,
+  extrasLimits,
+  interpretBookResponse,
+  nextBookStep,
+  suggestedExtras,
+  takePendingBook,
+} from "./book";
 import type { RoomView } from "./merge-quote";
 
 const ROOM_A = "11111111-1111-4111-8111-111111111111";
@@ -82,6 +93,7 @@ describe("buildBooking", () => {
     touristTax: 0,
     total,
     perNight: total / 3,
+    discount: null,
     freeCancellationUntil: null,
     saving: 0,
   });
@@ -99,8 +111,8 @@ describe("buildBooking", () => {
     expect(buildBooking([room], [view], { [FLEX]: 1, [NR]: 1 }, { adults: 3, children: 0 })).toEqual({
       ok: true,
       rooms: [
-        { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0 },
-        { roomId: ROOM_A, ratePlanId: NR, adults: 1, children: 0 },
+        { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0 },
+        { roomId: ROOM_A, ratePlanId: NR, adults: 1, children: 0, infants: 0, cots: 0, extraBeds: 0 },
       ],
       expectedTotal: 570.3,
     });
@@ -182,5 +194,70 @@ describe("interpretBookResponse", () => {
     expect(interpretBookResponse(500, { error: "server_error" })).toEqual(error);
     expect(interpretBookResponse(409, { error: "price_changed" })).toEqual(error);
     expect(interpretBookResponse(500, null)).toEqual(error);
+  });
+});
+
+describe("cots and extra beds", () => {
+  const room = (over: Partial<DbRoom> = {}): DbRoom => ({
+    id: ROOM_A,
+    name: "Family",
+    description: null,
+    room_type: null,
+    bed_type: null,
+    size_sqm: null,
+    max_occupancy: 3,
+    images: [],
+    tags: [],
+    rate_plans: [{ id: FLEX, name: "Flexible", bar: 100, currency: "EUR", is_refundable: true, meal_plan: null }],
+    cots_max: 1,
+    cot_fee: 0,
+    extra_beds_max: 1,
+    extra_bed_fee: 25,
+    cot_and_extra_bed_together: false,
+    ...over,
+  });
+
+  test("how many a room can take grows with the units picked, and one or the other when they can't be combined", () => {
+    expect(extrasLimits(room(), 1, { cots: 0, extraBeds: 0 })).toEqual({ cots: 1, extraBeds: 1 });
+    expect(extrasLimits(room(), 1, { cots: 1, extraBeds: 0 })).toEqual({ cots: 1, extraBeds: 0 });
+    expect(extrasLimits(room(), 2, { cots: 1, extraBeds: 0 })).toEqual({ cots: 2, extraBeds: 1 });
+    expect(extrasLimits(room({ cot_and_extra_bed_together: true }), 1, { cots: 1, extraBeds: 0 })).toEqual({ cots: 1, extraBeds: 1 });
+    expect(extrasLimits(room({ cots_max: 0, extra_beds_max: 0 }), 2, { cots: 0, extraBeds: 0 })).toEqual({ cots: 0, extraBeds: 0 });
+    // Nothing picked yet: limits for one room.
+    expect(extrasLimits(room({ cots_max: 2 }), 0, { cots: 0, extraBeds: 0 }).cots).toBe(2);
+  });
+
+  test("an infant suggests a cot where the room has them, until the guest chooses", () => {
+    expect(suggestedExtras(room(), 1, 1)).toEqual({ cots: 1, extraBeds: 0 });
+    expect(suggestedExtras(room(), 3, 1)).toEqual({ cots: 1, extraBeds: 0 });
+    expect(suggestedExtras(room(), 0, 1)).toEqual({ cots: 0, extraBeds: 0 });
+    expect(suggestedExtras(room({ cots_max: 0 }), 1, 1)).toEqual({ cots: 0, extraBeds: 0 });
+  });
+
+  test("the extras are dealt over the room's units and go into the booking", () => {
+    const view: RoomView = {
+      roomId: ROOM_A,
+      visible: true,
+      unitsLeft: 5,
+      leftCaption: null,
+      maxAdults: 2,
+      maxChildren: 1,
+      rates: {
+        [FLEX]: { ratePlanId: FLEX, stayTotal: 200, touristTax: 0, total: 200, perNight: 100, freeCancellationUntil: null, saving: 0, discount: null },
+      },
+    };
+    const b = buildBooking([room()], [view], { [FLEX]: 2 }, { adults: 2, children: 0, infants: 1 }, { [ROOM_A]: { cots: 1, extraBeds: 1 } });
+    expect(b.ok && b.rooms.map((r) => [r.infants, r.cots, r.extraBeds])).toEqual([
+      [1, 1, 0],
+      [0, 0, 1],
+    ]);
+  });
+
+  test("what is due at the hotel: each picked room's extras, per night", () => {
+    const sel = { [FLEX]: 1 };
+    expect(atHotelTotal([room()], sel, { [ROOM_A]: { cots: 1, extraBeds: 0 } }, 3)).toBe(0);
+    expect(atHotelTotal([room({ cot_and_extra_bed_together: true })], sel, { [ROOM_A]: { cots: 1, extraBeds: 1 } }, 3)).toBe(75);
+    // Extras on a room that isn't picked don't count.
+    expect(atHotelTotal([room()], {}, { [ROOM_A]: { cots: 0, extraBeds: 1 } }, 3)).toBe(0);
   });
 });

@@ -9,7 +9,7 @@ describe("quote rejects bad stays", () => {
   test("a valid stay parses", () => {
     expect(stay()).toEqual({
       ok: true,
-      value: { checkIn: "2031-11-10", checkOut: "2031-11-13", adults: 2, children: 0, rooms: 1 },
+      value: { checkIn: "2031-11-10", checkOut: "2031-11-13", adults: 2, children: 0, infants: 0, rooms: 1 },
     });
   });
 
@@ -17,8 +17,16 @@ describe("quote rejects bad stays", () => {
     const p = new URLSearchParams({ checkin: "2031-11-01", checkout: "2031-11-02", adults: "3", rooms: "2" });
     expect(parseStayInput(p, TODAY)).toEqual({
       ok: true,
-      value: { checkIn: "2031-11-01", checkOut: "2031-11-02", adults: 3, children: 0, rooms: 2 },
+      value: { checkIn: "2031-11-01", checkOut: "2031-11-02", adults: 3, children: 0, infants: 0, rooms: 2 },
     });
+  });
+
+  test("infants are read, at most 4 per room", () => {
+    expect(stay({ infants: "2" })).toMatchObject({ ok: true, value: { infants: 2 } });
+    expect(stay({ infants: "4" }).ok).toBe(true);
+    expect(stay({ infants: "5" })).toEqual({ ok: false, errors: ["at most 4 infants per room"] });
+    expect(stay({ infants: "5", adults: "2", rooms: "2" }).ok).toBe(true);
+    expect(stay({ infants: "x" })).toEqual({ ok: false, errors: ["infants must be a whole number from 0 to 36"] });
   });
 
   test("check-out on the check-in day is refused", () => {

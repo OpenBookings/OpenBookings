@@ -18,7 +18,7 @@ import { priceSelection, quoteStay, type SelectedRoom } from "./quote";
 const CHECK_IN = "2031-11-10";
 const CHECK_OUT = "2031-11-13"; // 3 nights
 const NOW = new Date("2031-10-01T10:00:00Z");
-const STAY = { checkIn: CHECK_IN, checkOut: CHECK_OUT, adults: 2, children: 0, rooms: 1 };
+const STAY = { checkIn: CHECK_IN, checkOut: CHECK_OUT, adults: 2, children: 0, infants: 0, rooms: 1 };
 
 describeWithDb("stay quote against Postgres", () => {
   let db: Client;
@@ -51,6 +51,9 @@ describeWithDb("stay quote against Postgres", () => {
     ratePlanId: ids.ratePlanId,
     adults: 2,
     children: 0,
+    infants: 0,
+    cots: 0,
+    extraBeds: 0,
     ...over,
   });
 
@@ -61,6 +64,14 @@ describeWithDb("stay quote against Postgres", () => {
     );
     return (rows[0] as { id: string }).id;
   }
+
+  test("a guest above base occupancy pays the room's extra-adult fee every night", async () => {
+    await db.query(`UPDATE rooms SET max_adults = 3, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    const q = await quoteStay(db, { propertyId: ids.propertyId, stay: { ...STAY, adults: 3 }, now: NOW, testing: false });
+    const plan = q!.rooms[0].ratePlans[0];
+    expect(plan.stayTotal).toBe(3 * (100 + 20));
+    expect(plan.nights.map((n) => n.price)).toEqual([120, 120, 120]);
+  });
 
   test("an override of 2 and one confirmed booking leave one unit", async () => {
     await db.query(
@@ -167,6 +178,86 @@ describeWithDb("stay quote against Postgres", () => {
     const r = await select([double({ adults: 3 })]);
     expect(r).toMatchObject({ ok: false, error: "too_many_guests" });
     if (!r.ok) expect(r.detail).toContain("Double");
+  });
+
+  test("selection: more cots or extra beds than the room takes are invalid", async () => {
+    await db.query(`UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 0 WHERE id = $1`, [ids.roomId]);
+    const tooManyCots = await select([double({ cots: 2 })]);
+    expect(tooManyCots).toMatchObject({ ok: false, error: "invalid_selection", detail: "Double: at most 1 cot" });
+    const noBeds = await select([double({ extraBeds: 1 })]);
+    expect(noBeds).toMatchObject({ ok: false, error: "invalid_selection", detail: "Double: no extra beds" });
+  });
+
+  test("selection: a cot and an extra bed together only where the room allows it", async () => {
+    await db.query(
+      `UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 1, extra_bed_fee = 25,
+                        cot_and_extra_bed_together = false WHERE id = $1`,
+      [ids.roomId],
+    );
+    const both = await select([double({ cots: 1, extraBeds: 1 })]);
+    expect(both).toMatchObject({
+      ok: false,
+      error: "invalid_selection",
+      detail: "Double: a cot and an extra bed cannot be combined",
+    });
+  });
+
+  test("selection: an extra bed is kept on the intent room and paid at the property, not charged", async () => {
+    await db.query(`UPDATE rooms SET extra_beds_max = 1, extra_bed_fee = 25 WHERE id = $1`, [ids.roomId]);
+    const r = await select([double({ extraBeds: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotal: 300, payAtProperty: 75 });
+    expect(r.rooms[0].nights.map((n) => n.price)).toEqual([100, 100, 100]);
+    expect(r.snapshot.roomsTotal).toBe(300);
+    expect(r.snapshot.total).toBe(300);
+  });
+
+  test("selection: an infant needs no free place and pays nothing", async () => {
+    const r = await select([double({ infants: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotal: 300 });
+  });
+
+  test("selection: stores a VAT split for an NL breakfast rate", async () => {
+    await db.query(`UPDATE properties SET breakfast_value = 18 WHERE id = $1`, [ids.propertyId]);
+    await db.query(`UPDATE rooms SET max_children = 1 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [ids.ratePlanId]);
+    const r = await select([double({ children: 1, infants: 1 })]);
+    if (!r.ok) throw new Error(r.detail);
+    const split = r.rooms[0].vatSplit;
+    expect(split).not.toBeNull();
+    expect(split!.nights).toHaveLength(3);
+    // 3 people (infants don't count) x EUR 18 = 54 of the night's price goes to breakfast.
+    expect(split!.nights[0].breakfast!.gross).toBe(54);
+    expect(split!.breakfastValueMissing).toBe(false);
+  });
+
+  test("selection: a property in an unlisted country books fine with vat_split null", async () => {
+    await db.query(`UPDATE properties SET country = 'CH' WHERE id = $1`, [ids.propertyId]);
+    const r = await select([double()]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0].vatSplit).toBeNull();
+  });
+
+  test("quote: each rate says which discount applied", async () => {
+    await db.query(
+      `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
+       VALUES ($1, 'length_of_stay', '{"min_nights": 3}'::jsonb, 'percent', -10, true, 0)`,
+      [ids.ratePlanId],
+    );
+    const plan = (await quote())!.rooms[0].ratePlans[0];
+    expect(plan.discount).toEqual({ label: "3+ night discount", percent: 10, amount: 30 });
+  });
+
+  test("selection: the discount that applied is kept for checkout", async () => {
+    await db.query(
+      `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
+       VALUES ($1, 'length_of_stay', '{"min_nights": 3}'::jsonb, 'percent', -10, true, 0)`,
+      [ids.ratePlanId],
+    );
+    const r = await select([double()]);
+    if (!r.ok) throw new Error(r.detail);
+    expect(r.rooms[0]).toMatchObject({ stayTotal: 270, discount: { label: "3+ night discount", amount: 30 } });
   });
 
   test("selection: two units of a room with one left is unavailable", async () => {

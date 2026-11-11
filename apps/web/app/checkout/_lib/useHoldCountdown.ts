@@ -52,7 +52,7 @@ export function useHoldCountdown({
   /** Unix milliseconds. */
   holdExpiresAt: number;
   open: boolean;
-}): boolean {
+}): { lapsed: boolean; expiresAt: number } {
   const [lapsed, setLapsed] = useState(!open);
 
   useEffect(() => {
@@ -83,5 +83,5 @@ export function useHoldCountdown({
     };
   }, [intentId, holdExpiresAt, open]);
 
-  return lapsed;
+  return { lapsed, expiresAt: holdExpiresAt };
 }

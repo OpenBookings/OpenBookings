@@ -54,6 +54,70 @@ export function nextBookStep(i: { hasStay: boolean; pending: boolean }): "ask_da
   return "post";
 }
 
+// ── Cots and extra beds ───────────────────────────────────────────────────────
+// Chosen per room on the card, for all the units of that room picked, and
+// paid at the hotel. Dealt over the units here, the way infants are.
+
+export type RoomExtras = { cots: number; extraBeds: number };
+
+const NONE: RoomExtras = { cots: 0, extraBeds: 0 };
+
+/**
+ * The most cots and extra beds the guest can ask for on a room, with `units`
+ * of it picked (one while none is). Where a unit takes one or the other, a
+ * unit given a cot can't also take a bed, and the other way round.
+ */
+export function extrasLimits(room: DbRoom, units: number, current: RoomExtras): RoomExtras {
+  const u = Math.max(1, units);
+  const cotsPer = room.cots_max ?? 0;
+  const bedsPer = room.extra_beds_max ?? 0;
+  if (room.cot_and_extra_bed_together ?? true) return { cots: cotsPer * u, extraBeds: bedsPer * u };
+  const withCots = cotsPer > 0 ? Math.ceil(current.cots / cotsPer) : 0;
+  const withBeds = bedsPer > 0 ? Math.ceil(current.extraBeds / bedsPer) : 0;
+  return { cots: cotsPer * Math.max(0, u - withBeds), extraBeds: bedsPer * Math.max(0, u - withCots) };
+}
+
+/** A cot for each infant, as far as the room has them, until the guest says otherwise. */
+export function suggestedExtras(room: DbRoom, infants: number, units: number): RoomExtras {
+  const cots = Math.min(infants, (room.cots_max ?? 0) * Math.max(1, units));
+  return { cots: Math.max(0, cots), extraBeds: 0 };
+}
+
+/** Each unit of a room filled with cots, then extra beds, up to what one unit takes. */
+function dealExtras(room: DbRoom, units: Unit[], wanted: RoomExtras): void {
+  let cots = wanted.cots;
+  let beds = wanted.extraBeds;
+  const together = room.cot_and_extra_bed_together ?? true;
+  for (const unit of units) {
+    const c = Math.min(cots, room.cots_max ?? 0);
+    unit.cots = c;
+    cots -= c;
+  }
+  for (const unit of units) {
+    if (!together && (unit.cots ?? 0) > 0) continue;
+    const b = Math.min(beds, room.extra_beds_max ?? 0);
+    unit.extraBeds = b;
+    beds -= b;
+  }
+}
+
+/** What the guest pays at the hotel for the picked rooms' cots and extra beds, for the stay. */
+export function atHotelTotal(
+  rooms: DbRoom[],
+  sel: Record<string, number>,
+  extras: Record<string, RoomExtras>,
+  nights: number,
+): number {
+  let total = 0;
+  for (const room of rooms) {
+    const picked = room.rate_plans.some((rate) => (sel[rate.id] ?? 0) > 0);
+    const e = extras[room.id] ?? NONE;
+    if (!picked) continue;
+    total += (e.cots * (room.cot_fee ?? 0) + e.extraBeds * (room.extra_bed_fee ?? 0)) * nights;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 export type Booking =
   | { ok: true; rooms: SelectedRoom[]; expectedTotal: number }
   | { ok: false; reason: "unpriced" }
@@ -67,12 +131,14 @@ export function buildBooking(
   rooms: DbRoom[],
   views: RoomView[],
   sel: Record<string, number>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; infants?: number },
+  extras: Record<string, RoomExtras> = {},
 ): Booking {
   const units: Unit[] = [];
   let total = 0;
   rooms.forEach((room, i) => {
     const view = views[i];
+    const roomUnits: Unit[] = [];
     for (const rate of room.rate_plans) {
       const qty = sel[rate.id] ?? 0;
       if (qty === 0) continue;
@@ -83,12 +149,14 @@ export function buildBooking(
       }
       total += qty * priced.total;
       for (let n = 0; n < qty; n++) {
-        units.push({ roomId: room.id, ratePlanId: rate.id, maxAdults: view.maxAdults, maxChildren: view.maxChildren });
+        roomUnits.push({ roomId: room.id, ratePlanId: rate.id, maxAdults: view.maxAdults, maxChildren: view.maxChildren });
       }
     }
+    dealExtras(room, roomUnits, extras[room.id] ?? NONE);
+    units.push(...roomUnits);
   });
   if (Number.isNaN(total)) return { ok: false, reason: "unpriced" };
-  const split = splitParty(party.adults, party.children, units);
+  const split = splitParty(party, units);
   if (!split.ok) return split;
   return { ok: true, rooms: split.rooms, expectedTotal: Math.round(total * 100) / 100 };
 }
@@ -102,7 +170,7 @@ export function bookingMessage(
   rooms: DbRoom[],
   views: RoomView[],
   sel: Record<string, number>,
-  party: { adults: number; children: number },
+  party: { adults: number; children: number; infants?: number },
 ): string | null {
   if (b.ok || b.reason === "unpriced") return null;
   if (b.reason === "too_many_rooms") return "One room per adult at most";

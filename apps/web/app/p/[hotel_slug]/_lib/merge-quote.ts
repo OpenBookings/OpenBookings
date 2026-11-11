@@ -1,3 +1,4 @@
+import type { AppliedDiscount } from "@openbookings/pricing";
 import type { StayQuote } from "@/lib/booking/quote";
 import type { DbRoom } from "../_components/constants";
 
@@ -11,6 +12,8 @@ export type PricedRate = {
   freeCancellationUntil: string | null;
   /** Non-refundable only: how much less a night costs than the cheapest refundable rate shown. */
   saving: number;
+  /** The stay discount already in the price ("Weekly discount", 10 %), or null. */
+  discount: AppliedDiscount | null;
 };
 
 /**
@@ -75,6 +78,7 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
           perNight: round2(total / nights),
           freeCancellationUntil: qp.freeCancellationUntil,
           saving: 0,
+          discount: qp.discount ?? null,
         };
       }
       // Same comparison as the listing (withCancellationTerms), on the stay's prices.

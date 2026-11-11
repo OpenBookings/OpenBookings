@@ -156,9 +156,6 @@ export async function savePolicies(
     cancellationTier: String(formData.get("cancellationTier") ?? ""),
     childrenWelcome: formData.get("childrenWelcome"),
     minCheckInAge: String(formData.get("minCheckInAge") ?? ""),
-    cotPolicy: formData.get("cotPolicy") ? String(formData.get("cotPolicy")) : null,
-    cotFee: String(formData.get("cotFee") ?? ""),
-    extraBedFee: String(formData.get("extraBedFee") ?? ""),
     petsAllowed: formData.get("petsAllowed"),
     paymentMethods: formData.getAll("paymentMethods").map(String),
     finePrint: formData.getAll("finePrint").map(String),
@@ -187,17 +184,13 @@ export async function savePolicies(
          -- booking is always paid up front. Written on every save so a row
          -- predating 0021 cannot keep saying otherwise.
          prepayment_required = true,
-         children_welcome = $2, min_check_in_age = $3, cot_policy = $4::cot_policy,
-         cot_fee = $5, extra_bed_fee = $6, pets_allowed = $7,
-         payment_methods = $8::text[], fine_print = $9::text[], updated_at = NOW()
-     WHERE property_id = $10`,
+         children_welcome = $2, min_check_in_age = $3, pets_allowed = $4,
+         payment_methods = $5::text[], fine_print = $6::text[], updated_at = NOW()
+     WHERE property_id = $7`,
     [
       d.reception24h,
       d.childrenWelcome,
       d.minCheckInAge,
-      d.cotPolicy,
-      d.cotFee,
-      d.extraBedFee,
       d.petsAllowed,
       d.paymentMethods,
       d.finePrint,

@@ -122,6 +122,11 @@ candidate_rooms AS (
     r.base_occupancy,
     r.max_adults,
     r.max_children,
+    -- bigint comes back as a string from node-postgres; the resolver adds these.
+    r.extra_adult_fee::int,
+    r.extra_child_fee::int,
+    r.cot_fee::int,
+    r.extra_bed_fee::int,
     rp.id            AS rate_plan_id,
     rp.name          AS rate_plan_name,
     rp.bar,
@@ -239,6 +244,10 @@ SELECT
   cr.base_occupancy,
   cr.max_adults,
   cr.max_children,
+  cr.extra_adult_fee,
+  cr.extra_child_fee,
+  cr.cot_fee,
+  cr.extra_bed_fee,
   cr.rate_plan_id,
   cr.rate_plan_name,
   cr.currency,
@@ -301,6 +310,7 @@ async function runSearch(input: SearchInput, testing: boolean) {
   const results = resolveSearchResults(priceCandidates(roomRows, rooms, availability, party), {
     adults: party.adults,
     children: party.children,
+    infants: party.infants,
     arrivalDate: input.checkIn,
   }).map(result => {
     const until =
@@ -332,6 +342,7 @@ function searchProperties(i: SearchInput) {
     checkout: i.checkOut,
     adults: i.adults,
     children: i.children,
+    infants: i.infants,
     rooms: i.rooms,
   }
 }

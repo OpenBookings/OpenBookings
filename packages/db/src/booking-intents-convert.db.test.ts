@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import type { VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import type { LifecycleDb } from "./booking-lifecycle";
 import {
@@ -25,6 +26,17 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   ratePlanId,
   adults: 2,
   children: 0,
+  infants: 1,
+  cots: 1,
+  extraBeds: 0,
+  payAtProperty: 20,
+  discount: { label: "Weekly discount", amount: 10 },
+  rateNights: [
+    { date: "2031-11-10", price: 99.5 },
+    { date: "2031-11-11", price: 120 },
+  ],
+  extraGuests: [],
+  payAtPropertyLines: [{ label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 }],
   nights: [
     { date: "2031-11-10", price: 99.5 },
     { date: "2031-11-11", price: 120 },
@@ -32,6 +44,7 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   stayTotal: 219.5,
   touristTax: 12,
   touristTaxLines: [{ label: "€3.00 per person per night", amount: 12, effectiveFrom: "2026-01-01" }],
+  vatSplit: null,
 });
 
 const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
@@ -156,6 +169,39 @@ describeWithDb("converting a paid booking intent", () => {
     expect(Number(booking.commission_cents)).toBe(1976);
   });
 
+  test("convertIntentToBooking copies vat_split to the reservation unchanged", async () => {
+    const vatSplit: VatSplit = {
+      nights: [
+        {
+          date: "2031-11-10",
+          room: { gross: 81.5, rate: 9, vat: 6.73 },
+          breakfast: { gross: 18, rate: 9, vat: 1.49 },
+        },
+        { date: "2031-11-11", room: { gross: 120, rate: 9, vat: 9.91 }, breakfast: null },
+      ],
+      totals: [{ part: "accommodation", gross: 201.5, rate: 9, vat: 16.64 }],
+      breakfastValueMissing: false,
+    };
+    const rooms = [{ ...room(ids.roomId, ids.ratePlanId), vatSplit }];
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: snapshot(rooms),
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    const result = await convert(created.intentId);
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+    const { rows } = await db.query(`SELECT vat_split FROM reservations WHERE booking_id = $1`, [result.bookingId]);
+    expect(rows[0].vat_split).toEqual(vatSplit);
+    // And the intent read back carries it too.
+    const { rows: ir } = await db.query(`SELECT vat_split FROM booking_intent_rooms WHERE intent_id = $1`, [created.intentId]);
+    expect(ir[0].vat_split).toEqual(vatSplit);
+  });
+
   test("the booking keeps the commission split the intent recorded", async () => {
     const rooms = [room(ids.roomId, ids.ratePlanId)];
     const snap: IntentSnapshot = {
@@ -244,7 +290,7 @@ describeWithDb("converting a paid booking intent", () => {
 
     const reservations = (
       await db.query(
-        `SELECT room_id, rate_plan_id, adults, children, total_nights, price_per_night, total_amount,
+        `SELECT room_id, rate_plan_id, adults, children, infants, cots, extra_beds, pay_at_property_amount, total_nights, price_per_night, total_amount,
                 tourist_tax_amount, tourist_tax_lines, cancellation_tier, nights
          FROM reservations WHERE booking_id = $1`,
         [result.bookingId],
@@ -252,7 +298,18 @@ describeWithDb("converting a paid booking intent", () => {
     ).rows;
     expect(reservations).toHaveLength(2);
     for (const r of reservations) {
-      expect(r).toMatchObject({ room_id: ids.roomId, rate_plan_id: ids.ratePlanId, adults: 2, children: 0, total_nights: 2 });
+      expect(r).toMatchObject({
+        room_id: ids.roomId,
+        rate_plan_id: ids.ratePlanId,
+        adults: 2,
+        children: 0,
+        infants: 1,
+        cots: 1,
+        extra_beds: 0,
+        total_nights: 2,
+      });
+      // Paid at the hotel: kept apart from what was charged.
+      expect(Number(r.pay_at_property_amount)).toBe(20);
       expect(Number(r.price_per_night)).toBe(Math.round(219.5 / 2));
       expect(Number(r.total_amount)).toBe(Math.round(219.5));
       expect(Number(r.tourist_tax_amount)).toBe(12);

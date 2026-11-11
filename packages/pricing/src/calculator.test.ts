@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import {
+  extraGuests,
   hasStayLengthDiscount,
+  todayInZone,
   resolveNightlyRates,
   resolveRoom,
   resolveSearchResults,
@@ -199,5 +201,229 @@ describe("resolveRoom priced_nights", () => {
     const sumCents = r.priced_nights.reduce((s, n) => s + Math.round(n.price * 100), 0);
     expect(sumCents).toBe(Math.round(r.room_price * 100));
     for (const n of r.priced_nights) expect(n.price).toBe(Math.round(n.price * 100) / 100);
+  });
+});
+
+describe("occupancy & extras", () => {
+  const room = (extra: Partial<RoomRow> = {}, nights = ["2026-07-01"]) =>
+    ({
+      base_occupancy: 2,
+      extra_adult_fee: 20,
+      extra_child_fee: 10,
+      cot_fee: 0,
+      extra_bed_fee: 25,
+      nights: nightsFrom(nights, 100),
+      modifiers: [],
+      ...extra,
+    }) as unknown as RoomRow;
+  const stay = (adults: number, children = 0, extra: { cots?: number; extraBeds?: number } = {}) => ({
+    adults,
+    children,
+    arrivalDate: "2026-07-01",
+    ...extra,
+  });
+
+  test("adults fill the included places first", () => {
+    expect(extraGuests(2, 2, 1)).toEqual({ adults: 0, children: 1 });
+    expect(extraGuests(2, 3, 0)).toEqual({ adults: 1, children: 0 });
+    expect(extraGuests(2, 1, 2)).toEqual({ adults: 0, children: 1 });
+    expect(extraGuests(1, 3, 2)).toEqual({ adults: 2, children: 2 });
+  });
+
+  test("guests above base occupancy pay the adult or child fee per night", () => {
+    expect(resolveRoom(room(), stay(2), "2026-06-01").room_price).toBe(100);
+    expect(resolveRoom(room(), stay(3), "2026-06-01").room_price).toBe(120);
+    expect(resolveRoom(room(), stay(2, 1), "2026-06-01").room_price).toBe(110);
+    expect(resolveRoom(room(), stay(3, 1), "2026-06-01").room_price).toBe(130);
+  });
+
+  test("no fee set means extra guests are not charged", () => {
+    expect(resolveRoom(room({ extra_adult_fee: null }), stay(3), "2026-06-01").room_price).toBe(100);
+  });
+
+  test("cots and extra beds are paid at the property, outside the room price", () => {
+    const r = resolveRoom(room({ cot_fee: 10 }, ["2026-07-01", "2026-07-02"]), stay(2, 0, { cots: 1, extraBeds: 1 }), "2026-06-01");
+    expect(r.room_price).toBe(200);
+    expect(r.total_price).toBe(200);
+    expect(r.trace.map((s) => s.label)).toEqual(["Base rate"]);
+    expect(r.pay_at_property).toEqual([
+      { label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 },
+      { label: "Extra beds", count: 1, fee_per_night: 25, nights: 2, amount: 50 },
+    ]);
+    expect(r.pay_at_property_total).toBe(70);
+  });
+
+  test("rate_nights + extra_guests - discount add up to room_price", () => {
+    const r = resolveRoom(
+      room(
+        {
+          extra_child_fee: 15,
+          nights: [
+            { date: "2026-07-01", base_price: 195 },
+            { date: "2026-07-02", base_price: 195 },
+            { date: "2026-07-03", base_price: 165 },
+          ] as unknown as Night[],
+          modifiers: [
+            { type: "early_bird", adjustment_type: "percent", adjustment_value: -10, trigger_condition: { days_before_arrival: 30 }, sort_order: 1 },
+          ] as unknown as Modifier[],
+        },
+      ),
+      stay(2, 1),
+      "2026-05-01",
+    );
+    expect(r.rate_nights.map((n) => n.price)).toEqual([195, 195, 165]);
+    expect(r.extra_guests).toEqual([{ kind: "child", count: 1, per_night: 15, nights: 3, amount: 45 }]);
+    expect(r.discount?.amount).toBe(55.5);
+    const sum = r.rate_nights.reduce((s, n) => s + n.price, 0) + 45 - 55.5;
+    expect(Math.round(sum * 100)).toBe(Math.round(r.room_price * 100));
+  });
+
+  test("no extra guests: extra_guests is []", () => {
+    expect(resolveRoom(room(), stay(2), "2026-06-01").extra_guests).toEqual([]);
+  });
+
+  test("a free cot is listed at 0, so the hotel still prepares it", () => {
+    const r = resolveRoom(room(), stay(2, 0, { cots: 1 }), "2026-06-01");
+    expect(r.pay_at_property).toEqual([{ label: "Cots", count: 1, fee_per_night: 0, nights: 1, amount: 0 }]);
+    expect(r.pay_at_property_total).toBe(0);
+  });
+
+  test("infants take no place and pay no fee", () => {
+    expect(resolveRoom(room(), { ...stay(2), infants: 2 }, "2026-06-01").room_price).toBe(100);
+  });
+
+  test("tourist tax counts infants with the children", () => {
+    const perPerson = (childrenExempt: boolean): TouristTaxRule => ({
+      effectiveFrom: "2026-01-01",
+      charges: [{ kind: "fixed", amount: 2, perPerson: true, perNight: true, perRoom: false }],
+      childrenExempt,
+      maxNights: null,
+    });
+    expect(resolveRoom(room({ tourist_tax_rules: [perPerson(false)] }), { ...stay(2), infants: 1 }, "2026-06-01").tourist_tax.total).toBe(6);
+    expect(resolveRoom(room({ tourist_tax_rules: [perPerson(true)] }), { ...stay(2), infants: 1 }, "2026-06-01").tourist_tax.total).toBe(4);
+  });
+
+  test("discounts never touch the extras", () => {
+    const r = resolveRoom(
+      room({ modifiers: [threeNightDiscount] }, ["2026-07-01", "2026-07-02", "2026-07-03"]),
+      stay(3),
+      "2026-06-01",
+    );
+    expect(r.room_price).toBe(300 * 0.9 + 3 * 20);
+    expect(r.priced_nights.map((n) => n.price)).toEqual([110, 110, 110]);
+  });
+
+  test("a percentage tourist tax includes the extras", () => {
+    const tenPercent: TouristTaxRule = {
+      effectiveFrom: "2026-01-01",
+      charges: [{ kind: "percent", amount: 10, perPerson: false, perNight: false, perRoom: false }],
+      childrenExempt: true,
+      maxNights: null,
+    };
+    const r = resolveRoom(room({ tourist_tax_rules: [tenPercent] }), stay(3), "2026-06-01");
+    expect(r.tourist_tax.total).toBe(12);
+  });
+});
+
+describe("modifier fixes", () => {
+  // Fri 3, Sat 4, Sun 5 July 2026.
+  const stay = (modifiers: Modifier[], extra: Partial<RoomRow> = {}) =>
+    resolveRoom(
+      {
+        base_occupancy: 2,
+        nights: nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 100),
+        modifiers,
+        ...extra,
+      } as unknown as RoomRow,
+      { adults: 2, children: 0, arrivalDate: "2026-07-03" },
+      "2026-06-01",
+    );
+  const discount = (type: "length_of_stay" | "early_bird", value: number, sort: number, flat = false): Modifier => ({
+    type,
+    adjustment_type: flat ? "flat" : "percent",
+    adjustment_value: value,
+    trigger_condition: type === "length_of_stay" ? { min_nights: 3 } : { days_before_arrival: 30 },
+    sort_order: sort,
+  });
+
+  test("a discount entered as a positive number still lowers the price", () => {
+    expect(stay([discount("length_of_stay", 10, 1)]).room_price).toBe(270);
+  });
+
+  test("a percentage discount is taken from the price with date surcharges, whatever the order", () => {
+    // Weekend +20 on Sat and Sun: 340, then −10%.
+    expect(stay([discount("length_of_stay", -10, 1), { ...weekendSurcharge, sort_order: 30 }]).room_price).toBe(306);
+    expect(stay([{ ...weekendSurcharge, sort_order: 1 }, discount("length_of_stay", -10, 30)]).room_price).toBe(306);
+  });
+
+  test("a flat discount is not a discount: it is ignored", () => {
+    expect(stay([discount("length_of_stay", -10, 1, true)]).room_price).toBe(300);
+    expect(stay([discount("early_bird", -10, 1, true)]).discount).toBeNull();
+  });
+
+  test("the discount is reported for checkout, named for the guest", () => {
+    const week = nightsFrom(["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06", "2026-07-07"], 60);
+    const los = (minNights: number): Modifier => ({ ...discount("length_of_stay", -10, 1), trigger_condition: { min_nights: minNights } });
+    const named = (minNights: number) =>
+      resolveRoom(
+        { base_occupancy: 2, nights: week, modifiers: [los(minNights)] } as unknown as RoomRow,
+        { adults: 2, children: 0, arrivalDate: "2026-07-01" },
+        "2026-06-01",
+      ).discount;
+    expect(named(7)).toEqual({ label: "Weekly discount", percent: 10, amount: 42 });
+    expect(named(3)).toEqual({ label: "3+ night discount", percent: 10, amount: 42 });
+    expect(stay([discount("early_bird", -15, 1)]).discount).toEqual({ label: "Early booking discount", percent: 15, amount: 45 });
+    expect(stay([]).discount).toBeNull();
+  });
+
+  test("the largest discount for the guest wins, not the first", () => {
+    const r = stay([discount("length_of_stay", -5, 1), discount("early_bird", -15, 2)]);
+    expect(r.room_price).toBe(255);
+    expect(r.applied_modifiers).toEqual(["early_bird"]);
+  });
+
+  test("weekdays are read from the date itself, not the server's time zone", () => {
+    const saved = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      const saturdayOnly: Modifier = { ...weekendSurcharge, trigger_condition: { days_of_week: [6] } };
+      const friSat = resolveRoom(
+        { base_occupancy: 2, nights: nightsFrom(["2026-07-03", "2026-07-04"], 100), modifiers: [saturdayOnly] } as unknown as RoomRow,
+        { adults: 2, children: 0, arrivalDate: "2026-07-03" },
+        "2026-06-01",
+      );
+      expect(friSat.room_price).toBe(220);
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
+  });
+
+  test("without a date passed in, lead time counts from the property's today", () => {
+    setSystemTime(new Date("2026-07-01T12:00:00Z")); // already 2 July in Kiritimati (UTC+14)
+    try {
+      const lastMinute: Modifier = {
+        type: "last_minute",
+        adjustment_type: "flat",
+        adjustment_value: 30,
+        trigger_condition: { days_till_arrival: 0 },
+        sort_order: 1,
+      };
+      const row = {
+        base_occupancy: 2,
+        timezone: "Pacific/Kiritimati",
+        nights: nightsFrom(["2026-07-02"], 100),
+        modifiers: [lastMinute],
+      } as unknown as RoomRow;
+      expect(resolveRoom(row, { adults: 2, children: 0, arrivalDate: "2026-07-02" }).room_price).toBe(130);
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("today is the property's date, not UTC's", () => {
+    const lateUtc = new Date("2026-07-01T12:00:00Z");
+    expect(todayInZone("Pacific/Kiritimati", lateUtc)).toBe("2026-07-02");
+    expect(todayInZone("Europe/Amsterdam", lateUtc)).toBe("2026-07-01");
   });
 });

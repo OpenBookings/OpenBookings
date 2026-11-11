@@ -56,7 +56,6 @@ const RULES: Record<SectionId, Rule[]> = {
     ["Minimum check-in age", (d) => d.content.minCheckInAge !== null && d.content.minCheckInAge >= 1],
     ["Accepted payment methods", (d) => d.content.paymentMethods.length > 0],
     ["Fine print", (d) => d.content.finePrint.length > 0],
-    ["Cot fee", (d) => d.content.cotPolicy !== "paid" || d.content.cotFee !== null],
   ],
   // Optional: not every town charges tourist tax, so no rule is a valid state.
   "tourist-tax": [],

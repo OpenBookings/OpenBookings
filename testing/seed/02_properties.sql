@@ -34,23 +34,23 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO property_content
   (property_id, overview_headline, overview_description, location_about, reception_24h,
-   children_welcome, pets_allowed, cot_policy, legal_company_name, vat_number, contact_email, contact_phone)
+   children_welcome, pets_allowed, legal_company_name, vat_number, contact_email, contact_phone)
 VALUES
   ('5eed1000-0000-4000-8000-000000000001',
    'Sleep on the canal',
    'Twenty rooms in two seventeenth-century canal houses, joined by a courtyard garden. Breakfast is served in the old kitchen until noon.',
    'In the Jordaan, a short walk from the Anne Frank House and the Noordermarkt.',
-   true, true, false, 'free',
+   true, true, false,
    'Lantern Hotels B.V.', 'NL000000001B01', 'canal@openbookings.test', '+31 20 000 0001'),
   ('5eed1000-0000-4000-8000-000000000002',
    'Suites with a garden view',
    'Eight suites around a walled garden, each with a kitchenette. Quiet, five minutes from Utrecht Centraal.',
    'On a square behind the Dom tower, between the canals and the station.',
-   false, true, true, 'paid',
+   false, true, true,
    'Lantern Hotels B.V.', 'NL000000001B01', 'dom@openbookings.test', '+31 30 000 0002'),
   -- The draft hotel has no legal details yet: it shows up as "not ready".
   ('5eed1000-0000-4000-8000-000000000003',
-   NULL, NULL, NULL, false, true, false, NULL, NULL, NULL, NULL, NULL)
+   NULL, NULL, NULL, false, true, false, NULL, NULL, NULL, NULL)
 ON CONFLICT (property_id) DO NOTHING;
 
 INSERT INTO property_images (property_id, url, "group", sort_order, alt_text) VALUES

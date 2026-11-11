@@ -38,9 +38,6 @@ function complete(): PropertyEditorData {
       prepaymentRequired: true,
       childrenWelcome: true,
       minCheckInAge: 18,
-      cotPolicy: "free",
-      cotFee: null,
-      extraBedFee: 60,
       petsAllowed: false,
       paymentMethods: ["visa", "mastercard"],
       legalCompanyName: "Quiete SRL",
@@ -165,13 +162,6 @@ describe("sectionStatus — policies", () => {
     const d = complete();
     d.content.finePrint = [];
     expect(sectionStatus("policies", d).missing).toContain("Fine print");
-  });
-
-  test("requires a cot fee when the cot policy is paid", () => {
-    const d = complete();
-    d.content.cotPolicy = "paid";
-    d.content.cotFee = null;
-    expect(sectionStatus("policies", d).missing).toContain("Cot fee");
   });
 
   test("requires a check-in time", () => {

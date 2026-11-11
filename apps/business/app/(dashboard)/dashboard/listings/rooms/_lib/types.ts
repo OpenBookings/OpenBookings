@@ -33,6 +33,19 @@ export interface RoomRecord {
   maxChildren: number;
   /** `rooms.total_units` — the baseline R&A's availability is computed from. */
   units: number;
+  /** Guests the rate includes; guests above it pay the extra fees (0040). */
+  baseOccupancy: number;
+  /** Whole euros per extra guest per night. NULL = not charged. */
+  extraAdultFee: number | null;
+  extraChildFee: number | null;
+  /** 0 = not offered. */
+  cotsMax: number;
+  /** Whole euros per night; 0 = free, NULL when not offered. */
+  cotFee: number | null;
+  extraBedsMax: number;
+  extraBedFee: number | null;
+  /** false = a guest gets cots or extra beds, not both. */
+  cotAndExtraBedTogether: boolean;
   amenityKeys: string[];
   featuredAmenityKeys: string[];
   sortOrder: number;

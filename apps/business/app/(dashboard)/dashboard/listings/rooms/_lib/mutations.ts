@@ -290,7 +290,31 @@ export type SpaceValues = {
   maxAdults: string;
   maxChildren: string;
   units: string;
+  baseOccupancy: string;
+  extraAdultFee: string;
+  extraChildFee: string;
+  /** Switches post "on" or nothing; kept as "" when off. */
+  cotsOn: string;
+  cotsMax: string;
+  cotFee: string;
+  extraBedsOn: string;
+  extraBedsMax: string;
+  extraBedFee: string;
+  cotAndExtraBedTogether: string;
 } & Record<`bed_${string}`, string>;
+
+const SPACE_EXTRA_FIELDS = [
+  "baseOccupancy",
+  "extraAdultFee",
+  "extraChildFee",
+  "cotsOn",
+  "cotsMax",
+  "cotFee",
+  "extraBedsOn",
+  "extraBedsMax",
+  "extraBedFee",
+  "cotAndExtraBedTogether",
+] as const;
 
 /**
  * The highest number of this room's units held on any single future night.
@@ -342,6 +366,7 @@ export async function saveRoomSpace(
     maxAdults: str(formData, "maxAdults"),
     maxChildren: str(formData, "maxChildren"),
     units: str(formData, "units"),
+    ...Object.fromEntries(SPACE_EXTRA_FIELDS.map((k) => [k, str(formData, k)])),
     ...Object.fromEntries(BED_TYPE_KEYS.map((k) => [`bed_${k}`, str(formData, `bed_${k}`) || "0"])),
   } as SpaceValues;
 
@@ -370,7 +395,10 @@ export async function saveRoomSpace(
   await deps.query(
     `UPDATE rooms
      SET size_sqm = $1, bed_config = $2::jsonb, bed_type = $3,
-         max_adults = $4, max_children = $5, total_units = $6, updated_at = NOW()
+         max_adults = $4, max_children = $5, total_units = $6,
+         base_occupancy = $8, extra_adult_fee = $9, extra_child_fee = $10,
+         cots_max = $11, cot_fee = $12, extra_beds_max = $13, extra_bed_fee = $14,
+         cot_and_extra_bed_together = $15, updated_at = NOW()
      WHERE id = $7`,
     [
       d.sizeM2,
@@ -382,6 +410,14 @@ export async function saveRoomSpace(
       d.maxChildren,
       d.units,
       roomId,
+      d.baseOccupancy,
+      d.extraAdultFee,
+      d.extraChildFee,
+      d.cotsMax,
+      d.cotFee,
+      d.extraBedsMax,
+      d.extraBedFee,
+      d.cotAndExtraBedTogether,
     ],
   );
   await deps.purge({ roomId });
