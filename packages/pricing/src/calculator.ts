@@ -481,6 +481,15 @@ const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
 // Main resolver
 // ─────────────────────────────────────────────
 
+/** Guests above base occupancy, as one checkout line. Already in `room_price`, never discounted. */
+export interface ExtraGuestLine {
+  kind: 'adult' | 'child'
+  count: number
+  per_night: number
+  nights: number
+  amount: number
+}
+
 export interface ResolvedRoom
   extends Omit<RoomRow, 'nights' | 'modifiers' | 'tourist_tax_rules'> {
   nights: Night[]
@@ -503,6 +512,13 @@ export interface ResolvedRoom
    * night absorbs rounding so the nights sum to `room_price` exactly.
    */
   priced_nights: { date: string; price: number }[]
+  /**
+   * Each night's rate plus date surcharges, before the stay discount and extra
+   * guests, in cents. Adds up with `extra_guests` and `discount` to `room_price`.
+   */
+  rate_nights: { date: string; price: number }[]
+  /** Extra adults and children in `room_price`. Empty when nobody is extra. */
+  extra_guests: ExtraGuestLine[]
   /** Cots and extra beds, paid at the property: not in `room_price` or `total_price`. */
   pay_at_property: PayAtPropertyLine[]
   pay_at_property_total: number
@@ -535,6 +551,10 @@ export function resolveRoom(
     rooms: 1,
   })
 
+  const discount = appliedDiscount(state)
+  const extraLines = extraGuestLines(row, params, numNights)
+  const extraAmount = extraLines.reduce((sum, l) => sum + l.amount, 0)
+
   const { tourist_tax_rules: _rules, ...rest } = row
   return {
     ...rest,
@@ -545,9 +565,11 @@ export function resolveRoom(
     tourist_tax: touristTax,
     total_price: round2(roomPrice + touristTax.total),
     priced_nights: roundedPricedNights(pricedNights(state), roomPrice),
+    rate_nights: roundedRateNights(state, round2(roomPrice - extraAmount + (discount?.amount ?? 0))),
+    extra_guests: extraLines,
     pay_at_property: payAtProperty,
     pay_at_property_total: round2(payAtProperty.reduce((sum, l) => sum + l.amount, 0)),
-    discount: appliedDiscount(state),
+    discount,
     applied_modifiers: [...state.applied],
     trace: roundTrace(state.trace),
   }
@@ -589,6 +611,20 @@ function applyExtraGuests(
     }
   }
   return next
+}
+
+/** One line per kind of extra guest that is charged. Matches applyExtraGuests. */
+function extraGuestLines(row: RoomRow, params: SearchParams, nights: number): ExtraGuestLine[] {
+  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
+  const lines: ExtraGuestLine[] = []
+  const add = (kind: ExtraGuestLine['kind'], count: number, fee: number | null | undefined) => {
+    const perNight = round2((fee ?? 0) * count)
+    if (perNight <= 0) return
+    lines.push({ kind, count, per_night: perNight, nights, amount: round2(perNight * nights) })
+  }
+  add('adult', extra.adults, row.extra_adult_fee)
+  add('child', extra.children, row.extra_child_fee)
+  return lines
 }
 
 /**
@@ -636,6 +672,15 @@ function pricedNights(state: CalculationState): { date: string; price: number }[
   const discounted = state.total - extrasTotal(state)
   const scale = state.subtotal > 0 ? discounted / state.subtotal : 0
   return state.nights.map(n => ({ date: n.date, price: (n.base_price + n._surcharge) * scale + n._extra }))
+}
+
+/** Rate plus surcharges per night; the last night absorbs rounding so they sum to `target`. */
+function roundedRateNights(state: CalculationState, target: number): { date: string; price: number }[] {
+  const rounded = state.nights.map(n => ({ date: n.date, price: round2(n.base_price + n._surcharge) }))
+  if (rounded.length === 0) return rounded
+  const head = rounded.slice(0, -1).reduce((sum, n) => sum + n.price, 0)
+  rounded[rounded.length - 1].price = round2(target - head)
+  return rounded
 }
 
 function roundedPricedNights(
