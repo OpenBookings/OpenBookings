@@ -1,9 +1,11 @@
 import {
   buildPolicySnapshot,
   describePolicy,
+  describePolicySteps,
   snapshotTier,
   TIER_LABELS,
   type CancellationTier,
+  type PolicyStep,
   type PropertyCancellationTier,
 } from '@openbookings/pricing';
 
@@ -12,6 +14,8 @@ export type CheckoutCancellationTerms = {
   tierLabel: string;
   /** The policy as sentences, deadlines as exact local dates (Annex B B.5.9). */
   policyLines: string[];
+  /** The same policy as a timeline, for the checkout schedule. */
+  steps: PolicyStep[];
   /** Annex B B.4.3: a Non-refundable rate is chosen explicitly before paying. */
   requiresNonRefundableConsent: boolean;
 };
@@ -41,6 +45,7 @@ export function checkoutCancellationTerms(i: {
     cancellationTier: tier,
     tierLabel: TIER_LABELS[tier],
     policyLines: describePolicy(snapshot, i.timeZone, i.now),
+    steps: describePolicySteps(snapshot, i.timeZone, i.now),
     requiresNonRefundableConsent: tier === 'non_refundable',
   };
 }

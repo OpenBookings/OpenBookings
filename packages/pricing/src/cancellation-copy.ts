@@ -23,8 +23,7 @@ export const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
 
 const deadlineFormatters = new Map<string, Intl.DateTimeFormat>();
 
-/** "Tue 3 Nov 2026, 15:00", in the property's time zone. */
-export function formatDeadline(d: Date, timeZone: string): string {
+function deadlineParts(d: Date, timeZone: string) {
   let f = deadlineFormatters.get(timeZone);
   if (!f) {
     f = new Intl.DateTimeFormat("en-GB", {
@@ -41,7 +40,19 @@ export function formatDeadline(d: Date, timeZone: string): string {
   }
   const parts = f.formatToParts(d);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("weekday")} ${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}`;
+  return {
+    weekday: get("weekday"),
+    day: get("day"),
+    month: get("month"),
+    year: get("year"),
+    time: `${get("hour")}:${get("minute")}`,
+  };
+}
+
+/** "Tue 3 Nov 2026, 15:00", in the property's time zone. */
+export function formatDeadline(d: Date, timeZone: string): string {
+  const p = deadlineParts(d, timeZone);
+  return `${p.weekday} ${p.day} ${p.month} ${p.year}, ${p.time}`;
 }
 
 /**
@@ -62,4 +73,49 @@ export function describePolicy(s: PolicySnapshot, timeZone: string, now: Date): 
   }
   lines.push(EARLY_DEPARTURE_LINE, TOURIST_TAX_LINE, NO_SHOW_LINE);
   return lines;
+}
+
+export type PolicyStep = {
+  kind: "free" | "after" | "no_show" | "non_refundable";
+  title: string;
+  detail: string;
+};
+
+const NO_SHOW_STEP: PolicyStep = {
+  kind: "no_show",
+  title: "If you don't show up",
+  detail: "The hotel keeps the full amount.",
+};
+
+/**
+ * The policy as a timeline of steps, for the checkout schedule. Words and
+ * dates only, no amounts. A passed free-cancellation deadline drops that step.
+ */
+export function describePolicySteps(s: PolicySnapshot, timeZone: string, now: Date): PolicyStep[] {
+  if (s.tier === "non_refundable") {
+    return [
+      {
+        kind: "non_refundable",
+        title: "Non-refundable",
+        detail: "The room isn't refunded if you cancel. Tourist tax for nights you don't stay is.",
+      },
+      NO_SHOW_STEP,
+    ];
+  }
+  const steps: PolicyStep[] = [];
+  if (s.fullRefundUntil && s.fullRefundUntil.getTime() > now.getTime()) {
+    const p = deadlineParts(s.fullRefundUntil, timeZone);
+    steps.push({
+      kind: "free",
+      title: `Free until ${p.weekday} ${p.day} ${p.month}, ${p.time}`,
+      detail: "Cancel before then and you get everything you paid back.",
+    });
+  }
+  steps.push({
+    kind: "after",
+    title: "After that",
+    detail: "The room isn't refunded. Tourist tax for nights you don't stay is.",
+  });
+  steps.push(NO_SHOW_STEP);
+  return steps;
 }

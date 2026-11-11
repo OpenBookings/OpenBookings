@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildPolicySnapshot, type CancellationTier } from "./cancellation";
-import { describePolicy, formatDeadline, TIER_LABELS, TIER_SUMMARIES } from "./cancellation-copy";
+import { describePolicy, describePolicySteps, formatDeadline, TIER_LABELS, TIER_SUMMARIES } from "./cancellation-copy";
 
 const DAY = 86_400_000;
 const TZ = "Europe/Amsterdam";
@@ -72,5 +72,41 @@ describe("describePolicy", () => {
   test("once the deadline has passed, it says what a cancellation costs now", () => {
     const late = new Date("2026-11-09T20:00:00Z");
     expect(describePolicy(snapshot("flex"), TZ, late)[0]).toBe("If you cancel now, the room price isn't refunded.");
+  });
+});
+
+describe("describePolicySteps", () => {
+  const steps = (tier: CancellationTier, now: Date) => describePolicySteps(snapshot(tier), TZ, now);
+
+  test("flex before the deadline: free, after that, no-show", () => {
+    expect(steps("flex", EARLY)).toEqual([
+      {
+        kind: "free",
+        title: "Free until Mon 9 Nov, 15:00",
+        detail: "Cancel before then and you get everything you paid back.",
+      },
+      {
+        kind: "after",
+        title: "After that",
+        detail: "The room isn't refunded. Tourist tax for nights you don't stay is.",
+      },
+      { kind: "no_show", title: "If you don't show up", detail: "The hotel keeps the full amount." },
+    ]);
+  });
+
+  test("flex after the deadline drops the free step", () => {
+    const kinds = steps("flex", new Date("2026-11-09T20:00:00Z")).map((s) => s.kind);
+    expect(kinds).toEqual(["after", "no_show"]);
+  });
+
+  test("non-refundable: non-refundable and no-show", () => {
+    expect(steps("non_refundable", EARLY)).toEqual([
+      {
+        kind: "non_refundable",
+        title: "Non-refundable",
+        detail: "The room isn't refunded if you cancel. Tourist tax for nights you don't stay is.",
+      },
+      { kind: "no_show", title: "If you don't show up", detail: "The hotel keeps the full amount." },
+    ]);
   });
 });

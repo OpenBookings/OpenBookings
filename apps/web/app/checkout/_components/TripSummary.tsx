@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { ShieldCheck } from 'lucide-react';
+import { Baby, BedSingle, Check, Coffee, User } from 'lucide-react';
 import * as Sentry from '@sentry/nextjs';
 import { useCheckoutElements } from '@stripe/react-stripe-js/checkout';
+import type { PolicyStep } from '@openbookings/pricing';
+import { partyFacts } from '../_lib/party';
 import { buildLedger, formatMoney, ledgerPayNowCents, type LedgerRoom } from '../_lib/ledger';
 
 /**
@@ -31,16 +33,19 @@ export type TripSummaryRoom = {
   sizeSqm: number | null;
   roomImageUrl: string;
   ratePlanName: string;
-  /** "2 adults · 1 child", this room's own party. */
-  guestsLabel: string;
+  /** This room's own party and what it asked for. */
+  adults: number;
+  children: number;
+  infants: number;
+  includesBreakfast: boolean;
+  cots: number;
+  extraBeds: number;
 };
 
 /** One set of cancellation terms, and the rooms it applies to. */
 export type TripSummaryCancellation = {
-  /** "Flex", "Non-refundable", ... */
-  tierLabel: string;
-  /** The policy as sentences with exact local deadlines, most urgent first. */
-  policyLines: string[];
+  /** The schedule: free until a date, what follows, and no-shows. */
+  steps: PolicyStep[];
   roomNames: string[];
 };
 
@@ -65,6 +70,8 @@ export type TripSummaryProps = {
 
   /** One entry per distinct set of terms: rooms on the same terms share one. */
   cancellations: TripSummaryCancellation[];
+  /** Shown once under the schedule when cots or extra beds are paid at the property. */
+  payAtPropertyNote: string | null;
   /** A Non-refundable rate on any room: the guest confirms it before the card form shows. */
   requiresNonRefundableConsent: boolean;
 };
@@ -125,29 +132,73 @@ function RoomIdentity({
         const attributes = [
           room.bedType && `${room.bedType} bed`,
           room.sizeSqm && `${room.sizeSqm} m²`,
-          room.guestsLabel,
-          room.ratePlanName,
+          room.ratePlanName && `${room.ratePlanName} rate`,
         ].filter((value): value is string => Boolean(value));
+        const party = partyFacts(room);
+        const chip =
+          'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-white/8 px-2.5 py-1 text-xs leading-none text-white/90';
+        const chips = [
+          room.includesBreakfast && { label: 'Breakfast included', Icon: Coffee },
+          room.cots > 0 && { label: 'Cot', Icon: Baby },
+          room.extraBeds > 0 && { label: 'Extra bed', Icon: BedSingle },
+        ].filter((c): c is { label: string; Icon: typeof Coffee } => Boolean(c));
         return (
-          <div key={room.id} className="flex items-center gap-5 sm:gap-7">
-            {room.roomImageUrl && (
-              <Image
-                src={room.roomImageUrl}
-                alt=""
-                width={224}
-                height={126}
-                className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <Heading className="font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
-                {room.roomName}
-                {room.roomType && room.roomType !== room.roomName ? ` ${room.roomType}` : ''}
-              </Heading>
-              {attributes.length > 0 && (
-                <p className="mt-3 text-sm text-white/55">{attributes.join(' · ')}</p>
+          <div key={room.id} className="space-y-4">
+            <div className="flex items-center gap-5 sm:gap-7">
+              {room.roomImageUrl && (
+                <Image
+                  src={room.roomImageUrl}
+                  alt=""
+                  width={224}
+                  height={126}
+                  className="aspect-16/9 w-40 shrink-0 rounded-2xl object-cover ring-1 ring-white/15 sm:w-56"
+                />
               )}
+              <div className="min-w-0 flex-1">
+                <Heading className="font-serif text-3xl leading-[1.05] text-balance text-white sm:text-4xl">
+                  {room.roomName}
+                  {room.roomType && room.roomType !== room.roomName ? ` ${room.roomType}` : ''}
+                </Heading>
+                {attributes.length > 0 && (
+                  <p className="mt-3 text-sm text-white/55">
+                    {attributes.map((fact, i) => (
+                      <span key={fact} className="whitespace-nowrap">
+                        {i > 0 && <span aria-hidden="true"> · </span>}
+                        {fact}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
             </div>
+
+            {(party.length > 0 || chips.length > 0) && (
+              <div className="space-y-3">
+                {party.length > 0 && (
+                  <p className="flex items-start gap-2 text-sm text-white/75">
+                    <User className="mt-0.5 size-4 shrink-0 text-white/55" strokeWidth={2} aria-hidden="true" />
+                    <span>
+                      {party.map((fact, i) => (
+                        <span key={fact} className="whitespace-nowrap">
+                          {i > 0 && <span aria-hidden="true"> · </span>}
+                          {fact}
+                        </span>
+                      ))}
+                    </span>
+                  </p>
+                )}
+                {chips.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {chips.map(({ label, Icon }) => (
+                      <span key={label} className={chip}>
+                        <Icon className="size-3 text-white/60" strokeWidth={2} aria-hidden="true" />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
@@ -389,79 +440,80 @@ function Ledger({ propertyName, ledgerRooms }: { propertyName: string; ledgerRoo
 /**
  * The policy, quiet but not hidden.
  *
- * Previously an opaque white card, which read as a second thing to act on and
- * competed with the payment form. Deadlines are stated outright, as dates and
- * times in the property's zone: "until Mon 9 Nov 2026, 15:00" answers the
- * question a rule like "24 hours before check-in" only describes.
+ * A dotted timeline in the property's own time: the date the guest has to act
+ * by, then what follows. Words and dates only; no amounts at this point.
+ * Given a panel of its own, and the page's accent, because this is what lets
+ * someone press pay. The first free step keeps the serif and the green check.
  */
-function PolicyPanel({
-  tierLabel,
-  policyLines,
-  roomsLabel,
-}: {
-  tierLabel: string;
-  policyLines: string[];
-  /** Which rooms these terms are for, when the rooms' terms differ. */
-  roomsLabel: string | null;
-}) {
-  const [headline, ...rest] = policyLines;
-  const freeWindow = headline?.startsWith('Free cancellation') || headline?.startsWith('Full refund');
+function PolicyPanel({ steps, roomsLabel }: { steps: PolicyStep[]; roomsLabel: string | null }) {
   return (
-    <>
-      {/*
-        Given a panel of its own, and the page's accent, because this is the
-        sentence that lets someone press pay: the risk of committing is the last
-        thing standing between the guest and the button in the other column.
-        Set as a deadline rather than a restatement of the policy beneath it —
-        the host's wording describes the rule, this resolves it to the date the
-        guest actually has to act on, which the rule alone cannot tell them.
-      */}
-      <div className="rounded-2xl border border-[#a5b4f0]/25 bg-[#a5b4f0]/[0.07] p-5 backdrop-blur-md sm:p-6">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-white/55 uppercase">
-          Cancellation · {tierLabel}
-          {roomsLabel && ` · ${roomsLabel}`}
-        </p>
-        {headline && (
-          <p className="mt-2 flex items-start gap-3">
-            {freeWindow && (
-              <ShieldCheck
-                className="mt-0.5 size-6 shrink-0 text-green-400"
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
-            )}
-            <span className="font-serif text-xl leading-snug text-white sm:text-2xl">{headline}</span>
-          </p>
-        )}
-        {rest.length > 0 && (
-          <ul className="mt-3 space-y-1 text-sm text-white/70">
-            {rest.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </>
+    <div className="rounded-2xl border border-[#a5b4f0]/25 bg-[#a5b4f0]/[0.07] p-5 backdrop-blur-md sm:p-6">
+      <p className="text-[11px] font-semibold tracking-[0.18em] text-white/55 uppercase">
+        What cancelling costs
+        {roomsLabel && ` · ${roomsLabel}`}
+      </p>
+      <ol className="mt-4 space-y-4">
+        {steps.map((step, i) => {
+          const free = step.kind === 'free';
+          const last = i === steps.length - 1;
+          return (
+            <li key={step.kind} className="relative flex gap-3.5">
+              {!last && (
+                <span
+                  className="absolute top-6 bottom-[-1rem] left-[0.6875rem] border-l border-dotted border-white/30"
+                  aria-hidden="true"
+                />
+              )}
+              <span className="relative mt-0.5 flex size-[1.375rem] shrink-0 items-center justify-center" aria-hidden="true">
+                {free ? (
+                  <Check className="size-5 text-green-400" strokeWidth={2.25} />
+                ) : (
+                  <span className="size-2 rounded-full bg-white/45" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <p
+                  className={
+                    free
+                      ? 'font-serif text-xl leading-snug text-white sm:text-2xl'
+                      : 'text-[15px] font-medium text-white/90'
+                  }
+                >
+                  {step.title}
+                </p>
+                <p className="mt-1 text-sm text-white/70">{step.detail}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
-function PolicyFooter({ cancellations }: { cancellations: TripSummaryCancellation[] }) {
+function PolicyFooter({
+  cancellations,
+  payAtPropertyNote,
+}: {
+  cancellations: TripSummaryCancellation[];
+  payAtPropertyNote: string | null;
+}) {
   return (
     <footer>
       <div className="space-y-4">
         {cancellations.map((terms) => (
           <PolicyPanel
-            key={`${terms.tierLabel}|${terms.policyLines.join('|')}`}
-            tierLabel={terms.tierLabel}
-            policyLines={terms.policyLines}
+            key={JSON.stringify(terms.steps)}
+            steps={terms.steps}
             roomsLabel={cancellations.length > 1 ? terms.roomNames.join(', ') : null}
           />
         ))}
       </div>
 
+      {payAtPropertyNote && <p className="mt-4 text-sm text-white/70">{payAtPropertyNote}</p>}
+
       <p className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-white/60">
-        {/* Legal pages open in a new tab so the guest doesn't lose checkout.
-            The cancellation policy page is not built yet, so it stays a placeholder. */}
+        {/* Legal pages open in a new tab so the guest doesn't lose checkout. */}
         <a
           href="/legal/en/terms"
           target="_blank"
@@ -471,7 +523,9 @@ function PolicyFooter({ cancellations }: { cancellations: TripSummaryCancellatio
           Terms of service
         </a>
         <a
-          href="#"
+          href="/legal/en/terms#cancellations"
+          target="_blank"
+          rel="noopener noreferrer"
           className="underline-offset-4 transition-colors hover:text-white/85 hover:underline"
         >
           Cancellation policy
@@ -510,7 +564,7 @@ export function TripSummary(props: TripSummaryProps) {
 
       <Ledger propertyName={props.propertyName} ledgerRooms={props.ledgerRooms} />
 
-      <PolicyFooter cancellations={props.cancellations} />
+      <PolicyFooter cancellations={props.cancellations} payAtPropertyNote={props.payAtPropertyNote} />
     </section>
   );
 }
