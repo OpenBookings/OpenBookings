@@ -55,7 +55,7 @@ const timeOf = (d: number, tz: string) =>
 const when = (d: number, tz: string) => `${dayOf(d, tz)}, ${timeOf(d, tz)}`;
 
 /** "12 days", "5 hours", "under an hour". */
-export function timeLeft(ms: number): string {
+function timeLeft(ms: number): string {
   if (ms >= 2 * DAY) return `${Math.floor(ms / DAY)} days`;
   if (ms >= 2 * HOUR) return `${Math.floor(ms / HOUR)} hours`;
   if (ms >= HOUR) return "1 hour";

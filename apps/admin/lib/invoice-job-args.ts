@@ -6,7 +6,7 @@
  */
 
 export const JOB_STEPS = ["backfill", "draft", "issue", "store", "deliver"] as const;
-export type JobStep = (typeof JOB_STEPS)[number];
+type JobStep = (typeof JOB_STEPS)[number];
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ENTITY_RE = /^[A-Za-z0-9_-]{1,64}$/;

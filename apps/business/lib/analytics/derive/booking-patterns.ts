@@ -13,7 +13,7 @@ interface BucketDef {
   max: number;
 }
 
-export const LEAD_BUCKETS: readonly BucketDef[] = [
+const LEAD_BUCKETS: readonly BucketDef[] = [
   { key: "same-day", label: "Same day", max: 0 },
   { key: "1-3", label: "1–3 days", max: 3 },
   { key: "4-7", label: "4–7 days", max: 7 },
@@ -23,7 +23,7 @@ export const LEAD_BUCKETS: readonly BucketDef[] = [
   { key: "61+", label: "61+ days", max: Number.POSITIVE_INFINITY },
 ];
 
-export const STAY_BUCKETS: readonly BucketDef[] = [
+const STAY_BUCKETS: readonly BucketDef[] = [
   { key: "1", label: "1 night", max: 1 },
   { key: "2", label: "2 nights", max: 2 },
   { key: "3", label: "3 nights", max: 3 },

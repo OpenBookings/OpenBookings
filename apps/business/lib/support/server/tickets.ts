@@ -125,7 +125,7 @@ function toDetail(row: TicketRow, viewerId: string): TicketDetail {
 /** `($3::bool OR t.opened_by_user_id = $2)`: all tickets for owners/admins, else your own. */
 const VISIBLE = `t.organization_id = $1 AND ($3::bool OR t.opened_by_user_id = $2)`;
 
-export const TICKETS_PAGE_SIZE = 25;
+const TICKETS_PAGE_SIZE = 25;
 
 export async function listTickets(
   scope: SupportScope,

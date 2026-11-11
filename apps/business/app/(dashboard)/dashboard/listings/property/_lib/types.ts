@@ -93,7 +93,7 @@ export interface TouristTaxRuleRecord extends TouristTaxRule {
   id: string;
 }
 
-export interface TouristTaxData {
+interface TouristTaxData {
   /** Every rule, oldest first. */
   rules: TouristTaxRuleRecord[];
   /** `properties.commission_rate`, e.g. 0.045. The calculator shows it. */

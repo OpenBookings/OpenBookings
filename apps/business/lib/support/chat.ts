@@ -8,7 +8,7 @@
  * comes from Chatwoot's sender type, never from content.
  */
 
-export type ChatSenderKind = "host" | "assistant" | "person";
+type ChatSenderKind = "host" | "assistant" | "person";
 
 export type ChatAttachment = {
   id: number;
@@ -199,12 +199,6 @@ export function timeline(
   }
   while (ai < activities.length) items.push(activities[ai++]!);
   return items;
-}
-
-/** The latest message that isn't the host's, if it's the last thing said. */
-export function awaitingReply(messages: ChatMessage[]): boolean {
-  const last = messages.at(-1);
-  return last?.kind === "host";
 }
 
 export function lastAssistantMessage(messages: ChatMessage[]): ChatMessage | null {

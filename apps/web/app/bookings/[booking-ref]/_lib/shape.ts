@@ -34,7 +34,7 @@ export type GuestBookingRow = {
   }[];
 };
 
-export type GuestBookingRoom = {
+type GuestBookingRoom = {
   reservationId: string;
   roomName: string;
   tierLabel: string;

@@ -13,11 +13,6 @@ export function formatMoney(value: number, currency: string): string {
   }).format(value);
 }
 
-const columnFormatter = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "numeric",
-});
-
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
@@ -41,10 +36,6 @@ const timestampFormatter = new Intl.DateTimeFormat("en-GB", {
 /** Dates are date-only strings; parse as UTC so they don't shift a day. */
 function parse(isoDate: string): Date {
   return new Date(`${isoDate}T00:00:00Z`);
-}
-
-export function formatColumnDate(isoDate: string): string {
-  return columnFormatter.format(parse(isoDate));
 }
 
 export function formatFullDate(isoDate: string): string {

@@ -54,11 +54,11 @@ export function editKey(edit: DraftEdit): string {
   return `${edit.kind}|${target}|${edit.date}`;
 }
 
-export interface DraftState {
+interface DraftState {
   edits: Map<string, DraftEdit>;
 }
 
-export type DraftAction =
+type DraftAction =
   | { type: "stage"; edits: DraftEdit[] }
   | { type: "unstage"; keys: string[] }
   | { type: "discard" };

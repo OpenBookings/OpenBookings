@@ -95,7 +95,7 @@ function Row({
   );
 }
 
-export function SkeletonRows() {
+function SkeletonRows() {
   return (
     <RowList>
       {[0, 1].map((row) => (

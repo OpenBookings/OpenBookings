@@ -14,7 +14,7 @@ const GROUP_LABELS: Record<GroupType, string> = {
 
 const regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
 
-export function countryName(code: string): string {
+function countryName(code: string): string {
   try {
     return regionNames.of(code) ?? code;
   } catch {

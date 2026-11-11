@@ -9,7 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * nothing from guessing ids. Pending rows are unpaid checkout intents, not
  * bookings, and are not shown.
  */
-export const GUEST_BOOKING_SQL = `
+const GUEST_BOOKING_SQL = `
   SELECT
     b.id AS booking_id,
     b.status,

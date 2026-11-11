@@ -17,14 +17,14 @@ import { z } from "zod";
 
 const text = (max: number) => z.string().max(max);
 
-export const coreInfoTextSchema = z.object({
+const coreInfoTextSchema = z.object({
   displayName: text(200),
   tagline: text(300),
   description: text(10_000),
   houseRulesText: text(10_000),
 });
 
-export const coreInfoLocationSchema = z.object({
+const coreInfoLocationSchema = z.object({
   streetAddress: text(200),
   city: text(120),
   country: text(100),

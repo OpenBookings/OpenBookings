@@ -5,13 +5,13 @@ import type { CompareMode, DateRange, Period } from "./period";
 export type IsoDate = string;
 
 /** ISO 8601 instant. Booking creation and cancellation carry a time. */
-export type IsoInstant = string;
+type IsoInstant = string;
 
 // ─────────────────────────────────────────────
 // Facts — the seam. Real queries will return exactly these shapes.
 // ─────────────────────────────────────────────
 
-export type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
+type BookingStatus = "confirmed" | "cancelled" | "completed" | "no_show";
 
 export interface BookingFact {
   id: string;
@@ -146,7 +146,7 @@ export interface RatePlanRow {
   revenueCents: number;
 }
 
-export interface WeekdayRow {
+interface WeekdayRow {
   /** 1 = Monday … 7 = Sunday. */
   weekday: number;
   label: string;

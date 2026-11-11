@@ -1,6 +1,6 @@
 import { resolveDestination, type ResolvedDestination } from "@/lib/search/resolve-destination";
 
-export const DESTINATION_NOT_FOUND = "We couldn't find that destination. Try a city name.";
+const DESTINATION_NOT_FOUND = "We couldn't find that destination. Try a city name.";
 
 export type SearchTarget =
   | { ok: true; lat: string | null; lon: string | null; place: string | null }

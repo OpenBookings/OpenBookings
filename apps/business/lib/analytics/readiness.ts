@@ -1,4 +1,4 @@
-export type ReadinessState = "done" | "todo" | "unknown";
+type ReadinessState = "done" | "todo" | "unknown";
 
 export interface ReadinessItem {
   key: string;

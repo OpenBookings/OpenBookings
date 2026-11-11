@@ -25,7 +25,7 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
   "small_rooms",
 ];
 
-export type DemoRoomTemplate = {
+type DemoRoomTemplate = {
   name: string;
   roomType: string;
   bedType: string;

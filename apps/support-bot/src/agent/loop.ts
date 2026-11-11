@@ -19,7 +19,7 @@ export type LoopMessage =
   | { role: "assistant"; content: string; toolCalls?: LoopToolCall[] }
   | { role: "tool"; name: string; content: string; toolCallId: string };
 
-export type LoopToolCall = {
+type LoopToolCall = {
   id: string;
   function: { name: string; arguments: string | Record<string, unknown> };
 };

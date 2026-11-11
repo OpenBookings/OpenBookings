@@ -44,7 +44,7 @@ export class SupportError extends Error {
   }
 }
 
-export function validateFiles(files: File[]): void {
+function validateFiles(files: File[]): void {
   if (files.length > ATTACHMENT_LIMITS.maxFiles) {
     throw new SupportError(`Attach at most ${ATTACHMENT_LIMITS.maxFiles} files.`);
   }

@@ -155,7 +155,7 @@ export interface MaptilerFeature {
   context?: { id: string; text: string }[];
 }
 
-export function maptilerUrl(query: string, key: string, params: Record<string, string>): string {
+function maptilerUrl(query: string, key: string, params: Record<string, string>): string {
   const search = new URLSearchParams({ key, ...params });
   return `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${search}`;
 }
@@ -243,7 +243,7 @@ export async function searchProperty(query: string, key: string, signal: AbortSi
  * this postcode". Rural postcodes are large: 58014 spans Manciano and
  * Saturnia, whose spa lies 5 km from the postcode's centre point.
  */
-export const NEAR_POSTCODE_KM = 15;
+const NEAR_POSTCODE_KM = 15;
 
 /** Feature kinds that can be a property's location. Rivers and hills cannot. */
 const LOCATABLE_TYPES = "address,poi,place,locality,neighbourhood,road";

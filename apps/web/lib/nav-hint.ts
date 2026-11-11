@@ -8,7 +8,7 @@
  * person may briefly see them, and nothing more should leak that way.
  */
 
-export const NAV_HINT_KEY = "ob_nav_hint";
+const NAV_HINT_KEY = "ob_nav_hint";
 
 type NavHint = { signedIn: boolean; initials?: string };
 

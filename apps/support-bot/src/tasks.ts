@@ -135,7 +135,7 @@ let qstashReceiver: Receiver | undefined;
  * this exact task URL. QStash signs a JWT whose claims bind the body hash and
  * the destination, so a captured delivery can't be replayed elsewhere.
  */
-export async function verifyQStashRequest(req: {
+async function verifyQStashRequest(req: {
   signature?: string;
   rawBody: string;
   name: TaskName;

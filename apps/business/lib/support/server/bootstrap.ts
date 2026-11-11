@@ -6,7 +6,7 @@ import { inboxHours, pubsubTokenFor } from "./service";
 import { panelTickets, supportScope } from "./tickets";
 
 /** Host support is switched on for this deployment (SUPPORT_CHAT_ENABLED). */
-export function supportChatEnabled(): boolean {
+function supportChatEnabled(): boolean {
   return supportFlags.chatEnabled;
 }
 
@@ -17,7 +17,7 @@ export async function currentSupportScope() {
 }
 
 /** `https://chat.example` → `wss://chat.example/cable`. */
-export function cableUrl(base: string | undefined): string | null {
+function cableUrl(base: string | undefined): string | null {
   if (!base) return null;
   try {
     const url = new URL(base);

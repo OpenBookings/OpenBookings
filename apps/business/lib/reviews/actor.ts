@@ -9,9 +9,6 @@ import type { ReplyError } from "@openbookings/db/reviews";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Anyone whose role can see the property's bookings may reply. */
-export const REPLY_PERMISSION = { booking: ["read"] } as const;
-
 export type ReviewActorDeps = {
   queryOne?: <T>(sql: string, values?: unknown[]) => Promise<T | null>;
   userCan?: (session: SessionLike, propertyId: string, permission: { booking: ["read"] }) => Promise<boolean>;

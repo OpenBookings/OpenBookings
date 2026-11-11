@@ -14,7 +14,7 @@ import { useEmpty } from "./empty-context";
  * where a rise is not good news arrive with a neutral tone and stay grey. The
  * label is always text, so the direction survives a greyscale print.
  */
-export function DeltaChip({ delta }: { delta: Delta }) {
+function DeltaChip({ delta }: { delta: Delta }) {
   const Icon = delta.direction === "up" ? ArrowUp : ArrowDown;
   return (
     <span

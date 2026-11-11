@@ -100,7 +100,7 @@ const ICONS: Record<string, LucideIcon> = {
   Zap,
 };
 
-export function toPascalCase(s: string) {
+function toPascalCase(s: string) {
   return s.replace(/(^\w|-\w)/g, (m) => m.replace("-", "").toUpperCase());
 }
 

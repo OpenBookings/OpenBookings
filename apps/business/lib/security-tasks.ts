@@ -1,13 +1,13 @@
 export type ProtectionTaskId = "passkey" | "sessions";
 
-export type OpenTask = {
+type OpenTask = {
   id: ProtectionTaskId;
   title: string;
   description: string;
   action: string;
 };
 
-export type CompletedTask = {
+type CompletedTask = {
   id: ProtectionTaskId;
   label: string;
   /** When it was completed, for the passkey steps. */

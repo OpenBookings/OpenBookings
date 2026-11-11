@@ -20,7 +20,7 @@ function fromUtc(ms: number): IsoDate {
 }
 
 /** True only for a well-formed date that survives a round trip, so "2026-13-45" fails. */
-export function isIsoDate(value: unknown): value is IsoDate {
+function isIsoDate(value: unknown): value is IsoDate {
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
   return fromUtc(toUtc(value)) === value;
 }
@@ -90,7 +90,7 @@ export interface Period extends DateRange {
 
 export type CompareMode = "none" | "previous" | "last-year";
 
-export const DEFAULT_COMPARE: CompareMode = "previous";
+const DEFAULT_COMPARE: CompareMode = "previous";
 
 export const COMPARE_LABELS: Record<CompareMode, string> = {
   none: "No comparison",

@@ -8,7 +8,7 @@ type Pool = { query: (text: string, values: unknown[]) => Promise<{ rows: { emai
  * mode every host owns it, so counting it would mail each host's address, IP
  * and browser to every other host.
  */
-export const ALERT_OWNERS_SQL = `SELECT DISTINCT u.email
+const ALERT_OWNERS_SQL = `SELECT DISTINCT u.email
        FROM "member" me
        JOIN "member" mo ON mo."organizationId" = me."organizationId" AND mo.role = 'owner'
        JOIN "user" u ON u.id = mo."userId"

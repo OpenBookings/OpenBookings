@@ -43,7 +43,7 @@ export interface MutationDeps {
   loadRoom: (session: SessionLike, roomId: string) => Promise<RoomEditorData | null>;
 }
 
-export const defaultDeps: MutationDeps = {
+const defaultDeps: MutationDeps = {
   query: dbQuery,
   queryOne: dbQueryOne,
   transaction: (fn) =>

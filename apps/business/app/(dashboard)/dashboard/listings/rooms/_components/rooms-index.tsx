@@ -256,7 +256,7 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
  * room. The refusal is not a dead end: the dialog turns into an offer to
  * unpublish, which stops new sales and leaves the booked guests alone.
  */
-export function ArchiveRoomDialog({
+function ArchiveRoomDialog({
   room,
   onClose,
   onArchived,

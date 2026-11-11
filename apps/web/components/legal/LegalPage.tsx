@@ -6,7 +6,6 @@ import { LegalDocument } from "@/components/legal/LegalDocument";
 import { Meta } from "@/components/legal/elements";
 import { LEGAL_STRINGS } from "@/lib/legal/strings";
 import {
-  DEFAULT_LEGAL_LOCALE,
   getCurrentVersion,
   getDocument,
   getVersion,
@@ -142,5 +141,3 @@ export function legalVersionStaticParams(): Array<{
     )
   );
 }
-
-export { DEFAULT_LEGAL_LOCALE };

@@ -22,8 +22,6 @@ import type { ComponentType } from "react";
 export const LEGAL_LOCALES = ["en", "nl", "fr"] as const;
 export type LegalLocale = (typeof LEGAL_LOCALES)[number];
 
-export const DEFAULT_LEGAL_LOCALE: LegalLocale = "en";
-
 export const LEGAL_LOCALE_LABELS: Record<LegalLocale, string> = {
   en: "English",
   nl: "Nederlands",

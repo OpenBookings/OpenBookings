@@ -478,24 +478,6 @@ SELECT COALESCE(md5(string_agg(sig, '|' ORDER BY sig)), 'empty') AS version
 FROM signatures
 `;
 
-/**
- * The window's current fingerprint. Publishing compares the host's against
- * this one and refuses rather than clobbering a concurrent edit.
- */
-export async function loadAriVersion(
-  session: SessionLike,
-  propertyId: string,
-  range: AriRange,
-): Promise<string> {
-  const host = getHostScopedDb(session);
-  const row = await host.queryOne<{ version: string }>(VERSION_SQL, [
-    propertyId,
-    range.start,
-    range.end,
-  ]);
-  return row?.version ?? "empty";
-}
-
 // ─────────────────────────────────────────────
 // Assembly
 // ─────────────────────────────────────────────
