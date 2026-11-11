@@ -22,6 +22,14 @@ export const hostReservationsSql = (testing: boolean = isTestingMode()) => `
     -- No guest contact details here: they are behind break-the-glass
     -- (./break-glass.ts), fetched per booking and logged.
     COALESCE((SELECT SUM(r.adults + r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS guests,
+    COALESCE((SELECT SUM(r.adults) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS adults,
+    COALESCE((SELECT SUM(r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS children,
+    -- Infants take no place; cots and extra beds are paid at the hotel (0042).
+    COALESCE((SELECT SUM(r.infants) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS infants,
+    COALESCE((SELECT SUM(r.cots) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS cots,
+    COALESCE((SELECT SUM(r.extra_beds) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS extra_beds,
+    COALESCE((SELECT SUM(r.pay_at_property_amount) FROM reservations r
+              WHERE r.booking_id = b.id AND r.cancelled_at IS NULL), 0)::float8 AS pay_at_property,
     b.total_amount::float8 AS total_amount,
     -- The viewer's role at this booking's property, so the list offers only
     -- the actions they may take (the server actions re-check every one). A

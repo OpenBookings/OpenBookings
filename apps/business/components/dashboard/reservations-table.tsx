@@ -79,12 +79,20 @@ export function ReservationsTable({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {reservation.guests}
+                  {reservation.extrasLabel ? (
+                    <span className="text-muted-foreground block text-xs">{reservation.extrasLabel}</span>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <ReservationStatusBadge status={reservation.status} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {currencyFormatter.format(reservation.totalAmount)}
+                  {reservation.atHotelAmount ? (
+                    <span className="text-muted-foreground block text-xs">
+                      + {currencyFormatter.format(reservation.atHotelAmount)} at the hotel
+                    </span>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))

@@ -161,7 +161,20 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
             <dd className="tabular-nums">− {currencyFormatter.format(reservation.refundedAmount)}</dd>
           </div>
         ) : null}
+        {reservation.atHotelAmount > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">To collect at check-in</dt>
+            <dd className="tabular-nums">{currencyFormatter.format(reservation.atHotelAmount)}</dd>
+          </div>
+        ) : null}
       </dl>
+      {reservation.extrasLabel ? (
+        <p className="text-muted-foreground mt-2 text-xs">
+          {reservation.atHotelAmount > 0
+            ? "Cots and extra beds are paid at your property, not online. This amount is not in your payout."
+            : "Cots and extra beds booked here are free."}
+        </p>
+      ) : null}
       {reservation.refundIssue ? (
         <p className="text-destructive mt-2 text-xs">A refund hasn&apos;t gone through yet. Retry it from the actions below.</p>
       ) : null}
@@ -181,10 +194,8 @@ export function ReservationDetailBody({
     <div className="flex flex-col gap-7">
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
-        <DetailField
-          label="Party size"
-          value={`${reservation.guests} ${reservation.guests === 1 ? "guest" : "guests"}`}
-        />
+        <DetailField label="Party" value={reservation.partyLabel} />
+        {reservation.extrasLabel ? <DetailField label="Cots & extra beds" value={reservation.extrasLabel} /> : null}
         <GuestContactSeal {...seal} />
       </DetailSection>
       <StayTicket reservation={reservation} />

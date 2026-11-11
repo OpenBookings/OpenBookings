@@ -61,7 +61,16 @@ export type HostReservationRow = {
   check_in_date: string;
   check_out_date: string;
   guest_name: string | null;
+  /** Adults and children: the places taken. */
   guests: number;
+  adults: number;
+  children: number;
+  /** Under 2: no place, no fee (0042). */
+  infants: number;
+  cots: number;
+  extra_beds: number;
+  /** What the guest owes the hotel for cots and extra beds, fixed at booking (0042). Not in total_amount. */
+  pay_at_property: number;
   total_amount: number;
   timezone: string;
   check_in_time: string | null;
@@ -97,6 +106,12 @@ export type HostReservationRoom = {
 };
 
 export type HostReservation = ReservationSummary & {
+  /** "2 adults, 1 child, 1 infant". */
+  partyLabel: string;
+  /** "1 cot · 1 extra bed", or null when none were booked. */
+  extrasLabel: string | null;
+  /** Collected at the hotel for cots and extra beds; never part of what was paid online. */
+  atHotelAmount: number;
   timezone: string;
   /** The property's check-in and check-out times ("15:00"), when it states them. */
   checkInTime: string | null;
@@ -181,6 +196,9 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     checkInDate: row.check_in_date,
     checkOutDate: row.check_out_date,
     guests: row.guests,
+    partyLabel: partyLabel(row),
+    extrasLabel: extrasLabel(row),
+    atHotelAmount: Number(row.pay_at_property),
     status: DISPLAY_STATUS[row.status],
     totalAmount: snapshotted
       ? rooms.reduce((sum, r) => sum + Math.round(r.paid * 100), 0) / 100
@@ -197,4 +215,25 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     // Narrowed to the viewer's role by loadHostReservations.
     canRetryRefunds: false,
   };
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Adults 13+, children 2–12, infants under 2: the bands guests book with. */
+function partyLabel(row: Pick<HostReservationRow, "adults" | "children" | "infants">): string {
+  return [
+    plural(row.adults, "adult", "adults"),
+    row.children > 0 && plural(row.children, "child", "children"),
+    row.infants > 0 && plural(row.infants, "infant", "infants"),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function extrasLabel(row: Pick<HostReservationRow, "cots" | "extra_beds">): string | null {
+  const parts = [
+    row.cots > 0 && plural(row.cots, "cot", "cots"),
+    row.extra_beds > 0 && plural(row.extra_beds, "extra bed", "extra beds"),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
