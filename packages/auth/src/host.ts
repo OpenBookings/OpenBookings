@@ -1,7 +1,7 @@
 import { alertOwnerEmails } from "./alert-owners";
 import { betterAuth, APIError } from "better-auth";
 import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
-import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { createAuthMiddleware } from "better-auth/api";
 import { passkey } from "@better-auth/passkey";
 import { ac, roles } from "@openbookings/authz/permissions";
 import {

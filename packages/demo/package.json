@@ -15,7 +15,6 @@
     "@openbookings/db": "workspace:*",
     "@openbookings/images": "workspace:*",
     "@openbookings/mode": "workspace:*",
-    "@openbookings/pricing": "workspace:*",
     "pg": "^8.23.1"
   },
   "devDependencies": {
