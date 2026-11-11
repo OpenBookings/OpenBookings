@@ -62,6 +62,10 @@ jobs:
 
       - run: bunx turbo run lint typecheck --affected
 
+      # Unused, missing or unresolved dependencies across the whole repo
+      # (~2 s, so not limited to --affected). Config in knip.json.
+      - run: bun run knip
+
   test:
     name: Test
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false

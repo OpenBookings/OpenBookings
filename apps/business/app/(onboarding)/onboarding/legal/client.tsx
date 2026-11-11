@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LegalNBoringStep, type LegalNBoringValues } from "../_steps/legal-n-boring";
 import { StepNav } from "../_components/step-nav";
-import { saveStepData, provisionStripeAccount, type LegalNBoringData } from "../actions";
+import { provisionStripeAccount, type LegalNBoringData } from "../actions";
 
 const EMPTY_LEGAL: LegalNBoringValues = {
   legalCompanyName: "",

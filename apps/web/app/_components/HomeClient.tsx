@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, startTransition, use } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import Image from "next/image";
