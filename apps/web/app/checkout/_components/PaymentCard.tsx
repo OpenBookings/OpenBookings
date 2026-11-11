@@ -22,6 +22,7 @@ import {
 } from '../_lib/errors';
 import { toStripeContact } from '../_lib/guest-details';
 import { holdLabel } from '../_lib/reassurance';
+import { PAY_BUTTON_ID } from './CheckoutStickyBar';
 import { CheckoutNotice } from './CheckoutNotice';
 import { CHECKOUT_CARD } from './DetailsCard';
 import type { CheckoutDetailsController } from './useCheckoutDetails';
@@ -375,6 +376,7 @@ export function PaymentCard({
               missing. The amount is Stripe's, so it can't differ from the charge.
             */}
             <button
+              id={PAY_BUTTON_ID}
               type="submit"
               disabled={busy}
               className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#a5b4f0] text-base font-semibold text-neutral-900 transition-colors outline-none hover:bg-[#93a4e8] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-70"
