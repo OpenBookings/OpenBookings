@@ -7,7 +7,8 @@
 #
 # Nothing is auto-merged. Next/React, Better Auth, Drizzle, Stripe, Hono and
 # TypeScript get their own group, because they need a human to read the
-# release notes.
+# release notes. PostHog and Sentry each get their own group too, majors
+# included, so they never fall behind.
 version: 2
 
 updates:
@@ -46,6 +47,15 @@ updates:
           - "hono"
           - "@mistralai/mistralai"
           - "typescript"
+      # Analytics and error tracking: kept current, majors included, one PR
+      # each. All @sentry/* packages move together (they share a version line).
+      posthog:
+        patterns:
+          - "posthog-js"
+          - "posthog-node"
+      sentry:
+        patterns:
+          - "@sentry/*"
       # Everything else, minor and patch only, in one PR a week.
       minor-and-patch:
         update-types: ["minor", "patch"]
@@ -66,6 +76,9 @@ updates:
           - "hono"
           - "@mistralai/mistralai"
           - "typescript"
+          - "posthog-js"
+          - "posthog-node"
+          - "@sentry/*"
     ignore:
       # @types/node follows the Node runtime (22: engines.node and the
       # Dockerfiles), not the newest Node. Raise it together with the runtime.
