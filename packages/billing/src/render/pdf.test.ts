@@ -148,10 +148,18 @@ test("a long seller name wraps in the header block and long documents stay deter
 
 test("a buyer name with many line breaks still renders", async () => {
   const doc = nlInvoice();
-  doc.buyer = { ...doc.buyer, legalName: "Evil" + "\n".repeat(150) + "Host" };
+  doc.buyer = { ...doc.buyer, legalName: "Line" + "\n".repeat(150) + "Host" };
   const [first] = pdfPageTexts(await render(doc));
-  expect(first).toContain("Evil Host");
+  expect(first).toContain("Line Host");
   expect(doc.buyer.legalName).toContain("\n");
+});
+
+test("a buyer registration number with line breaks is printed on one line", async () => {
+  const doc = nlInvoice();
+  doc.buyer = { ...doc.buyer, kvk: "1234\n\n5678\r\n90" };
+  const [first] = pdfPageTexts(await render(doc));
+  expect(first).toContain("KvK 1234 5678 90");
+  expect(doc.buyer.kvk).toContain("\n");
 });
 
 test("the collapse leaves the default invoice's first page unchanged", async () => {
