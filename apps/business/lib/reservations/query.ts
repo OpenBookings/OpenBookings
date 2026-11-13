@@ -12,7 +12,7 @@ const PAST_DAYS = 30;
  *
  * `$1` is the host (getHostScopedDb binds it).
  */
-export const hostReservationsSql = (testing: boolean = isTestingMode()) => `
+const hostReservationsSql = (testing: boolean = isTestingMode()) => `
   SELECT
     b.id AS booking_id,
     b.status,

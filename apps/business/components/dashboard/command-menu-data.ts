@@ -14,7 +14,7 @@ export type CommandMenuAction =
   | { type: "navigate"; href: string }
   | { type: "command"; id: string };
 
-export type CommandMenuItem = {
+type CommandMenuItem = {
   /** Icon name, resolved via the icon registry in the component. */
   icon: string;
   label: string;

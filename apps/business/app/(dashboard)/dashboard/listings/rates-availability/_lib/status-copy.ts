@@ -14,7 +14,7 @@ import type { Reason, ReasonCode, ReasonSource } from "./types";
  */
 
 /** Terse label for the chip in a cell or on a bar. */
-export function reasonChip(reason: Reason): string {
+function reasonChip(reason: Reason): string {
   switch (reason.code) {
     case "ROOM_CLOSED":
       return "Room closed";
@@ -60,7 +60,7 @@ export function reasonPhrase(reason: Reason): string {
  * painted the way it is. The overflow count is there so the host knows to open
  * the panel rather than assuming they have seen everything.
  */
-export function chipFor(
+function chipFor(
   reasons: Reason[],
 ): { label: string; overflow: number } | null {
   if (reasons.length === 0) return null;
@@ -107,15 +107,6 @@ export function reasonsPhrase(reasons: Reason[]): string {
 /** Plain-language sentence for a cell that cannot be sold. */
 export const UNSELLABLE_PRICE_NOTE =
   "No sellable price while closed. The underlying rate is kept.";
-
-/** Codes a host can lift from the cell itself, as opposed to inheriting. */
-export const LOCALLY_FIXABLE = new Set<ReasonCode>([
-  "STOP_SELL",
-  "CLOSED_TO_ARRIVAL",
-  "CLOSED_TO_DEPARTURE",
-  "MIN_STAY",
-  "MAX_STAY",
-]);
 
 /**
  * How the price was moved, if it was — "Manual" for an override, otherwise the

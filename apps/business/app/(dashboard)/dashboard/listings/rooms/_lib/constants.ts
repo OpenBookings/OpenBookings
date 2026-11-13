@@ -35,7 +35,7 @@ export const ROOM_AMENITY_GROUPS = [
   "Accessibility",
 ] as const;
 
-export type RoomAmenityGroup = (typeof ROOM_AMENITY_GROUPS)[number];
+type RoomAmenityGroup = (typeof ROOM_AMENITY_GROUPS)[number];
 
 interface RoomAmenity {
   key: string;
@@ -106,7 +106,6 @@ export const ROOM_AMENITIES: readonly RoomAmenity[] = [
 ];
 
 export const ROOM_AMENITY_KEYS = ROOM_AMENITIES.map((a) => a.key);
-export const ROOM_AMENITY_BY_KEY = new Map(ROOM_AMENITIES.map((a) => [a.key, a]));
 
 /** Featured amenities appear as chips on the guest room card; more than six crowds it. */
 export const MAX_FEATURED_AMENITIES = 6;

@@ -4,7 +4,7 @@
  * host's (the browser's) timezone. Pure, so it runs on either side.
  */
 
-export type WorkingHoursDay = {
+type WorkingHoursDay = {
   day_of_week: number;
   closed_all_day: boolean;
   open_all_day: boolean;
@@ -97,7 +97,7 @@ function isValidTimeZone(timeZone: string): boolean {
 }
 
 /** "09:00", "tomorrow 09:00" or "Monday 09:00", in the viewer's timezone. */
-export function formatOpening(at: Date, now: Date = new Date(), timeZone?: string): string {
+function formatOpening(at: Date, now: Date = new Date(), timeZone?: string): string {
   const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone }).format(at);
   const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone }).format(d);
   if (dayKey(at) === dayKey(now)) return time;

@@ -12,7 +12,7 @@ import { query, ROOM_POLICY_JSON, type SupportRoomPolicy } from "@openbookings/d
  * Neither path can call the other's queries.
  */
 
-export type HostBookingRoom = {
+type HostBookingRoom = {
   room_name: string;
   rate_plan_name: string;
 } & SupportRoomPolicy & {

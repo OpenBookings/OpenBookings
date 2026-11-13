@@ -6,7 +6,7 @@ import { isValidSlug } from "./slug";
 
 export type PurgeTarget = { propertyId: string } | { roomId: string };
 
-export type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
+type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
 
 /** Injection seam, following the `{ queryOne }` convention in @openbookings/authz. */
 export interface PurgeDeps {

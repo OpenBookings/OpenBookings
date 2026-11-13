@@ -9,7 +9,7 @@ import { isTestingMode } from "@openbookings/demo";
  * up to 24 hours to show, and in return nobody's page view queries them.
  * Only a review its author deletes is purged straight away.
  */
-export const PROPERTY_REVIEWS_TTL = {
+const PROPERTY_REVIEWS_TTL = {
   freshSeconds: Number(process.env.CACHE_TTL_PROPERTY_REVIEWS_S) || 86_400,
   // A day of stale on top, served only if Postgres fails on a refresh.
   maxAgeSeconds: Number(process.env.CACHE_MAX_AGE_PROPERTY_REVIEWS_S) || 172_800,

@@ -206,5 +206,3 @@ export const rateSchema = z.object({
     .transform((v) => v === "true"),
   active: checkbox,
 });
-
-export type RateInput = z.output<typeof rateSchema>;

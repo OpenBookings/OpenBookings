@@ -6,9 +6,6 @@
 export {
   getConversationMessages,
   handOffToHuman,
-  postPrivateNote,
   postReply,
-  setConversationStatus,
   setTypingStatus,
-  type ChatwootMessage,
 } from "@openbookings/support";

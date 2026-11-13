@@ -10,7 +10,7 @@ import { makeDelta } from "./delta";
 import { widget } from "./widget";
 
 /** Above this occupancy, a weekday priced below average is leaving money on the table. */
-export const HINT_OCCUPANCY_PCT = 85;
+const HINT_OCCUPANCY_PCT = 85;
 
 const discountedOnly = (rows: BookingFact[]) => rows.filter((b) => b.discountCents > 0);
 const discountsGiven = (rows: BookingFact[]) => sum(rows, (b) => b.discountCents);

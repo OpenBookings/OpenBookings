@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import type { Step, Timeline, Tone } from '../_lib/timeline';
 
 /** The spectrum stops (globals.css). Only the current state gets one. */
-export const TONE: Record<Tone, string> = {
+const TONE: Record<Tone, string> = {
   free: 'var(--spectrum-mint)',
   fee: 'var(--spectrum-amber)',
   stay: 'var(--spectrum-sky)',

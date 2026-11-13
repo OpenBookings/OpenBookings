@@ -44,7 +44,7 @@ import { PricingRulesDialog } from "./pricing-rules-dialog";
  * grid.
  */
 
-export type DialogKind =
+type DialogKind =
   | "availability"
   | "restrictions"
   | "rate-plan"

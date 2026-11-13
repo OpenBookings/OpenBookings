@@ -232,8 +232,6 @@ export const TOOLS = {
   },
 } satisfies Record<string, ToolDefinition>;
 
-export type ToolName = keyof typeof TOOLS;
-
 /** Tool declarations in the shape Mistral's chat API expects, for any registry. */
 export function buildToolSchemas<Ctx>(registry: Record<string, ToolDefinition<Ctx>>) {
   return Object.entries(registry).map(([name, def]) => ({

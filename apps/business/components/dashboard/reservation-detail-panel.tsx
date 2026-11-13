@@ -2,7 +2,6 @@
 
 import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { HostReservation } from "@/lib/reservations/shape";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -201,28 +200,6 @@ export function ReservationDetailBody({
       <StayTicket reservation={reservation} />
       <BookingTimeline timeline={reservation.timeline} />
       <RoomsAndPayment reservation={reservation} />
-    </div>
-  );
-}
-
-export function ReservationDetailSkeleton() {
-  return (
-    <div className="flex flex-col gap-8">
-      {[2, 4, 3].map((rows, section) => (
-        <div key={section} className="flex flex-col">
-          <div className="mb-4 border-b pb-2">
-            <Skeleton className="h-3.5 w-16" />
-          </div>
-          <div className="flex flex-col gap-3">
-            {Array.from({ length: rows }).map((_, row) => (
-              <div key={row} className="flex justify-between gap-4">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-4 w-28" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

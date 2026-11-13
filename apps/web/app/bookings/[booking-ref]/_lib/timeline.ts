@@ -24,7 +24,7 @@ export type Step = {
   tone?: Tone;
 };
 
-export type Trip = {
+type Trip = {
   checkInDate: string;
   checkInTime: string;
   checkOutDate: string;

@@ -5,7 +5,7 @@
 
 export type TicketStatus = "pending" | "open" | "snoozed" | "resolved";
 
-export const STATUS_LABELS: Record<TicketStatus, string> = {
+const STATUS_LABELS: Record<TicketStatus, string> = {
   pending: "With assistant",
   open: "With support team",
   snoozed: "With support team",

@@ -33,7 +33,7 @@ interface EmptyStateProps {
 }
 
 /** A small icon, two lines of text and at most one button. */
-export function EmptyState({ variant, headline, body, action }: EmptyStateProps) {
+function EmptyState({ variant, headline, body, action }: EmptyStateProps) {
   const Icon = ICONS[variant];
   return (
     <Empty className="gap-5 md:p-10">

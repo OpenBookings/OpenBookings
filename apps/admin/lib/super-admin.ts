@@ -5,7 +5,7 @@ export function isSuperAdminEnabled(env: GateEnv = process.env): boolean {
   return env.ADMIN_SUPER_MODE === "1" && env.NODE_ENV === "development";
 }
 
-export class SuperAdminDisabledError extends Error {
+class SuperAdminDisabledError extends Error {
   constructor() {
     super("Super admin mode is disabled");
     this.name = "SuperAdminDisabledError";

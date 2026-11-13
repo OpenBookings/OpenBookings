@@ -39,12 +39,12 @@ import { cn } from "@/lib/utils";
 import { STAY_LENGTHS, type RoomTypeRow } from "../_lib/types";
 import { formatDateRange } from "../_lib/format";
 
-export interface RangePreset {
+interface RangePreset {
   label: string;
   days: number;
 }
 
-export const RANGE_PRESETS: RangePreset[] = [
+const RANGE_PRESETS: RangePreset[] = [
   { label: "Next 7 days", days: 7 },
   { label: "Next 14 days", days: 14 },
   { label: "Next 30 days", days: 30 },

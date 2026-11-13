@@ -189,17 +189,6 @@ export function resolveStatus(input: StatusInput): ResolvedStatus {
 }
 
 /**
- * Cell state alone, for callers that do not need the reasons.
- *
- * Kept as a thin wrapper rather than a second implementation: two functions
- * deciding the same precedence is how a grid ends up painting one thing and
- * explaining another.
- */
-export function deriveState(input: StatusInput): CellState {
-  return resolveStatus(input).state;
-}
-
-/**
  * Status dot thresholds, stated explicitly so the dot means the same thing on
  * every row: every visible date open is healthy; every visible date closed or
  * sold out is inactive; anything in between wants a look.

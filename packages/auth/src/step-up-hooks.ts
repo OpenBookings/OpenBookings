@@ -17,7 +17,7 @@ import {
 
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
 
-export type StepUpState = {
+type StepUpState = {
   hasFactor: boolean;
   lastVerifiedAt: Date | string | null;
   lastFactorVerifiedAt: Date | string | null;

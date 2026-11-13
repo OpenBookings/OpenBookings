@@ -36,7 +36,7 @@ export const PAGES: Record<PageId, PageMeta> = {
 };
 
 /** The filters that follow a host from one analytics page to the next. */
-export const CARRIED_PARAMS = ["period", "from", "to", "compare", "demo"] as const;
+const CARRIED_PARAMS = ["period", "from", "to", "compare", "demo"] as const;
 
 /** `?period=…` with only the carried params, or an empty string. */
 export function carryQuery(search: URLSearchParams): string {

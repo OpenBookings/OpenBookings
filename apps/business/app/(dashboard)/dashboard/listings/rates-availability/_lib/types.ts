@@ -246,7 +246,6 @@ export interface AriGridData {
 
 /** Stay lengths offered by the toolbar's rate probe. */
 export const STAY_LENGTHS = [1, 3, 7] as const;
-export type StayLength = (typeof STAY_LENGTHS)[number];
 
 /** A run of consecutive dates sharing one non-open state, rendered as one bar. */
 export interface CellRun {

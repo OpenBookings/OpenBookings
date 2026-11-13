@@ -93,7 +93,7 @@ export type HostReservationRow = {
   }[];
 };
 
-export type HostReservationRoom = {
+type HostReservationRoom = {
   reservationId: string;
   roomName: string;
   tierLabel: string;

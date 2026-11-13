@@ -7,7 +7,7 @@ import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
 import { buildHeroQuery, type HotelPageData } from "./hotel-page-query";
 
 /** One `amenities` row as the page groups it; the grouping itself stays in the page. */
-export interface RawAmenity {
+interface RawAmenity {
   label: string;
   icon: string;
   category: string;

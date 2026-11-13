@@ -3,7 +3,7 @@ import { sql } from "@openbookings/db";
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 
 /** One row of the `payment_methods` catalogue, as the listing page renders it. */
-export interface PaymentMethodArtwork {
+interface PaymentMethodArtwork {
   code: string;
   label: string;
   /** NULL for methods with no logo (cash) — those render as their label. */

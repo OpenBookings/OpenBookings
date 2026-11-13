@@ -3,13 +3,13 @@ import { getOnboardingFacts } from "@/lib/onboarding-facts";
 import type { StripeAccountSummary } from "@/lib/stripe-readiness";
 import type { DbStep } from "../actions";
 
-export const SLUG_FOR_DB_STEP: Record<DbStep, string> = {
+const SLUG_FOR_DB_STEP: Record<DbStep, string> = {
   "core-info-text": "core-info",
   "core-info-location": "address",
   "legal-n-boring": "legal",
 };
 
-export const DATA_STEPS: DbStep[] = ["core-info-text", "core-info-location", "legal-n-boring"];
+const DATA_STEPS: DbStep[] = ["core-info-text", "core-info-location", "legal-n-boring"];
 
 export interface OnboardingRow {
   completed_steps: string[];

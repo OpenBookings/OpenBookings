@@ -2,7 +2,7 @@ import { roleAllows } from "@openbookings/authz/permissions";
 import type { BillingScope, InvoiceFile } from "./queries";
 
 /** How long a download link works. */
-export const DOWNLOAD_LINK_SECONDS = 300;
+const DOWNLOAD_LINK_SECONDS = 300;
 
 export type DownloadDeps = {
   /** The signed-in member's organization and role, or `null` when there is no valid session or membership. */

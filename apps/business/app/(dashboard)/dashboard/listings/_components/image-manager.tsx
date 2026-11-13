@@ -40,7 +40,7 @@ interface PendingUpload {
 }
 
 /** One stored photo, as either editor loads it. */
-export interface ManagedImage {
+interface ManagedImage {
   id: string;
   url: string;
   sortOrder: number;
@@ -51,7 +51,7 @@ export interface ManagedImage {
  * Where uploads land and which routes edit them. A property photo belongs to a
  * group (hero, logo, gallery); a room photo is always part of one gallery.
  */
-export type ImageTarget =
+type ImageTarget =
   | { kind: "property"; propertyId: string; group: ImageGroup }
   | { kind: "room"; roomId: string };
 

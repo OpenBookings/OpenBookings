@@ -21,7 +21,7 @@ export const ROOM_SECTION_LABELS: Record<RoomSectionId, string> = {
  */
 export type RoomStatus = "draft" | "published" | "archived";
 
-export interface RoomRecord {
+interface RoomRecord {
   id: string;
   propertyId: string;
   name: string;

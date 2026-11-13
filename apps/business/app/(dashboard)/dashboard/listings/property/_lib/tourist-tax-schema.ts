@@ -57,5 +57,3 @@ export const touristTaxRuleSchema = z.object({
     .max(365, "Enter at most 365 nights.")
     .nullable(),
 }) satisfies z.ZodType<TouristTaxRule, unknown>;
-
-export type TouristTaxRuleInput = z.input<typeof touristTaxRuleSchema>;

@@ -11,7 +11,7 @@ import { z } from "zod";
  * (0042).
  */
 
-export const RULE_KINDS = ["weekend", "length_of_stay", "early_bird", "last_minute"] as const;
+const RULE_KINDS = ["weekend", "length_of_stay", "early_bird", "last_minute"] as const;
 export type RuleKind = (typeof RULE_KINDS)[number];
 
 const MODIFIER_TYPE: Record<RuleKind, "day_of_week" | "length_of_stay" | "early_bird" | "last_minute"> = {
@@ -103,5 +103,3 @@ export const modifierSchema = z
       adjustmentValue: down ? -amount : amount,
     };
   });
-
-export type ModifierInput = z.infer<typeof modifierSchema>;

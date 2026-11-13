@@ -6,7 +6,7 @@
  * midnight, not the guest's.
  */
 
-export type StayPhase = "upcoming" | "current" | "past";
+type StayPhase = "upcoming" | "current" | "past";
 
 export type StayStatus = {
   phase: StayPhase;
@@ -52,7 +52,7 @@ export function stayRange(checkIn: string | null, checkOut: string | null): stri
 }
 
 /** Messages closer together than this, from the same side, share one run. */
-export const GROUP_GAP_MS = 5 * 60_000;
+const GROUP_GAP_MS = 5 * 60_000;
 
 type Groupable = { sender_role: string; created_at: string };
 

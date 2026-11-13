@@ -23,7 +23,7 @@ import { trace } from "../trace";
  */
 
 /** A host who hasn't looked at the reply within this long gets an email. */
-export const REPLY_EMAIL_DELAY_SECONDS = 10 * 60;
+const REPLY_EMAIL_DELAY_SECONDS = 10 * 60;
 
 type Conversation = {
   id?: number;
@@ -46,7 +46,7 @@ export type SupportWebhookPayload = Conversation & {
 };
 
 /** Chatwoot timestamps arrive as unix seconds or ISO strings depending on the payload. */
-export function parseChatwootTime(value: number | string | undefined | null): Date | null {
+function parseChatwootTime(value: number | string | undefined | null): Date | null {
   if (value === undefined || value === null || value === "") return null;
   const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;

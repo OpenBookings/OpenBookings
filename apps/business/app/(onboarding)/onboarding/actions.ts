@@ -11,14 +11,14 @@ import { promoteOnboardingToProperty } from "./promotion";
 import { summariseStripeAccount } from "./_lib/status";
 import { parseClientStepData } from "./_lib/step-data";
 
-export interface LegalSignatureRecord {
+interface LegalSignatureRecord {
   signedAt: string;
   signerIp: string;
   downloadedAt?: string;
   downloadedFilename?: string;
 }
 
-export interface LegalAttemptRecord {
+interface LegalAttemptRecord {
   resetAt: string;
   legalCompanyName: string;
   fullName: string;
@@ -180,35 +180,6 @@ export async function setInclusiveRatesConfirmation(confirmed: boolean): Promise
     ...legal,
     ...(confirmed && { ratesInclusive: { signedAt: new Date().toISOString(), signerIp: ip } }),
   });
-}
-
-/** Archive current legal data as a previous attempt and clear the active fields. */
-export async function resetLegalData(): Promise<void> {
-  await getSession();
-
-  const stepData = await loadStepData();
-  const legal = stepData["legal-n-boring"];
-
-  const attempt: LegalAttemptRecord = {
-    resetAt: new Date().toISOString(),
-    legalCompanyName: legal?.legalCompanyName ?? "",
-    fullName: legal?.fullName ?? "",
-    roleTitle: legal?.roleTitle ?? "",
-    vatNumber: legal?.vatNumber,
-    cocNumber: legal?.cocNumber,
-    ...(legal?.partnerAgreement && { partnerAgreement: legal.partnerAgreement }),
-    ...(legal?.dpa && { dpa: legal.dpa }),
-  };
-
-  const updated: LegalNBoringData = {
-    legalCompanyName: "",
-    fullName: "",
-    roleTitle: "",
-    vatNumber: "",
-    previousAttempts: [...(legal?.previousAttempts ?? []), attempt],
-  };
-
-  await saveLegalData(updated);
 }
 
 /** Create a Stripe Connect account for the host (idempotent — skips if already provisioned). */

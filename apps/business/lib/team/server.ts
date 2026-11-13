@@ -49,7 +49,7 @@ export type TeamMember = {
   propertyIds: string[];
 };
 
-export type TeamInvitation = {
+type TeamInvitation = {
   invitationId: string;
   email: string;
   role: string;
@@ -57,7 +57,7 @@ export type TeamInvitation = {
   propertyIds: string[];
 };
 
-export type TeamProperty = { id: string; name: string };
+type TeamProperty = { id: string; name: string };
 
 export type Team = {
   members: TeamMember[];

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { DANGER_OUTLINE, PendingButton } from "./pending-button";
 
 /** Longest label a passkey can be given on this page. */
-export const PASSKEY_NAME_MAX = 40;
+const PASSKEY_NAME_MAX = 40;
 
 const SUGGESTIONS = ["iPhone", "Security key", "Work laptop"];
 

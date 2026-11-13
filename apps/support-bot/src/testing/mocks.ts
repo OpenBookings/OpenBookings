@@ -26,7 +26,7 @@ export type FakeReservation = { bookingId: string; guestEmail: string | null };
 /** In-memory stand-in for the processed_events table. */
 export const processedEvents = new Map<string, { repliedAt: boolean }>();
 /** In-memory stand-in for support_context_cache. */
-export const contextCache = new Map<number, CachedTurn[]>();
+const contextCache = new Map<number, CachedTurn[]>();
 /** In-memory stand-in for the bookings a reservation lookup can reach, by reference. */
 export const reservations = new Map<string, FakeReservation>();
 /** Every write the pipeline made to Chatwoot, in order. */
@@ -54,7 +54,7 @@ export const supportTickets = new Map<number, FakeTicket>();
 /** Rows the backfill was asked to insert. */
 export const backfills: unknown[] = [];
 /** What claimSupportReplyNotification returns next (null = nothing to send). */
-export const replyClaims: Array<{ ticket_id: string; conversation_id: number; email: string; name: string | null } | null> = [];
+const replyClaims: Array<{ ticket_id: string; conversation_id: number; email: string; name: string | null } | null> = [];
 
 export function resetMocks(): void {
   processedEvents.clear();

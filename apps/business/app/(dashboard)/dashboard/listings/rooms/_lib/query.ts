@@ -171,7 +171,7 @@ interface RateRow {
   sort_order: number;
 }
 
-export function toRateRecord(r: RateRow): RatePlanRecord {
+function toRateRecord(r: RateRow): RatePlanRecord {
   return {
     id: r.id,
     roomId: r.room_id,
@@ -194,7 +194,7 @@ export function toRateRecord(r: RateRow): RatePlanRecord {
 }
 
 /** The columns `RateRow` needs, for every query that builds one. */
-export const RATE_COLUMNS = `
+const RATE_COLUMNS = `
   rp.id, rp.room_id, rp.name, rp.description,
   rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner,
   rp.extras, rp.other_inclusion, rp.min_advance_booking, rp.max_advance_booking,

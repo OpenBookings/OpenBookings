@@ -8,14 +8,12 @@ export const NAV_SECTIONS = [
   { id: "book",     label: "Footnote" },
 ] as const;
 
-export type NavSectionId = typeof NAV_SECTIONS[number]["id"];
-
 export const AMENITIES_PREVIEW = 10;
 export const PILLS_PER_ROW = 5;
 
 // ── DB-backed types ────────────────────────────────────────────────────────────
 
-export type DbAmenityItem = { label: string; icon: string };
+type DbAmenityItem = { label: string; icon: string };
 export type DbAmenityCategory = { label: string; items: DbAmenityItem[] };
 
 export type DbRatePlan = {
