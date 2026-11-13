@@ -22,13 +22,13 @@ const base = {
 describe("runReviewInvitations", () => {
   test("one property's invalid timezone does not stop other invitations", async () => {
     const rows = [
-      { ...base, booking_id: "victim", timezone: "Europe/Amsterdam" },
-      { ...base, booking_id: "attacker", timezone: "Not/AZone" },
+      { ...base, booking_id: "goodZone", timezone: "Europe/Amsterdam" },
+      { ...base, booking_id: "badZone", timezone: "Not/AZone" },
     ];
     const db = {
       async query(sql: string) {
         if (sql.includes("FROM bookings b")) return { rows };
-        if (sql.includes("INSERT INTO review_invitations (booking_id, claimed_at)")) return { rows: [{ booking_id: "victim" }] };
+        if (sql.includes("INSERT INTO review_invitations (booking_id, claimed_at)")) return { rows: [{ booking_id: "goodZone" }] };
         return { rows: [] };
       },
     };
@@ -43,10 +43,10 @@ describe("runReviewInvitations", () => {
       },
       onError: (error, ctx) => errors.push({ error, ctx }),
     });
-    expect(sent.map((m) => (m.kind === "invitation" ? m.bookingId : m.kind))).toEqual(["victim"]);
+    expect(sent.map((m) => (m.kind === "invitation" ? m.bookingId : m.kind))).toEqual(["goodZone"]);
     expect(summary.invitations).toBe(1);
     expect(summary.failed).toBe(1);
     expect(errors).toHaveLength(1);
-    expect(errors[0]!.ctx.bookingIds).toEqual(["attacker"]);
+    expect(errors[0]!.ctx.bookingIds).toEqual(["badZone"]);
   });
 });

@@ -31,16 +31,16 @@ function post(email: string, ip: string) {
 
 describe("login-link rate limits", () => {
   it("requests refused by the IP limit do not use up another address's link budget", async () => {
-    const attackerIp = "198.51.100.7";
+    const busyIp = "198.51.100.7";
     for (let i = 0; i < 5; i++) {
-      expect((await post(`attacker+${i}@example.test`, attackerIp)).status).toBe(200);
+      expect((await post(`other+${i}@example.test`, busyIp)).status).toBe(200);
     }
     for (let i = 0; i < 3; i++) {
-      expect((await post("victim@example.test", attackerIp)).status).toBe(429);
+      expect((await post("target@example.test", busyIp)).status).toBe(429);
     }
 
-    const res = await post("victim@example.test", "203.0.113.50");
+    const res = await post("target@example.test", "203.0.113.50");
     expect(res.status).toBe(200);
-    expect(sentTo).toContain("victim@example.test");
+    expect(sentTo).toContain("target@example.test");
   });
 });

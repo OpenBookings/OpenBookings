@@ -23,7 +23,7 @@ describe("billing details schema", () => {
   });
 
   test("text fields must be a single line", () => {
-    for (const patch of [{ legalName: "Evil\nHost" }, { city: "A\r\nB" }, { addressLine2: "x\u2028y" }]) {
+    for (const patch of [{ legalName: "Line\nHost" }, { city: "A\r\nB" }, { addressLine2: "x\u2028y" }]) {
       const r = billingDetailsSchema.safeParse({ ...valid, ...patch });
       expect(r.success).toBe(false);
       expect(JSON.stringify(r.error?.issues)).toContain("single line");
