@@ -190,6 +190,61 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(calls[1].idempotencyKey).toBe(calls[0].idempotencyKey);
   });
 
+  test("a retry while the original send is in flight reuses the original key", async () => {
+    refund = async (i) => {
+      calls.push(i);
+      throw new Error("socket hang up");
+    };
+    await cancelRooms({ ...deps(), isDefiniteFailure: () => false }, { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    // Last tried ten minutes ago on the test's clock, so the retry is allowed.
+    // created_at moves with it, so the row is still inside Stripe's key retention.
+    await db.query(
+      `UPDATE refunds
+          SET last_attempt_at = $2::timestamptz - interval '10 minutes',
+              created_at = $2::timestamptz - interval '10 minutes'
+        WHERE reservation_id = $1`,
+      [reservationIds[0], TEN_DAYS_BEFORE],
+    );
+
+    refund = async (i) => {
+      calls.push(i);
+      return { id: "re_retry", status: "succeeded" };
+    };
+    const retried = await retryRefunds({ ...deps(), findRefund: async () => null }, { bookingId });
+    expect(retried.ok && retried.refunds[0].status).toBe("succeeded");
+    expect(calls).toHaveLength(2);
+    expect(calls[1].idempotencyKey).toBe(calls[0].idempotencyKey);
+  });
+
+  test("a pending refund attempted moments ago is not re-sent", async () => {
+    refund = async (i) => {
+      calls.push(i);
+      throw new Error("socket hang up");
+    };
+    await cancelRooms({ ...deps(), isDefiniteFailure: () => false }, { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+
+    const retried = await retryRefunds({ ...deps(), findRefund: async () => null }, { bookingId });
+    expect(retried).toEqual({ ok: false, error: "refund_in_progress" });
+    expect(calls).toHaveLength(1);
+  });
+
+  test("a definitively failed refund is re-sent under a fresh key after a lookup miss", async () => {
+    refund = async (i) => {
+      calls.push(i);
+      throw new Error("card_declined");
+    };
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+
+    refund = async (i) => {
+      calls.push(i);
+      return { id: "re_retry", status: "succeeded" };
+    };
+    const retried = await retryRefunds({ ...deps(), findRefund: async () => null }, { bookingId });
+    expect(retried.ok && retried.refunds[0].status).toBe("succeeded");
+    expect(calls).toHaveLength(2);
+    expect(calls[1].idempotencyKey).toMatch(/:r\d+$/);
+  });
+
   test("goodwill first, then a host cancellation: never more than was paid in total", async () => {
     await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 500 });
     await cancelRooms(deps(), { bookingId, actor: host, reservationIds: null });
@@ -216,8 +271,9 @@ describeWithDb("booking lifecycle against Postgres", () => {
     );
     expect(audit.n).toBe(1);
 
+    // Ten minutes later: a pending row tried moments ago is left to its original send.
     const retried = await retryRefunds(
-      { ...deps(), findRefund: async () => ({ id: "re_already" }) },
+      { ...deps(new Date(TEN_DAYS_BEFORE.getTime() + 10 * 60_000)), findRefund: async () => ({ id: "re_already" }) },
       { bookingId },
     );
     expect(retried.ok && retried.refunds[0].status).toBe("succeeded");

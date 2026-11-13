@@ -740,6 +740,8 @@ export const refunds = pgTable(
     /** Better Auth user id; NULL = the system. */
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When the row was last sent to Stripe (0047); a retry skips a `pending` row tried in the last five minutes. */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
   },
   (table) => [
     index("idx_refunds_booking_id").on(table.bookingId),
