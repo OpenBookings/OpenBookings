@@ -18,12 +18,11 @@
 
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
 import type { Queryable } from "@openbookings/db";
-import { DEMO_ORG_ID } from "@openbookings/mode";
+import { DEMO_ORG_ID, DEMO_ORG_SLUG } from "@openbookings/mode";
 
 export { DEMO_ORG_ID };
 
 const DEMO_ORG_NAME = "OpenBookings Demo";
-const DEMO_ORG_SLUG = "openbookings-demo";
 /** org_consent.signed_by_user_id has no foreign key; no real user signed this. */
 const SYSTEM_SIGNER_ID = "demo";
 /** Legal details of the demo organisation, also copied onto every demo hotel. */

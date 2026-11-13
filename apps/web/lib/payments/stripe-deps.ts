@@ -50,7 +50,7 @@ export const bookingWebhookDeps: StripeEventDeps = {
   livemode: (process.env.STRIPE_SECRET_KEY ?? '').startsWith('sk_live_'),
   isProcessed: isStripeEventProcessed,
   markProcessed: markStripeEventProcessed,
-  onCheckoutPaid: (input) => confirmPaidCheckout(input, confirmation),
+  onCheckoutPaid: async (input) => void (await confirmPaidCheckout(input, confirmation)),
   // An intent whose unusable session was replaced also hears about the old
   // one, and that must not end the hold the new session is paying against.
   onCheckoutFailed: async ({ intentId, sessionId }) => {

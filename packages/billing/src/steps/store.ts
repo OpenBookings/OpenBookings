@@ -94,13 +94,14 @@ export async function storeInvoice(db: Queryable, invoiceId: string, deps: Store
 }
 
 /** What a store run did, by invoice number. */
-export type StoreReport = { stored: string[]; alreadyStored: string[]; conflicts: string[] };
+export type StoreReport = { stored: string[]; alreadyStored: string[]; conflicts: string[]; failed: { number: string; message: string }[] };
 
 /**
  * The store step of the monthly job (spec, the job, step 6): stores every
  * issued or sent invoice of the period that is missing a file. A conflict
  * stops the run at once and is reported in `conflicts` for the caller to
- * alert on; invoices already stored by earlier runs are not touched.
+ * alert on; any other error on one invoice is reported in `failed` and the
+ * run goes on with the next; invoices already stored by earlier runs are not touched.
  */
 export async function runStore(period: Period, deps: StoreDeps & { db: Queryable }): Promise<StoreReport> {
   const { rows } = await deps.db.query(
@@ -109,13 +110,16 @@ export async function runStore(period: Period, deps: StoreDeps & { db: Queryable
       ORDER BY number`,
     [period.start],
   );
-  const report: StoreReport = { stored: [], alreadyStored: [], conflicts: [] };
+  const report: StoreReport = { stored: [], alreadyStored: [], conflicts: [], failed: [] };
   for (const { id, number } of rows as { id: string; number: string }[]) {
     try {
       const outcome = await storeInvoice(deps.db, id, deps);
       (outcome === "stored" ? report.stored : report.alreadyStored).push(number);
     } catch (error) {
-      if (!(error instanceof StoredObjectConflictError)) throw error;
+      if (!(error instanceof StoredObjectConflictError)) {
+        report.failed.push({ number, message: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
       report.conflicts.push(number);
       break;
     }

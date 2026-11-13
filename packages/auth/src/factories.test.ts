@@ -121,7 +121,21 @@ describe("host admin plugin exposure", () => {
 
   test("it is still callable server-side, which is how impersonateWithAudit uses it", () => {
     expect(typeof host().api.impersonateUser).toBe("function");
-    expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user"]);
+    expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user", "/organization/leave"]);
+  });
+
+  test("organization/leave is not reachable over HTTP", async () => {
+    const res = await host().handler(
+      new Request("http://business.localhost:3001/api/auth/organization/leave", {
+        method: "POST",
+        body: "{}",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://business.localhost:3001",
+        },
+      }),
+    );
+    expect(res.status).toBe(404);
   });
 });
 

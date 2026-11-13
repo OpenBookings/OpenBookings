@@ -21,6 +21,7 @@
 import {
   REVIEW_REMINDER_AFTER_MS,
   isReviewSendHour,
+  isValidTimeZone,
   projectedCheckOutAt,
   reviewEligibility,
   reviewWindow,
@@ -184,7 +185,18 @@ async function failed(db: Queryable, bookingId: string, error: unknown): Promise
 export async function runReviewInvitations(deps: ReviewInvitationDeps): Promise<ReviewInvitationSummary> {
   const { db, now } = deps;
   const summary: ReviewInvitationSummary = { hostWarnings: 0, invitations: 0, reminders: 0, failed: 0 };
-  const rows = await candidates(db, now, deps.testing ?? false);
+  const candidateRows = await candidates(db, now, deps.testing ?? false);
+
+  // A stored time zone is not trusted: one bad row must not stop everyone else's mail.
+  const rows: CandidateRow[] = [];
+  for (const row of candidateRows) {
+    if (isValidTimeZone(row.timezone)) {
+      rows.push(row);
+      continue;
+    }
+    summary.failed += 1;
+    deps.onError?.(new Error(`invalid time zone: ${row.timezone}`), { kind: "invitation", bookingIds: [row.booking_id] });
+  }
 
   // 1. Host heads-up, from check-out until the invitation: stays never marked as arrived.
   const toWarn = new Map<string, CandidateRow[]>();

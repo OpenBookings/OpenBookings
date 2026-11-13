@@ -143,7 +143,7 @@ describeWithDb("booking intents against Postgres", () => {
     /** An intent with a session, `ageMinutes` old, in `status`. Spaced in time so earlier holds never block later ones. */
     const intent = async (status: string, ageMinutes: number, withSession = true) => {
       const { intentId } = await created(`${guest}-${n}`, undefined, new Date(NOW.getTime() + n++ * 20 * MINUTE));
-      if (withSession) await attachPaymentSession(db, { intentId, sessionId: `cs_test_${intentId}`, accountId: "acct_test" });
+      if (withSession) await attachPaymentSession(db, { intentId, sessionId: `cs_test_${intentId}`, accountId: "acct_test", amountCents: 20650 });
       await db.query(`UPDATE booking_intents SET status = $2, created_at = $3 WHERE id = $1`, [
         intentId,
         status,
@@ -258,7 +258,7 @@ describeWithDb("booking intents against Postgres", () => {
 
   test("new intent abandons the previous open one", async () => {
     const first = await created(guest);
-    await attachPaymentSession(db, { intentId: first.intentId, sessionId: "cs_a", accountId: "acct_a" });
+    await attachPaymentSession(db, { intentId: first.intentId, sessionId: "cs_a", accountId: "acct_a", amountCents: 20650 });
     // Another guest's open intent is none of this guest's business.
     const other = await created(`test-guest-${crypto.randomUUID()}`);
 
@@ -314,7 +314,7 @@ describeWithDb("booking intents against Postgres", () => {
 
   test("intent owner only", async () => {
     const { intentId } = await created(guest);
-    await attachPaymentSession(db, { intentId, sessionId: "cs_owner", accountId: "acct_a" });
+    await attachPaymentSession(db, { intentId, sessionId: "cs_owner", accountId: "acct_a", amountCents: 20650 });
     expect(await loadIntent(db, { intentId, userId: `test-guest-${crypto.randomUUID()}` })).toBeNull();
     expect(await loadIntent(db, { intentId: "not-a-uuid", userId: guest })).toBeNull();
     expect((await loadIntent(db, { intentId, userId: guest }))?.id).toBe(intentId);
@@ -330,14 +330,16 @@ describeWithDb("booking intents against Postgres", () => {
     const first = await created(guest);
     await created(guest); // abandons the first
     await expect(
-      attachPaymentSession(db, { intentId: first.intentId, sessionId: "cs_late", accountId: "acct_a" }),
+      attachPaymentSession(db, { intentId: first.intentId, sessionId: "cs_late", accountId: "acct_a", amountCents: 20650 }),
     ).rejects.toBeInstanceOf(IntentNotOpenError);
     expect((await loadIntent(db, { intentId: first.intentId, userId: guest }))?.paymentSessionId).toBeNull();
+    // Nor kept as one of its sessions: a payment on it confirms nothing.
+    expect((await db.query(`SELECT 1 FROM booking_intent_payment_sessions WHERE session_id = 'cs_late'`)).rows).toEqual([]);
   });
 
   test("expireIntent only once the hold has ended, and only an open intent", async () => {
     const { intentId, holdExpiresAt } = await created(guest);
-    await attachPaymentSession(db, { intentId, sessionId: "cs_exp", accountId: "acct_a" });
+    await attachPaymentSession(db, { intentId, sessionId: "cs_exp", accountId: "acct_a", amountCents: 20650 });
 
     expect(await expireIntent(db, { intentId, now: new Date(holdExpiresAt.getTime() - 1000) })).toBeNull();
     expect(await status(intentId)).toBe("open");
