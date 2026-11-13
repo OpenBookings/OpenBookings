@@ -101,6 +101,16 @@ function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+/** True when `timeZone` is a zone `Intl` knows; stored values are not trusted to be. */
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** How far `timeZone`'s wall clock is ahead of UTC at `instant`, in ms. */
 function zoneOffset(instant: number, timeZone: string): number {
   const parts = wallClockFormatter(timeZone).formatToParts(new Date(instant));

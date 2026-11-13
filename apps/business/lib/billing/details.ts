@@ -9,11 +9,21 @@ function vatPrefix(country: string): string {
   return country === "GR" ? "EL" : country;
 }
 
-const text = (label: string) => z.string().trim().min(1, `${label} is required`).max(200);
+/** Control characters and Unicode line/paragraph separators: nothing that could break a line on an invoice. */
+const MULTILINE = /[\p{Cc}\u2028\u2029]/u;
+
+const text = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} is required`)
+    .max(200)
+    .refine((v) => !MULTILINE.test(v), `${label} must be a single line`);
 const optional = z
   .string()
   .trim()
   .max(200)
+  .refine((v) => !MULTILINE.test(v), "Must be a single line")
   .transform((v) => (v === "" ? null : v))
   .nullable()
   .optional()

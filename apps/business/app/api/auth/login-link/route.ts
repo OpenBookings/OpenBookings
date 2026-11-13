@@ -46,14 +46,6 @@ export async function POST(request: NextRequest) {
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  const emailRateLimit = checkRateLimit(`email:${normalizedEmail}`, 3, 10 * 60 * 1000);
-  if (!emailRateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please wait before requesting another link.", resetTime: emailRateLimit.resetTime },
-      { status: 429 }
-    );
-  }
-
   const ipRateLimit = checkRateLimit(`ip:${getClientIP(request)}`, 5, 10 * 60 * 1000);
   if (!ipRateLimit.allowed) {
     return NextResponse.json(
@@ -76,6 +68,14 @@ export async function POST(request: NextRequest) {
     }
   } catch {
     // If the DB check fails, allow the request through — auth will enforce it
+  }
+
+  const emailRateLimit = checkRateLimit(`email:${normalizedEmail}`, 3, 10 * 60 * 1000);
+  if (!emailRateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait before requesting another link.", resetTime: emailRateLimit.resetTime },
+      { status: 429 }
+    );
   }
 
   try {

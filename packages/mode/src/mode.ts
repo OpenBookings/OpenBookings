@@ -26,3 +26,4 @@ export function assertTestingModeSafe(
  * a dependency cycle (demo depends on authz).
  */
 export const DEMO_ORG_ID = "demo-organisation";
+export const DEMO_ORG_SLUG = "openbookings-demo";

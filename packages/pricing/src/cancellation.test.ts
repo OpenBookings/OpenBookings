@@ -4,6 +4,7 @@ import {
   buildPolicySnapshot,
   checkInClosesAt,
   freeCancellationUntil,
+  isValidTimeZone,
   reservationPolicy,
   calculateRefund,
   localTimeToUtc,
@@ -410,5 +411,13 @@ describe("review fixes", () => {
     expect(
       checkInClosesAt({ arrivalDate: "2026-11-10", checkInTime: "15:00", checkInUntil: "22:00", timeZone: "Europe/Amsterdam" }).toISOString(),
     ).toBe("2026-11-10T21:00:00.000Z");
+  });
+});
+
+describe("isValidTimeZone", () => {
+  test("accepts a real IANA zone and rejects unknown or empty ones", () => {
+    expect(isValidTimeZone("Europe/Amsterdam")).toBe(true);
+    expect(isValidTimeZone("Not/AZone")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
   });
 });

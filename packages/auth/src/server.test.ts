@@ -283,6 +283,36 @@ describe("stepUpRequiredForRequest — admin plugin endpoints", () => {
   });
 });
 
+describe("stepUpRequiredForRequest — update-member-role role spellings", () => {
+  const gated: unknown[] = [
+    " owner",
+    "owner ",
+    ["owner "],
+    "frontdesk,owner",
+    ["frontdesk", "owner"],
+    "admin ",
+    "",
+    ",",
+    [],
+    [1],
+    undefined,
+  ];
+  for (const role of gated) {
+    test(`requires step-up for ${JSON.stringify(role) ?? "undefined"}`, () => {
+      expect(
+        stepUpRequiredForRequest("/organization/update-member-role", { role }),
+      ).toBe(true);
+    });
+  }
+  for (const role of ["frontdesk", "manager, frontdesk"]) {
+    test(`does not require step-up for ${JSON.stringify(role)}`, () => {
+      expect(
+        stepUpRequiredForRequest("/organization/update-member-role", { role }),
+      ).toBe(false);
+    });
+  }
+});
+
 describe("stepUpRequiredForRequest — endpoints Better Auth gated on freshness", () => {
   // freshAge is 0 on both instances, so the step-up gate takes over.
   test("unlinking a social account needs a fresh step-up", () => {

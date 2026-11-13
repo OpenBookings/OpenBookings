@@ -4,9 +4,20 @@
  * Every action runs the same way: lock the booking, check the action is allowed
  * right now (`allowedActions`), let `plan.ts` decide the money, write the new
  * state and a `pending` refund row per room, commit, then ask Stripe. A Stripe
- * failure never undoes the cancellation: the row is marked `failed`, and
- * `retryRefunds` sends it again with the same idempotency key, so a refund that
- * actually went through is never paid twice.
+ * failure never undoes the cancellation: the row is marked `failed` (Stripe
+ * refused it) or stays `pending` (outcome unknown), and `retryRefunds` sends it
+ * again. A refund row moves money at most once:
+ *
+ * - Every send stamps `last_attempt_at` just before its Stripe call. A retry
+ *   claims its rows in a transaction (`FOR UPDATE SKIP LOCKED`) and skips a
+ *   `pending` row attempted in the last five minutes.
+ * - A retry re-sends under the row's original idempotency key while Stripe
+ *   remembers it, so Stripe dedupes against the original. Only after a lookup
+ *   on Stripe found nothing, and only for a row Stripe definitively refused or
+ *   one older than Stripe's key retention, does it use a fresh key per window.
+ * - Should a retry still overlap a send on the same key, Stripe's idempotency
+ *   conflict is treated as uncertain, not refused: the row stays `pending` and
+ *   is looked up before it is ever sent under a fresh key.
  *
  * Who may act is the caller's job (property access for hosts, ownership for
  * guests). This module trusts `actor` and records it.
@@ -73,6 +84,13 @@ export type LifecycleDeps = {
 /** Stripe forgets idempotency keys after about a day; a retry key changes per window, after a lookup. */
 const RETRY_KEY_WINDOW_MS = 20 * 3_600_000;
 
+/**
+ * A retry leaves a `pending` row alone until its last attempt is this old:
+ * well past the Stripe client's timeout and network retries, so the original
+ * send has finished one way or another.
+ */
+const RETRY_MIN_AGE_MS = 5 * 60_000;
+
 /** `via: "admin"`: the dev dashboard acting as this guest or host; stamped on every event the action writes. */
 export type Actor = { kind: "guest" | "host"; userId: string; via?: "admin" };
 
@@ -97,7 +115,7 @@ export type LifecycleResult =
       /** Set by cancelRooms only. */
       cancelled?: CancelledRooms;
     }
-  | { ok: false; error: PlanError };
+  | { ok: false; error: PlanError | "refund_in_progress" };
 
 const defaultDb: LifecycleDb = {
   query: (text, values) => getPool().query(text, values),
@@ -261,7 +279,15 @@ async function recordEventSafely(db: Queryable, event: NewBookingEvent): Promise
   }
 }
 
-type RefundRow = { id: string; reservationId: string | null; amount: number; key: string };
+/** Retry rows also carry `status` and `createdAt`, which decide the idempotency key. */
+type RefundRow = {
+  id: string;
+  reservationId: string | null;
+  amount: number;
+  key: string;
+  status?: "pending" | "failed";
+  createdAt?: Date;
+};
 
 async function insertRefund(
   tx: Queryable,
@@ -310,6 +336,10 @@ async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, pla
  *   the row stays `pending`, audited, reported. It is looked up on Stripe
  *   before it is ever sent again (`retry`).
  * - A status update never overwrites a row that already succeeded.
+ *
+ * `last_attempt_at` is stamped before every Stripe call. A retry keeps the
+ * original key unless the lookup found nothing and the row either was refused
+ * by Stripe (`failed`) or is older than Stripe's key retention.
  */
 async function sendRefunds(
   deps: LifecycleDeps,
@@ -319,7 +349,6 @@ async function sendRefunds(
   retry = false,
   actor?: { via?: "admin" },
 ) {
-  const now = deps.now?.() ?? new Date();
   const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
   for (const row of rows) {
     const pi = booking.stripe_payment_intent_id;
@@ -328,22 +357,32 @@ async function sendRefunds(
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
       continue;
     }
+    // Its own statement, before Stripe hears of it, on the clock as this row is
+    // reached (earlier rows may have taken a while): a retry reads it to leave
+    // alone a row sent in the last few minutes.
+    const now = deps.now?.() ?? new Date();
+    await db.query(`UPDATE refunds SET last_attempt_at = $2::timestamptz WHERE id = $1`, [row.id, now]);
     let succeeded: { stripeRefundId: string } | null = null;
     try {
       const existing =
         retry && deps.findRefund
           ? await deps.findRefund({ paymentIntentId: pi, stripeAccountId: account, refundRowId: row.id })
           : null;
+      // A `pending` row may still go through under its original key, so it keeps
+      // that key while Stripe remembers it. A fresh key per window only after a
+      // lookup found nothing, and only once the original can no longer land.
+      const freshKey =
+        retry &&
+        !!deps.findRefund &&
+        (row.status === "failed" ||
+          (row.createdAt !== undefined && now.getTime() - row.createdAt.getTime() >= RETRY_KEY_WINDOW_MS));
       const refund =
         existing ??
         (await deps.refund({
           paymentIntentId: pi,
           stripeAccountId: account,
           amountCents: Math.round(row.amount * 100),
-          // After a lookup found nothing, a fresh key per window is safe; without
-          // a lookup, only the original key is.
-          idempotencyKey:
-            retry && deps.findRefund ? `${row.key}:r${Math.floor(now.getTime() / RETRY_KEY_WINDOW_MS)}` : row.key,
+          idempotencyKey: freshKey ? `${row.key}:r${Math.floor(now.getTime() / RETRY_KEY_WINDOW_MS)}` : row.key,
           metadata: { bookingId: booking.id, refundId: row.id },
         }));
       await db.query(
@@ -612,6 +651,11 @@ export async function issueGoodwillRefund(
  * Send refunds that failed, or whose outcome is unknown, again. Each is first
  * looked up on Stripe (when `findRefund` is given), so one that did go through
  * is recorded rather than paid twice.
+ *
+ * Rows are claimed in a transaction: a `pending` row tried in the last
+ * `RETRY_MIN_AGE_MS` is skipped (its send may still be in flight), and so is a
+ * row another retry holds. When every open row was skipped, the answer is
+ * `refund_in_progress`.
  */
 export async function retryRefunds(
   deps: LifecycleDeps,
@@ -620,11 +664,31 @@ export async function retryRefunds(
   const { db, now } = context(deps);
   const state = await loadBookingState(db, i.bookingId, now);
   if (!state) return { ok: false, error: "not_found" };
-  const { rows } = await db.query(
-    `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount, idempotency_key AS key
-     FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') ORDER BY created_at`,
-    [i.bookingId],
-  );
-  if (rows.length === 0) return { ok: false, error: "nothing_to_refund" };
-  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, rows as RefundRow[], true, { via: i.via }) };
+  const claim = await db.transaction(async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount, idempotency_key AS key,
+              status, created_at AS "createdAt"
+       FROM refunds
+       WHERE booking_id = $1 AND status IN ('pending', 'failed')
+         AND (status = 'failed' OR COALESCE(last_attempt_at, created_at) <= $2::timestamptz - make_interval(secs => $3))
+       ORDER BY created_at
+       FOR UPDATE SKIP LOCKED`,
+      [i.bookingId, now, RETRY_MIN_AGE_MS / 1000],
+    );
+    const claimed = rows as RefundRow[];
+    if (claimed.length > 0) {
+      await tx.query(`UPDATE refunds SET last_attempt_at = $2::timestamptz WHERE id = ANY($1::uuid[])`, [
+        claimed.map((r) => r.id),
+        now,
+      ]);
+      return { claimed, open: true };
+    }
+    const { rows: open } = await tx.query(
+      `SELECT 1 FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') LIMIT 1`,
+      [i.bookingId],
+    );
+    return { claimed, open: open.length > 0 };
+  });
+  if (claim.claimed.length === 0) return { ok: false, error: claim.open ? "refund_in_progress" : "nothing_to_refund" };
+  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, claim.claimed, true, { via: i.via }) };
 }

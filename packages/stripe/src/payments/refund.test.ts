@@ -58,6 +58,21 @@ describe("isDefiniteRefundFailure", () => {
     expect(isDefiniteRefundFailure({ type: "StripeAPIError" })).toBe(false);
     expect(isDefiniteRefundFailure(new Error("socket hang up"))).toBe(false);
   });
+
+  test("an idempotency conflict means another send on the same key may still pay", () => {
+    expect(isDefiniteRefundFailure({ type: "StripeIdempotencyError" })).toBe(false);
+    expect(
+      isDefiniteRefundFailure({ type: "StripeInvalidRequestError", statusCode: 409, code: "idempotency_key_in_use" }),
+    ).toBe(false);
+    expect(
+      isDefiniteRefundFailure({ type: "StripeInvalidRequestError", raw: { code: "idempotency_key_in_use" } }),
+    ).toBe(false);
+  });
+
+  test("other refusals still mean no money moved", () => {
+    expect(isDefiniteRefundFailure({ type: "StripeInvalidRequestError", code: "charge_already_refunded" })).toBe(true);
+    expect(isDefiniteRefundFailure({ type: "StripeCardError", code: "card_declined" })).toBe(true);
+  });
 });
 
 describe("matchRefund", () => {
