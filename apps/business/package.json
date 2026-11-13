@@ -29,7 +29,7 @@
     "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",
-    "@sentry/nextjs": "^10.76.2",
+    "@sentry/nextjs": "^11.11.0",
     "@shadcn/react": "^0.3.1",
     "@tabler/icons-react": "^3.50.0",
     "better-auth": "1.7.19",
