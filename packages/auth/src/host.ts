@@ -464,7 +464,11 @@ export function createHostAuth(config: HostAuthConfig) {
     // row. It stays callable server-side (auth.api.impersonateUser, which is
     // what impersonateWithAudit uses) but is not reachable over HTTP through
     // the /api/auth catch-all.
-    disabledPaths: ["/admin/impersonate-user"],
+    //
+    // /organization/leave is disabled too: it deletes the membership without
+    // running the organizationHooks (owner sync, thread host move, session
+    // revocation), and no UI uses it.
+    disabledPaths: ["/admin/impersonate-user", "/organization/leave"],
   });
 }
 
