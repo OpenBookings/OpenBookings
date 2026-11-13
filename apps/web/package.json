@@ -35,7 +35,7 @@
     "better-auth": "1.7.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.42.2",
+    "framer-motion": "^14.12.0",
     "instantsearch.js": "^4.122.0",
     "libphonenumber-js": "^1.13.15",
     "lucide-react": "^1.70.0",
