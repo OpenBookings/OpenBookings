@@ -40,7 +40,13 @@ export type ConfirmationDeps = {
  */
 export type PaidCheckout = StripePaidCheckout & { eventId: string | null };
 
-export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDeps): Promise<void> {
+/**
+ * How a paid checkout ended: a booking stands, the payment went back to the
+ * guest, or it was refused (reported, nothing converted, nothing refunded).
+ */
+export type ConfirmationOutcome = "confirmed" | "refunded" | "refused";
+
+export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDeps): Promise<ConfirmationOutcome> {
   const convert = deps.convert ?? convertIntentToBooking;
   const markRefunded = deps.markRefunded ?? markIntentRefundedOversold;
   const extra = { intentId: i.intentId, sessionId: i.sessionId, paymentIntentId: i.paymentIntentId, eventId: i.eventId };
@@ -61,7 +67,7 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
     // for something, and someone has to find out what.
     if (error instanceof IntentNotFoundError) {
       deps.report(error, { level: "error", extra });
-      return;
+      return "refused";
     }
     // Paid, but not on a session the platform made for this intent, or on
     // another account, or for another amount: it confirms nothing. Never
@@ -72,7 +78,7 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
         tags: { reason: "payment_mismatch", mismatch: error.reason, intentId: i.intentId },
         extra: { ...extra, stripeAccountId: i.stripeAccountId, amountCents: i.amountCents },
       });
-      return;
+      return "refused";
     }
     throw error;
   }
@@ -87,29 +93,30 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
       tags: { reason: "duplicate", intentId: i.intentId },
       extra: { ...extra, keptPaymentIntentId: stored, refundId: refund.id },
     });
-    return;
+    return "refunded";
   }
 
   if (result.outcome === "confirmed") {
-    if (!result.firstTime) return;
+    if (!result.firstTime) return "confirmed";
     await deps.sendConfirmed(result.bookingId).catch((error: unknown) => {
       console.error("[booking-confirmation] confirmation email failed:", error instanceof Error ? error.message : error);
       deps.report(error, { level: "warning", extra: { ...extra, bookingId: result.bookingId } });
     });
-    return;
+    return "confirmed";
   }
 
   // Oversold: the rooms went to someone else between the hold and the payment.
   const refund = await refundInFull(i, deps, "oversold");
   // Only the call that moves the intent to refunded tells the guest, so a
   // redelivered event does not email them twice.
-  if (!(await markRefunded(deps.db, { intentId: i.intentId, refundId: refund.id }))) return;
+  if (!(await markRefunded(deps.db, { intentId: i.intentId, refundId: refund.id }))) return "refunded";
   // Not thrown either: a retry would find the intent already refunded and
   // never send it.
   await deps.sendOversold(i.intentId).catch((error: unknown) => {
     console.error("[booking-confirmation] oversold email failed:", error instanceof Error ? error.message : error);
     deps.report(error, { level: "warning", extra });
   });
+  return "refunded";
 }
 
 /**
