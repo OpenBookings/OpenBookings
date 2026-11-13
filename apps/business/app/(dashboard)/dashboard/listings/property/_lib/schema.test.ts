@@ -178,6 +178,13 @@ describe("locationSchema", () => {
     lon: "10.3235",
   };
 
+  test("rejects a timezone outside the offered list", () => {
+    const r = locationSchema.safeParse({ ...valid, timezone: "Not/AZone" });
+    expect(r.success).toBe(false);
+    expect(r.error!.flatten().fieldErrors.timezone?.[0]).toBe("Pick a timezone from the list.");
+    expect(locationSchema.safeParse({ ...valid, timezone: "Europe/Amsterdam" }).success).toBe(true);
+  });
+
   test("reads the hand-placed pin flag, and its absence as false", () => {
     expect(locationSchema.safeParse({ ...valid, pinSetManually: "on" }).data!.pinSetManually).toBe(true);
     expect(locationSchema.safeParse(valid).data!.pinSetManually).toBe(false);

@@ -2,6 +2,7 @@
 
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne, withTransaction } from "@openbookings/db";
+import { DEMO_ORG_ID } from "@openbookings/mode";
 import { headers } from "next/headers";
 import { CONNECT_OWNER_METADATA_KEY, createConnectAccount, retrieveConnectAccount } from "@openbookings/stripe";
 import { provisionOrganizationTx } from "@/lib/provision-organization";
@@ -295,6 +296,9 @@ export async function completeOnboarding(): Promise<void> {
       legal,
       stripeAccountId,
     });
+    if (organizationId === DEMO_ORG_ID) {
+      throw new Error("Refusing to complete onboarding into the demo organisation");
+    }
 
     const result = await promoteOnboardingToProperty(
       { userId, userEmail: session.user.email, stepData },

@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { IntentNotFoundError, type ConvertResult } from "@openbookings/db";
+import { IntentNotFoundError, PaymentMismatchError, type ConvertResult } from "@openbookings/db";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
 import { confirmPaidCheckout, type ConfirmationDeps } from "./booking-confirmation";
 
@@ -72,13 +72,34 @@ describe("confirmPaidCheckout", () => {
     const t = setup([confirmed(true)]);
     await confirmPaidCheckout(paid, t.deps);
     expect(t.of("convert")).toEqual([
-      ["convert", true, { intentId: INTENT, paymentIntentId: "pi_1", accountId: "acct_1", amountCents: 48_250, now: NOW }],
+      [
+        "convert",
+        true,
+        { intentId: INTENT, sessionId: "cs_test_1", paymentIntentId: "pi_1", accountId: "acct_1", amountCents: 48_250, now: NOW },
+      ],
     ]);
+  });
+
+  test("the conversion is told which session was paid", async () => {
+    const t = setup([confirmed(true)]);
+    await confirmPaidCheckout({ ...paid, sessionId: "cs_paid" }, t.deps);
+    expect((t.of("convert")[0][2] as { sessionId: string }).sessionId).toBe("cs_paid");
+  });
+
+  test("a payment that does not match its intent is reported and acknowledged", async () => {
+    const t = setup([new PaymentMismatchError("i1", "account")]);
+    await expect(confirmPaidCheckout(paid, t.deps)).resolves.toBe("refused");
+    const reports = t.of("report");
+    expect(reports).toHaveLength(1);
+    expect(reports[0][2]).toBe("error");
+    expect((reports[0][3] as Record<string, string>).reason).toBe("payment_mismatch");
+    expect(t.of("refund")).toEqual([]);
+    expect(t.of("sendConfirmed")).toEqual([]);
   });
 
   test("a booking confirmed the first time sends the confirmation once", async () => {
     const t = setup([confirmed(true)]);
-    await confirmPaidCheckout(paid, t.deps);
+    expect(await confirmPaidCheckout(paid, t.deps)).toBe("confirmed");
     expect(t.of("sendConfirmed")).toEqual([["sendConfirmed", "b-1"]]);
     expect(t.of("refund")).toEqual([]);
   });
@@ -98,7 +119,7 @@ describe("confirmPaidCheckout", () => {
     });
     const logged = spyOn(console, "error").mockImplementation(() => {});
     try {
-      await expect(confirmPaidCheckout(paid, t.deps)).resolves.toBeUndefined();
+      await expect(confirmPaidCheckout(paid, t.deps)).resolves.toBe("confirmed");
       expect(logged).toHaveBeenCalledTimes(1);
     } finally {
       logged.mockRestore();
@@ -108,8 +129,8 @@ describe("confirmPaidCheckout", () => {
 
   test("oversold refunds once across retries", async () => {
     const t = setup([oversold(true), oversold(false)]);
-    await confirmPaidCheckout(paid, t.deps);
-    await confirmPaidCheckout(paid, t.deps);
+    expect(await confirmPaidCheckout(paid, t.deps)).toBe("refunded");
+    expect(await confirmPaidCheckout(paid, t.deps)).toBe("refunded");
 
     const refund = {
       paymentIntentId: "pi_1",
@@ -224,7 +245,7 @@ describe("confirmPaidCheckout", () => {
 
   test("a payment for an intent that does not exist is reported, not retried", async () => {
     const t = setup([new IntentNotFoundError(INTENT)]);
-    await expect(confirmPaidCheckout(paid, t.deps)).resolves.toBeUndefined();
+    await expect(confirmPaidCheckout(paid, t.deps)).resolves.toBe("refused");
     expect(t.of("report").map((c) => c[2])).toEqual(["error"]);
     expect(t.of("refund")).toEqual([]);
   });

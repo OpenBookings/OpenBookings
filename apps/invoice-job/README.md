@@ -14,7 +14,7 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 | `draft` | Reconciles the month's ledger against Stripe (blocking), then drafts one document per eligible host. Prints the run report, and emails it (plus Slack) unless it is a dry run. | `--period`, `--dry-run`, `--entity` |
 | `draft --preview` | Renders one host's current draft to `out/DRAFT-{entity}-{period}.pdf`, watermarked DRAFT. Seller from `SELLER_*` (placeholders when missing), buyer from the host's billing profile as it is now. Writes nothing to the database or R2. | `--entity` (required), `--period` |
 | `issue` | Issues the month's drafts (gapless `OB-YYYY-NNNN` numbers, seller and buyer snapshots), then runs `store`. Refused unless the month's last real draft run reconciled successfully. | `--period`, `--entity` |
-| `store` | Renders and uploads the PDF and CSV of every issued invoice that is not stored yet. Retry this on its own after a failed upload. | `--period` |
+| `store` | Renders and uploads the PDF and CSV of every issued invoice that is not stored yet. Retry this on its own after a failed upload. Blocked (exit `2`) when an invoice fails to render or upload: the job alerts with the invoice numbers. | `--period` |
 | `deliver` | Emails every stored, issued invoice that is not sent yet (PDF and CSV attached, invoice id as idempotency key). In test mode it needs `INVOICE_TEST_RECIPIENT` and sends everything there. | `--period` |
 | `report` | Writes the quarter's VAT-return, ICP, DAC7, returned-payments and Stripe-reconciliation CSVs to `out/`. | `--quarter=YYYYQn` (required) |
 | `backfill` | Reconciles every month from `--from` through last month, one run per month, and prints `backfilled / returned / blockers` per month. Drafts nothing, and never counts as a draft run. | `--from=YYYY-MM` (required), `--dry-run` |
@@ -25,7 +25,7 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 - A flag a step has no use for is refused, not ignored.
 - Every run writes an `invoice_runs` row (`running` → `succeeded` / `blocked` / `failed`) with its report.
 - **Exit codes:** `0` succeeded, `2` blocked (something needs a human: reconciliation blocked, a host blocked
-  or skipped, a file conflict, a send failure), `1` failed (bad arguments, a guard refused, or an error).
+  or skipped, a file conflict, an invoice that failed to render or upload, a send failure), `1` failed (bad arguments, a guard refused, or an error).
 
 ## Guards
 
@@ -84,7 +84,7 @@ Hard deadline: **everything issued by the 15th** of the month after the period.
      `out/DRAFT-….pdf`).
 3. **Issue:** run the job with `--step=issue`. It issues and then stores the PDFs and CSVs in R2. Exit `2`
    means a host was skipped (details changed since the draft: rerun the draft, then issue again) or a file
-   conflicts (stop, the job has alerted: never overwrite). If storing failed part-way, run `--step=store`.
+   conflicts (stop, the job has alerted: never overwrite). If storing failed part-way, or an invoice failed to render or upload (the job alerts with the invoice numbers and exits blocked), fix the cause and rerun `--step=store`.
 4. **Check the PDFs:** download a few in OpenBookings Business → Finance → Billing (or from the bucket) and
    compare totals with the run report.
 5. **Deliver:** run the job with `--step=deliver`. Rerunning is safe: sent invoices are skipped and the

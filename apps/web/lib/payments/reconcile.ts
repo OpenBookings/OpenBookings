@@ -1,6 +1,6 @@
 import type { UnsettledPayment } from "@openbookings/db";
 import { readPaidCheckout } from "@openbookings/stripe";
-import type { PaidCheckout } from "./booking-confirmation";
+import type { ConfirmationOutcome, PaidCheckout } from "./booking-confirmation";
 
 /**
  * The safety net under the Stripe webhook: asks Stripe how each unsettled
@@ -18,7 +18,7 @@ export type ReconcileDeps = {
   list: () => Promise<UnsettledPayment[]>;
   /** The Checkout Session as Stripe has it now, on the host's account. */
   retrieve: (sessionId: string, accountId: string) => Promise<unknown>;
-  confirm: (paid: PaidCheckout) => Promise<void>;
+  confirm: (paid: PaidCheckout) => Promise<ConfirmationOutcome>;
   /** The session lapsed unpaid: an intent still open stops holding its rooms. */
   expire: (intentId: string) => Promise<void>;
   /** Something a person must look at (Sentry). */
@@ -29,6 +29,8 @@ export type ReconcileSummary = {
   checked: number;
   /** Turned into a booking, or refunded because the rooms were gone. */
   paid: number;
+  /** Paid at Stripe but refused (reported, not converted): a person looks at it. */
+  refused: number;
   expired: number;
   /** Still open at Stripe, or a bank payment still clearing: next run. */
   waiting: number;
@@ -36,7 +38,7 @@ export type ReconcileSummary = {
 };
 
 export async function reconcilePayments(deps: ReconcileDeps): Promise<ReconcileSummary> {
-  const summary: ReconcileSummary = { checked: 0, paid: 0, expired: 0, waiting: 0, failed: 0 };
+  const summary: ReconcileSummary = { checked: 0, paid: 0, refused: 0, expired: 0, waiting: 0, failed: 0 };
 
   // One at a time: a backlog after an outage should not burst Stripe's rate limit.
   for (const payment of await deps.list()) {
@@ -51,7 +53,7 @@ export async function reconcilePayments(deps: ReconcileDeps): Promise<ReconcileS
   return summary;
 }
 
-async function settle(payment: UnsettledPayment, deps: ReconcileDeps): Promise<"paid" | "expired" | "waiting"> {
+async function settle(payment: UnsettledPayment, deps: ReconcileDeps): Promise<"paid" | "refused" | "expired" | "waiting"> {
   const session = await deps.retrieve(payment.sessionId, payment.accountId);
 
   const paid = readPaidCheckout(session, payment.accountId);
@@ -61,8 +63,8 @@ async function settle(payment: UnsettledPayment, deps: ReconcileDeps): Promise<"
     if (paid.intentId !== payment.intentId) {
       throw new Error(`Session ${payment.sessionId} names intent ${paid.intentId}, not ${payment.intentId}`);
     }
-    await deps.confirm({ ...paid, eventId: null });
-    return "paid";
+    const outcome = await deps.confirm({ ...paid, eventId: null });
+    return outcome === "refused" ? "refused" : "paid";
   }
 
   if ((session as { status?: unknown } | null)?.status === "expired") {

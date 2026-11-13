@@ -31,6 +31,16 @@ describe("consoleEmailClient", () => {
     expect(out[1]).toContain("plain body");
     expect(out[1]).not.toContain("One");
   });
+
+  test("leaves a shared base builder unchanged, like Lettermint's immutable builder", async () => {
+    const out: string[] = [];
+    const base = consoleEmailClient((text) => out.push(text)).from("a@x.test").subject("Base");
+    await base.to("one@x.test").send();
+    await base.send();
+
+    expect(out[0]).toContain("To:      one@x.test");
+    expect(out[1]).not.toContain("one@x.test");
+  });
 });
 
 describe("formatConsoleEmail", () => {
