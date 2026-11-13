@@ -22,6 +22,15 @@ describe("billing details schema", () => {
     expect(r.data).toMatchObject({ countryCode: "NL", vatId: "NL123456789B01", addressLine2: null, kvkNumber: null });
   });
 
+  test("text fields must be a single line", () => {
+    for (const patch of [{ legalName: "Evil\nHost" }, { city: "A\r\nB" }, { addressLine2: "x\u2028y" }]) {
+      const r = billingDetailsSchema.safeParse({ ...valid, ...patch });
+      expect(r.success).toBe(false);
+      expect(JSON.stringify(r.error?.issues)).toContain("single line");
+    }
+    expect(billingDetailsSchema.safeParse({ ...valid, legalName: "H".repeat(200) }).success).toBe(true);
+  });
+
   test("country must be an EU member state", () => {
     expect(billingDetailsSchema.safeParse({ ...valid, countryCode: "US", vatId: "US123456789" }).success).toBe(false);
     expect(billingDetailsSchema.safeParse({ ...valid, countryCode: "GB", vatId: "GB123456789" }).success).toBe(false);
