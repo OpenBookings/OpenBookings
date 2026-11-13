@@ -1,8 +1,8 @@
 import { alertOwnerEmails } from "./alert-owners";
-import { demoOrgError, demoOrgReadRefused, refuseDemoOrg } from "./demo-org-guard";
+import { demoOrgReadError, demoOrgReadRefused, isDemoOrgReadPath, namesOrganization, refuseDemoOrg } from "./demo-org-guard";
 import { betterAuth, APIError } from "better-auth";
 import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { passkey } from "@better-auth/passkey";
 import { ac, roles } from "@openbookings/authz/permissions";
 import {
@@ -300,7 +300,16 @@ export function createHostAuth(config: HostAuthConfig) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         // First: the demo organisation's member list is not for hosts to read.
-        if (demoOrgReadRefused(ctx.path, ctx.query, ctx.body)) throw demoOrgError();
+        // The session is looked up only when the request names no organisation
+        // (Better Auth then falls back to the active one).
+        const activeOrganizationId =
+          isDemoOrgReadPath(ctx.path) && !namesOrganization(ctx.query, ctx.body)
+            ? ((ctx.context.session ?? (await getSessionFromCtx(ctx).catch(() => null)))?.session
+                ?.activeOrganizationId ?? null)
+            : null;
+        if (demoOrgReadRefused(ctx.path, ctx.query, ctx.body, activeOrganizationId)) {
+          throw demoOrgReadError();
+        }
         // Before the step-up gate, so a refusal that is certain does not cost
         // the host a passkey prompt first.
         await refuseLastPasskeyRemoval(ctx, async (userId) => {

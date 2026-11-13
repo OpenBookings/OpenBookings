@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEMO_ORG_ID } from "@openbookings/mode";
+import { DEMO_ORG_ID, DEMO_ORG_SLUG } from "@openbookings/mode";
 import { demoOrgReadRefused, refuseDemoOrg } from "./demo-org-guard";
 
 describe("refuseDemoOrg", () => {
@@ -25,5 +25,19 @@ describe("demoOrgReadRefused", () => {
   test("allows real organisations and other paths", () => {
     expect(demoOrgReadRefused("/organization/list-members", { organizationId: "org_real" }, undefined)).toBe(false);
     expect(demoOrgReadRefused("/organization/remove-member", { organizationId: DEMO_ORG_ID }, undefined)).toBe(false);
+  });
+
+  test("refuses the demo slug in the query or body", () => {
+    expect(demoOrgReadRefused("/organization/list-members", { organizationSlug: DEMO_ORG_SLUG }, undefined)).toBe(true);
+    expect(demoOrgReadRefused("/organization/get-full-organization", undefined, { organizationSlug: DEMO_ORG_SLUG })).toBe(true);
+  });
+
+  test("refuses when no id or slug is given and the active organisation is the demo", () => {
+    expect(demoOrgReadRefused("/organization/list-members", {}, undefined, DEMO_ORG_ID)).toBe(true);
+  });
+
+  test("allows an active real organisation and a real slug", () => {
+    expect(demoOrgReadRefused("/organization/list-members", {}, undefined, "org_real")).toBe(false);
+    expect(demoOrgReadRefused("/organization/list-members", { organizationSlug: "real-hotel" }, undefined, DEMO_ORG_ID)).toBe(false);
   });
 });
