@@ -37,8 +37,8 @@
     "test": "bun test --timeout 30000"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1164.0",
-    "@aws-sdk/s3-request-presigner": "^3.1164.0",
+    "@aws-sdk/client-s3": "^3.1165.0",
+    "@aws-sdk/s3-request-presigner": "^3.1165.0",
     "@openbookings/authz": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
