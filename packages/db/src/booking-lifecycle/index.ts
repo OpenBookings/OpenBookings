@@ -8,13 +8,16 @@
  * refused it) or stays `pending` (outcome unknown), and `retryRefunds` sends it
  * again. A refund row moves money at most once:
  *
- * - Every send stamps `last_attempt_at` first. A retry claims its rows in a
- *   transaction (`FOR UPDATE SKIP LOCKED`) and skips a `pending` row tried in
- *   the last five minutes, so it never races a send still in flight.
- * - A retry re-sends under the row's original idempotency key, so Stripe
- *   dedupes against the original. Only after a lookup on Stripe found nothing,
- *   and only for a row Stripe definitively refused or one older than Stripe's
- *   key retention, does it use a fresh key per window.
+ * - Every send stamps `last_attempt_at` just before its Stripe call. A retry
+ *   claims its rows in a transaction (`FOR UPDATE SKIP LOCKED`) and skips a
+ *   `pending` row attempted in the last five minutes.
+ * - A retry re-sends under the row's original idempotency key while Stripe
+ *   remembers it, so Stripe dedupes against the original. Only after a lookup
+ *   on Stripe found nothing, and only for a row Stripe definitively refused or
+ *   one older than Stripe's key retention, does it use a fresh key per window.
+ * - Should a retry still overlap a send on the same key, Stripe's idempotency
+ *   conflict is treated as uncertain, not refused: the row stays `pending` and
+ *   is looked up before it is ever sent under a fresh key.
  *
  * Who may act is the caller's job (property access for hosts, ownership for
  * guests). This module trusts `actor` and records it.
@@ -346,7 +349,6 @@ async function sendRefunds(
   retry = false,
   actor?: { via?: "admin" },
 ) {
-  const now = deps.now?.() ?? new Date();
   const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
   for (const row of rows) {
     const pi = booking.stripe_payment_intent_id;
@@ -355,8 +357,10 @@ async function sendRefunds(
       results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
       continue;
     }
-    // Its own statement, before Stripe hears of it: a retry reads this to tell
-    // a send that may still be in flight from one that is over.
+    // Its own statement, before Stripe hears of it, on the clock as this row is
+    // reached (earlier rows may have taken a while): a retry reads it to leave
+    // alone a row sent in the last few minutes.
+    const now = deps.now?.() ?? new Date();
     await db.query(`UPDATE refunds SET last_attempt_at = $2::timestamptz WHERE id = $1`, [row.id, now]);
     let succeeded: { stripeRefundId: string } | null = null;
     try {

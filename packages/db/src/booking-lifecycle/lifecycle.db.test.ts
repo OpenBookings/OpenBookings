@@ -228,6 +228,44 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("a concurrent send on the same key leaves the refund pending, not failed", async () => {
+    // Stripe's 409 when another request with the same key is still being processed.
+    refund = async (i) => {
+      calls.push(i);
+      throw Object.assign(new Error("idempotency_key_in_use"), {
+        type: "StripeIdempotencyError",
+        code: "idempotency_key_in_use",
+        statusCode: 409,
+      });
+    };
+    // The classification @openbookings/stripe's isDefiniteRefundFailure makes
+    // (packages/stripe/src/payments/refund.ts); this package does not depend on it.
+    const isDefiniteFailure = (error: unknown) => {
+      const e = error as { type?: string; code?: string };
+      if (e.type === "StripeIdempotencyError" || e.code === "idempotency_key_in_use") return false;
+      return ["StripeInvalidRequestError", "StripeCardError", "StripePermissionError", "StripeAuthenticationError"].includes(
+        e.type ?? "",
+      );
+    };
+    const result = await cancelRooms({ ...deps(), isDefiniteFailure }, { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(result.ok && result.refunds[0].status).toBe("pending");
+    expect((await one<{ status: string }>(`SELECT status FROM refunds WHERE reservation_id = $1`, [reservationIds[0]])).status).toBe(
+      "pending",
+    );
+  });
+
+  test("each refund row is stamped when its own Stripe call starts", async () => {
+    // A clock that moves a minute every time it is read.
+    let ticks = 0;
+    const clock = () => new Date(TEN_DAYS_BEFORE.getTime() + ticks++ * 60_000);
+    await cancelRooms({ ...deps(), now: clock }, { bookingId, actor: host, reservationIds: null });
+    const stamps = (
+      await db.query(`SELECT last_attempt_at FROM refunds WHERE booking_id = $1 ORDER BY last_attempt_at`, [bookingId])
+    ).rows as { last_attempt_at: Date }[];
+    expect(stamps).toHaveLength(2);
+    expect(stamps[1].last_attempt_at.getTime()).toBeGreaterThan(stamps[0].last_attempt_at.getTime());
+  });
+
   test("a definitively failed refund is re-sent under a fresh key after a lookup miss", async () => {
     refund = async (i) => {
       calls.push(i);
