@@ -61,7 +61,11 @@ export function shortenPaymentRef(ref: string): string {
 }
 
 /** Renders the document; see the file comment. */
-export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {}): Promise<Uint8Array> {
+export async function renderPdf(input: InvoiceDocument, opts: RenderPdfOptions = {}): Promise<Uint8Array> {
+  // Party text is host-supplied; collapse every run of whitespace so no line break can reach the layout. The caller's document is left alone.
+  const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+  const single = (p: InvoiceDocument["seller"]): InvoiceDocument["seller"] => ({ ...p, legalName: oneLine(p.legalName), addressLines: p.addressLines.map(oneLine), ...(p.kvk ? { kvk: oneLine(p.kvk) } : {}) });
+  const doc: InvoiceDocument = { ...input, seller: single(input.seller), buyer: single(input.buyer) };
   const noun = doc.docType === "credit_note" ? "Credit note" : "Invoice";
   const number = doc.number ?? "DRAFT";
   const created = new Date(`${doc.issuedOn ?? doc.period.end}T00:00:00Z`);
@@ -450,7 +454,7 @@ export async function renderPdf(doc: InvoiceDocument, opts: RenderPdfOptions = {
   const count = pdf.bufferedPageRange().count;
   for (let i = 0; i < count; i++) {
     pdf.switchToPage(i);
-    const by = bottomRows[i]!;
+    const by = bottomRows[i] ?? FOOTER_BOTTOM - ROW_LH;
     text(sellerLegal, MARGIN_X, by, { size: 12, color: LIGHT_GREY }, ROW_LH);
     text(`Page ${i + 1} of ${count}`, RIGHT, by, { size: 12, color: LIGHT_GREY, right: true }, ROW_LH);
   }

@@ -457,8 +457,9 @@ export const STEP_UP_REFRESH_PATHS = [
  * guest-data export — are app endpoints, not Better Auth ones; they call
  * `isStepUpFresh` themselves when they are built.
  *
- * Fail closed: an update-member-role request without a readable role still
- * requires step-up.
+ * Fail closed: an update-member-role request without a readable role (missing,
+ * non-string, or empty after Better Auth's trim/comma-split) still requires
+ * step-up.
  */
 export function stepUpRequiredForRequest(
   path: string,
@@ -482,12 +483,18 @@ export function stepUpRequiredForRequest(
     case "/two-factor/generate-backup-codes":
       return true;
     case "/organization/update-member-role": {
-      const role = (body as { role?: unknown } | null | undefined)?.role;
-      if (typeof role === "string") return role === "owner" || role === "admin";
-      if (Array.isArray(role)) {
-        return role.some((r) => r === "owner" || r === "admin") || role.length === 0;
+      // Normalise exactly like Better Auth's parseRoleList: a string or array
+      // of strings, each possibly comma-separated and padded.
+      const raw = (body as { role?: unknown } | null | undefined)?.role;
+      const list = typeof raw === "string" ? [raw] : raw;
+      if (!Array.isArray(list) || !list.every((r) => typeof r === "string")) {
+        return true;
       }
-      return true;
+      const roles = (list as string[])
+        .flatMap((r) => r.split(","))
+        .map((r) => r.trim())
+        .filter(Boolean);
+      return roles.length === 0 || roles.includes("owner") || roles.includes("admin");
     }
     // Staff endpoints (ban, set-role, set-user-password, remove-user, ...).
     // An admin's cookie alone must not be enough. The one exception is

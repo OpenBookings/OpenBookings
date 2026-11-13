@@ -78,16 +78,30 @@ export async function returnUnexplainedPayment(
  * Stripe errors that mean the refund was refused, so no money moved. Anything
  * else (a dropped connection, a timeout, a Stripe-side 5xx, a rate limit)
  * might have gone through, and must be checked before it is sent again.
+ *
+ * An idempotency conflict is never a refusal: it means another request with
+ * the same key is still being processed (409 `idempotency_key_in_use`), and
+ * that one may well pay. The row stays uncertain, so it is looked up before it
+ * is ever sent under a fresh key.
  */
 const DEFINITE = new Set([
   'StripeInvalidRequestError',
   'StripeCardError',
   'StripePermissionError',
   'StripeAuthenticationError',
-  'StripeIdempotencyError',
 ]);
 
+function isIdempotencyConflict(error: unknown): boolean {
+  const e = error as { type?: unknown; code?: unknown; raw?: { code?: unknown } | null } | null;
+  return (
+    e?.type === 'StripeIdempotencyError' ||
+    e?.code === 'idempotency_key_in_use' ||
+    e?.raw?.code === 'idempotency_key_in_use'
+  );
+}
+
 export function isDefiniteRefundFailure(error: unknown): boolean {
+  if (isIdempotencyConflict(error)) return false;
   const type = (error as { type?: unknown } | null)?.type;
   return typeof type === 'string' && DEFINITE.has(type);
 }

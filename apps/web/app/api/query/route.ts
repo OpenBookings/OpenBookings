@@ -7,7 +7,7 @@ import {
   withTransaction,
 } from "@openbookings/db";
 import { ensureDemoHotels, hasDemoHotelsNear, isTestingMode } from "@openbookings/demo";
-import { freeCancellationUntil, perRoomParty, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
+import { freeCancellationUntil, isValidTimeZone, perRoomParty, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
 import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
@@ -313,8 +313,11 @@ async function runSearch(input: SearchInput, testing: boolean) {
     infants: party.infants,
     arrivalDate: input.checkIn,
   }).map(result => {
+    // A stored timezone is not trusted: a bad one must not fail the whole search.
+    const zoneOk = !result.timezone || isValidTimeZone(result.timezone)
+    if (!zoneOk) console.error("[search] bad property timezone", result.hotel_id)
     const until =
-      result.cancellation_tier && result.timezone
+      zoneOk && result.cancellation_tier && result.timezone
         ? freeCancellationUntil({
             tier: snapshotTier(result.cancellation_tier, result.is_refundable),
             timeZone: result.timezone,

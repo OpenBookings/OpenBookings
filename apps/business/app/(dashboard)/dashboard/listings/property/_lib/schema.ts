@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { hasPin } from "./geo";
+import { EU_TIMEZONES } from "./timezones";
 
 /** 24-hour "HH:MM". Postgres `time` accepts more, but the editor renders a time input. */
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -97,7 +98,7 @@ export const locationSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z]{2}$/, "Pick a country."),
-  timezone: requiredText("Timezone"),
+  timezone: requiredText("Timezone").refine((v) => EU_TIMEZONES.has(v), "Pick a timezone from the list."),
   lat: z
     .string()
     .refine((v) => v.trim() !== "", "Drop a pin on the map.")

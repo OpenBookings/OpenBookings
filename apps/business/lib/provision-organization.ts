@@ -1,4 +1,5 @@
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
+import { DEMO_ORG_ID } from "@openbookings/mode";
 import type { PoolClient } from "pg";
 import type { LegalNBoringData } from "@/app/(onboarding)/onboarding/actions";
 
@@ -55,7 +56,8 @@ export type ProvisionResult = {
 
 /**
  * Runs inside the caller's transaction (`withTransaction` from
- * @openbookings/db). Idempotent per user: if the user already owns an org,
+ * @openbookings/db). Idempotent per user: if the user already owns a real org (the shared demo
+ * organisation never counts),
  * returns it untouched, so a retried completeOnboarding never creates a
  * second org.
  */
@@ -71,8 +73,10 @@ export async function provisionOrganizationTx(
   const existing = await client.query<{ organizationId: string; slug: string }>(
     `SELECT m."organizationId", o.slug
      FROM "member" m JOIN "organization" o ON o.id = m."organizationId"
-     WHERE m."userId" = $1 AND m.role = 'owner'`,
-    [input.userId],
+     WHERE m."userId" = $1 AND m.role = 'owner' AND m."organizationId" <> $2
+     ORDER BY m."createdAt", m."organizationId"
+     LIMIT 1`,
+    [input.userId, DEMO_ORG_ID],
   );
   if (existing.rows[0]) {
     return {

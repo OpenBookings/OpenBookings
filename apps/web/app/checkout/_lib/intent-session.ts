@@ -9,7 +9,7 @@ export type IntentSessionDeps = {
   /** Stripe's view of a session already made for the intent. */
   retrieve: (sessionId: string, accountId: string) => Promise<{ status: string | null; clientSecret: string | null; expiresAt: number }>;
   /** Makes a new session on `accountId` (the caller has the lines and metadata). */
-  create: () => Promise<PaymentSession>;
+  create: () => Promise<PaymentSession & { amountTotal: number }>;
   /** Stops a session from taking payment. Throws when Stripe could not be told. */
   expire: (sessionId: string, accountId: string) => Promise<void>;
   /** Records a failure that must not change the guest's answer. */
@@ -92,7 +92,7 @@ export async function openIntentSession(
 
     const created = await deps.create();
     try {
-      await attachPaymentSession(tx, { intentId: i.intentId, sessionId: created.id, accountId: i.accountId });
+      await attachPaymentSession(tx, { intentId: i.intentId, sessionId: created.id, accountId: i.accountId, amountCents: created.amountTotal });
     } catch (err) {
       // Not recorded anywhere, so nothing else would ever stop it.
       await deps.expire(created.id, i.accountId).catch((expireErr) => deps.report(expireErr, { sessionId: created.id }));
