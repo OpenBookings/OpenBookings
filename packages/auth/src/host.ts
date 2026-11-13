@@ -1,4 +1,5 @@
 import { alertOwnerEmails } from "./alert-owners";
+import { demoOrgError, demoOrgReadRefused, refuseDemoOrg } from "./demo-org-guard";
 import { betterAuth, APIError } from "better-auth";
 import { magicLink, organization, admin, twoFactor } from "better-auth/plugins";
 import { createAuthMiddleware } from "better-auth/api";
@@ -298,6 +299,8 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // First: the demo organisation's member list is not for hosts to read.
+        if (demoOrgReadRefused(ctx.path, ctx.query, ctx.body)) throw demoOrgError();
         // Before the step-up gate, so a refusal that is certain does not cost
         // the host a passkey prompt first.
         await refuseLastPasskeyRemoval(ctx, async (userId) => {
@@ -371,9 +374,21 @@ export function createHostAuth(config: HostAuthConfig) {
             });
           },
           beforeRemoveMember: async ({ member, organization: org }) => {
+            refuseDemoOrg(org.id);
             if (member.role === "owner") {
               await assertNotLastOwner(org.id, member.id);
             }
+          },
+          beforeCreateInvitation: async ({ organization: org }) => {
+            refuseDemoOrg(org.id);
+          },
+          // Better Auth passes only the changed fields as `organization`
+          // here, so the organisation id comes from the acting member.
+          beforeUpdateOrganization: async ({ member }) => {
+            refuseDemoOrg(member.organizationId);
+          },
+          beforeDeleteOrganization: async ({ organization: org }) => {
+            refuseDemoOrg(org.id);
           },
           afterRemoveMember: async ({ user, organization: org }) => {
             await reassignPropertiesFromFormerOwner(pool, {
@@ -383,6 +398,7 @@ export function createHostAuth(config: HostAuthConfig) {
             await revokeUserSessions(user.id);
           },
           beforeUpdateMemberRole: async ({ member, newRole, organization: org }) => {
+            refuseDemoOrg(org.id);
             if (member.role === "owner" && newRole !== "owner") {
               await assertNotLastOwner(org.id, member.id);
             }
