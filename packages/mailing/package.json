@@ -14,7 +14,7 @@
   "dependencies": {
     "@openbookings/db": "workspace:*",
     "@openbookings/demo": "workspace:*",
-    "lettermint": "^2.8.0"
+    "lettermint": "^3.3.0"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
