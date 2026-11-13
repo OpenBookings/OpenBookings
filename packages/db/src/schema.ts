@@ -820,6 +820,27 @@ export const bookingIntents = pgTable(
   ],
 );
 
+/**
+ * Every Checkout Session the platform made for an intent (0046). Only a paid
+ * session listed here, on its account and for its amount, confirms the intent.
+ */
+export const bookingIntentPaymentSessions = pgTable(
+  "booking_intent_payment_sessions",
+  {
+    sessionId: text("session_id").primaryKey(),
+    intentId: uuid("intent_id")
+      .notNull()
+      .references(() => bookingIntents.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_booking_intent_payment_sessions_intent").on(table.intentId),
+    check("booking_intent_payment_sessions_amount_cents_check", sql`${table.amountCents} >= 0`),
+  ],
+);
+
 export const bookingIntentRooms = pgTable(
   "booking_intent_rooms",
   {

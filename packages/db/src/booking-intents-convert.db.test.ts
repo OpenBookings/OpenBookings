@@ -4,11 +4,13 @@ import type { VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import type { LifecycleDb } from "./booking-lifecycle";
 import {
+  attachPaymentSession,
   convertIntentToBooking,
   createBookingIntent,
   expireIntent,
   IntentNotFoundError,
   markIntentRefundedOversold,
+  PaymentMismatchError,
   type IntentRoomInput,
   type IntentSnapshot,
 } from "./booking-intents";
@@ -127,8 +129,57 @@ describeWithDb("converting a paid booking intent", () => {
     return { intentId: result.intentId, rooms, snapshot: snapshot(rooms) };
   };
 
-  const convert = (intentId: string, now = NOW, paymentIntentId = "pi_convert") =>
-    convertIntentToBooking(lifecycleDb(), { intentId, paymentIntentId, accountId: "acct_host", amountCents: 46300, now });
+  /** What the platform charges for the intent, in cents, as its Checkout Session is made for. */
+  const chargedCents = async (intentId: string) =>
+    Number(
+      (await db.query(`SELECT round(total_amount * 100) AS cents FROM booking_intents WHERE id = $1`, [intentId])).rows[0].cents,
+    );
+
+  /** A Checkout Session the platform made for the intent, on the host's account, as checkout records it. */
+  const attach = async (intentId: string, sessionId = "cs_convert") =>
+    attachPaymentSession(db, { intentId, sessionId, accountId: "acct_host", amountCents: await chargedCents(intentId) });
+
+  const attached = async (intentId: string, sessionId: string) =>
+    (await db.query(`SELECT 1 FROM booking_intent_payment_sessions WHERE intent_id = $1 AND session_id = $2`, [intentId, sessionId]))
+      .rows.length > 0;
+
+  /** A paid session as the webhook reports it: the platform's own unless a field says otherwise. */
+  const pay = async (
+    intentId: string,
+    over: { sessionId?: string; accountId?: string; amountCents?: number; paymentIntentId?: string; now?: Date } = {},
+  ) =>
+    convertIntentToBooking(lifecycleDb(), {
+      intentId,
+      sessionId: over.sessionId ?? "cs_convert",
+      paymentIntentId: over.paymentIntentId ?? "pi_convert",
+      accountId: over.accountId ?? "acct_host",
+      amountCents: over.amountCents ?? (await chargedCents(intentId)),
+      now: over.now ?? NOW,
+    });
+
+  /** The platform's session, attached once while the intent is open, paid in full. */
+  const convert = async (intentId: string, now = NOW, paymentIntentId = "pi_convert", sessionId = "cs_convert") => {
+    if (!(await attached(intentId, sessionId))) await attach(intentId, sessionId);
+    return pay(intentId, { sessionId, paymentIntentId, now });
+  };
+
+  /** Why the payment was refused; fails the test when it was not. */
+  const refusal = async (payment: Promise<unknown>) => {
+    const error = await payment.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(PaymentMismatchError);
+    return (error as PaymentMismatchError).reason;
+  };
+
+  /** A refused payment leaves no trace: the intent still open, no booking, no charge. */
+  const expectNothingWritten = async (intentId: string, paymentIntentId = "pi_convert") => {
+    expect((await intentRow(intentId)).status).toBe("open");
+    expect(await bookingsFor(paymentIntentId)).toHaveLength(0);
+    const charges = await db.query(`SELECT count(*)::int AS n FROM transactions WHERE provider_payment_id = $1`, [paymentIntentId]);
+    expect(charges.rows[0].n).toBe(0);
+  };
 
   const intentRow = async (intentId: string) =>
     (
@@ -376,6 +427,7 @@ describeWithDb("converting a paid booking intent", () => {
 
   test("late payment on a free room confirms", async () => {
     const { intentId } = await intent();
+    await attach(intentId);
     await expireIntent(db, { intentId, now: NOW, force: true });
     const result = await convert(intentId, LATE);
     expect(result).toMatchObject({ outcome: "confirmed", firstTime: true });
@@ -385,6 +437,7 @@ describeWithDb("converting a paid booking intent", () => {
   test("late payment on a taken room is oversold", async () => {
     await db.query(`UPDATE rooms SET total_units = 1 WHERE id = $1`, [ids.roomId]);
     const { intentId } = await intent();
+    await attach(intentId);
     await expireIntent(db, { intentId, now: NOW, force: true });
     const other = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2 });
     await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [other.bookingId]);
@@ -393,7 +446,7 @@ describeWithDb("converting a paid booking intent", () => {
       outcome: "oversold" as const,
       paymentIntentId: "pi_convert",
       accountId: "acct_host",
-      amountCents: 46300,
+      amountCents: 23150,
     };
     expect(await convert(intentId, LATE)).toEqual({ ...oversold, firstTime: true });
     expect(await bookingsFor("pi_convert")).toHaveLength(0);
@@ -413,6 +466,7 @@ describeWithDb("converting a paid booking intent", () => {
   test("markIntentRefundedOversold", async () => {
     await db.query(`UPDATE rooms SET total_units = 1 WHERE id = $1`, [ids.roomId]);
     const { intentId } = await intent();
+    await attach(intentId);
     await expireIntent(db, { intentId, now: NOW, force: true });
     const other = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2 });
     await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [other.bookingId]);
@@ -435,8 +489,11 @@ describeWithDb("converting a paid booking intent", () => {
 
   test("a second payment for a paid intent gets the stored reference back", async () => {
     const { intentId } = await intent();
+    // Two platform sessions (a second tab), both paid.
+    await attach(intentId);
+    await attach(intentId, "cs_second");
     const first = await convert(intentId);
-    const second = await convert(intentId, NOW, "pi_second");
+    const second = await convert(intentId, NOW, "pi_second", "cs_second");
     expect(second).toEqual({
       outcome: "confirmed",
       bookingId: (first as { bookingId: string }).bookingId,
@@ -450,12 +507,14 @@ describeWithDb("converting a paid booking intent", () => {
   test("a second payment for an oversold intent gets the stored reference back", async () => {
     await db.query(`UPDATE rooms SET total_units = 1 WHERE id = $1`, [ids.roomId]);
     const { intentId } = await intent();
+    await attach(intentId);
+    await attach(intentId, "cs_second");
     await expireIntent(db, { intentId, now: NOW, force: true });
     const other = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2 });
     await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [other.bookingId]);
     await convert(intentId, LATE);
 
-    expect(await convert(intentId, LATE, "pi_second")).toMatchObject({
+    expect(await convert(intentId, LATE, "pi_second", "cs_second")).toMatchObject({
       outcome: "oversold",
       firstTime: false,
       paymentIntentId: "pi_convert",
@@ -464,8 +523,45 @@ describeWithDb("converting a paid booking intent", () => {
   });
 
   test("an unknown or malformed intent id is IntentNotFoundError", async () => {
-    await expect(convert(crypto.randomUUID())).rejects.toBeInstanceOf(IntentNotFoundError);
-    await expect(convert("not-a-uuid")).rejects.toBeInstanceOf(IntentNotFoundError);
+    await expect(pay(crypto.randomUUID(), { amountCents: 23150 })).rejects.toBeInstanceOf(IntentNotFoundError);
+    await expect(pay("not-a-uuid", { amountCents: 23150 })).rejects.toBeInstanceOf(IntentNotFoundError);
+  });
+
+  test("a paid session on another connected account is refused", async () => {
+    const { intentId } = await intent();
+    await attach(intentId);
+    expect(await refusal(pay(intentId, { accountId: "acct_other" }))).toBe("account");
+    await expectNothingWritten(intentId);
+  });
+
+  test("a session the platform did not create is refused", async () => {
+    const { intentId } = await intent();
+    await attach(intentId);
+    expect(await refusal(pay(intentId, { sessionId: "cs_foreign" }))).toBe("session");
+    await expectNothingWritten(intentId);
+  });
+
+  test("a lower amount on the platform's session is refused", async () => {
+    const { intentId } = await intent();
+    await attach(intentId);
+    expect(await refusal(pay(intentId, { amountCents: (await chargedCents(intentId)) - 1 }))).toBe("amount");
+    await expectNothingWritten(intentId);
+  });
+
+  test("a replaced platform session paid late is still recognised", async () => {
+    const { intentId } = await intent();
+    await attach(intentId, "cs_a");
+    await attach(intentId, "cs_b"); // the guest came back; cs_a's bank debit clears later
+    expect(await pay(intentId, { sessionId: "cs_a" })).toMatchObject({ outcome: "confirmed", firstTime: true });
+    expect((await intentRow(intentId)).status).toBe("paid");
+  });
+
+  test("a foreign session on an already paid intent is refused, not treated as a duplicate", async () => {
+    const { intentId } = await intent();
+    await convert(intentId);
+    expect(await refusal(pay(intentId, { sessionId: "cs_foreign", paymentIntentId: "pi_foreign" }))).toBe("session");
+    expect(await bookingsFor("pi_foreign")).toHaveLength(0);
+    expect((await intentRow(intentId)).payment_reference).toBe("pi_convert");
   });
 
   test("the reservation keeps the tourist tax the guest was charged when the rules change before payment", async () => {

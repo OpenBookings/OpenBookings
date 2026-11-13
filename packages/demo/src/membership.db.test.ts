@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
-import { convertIntentToBooking, createBookingIntent } from "@openbookings/db";
+import { attachPaymentSession, convertIntentToBooking, createBookingIntent } from "@openbookings/db";
 import { applyPendingMigrations, connectionString, describeWithDb, seedGuest, seedProperty } from "@openbookings/db/testing";
 import { insertDemoProperty, insertDemoRatePlan, insertDemoRoom } from "./factories";
 import { ensureDemoMembership, resetDemoData } from "./membership";
@@ -112,8 +112,10 @@ describeWithDb("demo membership and reset", () => {
       now: new Date("2031-10-01T10:00:00Z"),
     });
     if (!intent.ok) throw new Error("expected an intent");
+    await attachPaymentSession(db, { intentId: intent.intentId, sessionId: "cs_demo_reset", accountId: "acct_host", amountCents: 10000 });
     const converted = await convertIntentToBooking(lifecycleDb(), {
       intentId: intent.intentId,
+      sessionId: "cs_demo_reset",
       paymentIntentId: "pi_demo_reset",
       accountId: "acct_host",
       amountCents: 10000,

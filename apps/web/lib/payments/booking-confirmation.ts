@@ -1,4 +1,4 @@
-import { convertIntentToBooking, IntentNotFoundError, markIntentRefundedOversold } from "@openbookings/db";
+import { convertIntentToBooking, IntentNotFoundError, markIntentRefundedOversold, PaymentMismatchError } from "@openbookings/db";
 import type { LifecycleDb } from "@openbookings/db/booking-lifecycle";
 import type { findRefundByMetadata, PaidCheckout as StripePaidCheckout, refundPayment } from "@openbookings/stripe";
 
@@ -49,6 +49,7 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
   try {
     result = await convert(deps.db, {
       intentId: i.intentId,
+      sessionId: i.sessionId,
       paymentIntentId: i.paymentIntentId,
       accountId: i.stripeAccountId,
       amountCents: i.amountCents,
@@ -60,6 +61,17 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
     // for something, and someone has to find out what.
     if (error instanceof IntentNotFoundError) {
       deps.report(error, { level: "error", extra });
+      return;
+    }
+    // Paid, but not on a session the platform made for this intent, or on
+    // another account, or for another amount: it confirms nothing. Never
+    // refunded automatically either: a person looks at it and decides.
+    if (error instanceof PaymentMismatchError) {
+      deps.report(error, {
+        level: "error",
+        tags: { reason: "payment_mismatch", mismatch: error.reason, intentId: i.intentId },
+        extra: { ...extra, stripeAccountId: i.stripeAccountId, amountCents: i.amountCents },
+      });
       return;
     }
     throw error;
