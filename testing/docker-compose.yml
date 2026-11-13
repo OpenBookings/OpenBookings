@@ -10,7 +10,7 @@ name: openbookings-testing
 
 services:
   postgres:
-    image: postgis/postgis:17-3.6@sha256:1ac10b2551ba84ae05db8e7da477afcd0a3fede99bcb7705da2ee157390cb095
+    image: postgis/postgis:17-3.7@sha256:1f0d64ef12bfb344d3569ab6419aca183258b146951daec83f0585d01e6c9cc9
     # postgis/postgis is published for amd64 only. On Apple Silicon, Docker
     # Desktop runs it under emulation (Rosetta): slower, but the same image as CI.
     platform: linux/amd64

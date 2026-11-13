@@ -1,26 +1,31 @@
-import { Lettermint } from "lettermint";
+import { Lettermint, type EmailBuilder } from "lettermint";
 
-type EmailClient = ReturnType<typeof Lettermint.email>;
-
-let cachedClient: EmailClient | null = null;
+let cachedClient: Lettermint | null = null;
+let consoleMode = false;
 
 /**
- * The email client every sender uses. Lettermint by default.
+ * A new email, ready to fill in: `getEmailClient().from(...).to(...).send()`.
+ * Lettermint by default.
+ *
+ * Each call starts an empty, immutable builder (every setter returns a new
+ * one), so emails composed at the same time never share recipients or
+ * content. The Lettermint client behind it is created once.
  *
  * With `EMAIL_TRANSPORT=console` (local development only), emails are printed
  * to the terminal instead of sent, so the apps run without an email provider:
  * a sign-in link shows up in the dev server's output. It is refused in
  * production, where a silent "sent" that went nowhere would lose real mail.
  */
-export function getEmailClient(): EmailClient {
-  if (cachedClient) return cachedClient;
+export function getEmailClient(): EmailBuilder {
+  if (consoleMode) return consoleEmailClient();
+  if (cachedClient) return cachedClient.emails.compose();
 
   if (process.env.EMAIL_TRANSPORT?.trim() === "console") {
     if (process.env.NODE_ENV === "production") {
       throw new Error("EMAIL_TRANSPORT=console is for local development only; it is refused in production.");
     }
-    cachedClient = consoleEmailClient();
-    return cachedClient;
+    consoleMode = true;
+    return consoleEmailClient();
   }
 
   const token = process.env.LETTERMINT_PROJECT_TOKEN ?? "";
@@ -31,20 +36,19 @@ export function getEmailClient(): EmailClient {
     );
   }
 
-  cachedClient = Lettermint.email(token);
-  return cachedClient;
+  cachedClient = new Lettermint({ sendingToken: token });
+  return cachedClient.emails.compose();
 }
 
 /**
- * A stand-in with the same builder shape as Lettermint's client: every call
- * records its arguments and returns the builder, and `send()` prints the
+ * A stand-in with the same shape as Lettermint's builder: every setter
+ * returns a new builder with that field recorded, and `send()` prints the
  * message. Links are listed separately, since the HTML is hard to read in a
  * terminal and the sign-in link is usually what you came for.
  */
-export function consoleEmailClient(log: (text: string) => void = console.log): EmailClient {
-  const start = () => {
-    const fields: Record<string, unknown[]> = {};
-    const builder: Record<string | symbol, unknown> = new Proxy(
+export function consoleEmailClient(log: (text: string) => void = console.log): EmailBuilder {
+  const builder = (fields: Record<string, unknown[]>): EmailBuilder =>
+    new Proxy(
       {},
       {
         get(_target, prop) {
@@ -56,29 +60,12 @@ export function consoleEmailClient(log: (text: string) => void = console.log): E
               return { message_id: `console-${Date.now()}`, status: "logged" };
             };
           }
-          return (...args: unknown[]) => {
-            fields[String(prop)] = args;
-            return builder;
-          };
+          return (...args: unknown[]) => builder({ ...fields, [String(prop)]: args });
         },
       },
-    );
-    return builder;
-  };
+    ) as EmailBuilder;
 
-  return new Proxy(
-    {},
-    {
-      get(_target, prop) {
-        if (prop === "then") return undefined;
-        // The first call in a chain (usually `.from(...)`) starts a new message.
-        return (...args: unknown[]) => {
-          const builder = start() as Record<string, (...a: unknown[]) => unknown>;
-          return builder[String(prop)]!(...args);
-        };
-      },
-    },
-  ) as EmailClient;
+  return builder({});
 }
 
 export function formatConsoleEmail(fields: Record<string, unknown[]>): string {

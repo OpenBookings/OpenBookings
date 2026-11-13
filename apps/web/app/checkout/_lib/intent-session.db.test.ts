@@ -95,7 +95,12 @@ describeWithDb("payment session of a booking intent", () => {
     await db.query("ROLLBACK");
   });
 
-  const NEW: PaymentSession = { id: "cs_new", clientSecret: "cs_new_secret", expiresAt: 1_900_000_000 };
+  const NEW: PaymentSession & { amountTotal: number } = {
+    id: "cs_new",
+    clientSecret: "cs_new_secret",
+    expiresAt: 1_900_000_000,
+    amountTotal: 10000,
+  };
 
   /** Fake Stripe around the test's own connection; `create` may run SQL first, as a racing request would. */
   function deps(over: { retrieved?: string | null; noSecret?: boolean; beforeCreate?: string } = {}) {

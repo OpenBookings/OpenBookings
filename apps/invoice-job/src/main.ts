@@ -140,17 +140,20 @@ async function issue(ctx: Context): Promise<Outcome> {
   return worst(run.status, await store(ctx));
 }
 
-/** Stores every issued invoice's PDF and CSV in R2 that is not stored yet. A file already there with other content stops the run and alerts. */
+/** Stores every issued invoice's PDF and CSV in R2 that is not stored yet. A file already there with other content stops the run and alerts; an invoice that fails to render or upload is reported and skipped, and the run goes on. */
 async function store(ctx: Context): Promise<Outcome> {
   const { args, deps } = ctx;
   const objects = createR2Store(ctx.env);
   const run = await withRun(deps.pool, { periodStart: args.period.start, step: "store" }, async () => {
     const report = await runStore(args.period, { db: deps.pool, store: objects });
-    return { status: report.conflicts.length ? "blocked" : "succeeded", report, value: report };
+    return { status: report.conflicts.length || report.failed.length ? "blocked" : "succeeded", report, value: report };
   });
   print(`Store ${month(args.period)}: ${run.status}`, run.report);
   if (run.value.conflicts.length) {
     await alert(ctx, `stored file conflict for ${run.value.conflicts.join(", ")}: an object with other content is already in R2`, run.value);
+  }
+  if (run.value.failed.length) {
+    await alert(ctx, `${run.value.failed.length} invoice(s) failed to store: ${run.value.failed.map((f) => f.number).join(", ")}`, run.value);
   }
   return run.status;
 }

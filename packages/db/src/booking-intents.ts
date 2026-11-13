@@ -343,10 +343,14 @@ export class IntentNotOpenError extends Error {
  * nothing holding the rooms. Checked on the same row the abandon step updates,
  * so either this attach wins and `createBookingIntent` returns the session to
  * expire, or the abandon wins and this throws.
+ *
+ * The session is also kept, with its account and the amount Stripe made it
+ * for (`amount_total`), among the intent's platform sessions: only those
+ * confirm the intent (see `convertIntentToBooking`), a replaced one included.
  */
 export async function attachPaymentSession(
   db: Queryable,
-  i: { intentId: string; sessionId: string; accountId: string },
+  i: { intentId: string; sessionId: string; accountId: string; amountCents: number },
 ): Promise<void> {
   const { rows } = await db.query(
     `UPDATE booking_intents
@@ -356,6 +360,10 @@ export async function attachPaymentSession(
     [i.intentId, i.sessionId, i.accountId],
   );
   if (rows.length === 0) throw new IntentNotOpenError(i.intentId);
+  await db.query(
+    `INSERT INTO booking_intent_payment_sessions (session_id, intent_id, account_id, amount_cents) VALUES ($1, $2, $3, $4)`,
+    [i.sessionId, i.intentId, i.accountId, i.amountCents],
+  );
 }
 
 /**
@@ -463,7 +471,27 @@ export class IntentNotFoundError extends Error {
 }
 
 /**
+ * A paid session that is not one the platform made for this intent: another
+ * session, another connected account, or another amount. It never confirms
+ * anything. Not retried: a person looks at it, and may refund it on its own account.
+ */
+export class PaymentMismatchError extends Error {
+  constructor(
+    readonly intentId: string,
+    readonly reason: "session" | "account" | "amount",
+  ) {
+    super(`Payment does not match booking intent ${intentId}: ${reason}`);
+    this.name = "PaymentMismatchError";
+  }
+}
+
+/**
  * Turn a paid intent into a confirmed booking, exactly once.
+ *
+ * Only for a session the platform made for this intent (`attachPaymentSession`),
+ * paid on the account it was made on, for the amount it was made for. Anything
+ * else is a `PaymentMismatchError`, checked before the `paid` and `oversold`
+ * answers so that it never passes for a redelivery or a second payment either.
  *
  * One transaction, locking in `createBookingIntent`'s order (the intent, then
  * its rooms by id) so the two never deadlock. The intent lock makes redelivered
@@ -481,7 +509,7 @@ export class IntentNotFoundError extends Error {
  */
 export async function convertIntentToBooking(
   db: LifecycleDb,
-  i: { intentId: string; paymentIntentId: string; accountId: string; amountCents: number; now: Date },
+  i: { intentId: string; sessionId: string; paymentIntentId: string; accountId: string; amountCents: number; now: Date },
 ): Promise<ConvertResult> {
   const oversold = (firstTime: boolean, paymentIntentId: string): ConvertResult => ({
     outcome: "oversold",
@@ -502,6 +530,16 @@ export async function convertIntentToBooking(
       | { status: BookingIntentStatus; booking_id: string | null; payment_reference: string | null }
       | undefined;
     if (!current) throw new IntentNotFoundError(i.intentId);
+
+    const { rows: sessions } = await tx.query(
+      `SELECT account_id, amount_cents FROM booking_intent_payment_sessions WHERE session_id = $1 AND intent_id = $2::uuid`,
+      [i.sessionId, i.intentId],
+    );
+    const platform = sessions[0] as { account_id: string; amount_cents: string } | undefined;
+    if (!platform) throw new PaymentMismatchError(i.intentId, "session");
+    if (platform.account_id !== i.accountId) throw new PaymentMismatchError(i.intentId, "account");
+    if (Number(platform.amount_cents) !== i.amountCents) throw new PaymentMismatchError(i.intentId, "amount");
+
     if (current.status === "paid") {
       // Never a second booking for one intent, even if the first was deleted.
       if (!current.booking_id || !current.payment_reference) {

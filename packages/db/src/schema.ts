@@ -740,6 +740,8 @@ export const refunds = pgTable(
     /** Better Auth user id; NULL = the system. */
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** When the row was last sent to Stripe (0047); a retry skips a `pending` row tried in the last five minutes. */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
   },
   (table) => [
     index("idx_refunds_booking_id").on(table.bookingId),
@@ -817,6 +819,27 @@ export const bookingIntents = pgTable(
       sql`${table.status} IN ('open','paid','expired','failed','abandoned','oversold','refunded_oversold')`,
     ),
     check("booking_intents_dates", sql`${table.checkOutDate} > ${table.checkInDate}`),
+  ],
+);
+
+/**
+ * Every Checkout Session the platform made for an intent (0046). Only a paid
+ * session listed here, on its account and for its amount, confirms the intent.
+ */
+export const bookingIntentPaymentSessions = pgTable(
+  "booking_intent_payment_sessions",
+  {
+    sessionId: text("session_id").primaryKey(),
+    intentId: uuid("intent_id")
+      .notNull()
+      .references(() => bookingIntents.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_booking_intent_payment_sessions_intent").on(table.intentId),
+    check("booking_intent_payment_sessions_amount_cents_check", sql`${table.amountCents} >= 0`),
   ],
 );
 

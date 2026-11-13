@@ -89,14 +89,18 @@ export function buildBookingCheckoutParams(
   };
 }
 
-/** Creates the Session on the host's connected account. */
+/**
+ * Creates the Session on the host's connected account. `amountTotal` is what
+ * Stripe will charge, in cents: the amount a paid session must match.
+ */
 export async function createBookingCheckout(
   input: BookingCheckoutInput,
-): Promise<{ id: string; clientSecret: string | null; expiresAt: number }> {
+): Promise<{ id: string; clientSecret: string | null; expiresAt: number; amountTotal: number }> {
   const session = await stripe.checkout.sessions.create(buildBookingCheckoutParams(input), {
     stripeAccount: input.stripeAccountId,
   });
-  return { id: session.id, clientSecret: session.client_secret, expiresAt: session.expires_at };
+  if (session.amount_total === null) throw new Error(`Checkout Session ${session.id} has no amount_total`);
+  return { id: session.id, clientSecret: session.client_secret, expiresAt: session.expires_at, amountTotal: session.amount_total };
 }
 
 /**

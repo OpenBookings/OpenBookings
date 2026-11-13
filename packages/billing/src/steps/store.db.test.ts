@@ -130,7 +130,7 @@ describeWithDb("storing issued invoices", () => {
 
     const report = await runStore(PERIOD, { db, store: mem.store, render });
 
-    expect(report).toEqual({ stored: ["OB-2100-0042", "OB-2100-0043"], alreadyStored: [], conflicts: [] });
+    expect(report).toEqual({ stored: ["OB-2100-0042", "OB-2100-0043"], alreadyStored: [], conflicts: [], failed: [] });
     expect((await keysOf(a)).pdf_key).not.toBeNull();
     expect((await keysOf(b)).csv_key).not.toBeNull();
   });
@@ -168,8 +168,28 @@ describeWithDb("storing issued invoices", () => {
     expect(renders).toEqual({ pdf: 1, csv: 1 });
 
     expect(await storeInvoice(db, id, { store: mem.store, render })).toBe("already_stored");
-    expect(await runStore(PERIOD, { db, store: mem.store, render })).toEqual({ stored: [], alreadyStored: [], conflicts: [] });
+    expect(await runStore(PERIOD, { db, store: mem.store, render })).toEqual({ stored: [], alreadyStored: [], conflicts: [], failed: [] });
     expect(renders).toEqual({ pdf: 1, csv: 1 });
     expect(mem.puts).toHaveLength(2);
+  });
+
+  test("a render failure on one invoice is reported and the others are still stored", async () => {
+    const mem = memoryStore();
+    const a = await issued(await seedHost(db), "OB-2100-0042");
+    const b = await issued(await seedHost(db), "OB-2100-0043");
+    const failing = {
+      ...render,
+      pdf: async (doc: InvoiceDocument) => {
+        if (doc.number === "OB-2100-0042") throw new Error("cannot render");
+        return render.pdf(doc);
+      },
+    };
+
+    const report = await runStore(PERIOD, { db, store: mem.store, render: failing });
+
+    expect(report.failed).toEqual([{ number: "OB-2100-0042", message: "cannot render" }]);
+    expect(report.stored).toEqual(["OB-2100-0043"]);
+    expect((await keysOf(a)).pdf_key).toBeNull();
+    expect((await keysOf(b)).pdf_key).not.toBeNull();
   });
 });
