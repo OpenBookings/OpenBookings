@@ -5,10 +5,10 @@
 # cooldown: they open as soon as an advisory is published. Turn on "Dependabot
 # security updates" under Settings -> Code security for those.
 #
-# Nothing is auto-merged. Next/React, Better Auth, Drizzle, Stripe, Hono and
-# TypeScript get their own group, because they need a human to read the
-# release notes. PostHog and Sentry each get their own group too, majors
-# included, so they never fall behind.
+# Nothing is auto-merged. Next/React, Better Auth, PostHog and Sentry each get
+# their own group, majors included, so they never fall behind. Drizzle, Stripe,
+# Hono, Mistral and TypeScript share a group, because they need a human to read
+# the release notes.
 version: 2
 
 updates:
@@ -26,7 +26,7 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      # Next, React and their types move together.
+      # Next, React and their types move together, majors included.
       framework:
         patterns:
           - "next"
@@ -36,11 +36,14 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
-      # Security, database, payments and language core: reviewed by hand.
-      needs-review:
+      # Auth: its own PR, majors included, so it never falls behind.
+      better-auth:
         patterns:
           - "better-auth"
           - "@better-auth/*"
+      # Database, payments and language core: reviewed by hand.
+      needs-review:
+        patterns:
           - "drizzle-orm"
           - "drizzle-kit"
           - "stripe"
