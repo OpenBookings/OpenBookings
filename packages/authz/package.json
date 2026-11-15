@@ -9,7 +9,7 @@
     "./role-guide": "./src/role-guide.ts"
   },
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,6 +20,8 @@
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@types/bun": "^1.3.14",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "typescript": "^5.9.3"
   }
 }
