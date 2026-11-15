@@ -100,8 +100,27 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "privacy",
     fallbackLocale: "en",
-    currentVersion: "2026-10-03",
+    currentVersion: "2026-11-15",
     versions: [
+      {
+        version: "2026-11-15",
+        effectiveFrom: "2026-11-15",
+        lastUpdated: "2026-11-15",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/privacy/2026-11-15/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-11-15/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-11-15/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-10-03",
         effectiveFrom: "2026-10-03",

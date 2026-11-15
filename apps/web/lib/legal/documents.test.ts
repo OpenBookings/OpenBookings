@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-10-03";
+const CURRENT = "2026-11-15";
 const DIR = join(import.meta.dir, "../../content/legal/privacy");
 const read = (version: string, locale: string) =>
   readFileSync(join(DIR, version, `${locale}.mdx`), "utf8");
