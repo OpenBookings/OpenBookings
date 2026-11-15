@@ -1,5 +1,6 @@
 import { claimSupportReplyNotification } from "@openbookings/db";
 import { getEmailClient } from "@openbookings/mailing";
+import { trackMail } from "@openbookings/mailing/tracking";
 import { env } from "../env";
 import type { SupportReplyNotifyPayload } from "../tasks";
 import { trace } from "../trace";
@@ -56,10 +57,20 @@ export function renderSupportReplyEmail(input: {
  * the send in the same statement, so retries and parallel workers can't send
  * twice.
  */
-export async function sendSupportReplyNotification(payload: SupportReplyNotifyPayload): Promise<void> {
+export async function sendSupportReplyNotification(
+  payload: SupportReplyNotifyPayload,
+  deps: {
+    track?: typeof trackMail;
+    claim?: typeof claimSupportReplyNotification;
+    getClient?: typeof getEmailClient;
+  } = {},
+): Promise<void> {
+  const track = deps.track ?? trackMail;
+  const claimNotification = deps.claim ?? claimSupportReplyNotification;
+  const getClient = deps.getClient ?? getEmailClient;
   const messageAt = new Date(payload.messageAt);
   if (Number.isNaN(messageAt.getTime())) return;
-  const claim = await claimSupportReplyNotification(payload.conversationId, messageAt);
+  const claim = await claimNotification(payload.conversationId, messageAt);
   if (!claim) {
     trace("notify", "nothing to send", { conversationId: payload.conversationId });
     return;
@@ -71,13 +82,15 @@ export async function sendSupportReplyNotification(payload: SupportReplyNotifyPa
     url,
   });
   try {
-    await getEmailClient()
+    const tracked = await track({ kind: "support_reply", to: claim.email, html });
+    await getClient()
       .from(process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_FROM)
       .to(claim.email)
       .subject(subject)
-      .html(html)
+      .html(tracked.html)
       .text(text)
       .send();
+    await tracked.onSent();
     trace("notify", "reply email sent", { conversationId: payload.conversationId });
   } catch (err) {
     // The claim is already stamped, so a retry would be refused anyway; the
