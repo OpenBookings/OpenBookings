@@ -4,6 +4,7 @@ import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { bookingMailUrls, type BookingMailUrls } from "./booking-send";
 import { getEmailClient } from "./client";
 import { fromAddress } from "./from-address";
+import { trackMail } from "./tracking";
 import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays } from "./review-mail";
 
 /**
@@ -14,7 +15,7 @@ import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestRev
 type Db = { query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[] }> };
 type Transport = (m: { to: string; subject: string; html: string }) => Promise<void>;
 
-export type ReviewSendDeps = { db?: Db; transport?: Transport; testing?: boolean; urls?: BookingMailUrls };
+export type ReviewSendDeps = { db?: Db; transport?: Transport; testing?: boolean; urls?: BookingMailUrls; track?: typeof trackMail };
 
 const resolve = (d: ReviewSendDeps) => ({
   db: d.db ?? getPool(),
@@ -24,6 +25,7 @@ const resolve = (d: ReviewSendDeps) => ({
       getEmailClient().from(fromAddress()).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
   testing: d.testing ?? isTestingMode(),
   urls: d.urls ?? bookingMailUrls(),
+  track: d.track ?? trackMail,
 });
 
 const trim = (url: string) => url.replace(/\/$/, "");
@@ -62,7 +64,13 @@ export async function sendReviewMail(mail: ReviewMail, deps: ReviewSendDeps = {}
       invitesAt: localMoment(first.invitesAt, mail.timeZone),
       reservationsUrl: `${trim(c.urls.businessUrl)}/dashboard/bookings/reservations`,
     });
-    const results = await Promise.allSettled(to.map((address) => c.transport({ to: address, ...message })));
+    const results = await Promise.allSettled(
+      to.map(async (address) => {
+        const t = await c.track({ kind: "stays_unconfirmed_host", to: address, html: message.html });
+        await c.transport({ to: address, subject: message.subject, html: t.html });
+        await t.onSent();
+      }),
+    );
     const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
     if (failed) throw failed.reason;
     return;
@@ -76,7 +84,9 @@ export async function sendReviewMail(mail: ReviewMail, deps: ReviewSendDeps = {}
     closesAt: mail.closesAt,
   };
   const message = mail.kind === "invitation" ? guestReviewInvitation(input) : guestReviewReminder(input);
-  await c.transport({ to: mail.to, ...message });
+  const t = await c.track({ kind: mail.kind === "invitation" ? "review_invitation" : "review_reminder", to: mail.to, html: message.html });
+  await c.transport({ to: mail.to, subject: message.subject, html: t.html });
+  await t.onSent();
 }
 
 /**

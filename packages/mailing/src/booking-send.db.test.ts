@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
+import type { trackMail } from "./tracking";
 import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, type SendDeps } from "./booking-send";
 
 let db: Client;
@@ -119,6 +120,47 @@ describeWithDb("booking emails against Postgres", () => {
     await sendBookingConfirmed(bookingId, deps({ testing: true }));
     expect(to()).toEqual([guestEmail, guestEmail]);
     expect(sent.map((m) => m.subject).sort()).toEqual(["Booking confirmed: Hotel <Test>", "New booking at Hotel <Test>"]);
+  });
+
+  const tracker = () => {
+    const marked: string[] = [];
+    const track: typeof trackMail = async ({ kind, to, html }) => ({
+      html: `${html}<!--${kind}:${to}-->`,
+      onSent: async () => {
+        marked.push(`${kind}:${to}`);
+      },
+    });
+    return { marked, track };
+  };
+
+  test("a confirmation is tracked per address with its kind, and marked sent", async () => {
+    const { marked, track } = tracker();
+    await sendBookingConfirmed(bookingId, deps({ track }));
+    expect(sent.find((m) => m.to === guestEmail)!.html.endsWith(`<!--booking_confirmed_guest:${guestEmail}-->`)).toBe(true);
+    for (const owner of ownerEmails) {
+      expect(sent.find((m) => m.to === owner)!.html.endsWith(`<!--booking_new_host:${owner}-->`)).toBe(true);
+    }
+    expect(marked.sort()).toEqual([`booking_confirmed_guest:${guestEmail}`, ...ownerEmails.map((o) => `booking_new_host:${o}`)].sort());
+  });
+
+  test("an address whose transport failed is not marked sent, and the error still throws", async () => {
+    const { marked, track } = tracker();
+    const failing: NonNullable<SendDeps["transport"]> = async (m) => {
+      if (m.to === ownerEmails[0]) throw new Error("smtp down");
+      sent.push(m);
+    };
+    await expect(sendBookingConfirmed(bookingId, deps({ track, transport: failing }))).rejects.toThrow("smtp down");
+    expect(marked).not.toContain(`booking_new_host:${ownerEmails[0]}`);
+    expect(marked).toContain(`booking_confirmed_guest:${guestEmail}`);
+    expect(marked).toContain(`booking_new_host:${ownerEmails[1]}`);
+  });
+
+  test("a cancellation is not tracked", async () => {
+    const { marked, track } = tracker();
+    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotal: 103, cancelsBooking: false }, undefined, deps({ track }));
+    expect(marked).toEqual([]);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((m) => !/<!--[a-z_]+:/.test(m.html))).toBe(true);
   });
 
   test("a partial cancellation mails exactly the cancelled room and refund", async () => {
