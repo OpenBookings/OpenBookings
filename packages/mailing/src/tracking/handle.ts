@@ -1,5 +1,5 @@
 import { captureServerEvent } from "@openbookings/analytics/server";
-import { trackingConfig, type TrackingConfig } from "./config";
+import { trackingConfig, type ClickRedirectConfig, type TrackingConfig } from "./config";
 import { isConsented, type TrackDeps } from "./track";
 import { openToken, type TrackingToken } from "./token";
 
@@ -8,7 +8,10 @@ export const PIXEL_GIF: Uint8Array = Uint8Array.from(
   Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64"),
 );
 
-const DEFAULT_DESTINATION = "https://openbookings.co";
+/** Where an unusable click lands. Literal reference so Next inlines the build-time value. */
+function homeUrl(): string {
+  return (process.env.NEXT_PUBLIC_WEB_URL?.trim() || "https://openbookings.co").replace(/\/+$/, "");
+}
 
 type HandleDeps = Pick<TrackDeps, "config" | "consentAccepted" | "capture" | "now">;
 
@@ -20,14 +23,19 @@ export function clientProxy(userAgent: string | null): "google" | "apple_suspect
   return null;
 }
 
-/** The token's destination when it is one of our own hosts, else the web home. */
+/**
+ * The token's destination when it is one of our own hosts, else the web home. Takes the
+ * redirect-only config, so links keep working while capture is off.
+ */
 export function clickDestination(
   token: string,
-  config: TrackingConfig | null,
+  config: ClickRedirectConfig | null,
 ): { destination: string; payload: TrackingToken | null } {
-  const home = config?.baseUrl ?? DEFAULT_DESTINATION;
-  const payload = config ? openToken(token, config.key) : null;
-  if (!config || !payload?.d) return { destination: home, payload };
+  const home = config?.baseUrl ?? homeUrl();
+  if (!config) return { destination: home, payload: null };
+  const payload = openToken(token, config.key);
+  if (!payload) console.warn("[email-tracking] click token rejected");
+  if (!payload?.d) return { destination: home, payload };
   try {
     const url = new URL(payload.d);
     const ok = (url.protocol === "https:" || url.protocol === "http:") && config.ownHosts.includes(url.host);

@@ -15,7 +15,26 @@ export type TrackDeps = {
   capture?: (e: ServerEvent) => Promise<void>;
   newId?: () => string;
   now?: () => Date;
+  /** Budget for the pre-send user + consent lookups together; default `LOOKUP_TIMEOUT_MS`. */
+  lookupTimeoutMs?: number;
 };
+
+/** The longest tracking may hold up a send; past it the untouched html goes out. */
+export const LOOKUP_TIMEOUT_MS = 1500;
+
+const TIMED_OUT = Symbol("timed out");
+
+async function withinBudget<T>(work: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Latest unexpired analytics consent, given on a banner version at or above the configured one. */
 export async function isConsented(
@@ -45,11 +64,18 @@ export async function trackMail(
     const consented = deps.consentAccepted ?? ((id: string) => isConsented(id, config));
 
     let userId: string | null = null;
-    if (anonymous) {
-      userId = null;
-    } else {
-      userId = await lookup(input.to);
-      if (!userId || !(await consented(userId))) return untouched;
+    if (!anonymous) {
+      const consentedUser = async () => {
+        const id = await lookup(input.to);
+        return id && (await consented(id)) ? id : null;
+      };
+      const found = await withinBudget(consentedUser(), deps.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
+      if (found === TIMED_OUT) {
+        console.warn("[email-tracking] consent lookup timed out, sending untouched html");
+        return untouched;
+      }
+      if (!found) return untouched;
+      userId = found;
     }
 
     const sendId = (deps.newId ?? randomUUID)();

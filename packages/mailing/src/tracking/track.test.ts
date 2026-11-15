@@ -1,7 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it, spyOn } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ServerEvent } from "@openbookings/analytics/server";
-import { trackingConfig, type TrackingConfig } from "./config";
-import { isConsented, trackMail } from "./track";
+import { clickRedirectConfig, trackingConfig, type TrackingConfig } from "./config";
+import { LOOKUP_TIMEOUT_MS, isConsented, trackMail } from "./track";
 import { openToken } from "./token";
 
 const key = Buffer.alloc(32, 7);
@@ -11,6 +12,8 @@ const fullEnv = {
   EMAIL_TRACKING_CONSENT_VERSION: "2",
   NEXT_PUBLIC_POSTHOG_KEY: "phc_x",
   NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+  NEXT_PUBLIC_WEB_URL: "https://openbookings.co",
+  NEXT_PUBLIC_BUSINESS_URL: "https://business.openbookings.co",
 };
 
 describe("trackingConfig", () => {
@@ -43,13 +46,65 @@ describe("trackingConfig", () => {
     expect(trackingConfig({ ...fullEnv, EMAIL_TRACKING_SECRET: Buffer.alloc(16).toString("base64") }, false)).toBeNull();
     expect(trackingConfig({ ...fullEnv, EMAIL_TRACKING_CONSENT_VERSION: "two" }, false)).toBeNull();
   });
+
+  it("has no production host fallback: both app urls are required", () => {
+    expect(trackingConfig({ ...fullEnv, NEXT_PUBLIC_WEB_URL: "" }, false)).toBeNull();
+    expect(trackingConfig({ ...fullEnv, NEXT_PUBLIC_BUSINESS_URL: "" }, false)).toBeNull();
+  });
+
+  it("references every NEXT_PUBLIC_ variable literally so Next inlines it at build time", () => {
+    const source = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
+    for (const name of [
+      "NEXT_PUBLIC_POSTHOG_KEY",
+      "NEXT_PUBLIC_POSTHOG_HOST",
+      "NEXT_PUBLIC_WEB_URL",
+      "NEXT_PUBLIC_BUSINESS_URL",
+    ]) {
+      expect(source).toContain(`process.env.${name}`);
+    }
+  });
+});
+
+describe("clickRedirectConfig", () => {
+  const redirectEnv = {
+    EMAIL_TRACKING_SECRET: key.toString("base64"),
+    NEXT_PUBLIC_WEB_URL: "http://web.localhost:3002/",
+    NEXT_PUBLIC_BUSINESS_URL: "http://business.localhost:3001",
+  };
+
+  it("needs only the secret and the two app urls", () => {
+    const c = clickRedirectConfig(redirectEnv);
+    expect(c?.key.equals(key)).toBe(true);
+    expect(c?.baseUrl).toBe("http://web.localhost:3002");
+    expect(c?.ownHosts).toEqual(["web.localhost:3002", "business.localhost:3001"]);
+  });
+
+  it("survives tracking being switched off or half-configured", () => {
+    const c = clickRedirectConfig({ ...redirectEnv, EMAIL_TRACKING_ENABLED: "false", EMAIL_TRANSPORT: "console" });
+    expect(c?.baseUrl).toBe("http://web.localhost:3002");
+  });
+
+  for (const name of Object.keys(redirectEnv)) {
+    it(`is null without ${name}`, () => {
+      expect(clickRedirectConfig({ ...redirectEnv, [name]: undefined })).toBeNull();
+    });
+  }
+
+  it("is null with a secret that is not 32 bytes", () => {
+    expect(clickRedirectConfig({ ...redirectEnv, EMAIL_TRACKING_SECRET: Buffer.alloc(16).toString("base64") })).toBeNull();
+  });
 });
 
 let errorSpy: ReturnType<typeof spyOn>;
+let warnSpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
   errorSpy = spyOn(console, "error").mockImplementation(() => {});
+  warnSpy = spyOn(console, "warn").mockImplementation(() => {});
 });
-afterEach(() => errorSpy.mockRestore());
+afterEach(() => {
+  errorSpy.mockRestore();
+  warnSpy.mockRestore();
+});
 
 const config: TrackingConfig = {
   key,
@@ -145,6 +200,21 @@ describe("trackMail", () => {
     const r = await trackMail({ kind: "booking_confirmed_guest", to: "a@b.c", html }, h.deps);
     expect(r.html).toBe(html);
     await r.onSent();
+  });
+
+  it("sends untouched html when the pre-send lookups exceed the time budget", async () => {
+    const never = () => new Promise<never>(() => {});
+    for (const over of [{ userIdByEmail: never }, { consentAccepted: never }]) {
+      const h = harness({ ...over, lookupTimeoutMs: 20 });
+      const started = Date.now();
+      const r = await trackMail({ kind: "booking_confirmed_guest", to: "a@b.c", html }, h.deps);
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(r.html).toBe(html);
+      await r.onSent();
+      expect(h.captured).toEqual([]);
+    }
+    expect(warnSpy).toHaveBeenCalledWith("[email-tracking] consent lookup timed out, sending untouched html");
+    expect(LOOKUP_TIMEOUT_MS).toBe(1500);
   });
 
   it("onSent never throws when capture rejects", async () => {

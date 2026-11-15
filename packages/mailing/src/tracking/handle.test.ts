@@ -1,6 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import type { ServerEvent } from "@openbookings/analytics/server";
-import type { TrackingConfig } from "./config";
+import { clickRedirectConfig, type TrackingConfig } from "./config";
 import { PIXEL_GIF, clickDestination, clientProxy, handleClick, handleOpen } from "./handle";
 import { sealToken, type TrackingToken } from "./token";
 
@@ -89,6 +89,36 @@ describe("handleOpen", () => {
 });
 
 describe("clickDestination", () => {
+  let warnSpy: ReturnType<typeof spyOn>;
+  beforeEach(() => {
+    warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => warnSpy.mockRestore());
+
+  const sentEnv = {
+    EMAIL_TRACKING_SECRET: key.toString("base64"),
+    NEXT_PUBLIC_WEB_URL: "https://openbookings.co",
+    NEXT_PUBLIC_BUSINESS_URL: "https://business.openbookings.co",
+  };
+
+  it("still redirects a valid token to its own-host destination after tracking was disabled", () => {
+    const token = sealToken({ ...base, l: "cta", d: "https://business.openbookings.co/stays" }, key);
+    const redirect = clickRedirectConfig({ ...sentEnv, EMAIL_TRACKING_ENABLED: "false" });
+    expect(clickDestination(token, redirect).destination).toBe("https://business.openbookings.co/stays");
+  });
+
+  it("goes home when the secret is missing", () => {
+    const token = sealToken({ ...base, l: "cta", d: "https://business.openbookings.co/stays" }, key);
+    const redirect = clickRedirectConfig({ ...sentEnv, EMAIL_TRACKING_SECRET: undefined });
+    expect(clickDestination(token, redirect).destination).toBe("https://openbookings.co");
+  });
+
+  it("warns without the token when a token is rejected", () => {
+    clickDestination("garbage-token-content", config);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]).toEqual(["[email-tracking] click token rejected"]);
+  });
+
   it("returns an own destination", () => {
     const token = sealToken({ ...base, l: "cta", d: "https://openbookings.co/bookings/1" }, key);
     const r = clickDestination(token, config);
