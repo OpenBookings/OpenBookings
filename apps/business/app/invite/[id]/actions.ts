@@ -2,6 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { captureOutcome } from "@openbookings/mailing/tracking";
 import { auth, getServerSession } from "@/lib/auth";
 
 /**
@@ -24,6 +26,7 @@ export async function acceptInvite(invitationId: string): Promise<InviteResult> 
   } catch (error) {
     return { error: message(error) };
   }
+  after(() => captureOutcome("team_invitation_accepted", "anonymous"));
   redirect("/dashboard");
 }
 

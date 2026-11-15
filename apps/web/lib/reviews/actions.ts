@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { after } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
 import { getPool, withTransaction } from '@openbookings/db';
@@ -14,6 +15,7 @@ import {
   type SubmitReviewResult,
 } from '@openbookings/db/reviews';
 import { sendReviewPosted } from '@openbookings/mailing/review-send';
+import { captureOutcome } from '@openbookings/mailing/tracking';
 import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
@@ -83,6 +85,7 @@ export async function submitReviewAsGuest(bookingId: string, input: { score: num
   if (!context || context.guestUserId !== session.user.id) return fail('not_found');
   const result = await store(bookingId, 'session', input);
   if (!result.ok) return fail(result.error);
+  after(() => captureOutcome('review_submitted', { userId: context.guestUserId }, { via: 'session' }));
   refresh(bookingId, result.context.propertySlug);
   return { ok: true, status: result.status };
 }
@@ -105,6 +108,7 @@ export async function submitReviewWithToken(token: string, input: { score: numbe
     pending: result.status === 'pending',
     report: (error) => Sentry.captureException(error, { tags: { area: 'reviews', mail: 'review_posted' } }),
   });
+  after(() => captureOutcome('review_submitted', { userId: context.guestUserId }, { via: 'token' }));
   refresh(bookingId, result.context.propertySlug);
   return { ok: true, status: result.status };
 }
