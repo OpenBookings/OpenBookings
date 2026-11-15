@@ -31,7 +31,9 @@ export function instrumentHtml(
   });
 
   const pixel = `<img src="${opts.pixelUrl}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px;" />`;
-  const at = rewritten.toLowerCase().lastIndexOf("</body>");
+  // Matched on the original string: lowercasing can change its length ("İ" → "i̇").
+  let at = -1;
+  for (const m of rewritten.matchAll(/<\/body>/gi)) at = m.index;
   if (at === -1) return rewritten + pixel;
   return rewritten.slice(0, at) + pixel + rewritten.slice(at);
 }

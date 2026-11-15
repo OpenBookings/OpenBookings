@@ -45,6 +45,12 @@ describe("instrumentHtml", () => {
     expect(out).toBe(`<html><body><p>hi</p>${img}</BODY></html>`);
   });
 
+  test("inserts pixel right before </body> when text changes length on lowercasing", () => {
+    // "İ".toLowerCase() is two code units, so an index taken from a lowercased copy is off by one.
+    const out = instrumentHtml(`<html><body><p>İstanbul İzmir</p></body></html>`, opts);
+    expect(out).toBe(`<html><body><p>İstanbul İzmir</p>${img}</body></html>`);
+  });
+
   test("appends pixel without </body>", () => {
     expect(instrumentHtml(`<p>hi</p>`, opts)).toBe(`<p>hi</p>${img}`);
   });
