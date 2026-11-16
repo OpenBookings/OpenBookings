@@ -650,6 +650,52 @@
 }
 
 /*
+ * "Last room for your dates" on the room panel (RoomsCarousel.tsx). Built
+ * like the emerald "Save" pill on the rate rows, in the spectrum's amber.
+ * The dot is the one status light; it beats slowly on the last room and
+ * while another guest is booking, and holds still under reduced motion.
+ */
+.scarcity-pill-hot {
+  border-color: color-mix(in oklch, var(--spectrum-amber) 45%, transparent);
+  background: color-mix(in oklch, var(--spectrum-amber) 16%, transparent);
+  color: color-mix(in oklch, var(--spectrum-amber) 55%, white);
+}
+
+.scarcity-live {
+  color: color-mix(in oklch, var(--spectrum-amber) 40%, white);
+}
+
+.scarcity-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--spectrum-amber);
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--spectrum-amber) 22%, transparent),
+    0 0 10px color-mix(in oklch, var(--spectrum-amber) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scarcity-dot[data-beat="true"] {
+    animation: scarcity-beat 2.2s ease-in-out infinite;
+  }
+}
+
+@keyframes scarcity-beat {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--spectrum-amber) 22%, transparent),
+      0 0 8px color-mix(in oklch, var(--spectrum-amber) 50%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px color-mix(in oklch, var(--spectrum-amber) 6%, transparent),
+      0 0 16px color-mix(in oklch, var(--spectrum-amber) 75%, transparent);
+  }
+}
+
+/*
  * The nav's top-right corner while the session check is in flight
  * (components/nav.tsx, lib/nav-hint.ts). The <head> script sets
  * data-nav-hint="in" when this device was signed in last time.

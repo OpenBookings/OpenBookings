@@ -63,6 +63,12 @@ export type QuotedRoom = {
   maxChildren: number;
   total: number;
   unitsLeft: number;
+  /**
+   * Units other guests hold in checkout right now, on the busiest night of
+   * the stay. Already counted out of `unitsLeft`; the viewer's own hold is not
+   * in either.
+   */
+  heldByOthers: number;
   reasons: UnavailableReason[];
   ratePlans: QuotedRatePlan[];
 };
@@ -298,10 +304,15 @@ function priceRooms(
   return [...rooms.values()];
 }
 
-/** The quote for a visible property, or null when the guest may not see it. Validate `stay` first. */
+/**
+ * The quote for a visible property, or null when the guest may not see it. Validate `stay` first.
+ *
+ * `viewerIntentId` is the guest's own open intent here, if any. Their hold is
+ * left out, as `createBookingIntent` would: booking again replaces it.
+ */
 export async function quoteStay(
   db: Queryable,
-  i: { propertyId: string; stay: StayInput; now: Date; testing: boolean },
+  i: { propertyId: string; stay: StayInput; now: Date; testing: boolean; viewerIntentId?: string | null },
 ): Promise<StayQuote | null> {
   const property = await loadVisibleProperty(db, { id: i.propertyId }, i.testing);
   if (!property) return null;
@@ -309,7 +320,7 @@ export async function quoteStay(
   const { checkIn, checkOut } = i.stay;
   const [rows, availability] = await Promise.all([
     loadPlanRows(db, { propertyId: property.id, checkIn, checkOut }),
-    loadStayAvailability(db, { propertyId: property.id, checkIn, checkOut, now: i.now }),
+    loadStayAvailability(db, { propertyId: property.id, checkIn, checkOut, now: i.now, excludeIntentId: i.viewerIntentId }),
   ]);
   const byRoom = new Map(availability.map((a) => [a.roomId, a]));
   const party = perRoomParty(i.stay);
@@ -330,6 +341,7 @@ export async function quoteStay(
       maxChildren: a.maxChildren,
       total: a.total,
       unitsLeft: a.unitsLeft,
+      heldByOthers: Math.max(0, ...a.nights.map((n) => n.held)),
       reasons,
       ratePlans: room.plans.map(({ row, priced }) => ({
         ratePlanId: row.rate_plan_id,

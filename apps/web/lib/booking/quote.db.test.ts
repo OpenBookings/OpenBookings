@@ -90,6 +90,39 @@ describeWithDb("stay quote against Postgres", () => {
     expect(q!.stay).toEqual(STAY);
   });
 
+  test("another guest's hold counts as held by others; the viewer's own does not", async () => {
+    // An open, unexpired hold on one unit for the first night only.
+    const hold = async (userId: string) => {
+      const { rows } = await db.query(
+        `INSERT INTO booking_intents
+           (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_amount)
+         VALUES ($1, $2, $3::date, $3::date + 1, 'open', $4::timestamptz + INTERVAL '10 minutes', '{}'::jsonb, 100)
+         RETURNING id`,
+        [userId, ids.propertyId, CHECK_IN, NOW],
+      );
+      const intentId = (rows[0] as { id: string }).id;
+      await db.query(
+        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total)
+         VALUES ($1, $2, $3, 2, '[]'::jsonb, 100)`,
+        [intentId, ids.roomId, ids.ratePlanId],
+      );
+      return intentId;
+    };
+    const room = async (viewerIntentId: string | null = null) =>
+      (await quoteStay(db, { propertyId: ids.propertyId, stay: STAY, now: NOW, testing: false, viewerIntentId }))!.rooms.find(
+        (r) => r.roomId === ids.roomId,
+      )!;
+
+    expect(await room()).toMatchObject({ unitsLeft: 5, heldByOthers: 0 });
+
+    const mine = await hold(`test-guest-${crypto.randomUUID()}`);
+    await hold(`test-guest-${crypto.randomUUID()}`);
+    // Seen by a stranger: both holds, on the stay's busiest night.
+    expect(await room()).toMatchObject({ unitsLeft: 3, heldByOthers: 2 });
+    // Seen by the guest behind one of them: only the other one.
+    expect(await room(mine)).toMatchObject({ unitsLeft: 4, heldByOthers: 1 });
+  });
+
   test("prices every night and the tourist tax for the per-room party", async () => {
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
