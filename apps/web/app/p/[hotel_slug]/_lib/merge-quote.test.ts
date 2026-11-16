@@ -48,6 +48,7 @@ const quotedRoom = (roomId: string, ratePlans: QuotedRatePlan[], over: Partial<Q
   maxChildren: 1,
   total: 5,
   unitsLeft: 5,
+  heldByOthers: 0,
   reasons: [],
   ratePlans,
   ...over,
@@ -70,8 +71,8 @@ describe("mergeQuote", () => {
   test("without a stay every room and rate shows, unpriced", () => {
     const views = mergeQuote(ROOMS, { status: "none" });
     expect(views).toEqual([
-      { roomId: "a", visible: true, unitsLeft: null, leftCaption: null, maxAdults: null, maxChildren: null, rates: { a1: null, a2: null } },
-      { roomId: "b", visible: true, unitsLeft: null, leftCaption: null, maxAdults: null, maxChildren: null, rates: { b1: null } },
+      { roomId: "a", visible: true, unitsLeft: null, scarcity: null, othersBooking: false, maxAdults: null, maxChildren: null, rates: { a1: null, a2: null } },
+      { roomId: "b", visible: true, unitsLeft: null, scarcity: null, othersBooking: false, maxAdults: null, maxChildren: null, rates: { b1: null } },
     ]);
   });
 
@@ -128,11 +129,21 @@ describe("mergeQuote", () => {
     expect(b.visible).toBe(false);
   });
 
-  test("only the last one or two rooms are counted out loud", () => {
+  test("only the last three rooms are counted out loud, louder as they run out", () => {
     const left = (unitsLeft: number) => mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1")], { unitsLeft })]))[0];
-    expect(left(1)).toMatchObject({ unitsLeft: 1, leftCaption: "1 left", maxAdults: 2, maxChildren: 1 });
-    expect(left(2)).toMatchObject({ unitsLeft: 2, leftCaption: "2 left" });
-    expect(left(3)).toMatchObject({ unitsLeft: 3, leftCaption: null });
+    expect(left(1)).toMatchObject({ unitsLeft: 1, scarcity: { level: "last", label: "Last room for your dates" }, maxAdults: 2, maxChildren: 1 });
+    expect(left(2)).toMatchObject({ unitsLeft: 2, scarcity: { level: "low", label: "Only 2 left for your dates" } });
+    expect(left(3)).toMatchObject({ unitsLeft: 3, scarcity: { level: "few", label: "3 left for your dates" } });
+    expect(left(4)).toMatchObject({ unitsLeft: 4, scarcity: null });
+  });
+
+  test("another guest's hold shows as someone booking, only on a room that can still be booked", () => {
+    const view = (over: Partial<QuotedRoom>, quotedPlans = [quoted("a1")]) =>
+      mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", quotedPlans, over)]))[0];
+    expect(view({ heldByOthers: 1 }).othersBooking).toBe(true);
+    expect(view({ heldByOthers: 0 }).othersBooking).toBe(false);
+    const soldOut = view({ heldByOthers: 1, unitsLeft: 0, reasons: ["sold_out"] });
+    expect(soldOut).toMatchObject({ visible: false, othersBooking: false, scarcity: null });
   });
 
   test("a non-refundable rate's saving is per night against the cheapest refundable rate", () => {
