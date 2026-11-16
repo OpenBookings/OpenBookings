@@ -207,6 +207,7 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
             {[room.size_sqm != null ? `${room.size_sqm} m²` : null, room.bed_type].filter(Boolean).join(" · ") || "—"}
           </p>
           {occupancyLine(room, view) && <p className="text-xs text-white/60 mt-1.5">{occupancyLine(room, view)}</p>}
+          <ScarcityCue view={view} />
         </div>
 
         {room.description && (
@@ -298,6 +299,44 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
           )}
         </AnimatePresence>
       </div>
+    </motion.div>
+  );
+}
+
+/**
+ * "Last room for your dates", once per room, louder as it runs out (see
+ * `Scarcity` in merge-quote), and "Someone else is booking this room now"
+ * while another guest holds one in checkout. Both come from live stock and
+ * holds, never from a guess: scarcity claims must be true.
+ */
+function ScarcityCue({ view }: { view: RoomView }) {
+  const { scarcity, othersBooking } = view;
+  if (!scarcity && !othersBooking) return null;
+  const hot = scarcity !== null && scarcity.level !== "few";
+  const beat = scarcity?.level === "last" || othersBooking;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={QUICK}
+      className="flex flex-col items-center gap-2 mt-3"
+    >
+      {scarcity && (
+        <span
+          className={`inline-flex items-center gap-2 pl-2.5 pr-3 py-1.5 text-xs leading-none rounded-full border ${
+            hot ? "scarcity-pill-hot font-medium" : "border-white/15 bg-white/8 text-white/90"
+          }`}
+        >
+          <span aria-hidden className="scarcity-dot" data-beat={beat} />
+          {scarcity.label}
+        </span>
+      )}
+      {othersBooking && (
+        <p className="scarcity-live inline-flex items-center gap-2 text-xs leading-none">
+          {!scarcity && <span aria-hidden className="scarcity-dot" data-beat />}
+          Someone else is booking this room now
+        </p>
+      )}
     </motion.div>
   );
 }
@@ -416,16 +455,17 @@ type RateRowProps = {
   /** The stay's price, or null: today's price without a stay, "—" while a stay's price is missing. */
   priced: PricedRate | null;
   hasStay: boolean;
-  leftCaption: string | null;
   /** False once the room's picks, all its rates together, reach the rooms left. */
   canAdd: boolean;
+  /** This row took the room's last unit: say why + stopped. */
+  lastOne: boolean;
   maxOccupancy: number | null;
   qty: number;
   onQtyChange: (v: number) => void;
   ratesConfirmed: boolean;
 };
 
-function RateRow({ rate, priced, hasStay, leftCaption, canAdd, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
+function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
   const tier = tierOf(rate);
   const saving = priced ? priced.saving : hasStay ? 0 : (rate.saving_vs_refundable ?? 0);
   const price = priced ? euro(priced.perNight) : hasStay ? "—" : euro(nightlyPrice(rate));
@@ -488,9 +528,8 @@ function RateRow({ rate, priced, hasStay, leftCaption, canAdd, maxOccupancy, qty
           <p className="text-xs text-white/60 mt-1.5">
             {ratesConfirmed ? "per night · incl. tax & fees" : "per night · not bookable yet"}
           </p>
-          {leftCaption && <p className="text-xs text-white/60 mt-1.5">{leftCaption}</p>}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="relative flex items-center gap-1.5">
           <button
             type="button"
             aria-label={`One fewer ${rate.name}`}
@@ -510,6 +549,10 @@ function RateRow({ rate, priced, hasStay, leftCaption, canAdd, maxOccupancy, qty
           >
             <Plus className="size-3.5" strokeWidth={2} />
           </button>
+          {/* Under the stepper without moving it, inside the row's padding. */}
+          <p role="status" className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap text-[11px] leading-none text-white/60">
+            {lastOne ? "That's the last one" : ""}
+          </p>
         </div>
       </div>
     </motion.div>
@@ -546,6 +589,14 @@ function RoomSlide({
   const shownRates = room.rate_plans.filter((rate) => rate.id in view.rates);
   const picked = room.rate_plans.reduce((n, rate) => n + (quantities[rate.id] ?? 0), 0);
   const canAdd = view.unitsLeft === null || picked < view.unitsLeft;
+  // "That's the last one" goes on the row the guest just added to; picks made
+  // before this room was on screen fall back to the lowest picked row.
+  const [lastAdded, setLastAdded] = useState<string | null>(null);
+  const lastOneRate = canAdd
+    ? null
+    : lastAdded && (quantities[lastAdded] ?? 0) > 0 && shownRates.some((r) => r.id === lastAdded)
+      ? lastAdded
+      : ([...shownRates].reverse().find((r) => (quantities[r.id] ?? 0) > 0)?.id ?? null);
 
   return (
     <>
@@ -678,11 +729,14 @@ function RoomSlide({
               rate={rate}
               priced={view.rates[rate.id] ?? null}
               hasStay={stayFields.hasStay}
-              leftCaption={view.leftCaption}
               canAdd={canAdd}
+              lastOne={lastOneRate === rate.id}
               maxOccupancy={room.max_occupancy}
               qty={quantities[rate.id] ?? 0}
-              onQtyChange={(v) => onQtyChange(rate.id, v)}
+              onQtyChange={(v) => {
+                if (v > (quantities[rate.id] ?? 0)) setLastAdded(rate.id);
+                onQtyChange(rate.id, v);
+              }}
               ratesConfirmed={ratesConfirmed}
             />
           ))}

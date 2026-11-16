@@ -25,7 +25,10 @@ export type RoomView = {
   roomId: string;
   visible: boolean;
   unitsLeft: number | null;
-  leftCaption: string | null;
+  /** The room panel's "Last room for your dates" pill, or null. */
+  scarcity: Scarcity | null;
+  /** Another guest is in checkout for this room on these dates. */
+  othersBooking: boolean;
   /** How many one unit sleeps, from the quote; null without one. */
   maxAdults: number | null;
   maxChildren: number | null;
@@ -36,9 +39,18 @@ export type QuoteState = { status: "none" } | { status: "loading" } | { status: 
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Only the last rooms are counted out loud, never the host's total. */
-function leftCaption(unitsLeft: number): string | null {
-  return unitsLeft === 1 || unitsLeft === 2 ? `${unitsLeft} left` : null;
+/**
+ * How close a room is to selling out, louder as it runs out: 3 left is a
+ * heads-up, 2 is "only", 1 is the last room. Only the last rooms are counted
+ * out loud, never the host's total.
+ */
+export type Scarcity = { level: "few" | "low" | "last"; label: string };
+
+function scarcityOf(unitsLeft: number): Scarcity | null {
+  if (unitsLeft === 1) return { level: "last", label: "Last room for your dates" };
+  if (unitsLeft === 2) return { level: "low", label: "Only 2 left for your dates" };
+  if (unitsLeft === 3) return { level: "few", label: "3 left for your dates" };
+  return null;
 }
 
 /**
@@ -53,7 +65,8 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
       roomId: room.id,
       visible: true,
       unitsLeft: null,
-      leftCaption: null,
+      scarcity: null,
+      othersBooking: false,
       maxAdults: null,
       maxChildren: null,
       rates: Object.fromEntries(room.rate_plans.map((plan) => [plan.id, null])),
@@ -92,11 +105,13 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
       }
     }
     const unitsLeft = q?.unitsLeft ?? 0;
+    const visible = Object.keys(rates).length > 0;
     return {
       roomId: room.id,
-      visible: Object.keys(rates).length > 0,
+      visible,
       unitsLeft,
-      leftCaption: leftCaption(unitsLeft),
+      scarcity: visible ? scarcityOf(unitsLeft) : null,
+      othersBooking: visible && (q?.heldByOthers ?? 0) > 0,
       maxAdults: q?.maxAdults ?? null,
       maxChildren: q?.maxChildren ?? null,
       rates,

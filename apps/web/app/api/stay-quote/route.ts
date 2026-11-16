@@ -1,6 +1,7 @@
-import { getPool } from "@openbookings/db";
+import { findOpenIntentId, getPool } from "@openbookings/db";
 import { isTestingMode } from "@openbookings/demo";
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "@/lib/auth";
 import { loadVisibleProperty, quoteStay } from "@/lib/booking/quote";
 import { parseStayInput, todayInZone } from "@/lib/booking/stay-input";
 
@@ -28,7 +29,15 @@ export async function GET(request: NextRequest) {
     const stay = parseStayInput(params, todayInZone(property.timezone, now));
     if (!stay.ok) return NextResponse.json({ errors: stay.errors }, { status: 400 });
 
-    const quote = await quoteStay(db, { propertyId: property.id, stay: stay.value, now, testing });
+    // A guest back from checkout still holds their rooms for a few minutes.
+    // That hold is theirs: it must not read as fewer rooms, or as someone
+    // else booking. Signed out, there is no hold to leave out.
+    const session = await getServerSession().catch(() => null);
+    const viewerIntentId = session?.user?.id
+      ? await findOpenIntentId(db, { userId: session.user.id, propertyId: property.id, now })
+      : null;
+
+    const quote = await quoteStay(db, { propertyId: property.id, stay: stay.value, now, testing, viewerIntentId });
     if (!quote) return NextResponse.json({ error: "Property not found" }, { status: 404 });
     return NextResponse.json(quote);
   } catch (err) {

@@ -312,6 +312,26 @@ function toIntent(row: IntentRow): BookingIntent {
   };
 }
 
+/**
+ * The guest's open, unexpired intent at this property, or null. A guest holds
+ * one selection at a time (`createBookingIntent` abandons the rest), so the
+ * property page can leave this one hold out of what other guests hold.
+ */
+export async function findOpenIntentId(
+  db: Queryable,
+  i: { userId: string; propertyId: string; now: Date },
+): Promise<string | null> {
+  if (!UUID.test(i.propertyId)) return null;
+  const { rows } = await db.query(
+    `SELECT id FROM booking_intents
+     WHERE user_id = $1 AND property_id = $2::uuid AND status = 'open' AND hold_expires_at > $3::timestamptz
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [i.userId, i.propertyId, i.now],
+  );
+  return (rows[0] as { id: string } | undefined)?.id ?? null;
+}
+
 /** The guest's own intent, or null: someone else's reads as not found. */
 export async function loadIntent(db: Queryable, i: { intentId: string; userId: string }): Promise<BookingIntent | null> {
   if (!UUID.test(i.intentId)) return null;

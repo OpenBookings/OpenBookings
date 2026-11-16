@@ -6,6 +6,7 @@ import {
   attachPaymentSession,
   createBookingIntent,
   expireIntent,
+  findOpenIntentId,
   HOLD_MINUTES,
   IntentNotOpenError,
   isCurrentPaymentSession,
@@ -187,6 +188,17 @@ describeWithDb("booking intents against Postgres", () => {
       expect(await isCurrentPaymentSession(db, { intentId: id, sessionId: "cs_test_replaced" })).toBe(false);
       expect(await isCurrentPaymentSession(db, { intentId: "not-a-uuid", sessionId: `cs_test_${id}` })).toBe(false);
     });
+  });
+
+  test("findOpenIntentId: the guest's own running hold at this property, nothing else", async () => {
+    const { intentId } = await created(guest);
+    const find = (userId: string, now = NOW, propertyId = ids.propertyId) => findOpenIntentId(db, { userId, propertyId, now });
+
+    expect(await find(guest)).toBe(intentId);
+    expect(await find(`test-guest-${crypto.randomUUID()}`)).toBeNull();
+    expect(await find(guest, new Date(NOW.getTime() + HOLD_MINUTES * MINUTE))).toBeNull();
+    expect(await find(guest, NOW, crypto.randomUUID())).toBeNull();
+    expect(await find(guest, NOW, "not-a-uuid")).toBeNull();
   });
 
   test("hold length", async () => {
