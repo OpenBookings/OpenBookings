@@ -17,7 +17,7 @@
     "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",
-    "@upstash/qstash": "2.12.1",
+    "@upstash/qstash": "2.12.2",
     "hono": "^4.13.17",
     "zod": "^4.6.7"
   },
