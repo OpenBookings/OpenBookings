@@ -1,5 +1,6 @@
 import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing";
 import type { HostInvitationEmail } from "@openbookings/auth/host";
+import { trackMail } from "@openbookings/mailing/tracking";
 import { roleLabel } from "@openbookings/authz/role-guide";
 
 const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
@@ -41,7 +42,14 @@ export function renderInvitation(invite: HostInvitationEmail, appUrl: string = A
   return { subject, html };
 }
 
-export async function sendInvitationEmail(invite: HostInvitationEmail): Promise<void> {
+export async function sendInvitationEmail(
+  invite: HostInvitationEmail,
+  deps: { track?: typeof trackMail; getClient?: typeof getEmailClient } = {},
+): Promise<void> {
+  const track = deps.track ?? trackMail;
+  const getClient = deps.getClient ?? getEmailClient;
   const { subject, html } = renderInvitation(invite);
-  await getEmailClient().from(FROM_ADDRESS).to(invite.email).subject(subject).html(html).send();
+  const tracked = await track({ kind: "team_invitation", to: invite.email, html });
+  await getClient().from(FROM_ADDRESS).to(invite.email).subject(subject).html(tracked.html).send();
+  await tracked.onSent();
 }

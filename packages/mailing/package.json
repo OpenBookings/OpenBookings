@@ -5,13 +5,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./booking-send": "./src/booking-send.ts",
-    "./review-send": "./src/review-send.ts"
+    "./review-send": "./src/review-send.ts",
+    "./tracking": "./src/tracking/index.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openbookings/analytics": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/demo": "workspace:*",
     "lettermint": "^3.3.0"

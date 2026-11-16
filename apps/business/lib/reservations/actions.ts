@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { userCan, type Permission } from "@openbookings/authz";
 import { queryOne } from "@openbookings/db";
 import {
@@ -14,6 +15,7 @@ import {
   type LifecycleDeps,
   type LifecycleResult,
 } from "@openbookings/db/booking-lifecycle";
+import { captureOutcome } from "@openbookings/mailing/tracking";
 import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
@@ -72,7 +74,11 @@ export async function hostCancelRooms(bookingId: string, reservationIds: string[
 }
 
 export async function hostMarkCheckedIn(bookingId: string) {
-  return run(bookingId, ACTION_PERMISSION.mark_checked_in, (actor) => markCheckedIn(deps, { bookingId, actor }));
+  return run(bookingId, ACTION_PERMISSION.mark_checked_in, async (actor) => {
+    const result = await markCheckedIn(deps, { bookingId, actor });
+    if (result.ok) after(() => captureOutcome("stay_marked_arrived", { userId: actor.userId }));
+    return result;
+  });
 }
 
 export async function hostMarkNoShow(bookingId: string) {

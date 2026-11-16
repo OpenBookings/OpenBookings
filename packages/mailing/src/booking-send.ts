@@ -12,6 +12,7 @@ import {
 } from "./booking-mail";
 import { formatEuro, formatStayDate } from "./format";
 import type { ActionMail } from "./action-mail";
+import { trackMail, type EmailKind } from "./tracking";
 
 /**
  * Loads a booking and sends its emails. The pure wording is in ./booking-mail;
@@ -39,6 +40,7 @@ export type SendDeps = {
   transport?: Transport;
   testing?: boolean;
   urls?: BookingMailUrls;
+  track?: typeof trackMail;
 };
 
 const resolve = (d: SendDeps) => ({
@@ -46,6 +48,7 @@ const resolve = (d: SendDeps) => ({
   transport: d.transport ?? ((m) => getEmailClient().from(fromAddress()).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
   testing: d.testing ?? isTestingMode(),
   urls: d.urls ?? bookingMailUrls(),
+  track: d.track ?? trackMail,
 });
 type Ctx = ReturnType<typeof resolve>;
 
@@ -57,9 +60,19 @@ async function rowsOf<T>(db: Db, text: string, values: unknown[]): Promise<T[]> 
   return (await db.query(text, values)).rows as T[];
 }
 
-/** One mail to one or more addresses; every address is tried, the first failure thrown after. */
-async function deliver(c: Ctx, to: string[], mail: ActionMail): Promise<void> {
-  const results = await Promise.allSettled([...new Set(to)].map((address) => c.transport({ to: address, subject: mail.subject, html: mail.html })));
+/**
+ * One mail to one or more addresses; every address is tried, the first failure thrown after.
+ * With a `kind` each address is tracked on its own: the tracked html is what is sent, and
+ * `onSent` runs only once the transport resolved for that address.
+ */
+async function deliver(c: Ctx, to: string[], mail: ActionMail, kind?: EmailKind): Promise<void> {
+  const results = await Promise.allSettled(
+    [...new Set(to)].map(async (address) => {
+      const t = kind ? await c.track({ kind, to: address, html: mail.html }) : null;
+      await c.transport({ to: address, subject: mail.subject, html: t ? t.html : mail.html });
+      await t?.onSent();
+    }),
+  );
   const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
   if (failed) throw failed.reason;
 }
@@ -175,12 +188,13 @@ export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {
   };
   const seller = { legalName: b.legal_name, vatNumber: b.vat_number };
   await deliverAll([
-    () => deliver(c, [b.guestEmail], guestBookingConfirmed({ ...shared, seller, bookingUrl: bookingUrl(c, bookingId) })),
+    () => deliver(c, [b.guestEmail], guestBookingConfirmed({ ...shared, seller, bookingUrl: bookingUrl(c, bookingId) }), "booking_confirmed_guest"),
     async () =>
       deliver(
         c,
         await hostsOf(c, b.property_id, b.guestEmail),
         hostNewBooking({ ...shared, guestName: b.guestName, commissionCents: b.commission_cents, reservationsUrl: reservationsUrl(c) }),
+        "booking_new_host",
       ),
   ]);
 }

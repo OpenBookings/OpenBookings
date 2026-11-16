@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { captureOutcome } from "@openbookings/mailing/tracking";
 import { checkRateLimit } from "@/lib/rateLimit";
 import type { LinkedKind } from "./categories";
 import { currentSupportScope } from "./server/bootstrap";
@@ -60,6 +62,7 @@ export async function refreshPanelAction(): Promise<
 export async function markSeenAction(ticketId: string): Promise<ActionResult<undefined>> {
   return run(async (scope) => {
     await markSeen(scope, ticketId);
+    after(() => captureOutcome("support_thread_viewed", { userId: scope.userId }));
     return undefined;
   });
 }

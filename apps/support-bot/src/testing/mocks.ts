@@ -159,6 +159,11 @@ mock.module("@openbookings/db", () => ({
   },
   claimSupportReplyNotification: async () => replyClaims.shift() ?? null,
 
+  // Imported by @openbookings/mailing/tracking (via notify.ts); tests inject `track`, so these never run.
+  consentVersionOf: () => null,
+  latestAnalyticsConsent: async () => null,
+  userIdByEmail: async () => null,
+
   // Mirrors INSERT ... ON CONFLICT DO NOTHING RETURNING: true only for the
   // insert that actually won the race.
   recordProcessedEvent: async (eventId: string) => {

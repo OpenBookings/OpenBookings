@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { sendReviewReplied } from "./review-send";
+import type { ReviewMail } from "@openbookings/db/reviews";
+import { sendReviewMail, sendReviewReplied } from "./review-send";
+import type { trackMail } from "./tracking";
 
 const REVIEW = "11111111-1111-4111-8111-111111111111";
 const urls = { webUrl: "https://openbookings.co", businessUrl: "https://business.openbookings.co" };
@@ -74,5 +76,76 @@ describe("sendReviewReplied", () => {
     const { reported, run } = setup(base, new Error("smtp down"));
     await run();
     expect(reported).toHaveLength(1);
+  });
+});
+
+describe("sendReviewMail tracking", () => {
+  const owners = ["owner-a@example.test", "owner-b@example.test"];
+  function run(mail: ReviewMail, failFor?: string) {
+    const sent: { to: string; html: string }[] = [];
+    const marked: string[] = [];
+    const track: typeof trackMail = async ({ kind, to, html }) => ({
+      html: `${html}<!--${kind}:${to}-->`,
+      onSent: async () => {
+        marked.push(`${kind}:${to}`);
+      },
+    });
+    const deps = {
+      db: { query: async () => ({ rows: owners.map((email) => ({ is_demo: false, email })) }) },
+      transport: async (m: { to: string; subject: string; html: string }) => {
+        if (m.to === failFor) throw new Error("smtp down");
+        sent.push(m);
+      },
+      testing: false,
+      urls,
+      track,
+    };
+    return { sent, marked, go: () => sendReviewMail(mail, deps) };
+  }
+  const guest = (kind: "invitation" | "reminder"): ReviewMail => ({
+    kind,
+    bookingId: "b1",
+    to: "anna@example.com",
+    guestFirstName: "Anna",
+    propertyName: "Canal House",
+    checkOutDate: "2027-03-14",
+    token: "tok",
+    closesAt: new Date("2027-04-14T00:00:00Z"),
+  });
+  const warning: ReviewMail = {
+    kind: "host_warning",
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    propertyName: "Canal House",
+    timeZone: "Europe/Amsterdam",
+    stays: [{ bookingId: "b1", guestName: "Anna", guestEmail: "anna@example.com", checkInDate: "2027-03-12", checkOutDate: "2027-03-14", invitesAt: new Date("2027-03-15T10:00:00Z") }],
+  };
+
+  test.each([
+    ["invitation", "review_invitation"],
+    ["reminder", "review_reminder"],
+  ] as const)("a %s is tracked as %s", async (kind, tracked) => {
+    const { sent, marked, go } = run(guest(kind));
+    await go();
+    expect(sent[0]!.html.endsWith(`<!--${tracked}:anna@example.com-->`)).toBe(true);
+    expect(marked).toEqual([`${tracked}:anna@example.com`]);
+  });
+
+  test("a host warning is tracked per owner", async () => {
+    const { sent, marked, go } = run(warning);
+    await go();
+    for (const o of owners) expect(sent.find((m) => m.to === o)!.html.endsWith(`<!--stays_unconfirmed_host:${o}-->`)).toBe(true);
+    expect(marked.sort()).toEqual(owners.map((o) => `stays_unconfirmed_host:${o}`));
+  });
+
+  test("an owner whose transport failed is not marked sent, and the error throws", async () => {
+    const { marked, go } = run(warning, owners[0]);
+    await expect(go()).rejects.toThrow("smtp down");
+    expect(marked).toEqual([`stays_unconfirmed_host:${owners[1]}`]);
+  });
+
+  test("a failed invitation is not marked sent", async () => {
+    const { marked, go } = run(guest("invitation"), "anna@example.com");
+    await expect(go()).rejects.toThrow("smtp down");
+    expect(marked).toEqual([]);
   });
 });
