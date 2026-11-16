@@ -16,10 +16,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/passkey": "1.7.19",
+    "@better-auth/passkey": "1.7.22",
     "@openbookings/authz": "workspace:*",
     "@openbookings/mode": "workspace:*",
-    "better-auth": "1.7.19",
+    "better-auth": "1.7.22",
     "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
