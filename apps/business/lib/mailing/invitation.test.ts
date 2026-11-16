@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { getEmailClient } from "@openbookings/mailing";
 import type { trackMail } from "@openbookings/mailing/tracking";
 import { invitationUrl, renderInvitation, sendInvitationEmail } from "./invitation";
 
@@ -13,8 +14,17 @@ const invite = {
 
 
 type Sent = { to?: string; html?: string; text?: string; subject?: string; opts?: unknown };
-function fakeClient(log: string[], sent: Sent[], failWith?: Error) {
-  const make = (state: Sent): any => ({
+type FakeBuilder = {
+  from: () => FakeBuilder;
+  to: (to: string) => FakeBuilder;
+  subject: (subject: string) => FakeBuilder;
+  html: (html: string) => FakeBuilder;
+  text: (text: string) => FakeBuilder;
+  attach: () => FakeBuilder;
+  send: (opts?: unknown) => Promise<{ message_id: string }>;
+};
+function fakeClient(log: string[], sent: Sent[], failWith?: Error): typeof getEmailClient {
+  const make = (state: Sent): FakeBuilder => ({
     from: () => make(state),
     to: (to: string) => make({ ...state, to }),
     subject: (subject: string) => make({ ...state, subject }),
@@ -28,7 +38,7 @@ function fakeClient(log: string[], sent: Sent[], failWith?: Error) {
       return { message_id: "m1" };
     },
   });
-  return () => make({});
+  return () => make({}) as unknown as ReturnType<typeof getEmailClient>;
 }
 const tracker = (log: string[]): typeof trackMail => async ({ kind, to, html }) => ({
   html: `${html}<!--${kind}:${to}-->`,

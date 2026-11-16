@@ -29,6 +29,13 @@ function defaultEnv(): Env {
   };
 }
 
+/** Loop, not `/\/+$/`: that regex backtracks quadratically on long runs of slashes. */
+function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") end--;
+  return url.slice(0, end);
+}
+
 function hostOf(url: string): string | null {
   try {
     return new URL(url).host;
@@ -54,7 +61,7 @@ export function clickRedirectConfig(env: Env = defaultEnv()): ClickRedirectConfi
   const businessHost = hostOf(businessUrl);
   if (!webHost || !businessHost) return null;
 
-  return { key, baseUrl: webUrl.replace(/\/+$/, ""), ownHosts: [webHost, businessHost] };
+  return { key, baseUrl: trimTrailingSlashes(webUrl), ownHosts: [webHost, businessHost] };
 }
 
 /** null (tracking off, emails byte-identical) unless every switch-on condition holds. */
