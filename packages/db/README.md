@@ -39,22 +39,45 @@ on the URL Neon issues); a production URL without it logs an error at boot.
 
 ## Authorization
 
-**There is no row-level security.** No table has RLS enabled, no policies
-exist, and every app connects as `neondb_owner` — which holds `BYPASSRLS`, so
-policies added today would not apply to the application anyway. Tenant
-isolation is entirely application-level, and its single choke point is
-`@openbookings/authz`: `userOwnsProperty`, `userOwnsRoom`, `userOwnsRatePlan`,
-`getThreadForParticipant`, `getHostScopedDb`.
+The first layer is `@openbookings/authz`: `userCan`, `userOwnsProperty`,
+`userOwnsRoom`, `userOwnsRatePlan`, `getThreadForParticipant`,
+`getHostScopedDb`. **No endpoint writes its own ownership SQL.** A query that
+filters on an id taken from the request goes through one of these.
 
-The practical rule that follows: **no endpoint writes its own ownership SQL.**
-A query that filters on an id taken from the request, without going through
-authz or `getHostScopedDb`, is a cross-tenant read waiting to happen — there is
-no second layer underneath it to catch the mistake.
+The second layer is row-level security on the guest-data tables
+(`drizzle/0049_rls_guest_data.sql`): bookings and everything hanging off
+them, checkout holds, guest profiles, messages, reviews, and the login tables.
+A host sees only rows at properties they may read, a guest only their own.
+The rule mirrors `propertyReadAccessSql`; `packages/authz/src/rls.db.test.ts`
+checks the two agree for every role.
 
-Adding real RLS is a two-part change and neither half works alone: a
-least-privilege role for the apps (no `BYPASSRLS`, no table ownership), and
-per-table policies keyed off a request-scoped `set_config`. Until both exist,
-treat the authz package as load-bearing.
+**It is not active yet.** Every app still connects as `neondb_owner`, which
+owns the tables and holds `BYPASSRLS`, so the policies do not apply to it.
+They apply once an app connects as one of the roles 0049 creates:
+
+| Role           | For                                                    | RLS      |
+| -------------- | ------------------------------------------------------ | -------- |
+| `ob_web`       | guest site (member of `ob_app`)                        | enforced |
+| `ob_business`  | host dashboard (member of `ob_app`)                    | enforced |
+| `ob_auth`      | Better Auth's pool and hooks                           | bypassed |
+| `ob_system`    | Stripe webhooks, crons, invoice job, support bot, mail | bypassed |
+| `neondb_owner` | migrations only                                        | bypassed |
+
+The roles are created without LOGIN; give one a password by hand
+(`ALTER ROLE ob_web LOGIN PASSWORD '…'`), never in a migration. App roles
+cannot read password hashes, session tokens or 2FA secrets, and only read the
+invoicing tables.
+
+Switching an app over needs each request wrapped in a transaction that starts
+with `SELECT set_config('app.user_id', $1, true)` (plus
+`set_config('app.testing', 'on', true)` in testing mode). Transaction-local
+matters: the Neon pooler shares server connections between clients. Without
+it, policies match nothing and queries return no rows. Availability must read
+other guests' rooms through `app.room_units_taken(...)` (counts only) rather
+than joining `reservations` / `booking_intent_rooms` as a guest.
+
+A table added by a later migration is not granted to any app role until that
+migration grants it: there are deliberately no default privileges.
 
 ## Migrations
 
