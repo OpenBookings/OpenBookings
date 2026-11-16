@@ -13,8 +13,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "posthog-js": "^1.447.7",
-    "posthog-node": "^5.67.1",
+    "posthog-js": "^1.448.0",
+    "posthog-node": "^5.71.0",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
