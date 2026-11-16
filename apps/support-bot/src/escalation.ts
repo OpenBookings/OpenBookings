@@ -73,7 +73,7 @@ export function messageTriggersEscalation(message: string): string | null {
   for (const pattern of DISPUTE_PATTERNS) {
     const match = pattern.exec(normalized);
     if (match) {
-      return `Guest message mentions a dispute/chargeback ("${match[0]}") — routed straight to a human per partner-agreement dispute procedure.`;
+      return `Guest message mentions a dispute/chargeback ("${match[0]}") — routed straight to a human per the Host Agreement dispute procedure.`;
     }
   }
   return null;
