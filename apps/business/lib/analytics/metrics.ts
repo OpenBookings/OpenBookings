@@ -3,8 +3,6 @@ import type {
   BookingFact, Facts, GroupType, InventoryFact, IsoDate, Share, SoldNight,
 } from "./types";
 
-/** OpenBookings' cut of net room revenue. */
-export const COMMISSION_RATE = 0.045;
 /** Distributions, rankings and tables refuse to render below this. */
 export const MIN_SAMPLE = 5;
 export const TOP_N = 5;
@@ -70,8 +68,13 @@ export const adrCents = (nights: SoldNight[]): number | null =>
 export const revparCents = (nights: SoldNight[], inventory: InventoryFact[]): number | null =>
   ratio(stayRevenueCents(nights), nightsAvailable(inventory));
 
-/** Rounded once, on the total. Per-booking rounding drifts by a cent a booking. */
-export const commissionCents = (revenue: number): number => Math.round(revenue * COMMISSION_RATE);
+/**
+ * The commission charged on these bookings: the sum of what each booking was
+ * charged, so it matches the monthly invoice. Never a rate times revenue: the
+ * rate is per property, applies to the price including VAT, and is rounded
+ * per booking.
+ */
+export const commissionCents = (bookings: BookingFact[]): number => sum(bookings, (b) => b.commissionCents);
 
 /** A booking made after check-in is same-day, not negative days out. */
 export const leadDays = (b: BookingFact): number =>

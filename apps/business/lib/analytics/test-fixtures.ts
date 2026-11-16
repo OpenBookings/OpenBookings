@@ -25,6 +25,8 @@ export function booking(over: Partial<BookingFact> = {}): BookingFact {
     roomId: "standard",
     ratePlanId: "flex",
     cancellationFeeCents: 0,
+    // 4.5% of the stay at 21% VAT, rounded per booking, as the engine charges it.
+    commissionCents: Math.round(Math.round(net * 1.21) * 0.045),
     ...over,
     checkIn,
     checkOut: over.checkOut ?? addDays(checkIn, nights),

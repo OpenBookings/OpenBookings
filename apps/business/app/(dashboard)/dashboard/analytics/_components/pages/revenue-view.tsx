@@ -43,10 +43,10 @@ export function RevenuePageView({ data }: { data: PageData<"revenue"> }) {
           info="Revenue per available room night: ADR multiplied by occupancy. Read next to ADR, it tells you whether weak revenue comes from a low price or from empty rooms."
         />
         <Stat
-          label="Commission (4.5%)"
+          label="Commission"
           widget={view.commission}
           format={formatEuros}
-          info="OpenBookings' commission: 4.5% of the revenue in this period."
+          info="OpenBookings' commission on the bookings made in this period, as charged: your rate on the room price including VAT, rounded per booking and never on tourist tax. Revenue here is shown without VAT, so this is more than your rate times that figure. It includes commission on fees you kept from cancellations."
           href="/dashboard/finance"
           hrefLabel="Statements in Finance"
         />

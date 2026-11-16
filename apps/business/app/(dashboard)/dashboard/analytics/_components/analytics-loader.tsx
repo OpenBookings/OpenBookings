@@ -9,7 +9,7 @@ import { PAGES, type PageId } from "@/lib/analytics/pages";
 const LINES: Record<PageId, readonly string[]> = {
   revenue: [
     "Adding up what you earned",
-    "Setting aside the 4.5% commission",
+    "Setting aside the commission",
     "Working out ADR and RevPAR",
     "Drawing revenue over time",
   ],

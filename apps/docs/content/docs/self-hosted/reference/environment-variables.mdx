@@ -39,6 +39,7 @@ I = invoice job, R = root scripts.
 | `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET` | W | no | Sign in with Apple for guests. |
 | `GOOGLE_CLIENT_ID_BUSINESS` / `GOOGLE_CLIENT_SECRET_BUSINESS` | B | no | Google sign-in for hosts (a separate OAuth client). |
 | `TIRRENO_URL` / `TIRRENO_API_KEY` | B | no | Sign-in risk scoring with Tirreno. Off when unset. |
+| `HOST_AGREEMENT_URL` | B | in production | Where the current Host Agreement text is published (http or https). Hosts cannot accept the agreement, and so cannot finish onboarding, while it is unset in production. Outside production a placeholder link stands in. |
 
 ## Payments (Stripe)
 
