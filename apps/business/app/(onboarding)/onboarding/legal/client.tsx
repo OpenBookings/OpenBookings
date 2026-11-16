@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LegalNBoringStep, type LegalNBoringValues } from "../_steps/legal-n-boring";
 import { StepNav } from "../_components/step-nav";
 import { provisionStripeAccount, type LegalNBoringData } from "../actions";
+import { isCurrentHostAgreement } from "../_lib/host-agreement";
 
 const EMPTY_LEGAL: LegalNBoringValues = {
   legalCompanyName: "",
@@ -12,8 +13,7 @@ const EMPTY_LEGAL: LegalNBoringValues = {
   roleTitle: "",
   vatNumber: "",
   cocNumber: "",
-  partnerAgreementSignedAt: null,
-  dpaSignedAt: null,
+  hostAgreementSignedAt: null,
   ratesInclusiveConfirmedAt: null,
 };
 
@@ -25,13 +25,22 @@ function toValues(saved: LegalNBoringData | undefined): LegalNBoringValues {
     roleTitle: saved.roleTitle ?? "",
     vatNumber: saved.vatNumber ?? "",
     cocNumber: saved.cocNumber ?? "",
-    partnerAgreementSignedAt: saved.partnerAgreement?.signedAt ?? null,
-    dpaSignedAt: saved.dpa?.signedAt ?? null,
+    // Only an acceptance of the version in force counts; an older one (or a
+    // legacy "Partner Agreement" click) means accepting again.
+    hostAgreementSignedAt: isCurrentHostAgreement(saved.hostAgreement)
+      ? saved.hostAgreement!.signedAt
+      : null,
     ratesInclusiveConfirmedAt: saved.ratesInclusive?.signedAt ?? null,
   };
 }
 
-export function LegalClient({ initialValues }: { initialValues?: LegalNBoringData }) {
+export function LegalClient({
+  initialValues,
+  agreementUrl,
+}: {
+  initialValues?: LegalNBoringData;
+  agreementUrl: string | null;
+}) {
   const router = useRouter();
   const [values, setValues] = useState<LegalNBoringValues>(() => toValues(initialValues));
   const [isPending, startTransition] = useTransition();
@@ -52,7 +61,7 @@ export function LegalClient({ initialValues }: { initialValues?: LegalNBoringDat
     !values.fullName.trim() ||
     !values.roleTitle.trim() ||
     !values.vatNumber.trim() ||
-    !values.partnerAgreementSignedAt ||
+    !values.hostAgreementSignedAt ||
     !values.ratesInclusiveConfirmedAt;
 
   return (
@@ -60,6 +69,7 @@ export function LegalClient({ initialValues }: { initialValues?: LegalNBoringDat
       <div className="pb-28">
         <LegalNBoringStep
           values={values}
+          agreementUrl={agreementUrl}
           onChange={(partial) => setValues((prev) => ({ ...prev, ...partial }))}
         />
       </div>

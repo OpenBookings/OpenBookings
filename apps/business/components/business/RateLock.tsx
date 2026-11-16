@@ -172,12 +172,13 @@ export async function RateLock() {
             <div>
               <div className="mb-3 flex items-center gap-2.5">
                 <span className="h-2 w-2 rounded-full bg-spectrum-mint" />
-                <span className="text-[15px] font-medium tracking-[-0.01em] text-white">Booking data — stays in the EU</span>
+                <span className="text-[15px] font-medium tracking-[-0.01em] text-white">Booking data — stored in the EU</span>
               </div>
               <p className="text-[14px] leading-[1.75] text-white/40">
-                Reservations, guest names, messages, preferences. OpenBookings stores lives in
-                EU-certified data centres and never leaves the European Economic Area. GDPR compliance is
-                by design, not a policy document.
+                Reservations, guest names, messages, preferences. OpenBookings stores them in
+                data centres in the EU. Where a processor such as Stripe or Cloudflare handles data outside
+                the EU, it does so under the EU&apos;s Standard Contractual Clauses. GDPR compliance is by design,
+                not a policy document.
               </p>
             </div>
             <div>

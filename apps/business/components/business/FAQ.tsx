@@ -30,19 +30,19 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "What exactly is open source?",
     answer: [
-      "The core booking engine and data models, including the fee and ranking logic, are public on GitHub under the MPL-2.0 license. Parameters like ranking points are kept in the so called 'black-box' to keep the platform fair to everyone.",
+      "All of it. The whole platform, including the booking engine, the fee logic and the search ranking, is public on GitHub under the AGPL-3.0 license. There are no hidden ranking parameters: search shows properties within 250 km that fit the guests and dates, cheapest total price first. Ranking is not for sale.",
     ],
   },
   {
     question: "Where is guest data stored?",
     answer: [
-      "Booking data (e.g. reservations, guest names, messages) is stored in EU-certified data centres and never leaves the European Economic Area. Payment data is different by design: card details go directly from the guest to Stripe (PCI-DSS Level 1) and never touch our servers at all.",
+      "Booking data (e.g. reservations, guest names, messages) is stored in data centres in the EU. A few processors we rely on, such as Stripe and Cloudflare, may process some of it outside the EU under the EU's Standard Contractual Clauses; our Privacy Policy lists each one and where it processes data. Card details go directly from the guest to Stripe (PCI-DSS Level 1) and never touch our servers at all.",
     ],
   },
   {
     question: "Am I locked in?",
     answer: [
-      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours and can be exported at any time, while guest data cannot be bulk exported in line with GDPR requirements and the Partner Agreement.",
+      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours and can be exported at any time, while guest data cannot be bulk exported in line with GDPR requirements and the Host Agreement.",
     ],
   },
 ];

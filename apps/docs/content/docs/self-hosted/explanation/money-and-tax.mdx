@@ -14,13 +14,15 @@ or a fixed amount per person, night or room) and added on top. Guests see it bef
 
 ## Prepayment, always
 
-Every booking is paid in full, online, at checkout. There's no pay-at-the-hotel option. The
+Every booking is paid in full, online, at checkout: the stay plus tourist tax. The one exception
+is cots and extra beds. Their price is worked out and shown at booking (stored on the reservation
+as `pay_at_property_amount`), but the guest pays it at the hotel, and it's never commissioned. The
 payment is a Stripe **direct charge** on the hotel's own connected account. The money belongs to
 the hotel from the start, and OpenBookings takes its commission as an application fee.
 
 ## Commission
 
-The commission is **4.5% of the room price**. It's never taken on tourist tax, which passes
+The commission is **4.5% of the room price**, VAT included. It's never taken on tourist tax, which passes
 straight to the hotel. The fee itself includes VAT: Dutch VAT for a Dutch hotel, and reverse
 charge for a hotel elsewhere in the EU with a verified VAT number. Each booking stores the fee
 and its net/VAT split at the moment it's made.

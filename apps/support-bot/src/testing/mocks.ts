@@ -81,7 +81,11 @@ function reservationRow(fake: FakeReservation): SupportReservation {
     check_out_time: "11:00:00",
     timezone: "Europe/Amsterdam",
     confirmed_at: "2026-08-01T00:00:00+00:00",
-    total_amount: 32500,
+    // Money as the tools read it: cents. The real row also has
+    // bookings.total_amount = 207 (whole euros); the lookup never selects it.
+    total_cents: 20700,
+    rooms_total_cents: 19050,
+    tourist_tax_cents: 1650,
     currency: "eur",
     stripe_payment_intent_id: "pi_test",
     stripe_account_id: "acct_test",
@@ -103,8 +107,8 @@ function reservationRow(fake: FakeReservation): SupportReservation {
         adults: 2,
         children: 0,
         total_nights: 2,
-        price_per_night: 16250,
-        total_amount: 32500,
+        stay_total_cents: 19050,
+        pay_at_property_cents: 2000,
       },
     ],
   };
@@ -113,6 +117,8 @@ function reservationRow(fake: FakeReservation): SupportReservation {
 mock.module("@openbookings/db", () => ({
   // The real SQL fragment: host lookups interpolate it into their statement.
   ROOM_POLICY_JSON: "'cancellation_tier', 'standard'",
+  BOOKING_CENTS_COLUMNS: "b.total_cents AS total_cents",
+  ROOM_CENTS_JSON: "'stay_total_cents', 0",
   // Host lookups (src/host/queries.ts) go through raw SQL; tests script the
   // rows and assert the scoping in the statement text.
   query: async (text: string, values: unknown[] = []) => {

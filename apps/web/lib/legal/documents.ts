@@ -100,8 +100,27 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "privacy",
     fallbackLocale: "en",
-    currentVersion: "2026-11-15",
+    currentVersion: "2026-11-16",
     versions: [
+      {
+        version: "2026-11-16",
+        effectiveFrom: "2026-11-16",
+        lastUpdated: "2026-11-16",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/privacy/2026-11-16/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-11-16/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-11-16/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-11-15",
         effectiveFrom: "2026-11-15",
@@ -183,8 +202,27 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "terms",
     fallbackLocale: "en",
-    currentVersion: "2026-10-24",
+    currentVersion: "2026-11-16",
     versions: [
+      {
+        version: "2026-11-16",
+        effectiveFrom: "2026-11-16",
+        lastUpdated: "2026-11-16",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/terms/2026-11-16/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-11-16/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-11-16/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-10-24",
         effectiveFrom: "2026-10-24",

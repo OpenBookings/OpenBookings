@@ -15,7 +15,10 @@ export type TrackingToken = {
   /** send id */
   s: string;
   k: EmailKind;
-  /** user id, null for emails tracked without consent */
+  /**
+   * User id. Null only on team invitations sent before every kind needed
+   * consent; those opens and clicks are never captured (see handle.ts).
+   */
   u: string | null;
   /** sent at, epoch seconds */
   t: number;

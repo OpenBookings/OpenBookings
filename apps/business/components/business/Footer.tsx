@@ -20,7 +20,7 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
               <Image src="https://cdn.openbookings.co/Public/OB-LIGHT-WORDMARK.png" alt="OpenBookings Business" width={200} height={40} preload />
             </div>
             <p className="text-[13px] leading-[1.7] text-white/28">
-              Open-Source Core · EU Data Residency · No surprises.
+              Open Source · Data stored in the EU · No surprises.
             </p>
           </div>
           <div className="flex gap-16">

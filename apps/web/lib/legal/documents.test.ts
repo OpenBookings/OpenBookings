@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-11-15";
+const CURRENT = "2026-11-16";
 const DIR = join(import.meta.dir, "../../content/legal/privacy");
 const read = (version: string, locale: string) =>
   readFileSync(join(DIR, version, `${locale}.mdx`), "utf8");
@@ -42,7 +42,11 @@ describe("current privacy policy content", () => {
   for (const locale of LEGAL_LOCALES) {
     test(`${locale}: names the real vendors`, () => {
       const source = read(CURRENT, locale);
-      for (const vendor of ["Neon", "Scaleway", "Algolia", "MapTiler", "Lettermint", "PostHog", "Sentry", "Cloudflare", "Stripe"]) {
+      for (const vendor of [
+        "Neon", "Scaleway", "Algolia", "MapTiler", "Lettermint", "PostHog", "Sentry", "Cloudflare", "Stripe",
+        // Reviews cache and support task queue; support inbox; support assistant.
+        "Upstash", "Chatwoot", "Mistral",
+      ]) {
         expect(source).toContain(`**${vendor}**`);
       }
     });
@@ -50,7 +54,7 @@ describe("current privacy policy content", () => {
     test(`${locale}: does not name vendors that get no guest data`, () => {
       const source = read(CURRENT, locale);
       // Whole words, any case: "Cartographie" is not CartoDB, "CARTO" is.
-      for (const absent of ["Google Cloud", "Tirreno", "Chatwoot", "Mistral", "Carto", "CartoDB", "Dicebear", "Microsoft", "Upstash"]) {
+      for (const absent of ["Google Cloud", "Tirreno", "Carto", "CartoDB", "Dicebear", "Microsoft"]) {
         expect(source).not.toMatch(new RegExp(`\\b${absent}\\b`, "i"));
       }
     });
@@ -63,10 +67,43 @@ describe("current privacy policy content", () => {
       }
     });
 
-    test(`${locale}: Cloudflare row claims only what the guest site sends it`, () => {
+    test(`${locale}: Cloudflare row covers live message delivery, but not rate limiting`, () => {
       const row = read(CURRENT, locale).split("\n").find((l) => l.startsWith("| **Cloudflare**"))!;
-      // Guest messaging and Cloudflare rate limiting are not live on the guest site.
-      expect(row).not.toMatch(/messag|bericht|limit|snelheid|débit/i);
+      // Live guest messages go through a Cloudflare Worker (packages/messaging/src/realtime.ts).
+      expect(row).toMatch(/messag|bericht/i);
+      // Cloudflare rate limiting is not live on the guest site.
+      expect(row).not.toMatch(/limit|snelheid|débit/i);
+    });
+
+    test(`${locale}: Upstash row names the cached reviews`, () => {
+      const row = read(CURRENT, locale).split("\n").find((l) => l.startsWith("| **Upstash**"))!;
+      expect(row).toMatch(/review|beoordeling|avis/i);
+    });
+
+    test(`${locale}: email pixels are disclosed, and only with consent`, () => {
+      const source = read(CURRENT, locale);
+      expect(source).not.toMatch(/No tracking pixels|Geen trackingpixels|Aucun pixel de suivi/);
+      expect(source).toMatch(/invisible image|onzichtbaar plaatje|image invisible/);
+    });
+
+    test(`${locale}: lists the account data the export holds`, () => {
+      const source = read(CURRENT, locale);
+      // apps/web/lib/account/export.ts: phone, address, passkeys, sessions (IP), liked rooms.
+      expect(source).toMatch(/phone|telefoon|téléphone/i);
+      expect(source).toMatch(/passkey|clés d'accès/i);
+      expect(source).toMatch(/IP/);
+    });
+
+    test(`${locale}: states message and booking-note retention`, () => {
+      const source = read(CURRENT, locale);
+      expect(source).toMatch(/\| (Messages|Berichten) \| 365 (days|dagen|jours)/);
+      expect(source).toMatch(/18 (months|maanden|mois)/);
+    });
+
+    test(`${locale}: points hosts at the Host Agreement, not the old Partner Agreement`, () => {
+      const source = read(CURRENT, locale);
+      expect(source).toMatch(/Host Agreement|Hostovereenkomst/);
+      expect(source).not.toMatch(/Partner Agreement|Partnerovereenkomst|Contrat de partenariat/);
     });
 
     test(`${locale}: discloses that Sentry receives page-load timing, not only errors`, () => {
@@ -108,5 +145,6 @@ describe("current privacy policy content", () => {
 
   test("the previous version's files are untouched", () => {
     expect(read("2026-09-21", "en")).toContain("**Google Cloud**");
+    expect(read("2026-11-15", "en")).toContain("No tracking pixels.");
   });
 });

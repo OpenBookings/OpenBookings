@@ -105,7 +105,7 @@ export function Hero() {
             </div>
             <div className="whitespace-nowrap text-center">
               <div className="text-[11px] font-medium text-white/80">GDPR Compliant</div>
-              <div className="text-[10px] text-white/35">EU Data Residency</div>
+              <div className="text-[10px] text-white/35">Data stored in the EU</div>
             </div>
           </div>
 
@@ -118,8 +118,8 @@ export function Hero() {
               </svg>
             </div>
             <div className="whitespace-nowrap text-center">
-              <div className="text-[11px] font-medium text-white/80">Open Source Core</div>
-              <div className="text-[10px] text-white/35">MPL-2.0 Licensed</div>
+              <div className="text-[11px] font-medium text-white/80">Open Source</div>
+              <div className="text-[10px] text-white/35">AGPL-3.0 Licensed</div>
             </div>
           </div>
 

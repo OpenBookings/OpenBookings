@@ -173,22 +173,27 @@ describe("trackMail", () => {
     expect("anonymous" in h.captured[0]!).toBe(false);
   });
 
-  it("tracks team_invitation anonymously without a consent check", async () => {
+  it("leaves a team_invitation untouched when the invitee has no account", async () => {
     const h = harness({ userIdByEmail: async () => null });
     const r = await trackMail({ kind: "team_invitation", to: "a@b.c", html }, h.deps);
-    expect(r.html).toContain("/e/o/");
-    const pixel = /src="https:\/\/openbookings\.co\/e\/o\/([^"]+)"/.exec(r.html)![1]!;
-    expect(openToken(pixel, key)?.u).toBeNull();
+    expect(r.html).toBe(html);
     await r.onSent();
-    expect(h.captured).toEqual([
-      {
-        distinctId: "send-1",
-        event: "email_sent",
-        properties: { email_kind: "team_invitation", send_id: "send-1" },
-        anonymous: true,
+    expect(h.captured).toEqual([]);
+  });
+
+  it("gates a team_invitation on consent like every other kind", async () => {
+    const asked: string[] = [];
+    const h = harness({
+      consentAccepted: async (u: string) => {
+        asked.push(u);
+        return false;
       },
-    ]);
-    expect(h.consentCalls).toEqual([]);
+    });
+    const r = await trackMail({ kind: "team_invitation", to: "a@b.c", html }, h.deps);
+    expect(r.html).toBe(html);
+    expect(asked).toEqual(["user-1"]);
+    await r.onSent();
+    expect(h.captured).toEqual([]);
   });
 
   it("falls back to untouched html when a dependency throws", async () => {

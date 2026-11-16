@@ -9,29 +9,14 @@ export type FeedEntry = {
   date: string;
 };
 
-// Stub feeds until the notifications backend lands. Newest first; `id` is the
-// ordering key the seen-state compares against.
-export const NOTIFICATIONS: FeedEntry[] = [
-  {
-    id: 3,
-    title: "New reservation",
-    body: "A booking came in for the Garden Suite, 12–15 October.",
-    date: "2026-09-05",
-  },
-  {
-    id: 2,
-    title: "Payout on its way",
-    body: "Your September payout has been sent to your bank account.",
-    date: "2026-09-02",
-  },
-  {
-    id: 1,
-    title: "Review received",
-    body: "A guest left a 5-star review for the Garden Suite.",
-    date: "2026-08-28",
-  },
-];
+// Empty until the notifications backend lands. The sample entries this held
+// ("New reservation", "Payout on its way", "Review received") were shown to
+// every real host as if they were theirs, so the dialog shows its empty state
+// and the nav gets no unread dot. Newest first; `id` is the ordering key the
+// seen-state compares against.
+export const NOTIFICATIONS: FeedEntry[] = [];
 
+// Product changes, the same for every host.
 export const CHANGELOG: FeedEntry[] = [
   {
     id: 2,

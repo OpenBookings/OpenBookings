@@ -24,7 +24,6 @@ function setup(over: Parameters<typeof captureOutcome>[3] = {}) {
     capture: async (e: ServerEvent) => {
       captured.push(e);
     },
-    newId: () => "anon-1",
     ...over,
   };
   return { captured, deps };
@@ -41,16 +40,8 @@ describe("captureOutcome", () => {
     await captureOutcome("review_submitted", { userId: "u1" }, undefined, s.deps);
     expect(s.captured).toEqual([]);
   });
-  it("captures anonymously with a fresh id", async () => {
-    const s = setup();
-    await captureOutcome("team_invitation_accepted", "anonymous", undefined, s.deps);
-    expect(s.captured).toEqual([
-      { distinctId: "anon-1", event: "team_invitation_accepted", properties: {}, anonymous: true },
-    ]);
-  });
   it("is a no-op without config", async () => {
     const s = setup({ config: null });
-    await captureOutcome("stay_marked_arrived", "anonymous", undefined, s.deps);
     await captureOutcome("stay_marked_arrived", { userId: "u1" }, undefined, s.deps);
     expect(s.captured).toEqual([]);
   });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentVersion, getDocument, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-10-24";
+const CURRENT = "2026-11-16";
 const DIR = join(import.meta.dir, "../../content/legal/terms");
 const read = (locale: string) => readFileSync(join(DIR, CURRENT, `${locale}.mdx`), "utf8");
 const sectionIds = (source: string) =>
@@ -49,6 +49,22 @@ describe("current terms of service content", () => {
       const privacyLinks = [...source.matchAll(/\]\((\/legal\/[^)]+)\)/g)].map((m) => m[1]);
       expect(privacyLinks.length).toBeGreaterThan(0);
       for (const href of privacyLinks) expect(href).toBe(`/legal/${locale}/privacy`);
+    });
+
+    test(`${locale}: names the AGPL, not the MPL`, () => {
+      expect(source).toContain("AGPL-3.0-only");
+      expect(source).not.toMatch(/Mozilla/);
+    });
+
+    test(`${locale}: describes reviews instead of saying they aren't available`, () => {
+      expect(source).toMatch(/\*\*10\.7 (Reviews|Beoordelingen|Avis)\.\*\*/);
+      expect(source).toMatch(/30 (days|dagen|jours)/);
+    });
+
+    test(`${locale}: does not promise account deletion "at any time"`, () => {
+      // apps/web/lib/account/deletion.ts blocks deletion during an upcoming stay.
+      const clause = source.split("\n").find((l) => l.startsWith("**3.5**"))!;
+      expect(clause).not.toMatch(/at any time|op elk moment|à tout moment/);
     });
 
     test(`${locale}: carries no internal drafting notes`, () => {

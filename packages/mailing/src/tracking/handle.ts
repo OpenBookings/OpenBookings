@@ -53,11 +53,11 @@ async function captureEngagement(
   deps: HandleDeps,
 ): Promise<void> {
   try {
-    const anonymous = payload.u === null;
-    if (!anonymous) {
-      const consented = deps.consentAccepted ?? ((id: string) => isConsented(id, config));
-      if (!(await consented(payload.u as string))) return;
-    }
+    // A token without a user predates consent-gating for every kind (old team
+    // invitations still in inboxes): the link works, nothing is captured.
+    if (payload.u === null) return;
+    const consented = deps.consentAccepted ?? ((id: string) => isConsented(id, config));
+    if (!(await consented(payload.u))) return;
     const nowSeconds = Math.floor((deps.now ?? (() => new Date()))().getTime() / 1000);
     const properties: Record<string, string | number | boolean | null> = {
       email_kind: payload.k,
@@ -67,12 +67,7 @@ async function captureEngagement(
     };
     if (event === "email_clicked") properties.link = payload.l ?? null;
     const capture = deps.capture ?? captureServerEvent;
-    await capture({
-      distinctId: payload.u ?? payload.s,
-      event,
-      properties,
-      ...(anonymous ? { anonymous: true } : {}),
-    });
+    await capture({ distinctId: payload.u, event, properties });
   } catch (error) {
     console.error(`[email-tracking] ${event} capture failed`, error);
   }
