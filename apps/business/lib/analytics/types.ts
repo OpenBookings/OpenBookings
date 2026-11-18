@@ -39,6 +39,13 @@ export interface BookingFact {
   discountCents: number;
   /** What the host kept when a cancelled booking's tier charged a fee. */
   cancellationFeeCents: number;
+  /**
+   * OpenBookings' commission on this booking as charged (`bookings.commission_cents`),
+   * net of what a refund handed back. Fixed at booking: the property's own rate on
+   * the room price including VAT, rounded per booking, never on tourist tax. Not
+   * derivable from `netRevenueCents`, which is ex VAT; read it, never recompute it.
+   */
+  commissionCents: number;
 }
 
 /** One room type's capacity on one date. */

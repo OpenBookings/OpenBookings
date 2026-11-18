@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { bookingDate, earliestFactDate } from "../metrics";
 import { addDays } from "../period";
+import { applicationFeeCents } from "@openbookings/stripe/fees";
 import { buildDemoFacts } from "./generate";
 
 const TODAY = "2026-10-01";
@@ -64,6 +65,16 @@ describe("demo facts", () => {
     expect(facts.bookings.some((b) => b.discountCents > 0)).toBe(true);
     expect(cancelled.some((b) => b.cancellationFeeCents > 0)).toBe(true);
     expect(new Set(facts.bookings.map((b) => b.guestCountry)).size).toBeGreaterThan(8);
+  });
+
+  test("commission is charged as checkout charges it: on the stay with VAT, per booking", () => {
+    for (const b of facts.bookings.filter((x) => x.status !== "cancelled")) {
+      expect(b.commissionCents).toBe(applicationFeeCents(Math.round(b.netRevenueCents * 1.21), 0.045));
+    }
+    const cancelled = facts.bookings.filter((b) => b.status === "cancelled");
+    // A full refund hands the commission back; a kept fee keeps its share.
+    expect(cancelled.filter((b) => b.cancellationFeeCents === 0).every((b) => b.commissionCents === 0)).toBe(true);
+    expect(cancelled.some((b) => b.cancellationFeeCents > 0 && b.commissionCents > 0)).toBe(true);
   });
 
   test("history reaches back far enough for a year-over-year comparison", () => {

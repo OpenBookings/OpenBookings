@@ -5,9 +5,6 @@ import { trackingConfig, type TrackingConfig } from "./config";
 import { instrumentHtml } from "./instrument";
 import { sealToken, type EmailKind } from "./token";
 
-/** Kinds tracked without consent: recipients who may not have an account yet. */
-export const ANONYMOUS_KINDS: ReadonlySet<EmailKind> = new Set<EmailKind>(["team_invitation"]);
-
 export type TrackDeps = {
   config?: TrackingConfig | null;
   userIdByEmail?: (email: string) => Promise<string | null>;
@@ -59,24 +56,21 @@ export async function trackMail(
     const config = deps.config === undefined ? trackingConfig() : deps.config;
     if (!config) return untouched;
 
-    const anonymous = ANONYMOUS_KINDS.has(input.kind);
+    // Every kind needs a recipient with an account and analytics consent.
+    // No kind is tracked without it, including team invitations: an invitee
+    // who has no account yet, or never accepted analytics, gets the html untouched.
     const lookup = deps.userIdByEmail ?? dbUserIdByEmail;
     const consented = deps.consentAccepted ?? ((id: string) => isConsented(id, config));
-
-    let userId: string | null = null;
-    if (!anonymous) {
-      const consentedUser = async () => {
-        const id = await lookup(input.to);
-        return id && (await consented(id)) ? id : null;
-      };
-      const found = await withinBudget(consentedUser(), deps.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
-      if (found === TIMED_OUT) {
-        console.warn("[email-tracking] consent lookup timed out, sending untouched html");
-        return untouched;
-      }
-      if (!found) return untouched;
-      userId = found;
+    const consentedUser = async () => {
+      const id = await lookup(input.to);
+      return id && (await consented(id)) ? id : null;
+    };
+    const userId = await withinBudget(consentedUser(), deps.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
+    if (userId === TIMED_OUT) {
+      console.warn("[email-tracking] consent lookup timed out, sending untouched html");
+      return untouched;
     }
+    if (!userId) return untouched;
 
     const sendId = (deps.newId ?? randomUUID)();
     const sentAt = Math.floor((deps.now ?? (() => new Date()))().getTime() / 1000);
@@ -97,10 +91,9 @@ export async function trackMail(
     });
 
     const event: ServerEvent = {
-      distinctId: userId ?? sendId,
+      distinctId: userId,
       event: "email_sent",
       properties: { email_kind: input.kind, send_id: sendId },
-      ...(anonymous ? { anonymous: true } : {}),
     };
     return {
       html,

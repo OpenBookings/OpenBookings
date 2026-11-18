@@ -20,13 +20,16 @@ function message(error: unknown): string {
 }
 
 export async function acceptInvite(invitationId: string): Promise<InviteResult> {
-  if (!(await getServerSession())) redirect(`/login?redirect=${encodeURIComponent(`/invite/${invitationId}`)}`);
+  const session = await getServerSession();
+  if (!session) redirect(`/login?redirect=${encodeURIComponent(`/invite/${invitationId}`)}`);
   try {
     await auth.api.acceptInvitation({ headers: await headers(), body: { invitationId } });
   } catch (error) {
     return { error: message(error) };
   }
-  after(() => captureOutcome("team_invitation_accepted", "anonymous"));
+  // Consent-gated like every outcome: the invitee is signed in by now.
+  const userId = session.user.id;
+  after(() => captureOutcome("team_invitation_accepted", { userId }));
   redirect("/dashboard");
 }
 

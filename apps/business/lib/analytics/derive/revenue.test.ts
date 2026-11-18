@@ -8,13 +8,18 @@ describe("deriveRevenue", () => {
   test("revenue is the net of kept bookings made in the period", () => {
     const f = facts([
       booking(),
-      booking({ status: "cancelled", cancelledAt: "2026-09-03T10:00:00.000Z" }),
+      // Fully refunded: its commission was handed back.
+      booking({ status: "cancelled", cancelledAt: "2026-09-03T10:00:00.000Z", commissionCents: 0 }),
+      // Cancelled late: the host kept a fee, and the commission on it stays.
+      booking({ status: "cancelled", cancelledAt: "2026-09-04T10:00:00.000Z", cancellationFeeCents: 10_000, commissionCents: 545 }),
       booking({ createdAt: "2026-08-15T10:00:00.000Z", nights: 1 }),
     ]);
     const view = deriveRevenue(ctx(f, SEPT));
     expect(ok(view.revenue).value).toBe(20_000);
     expect(ok(view.revenue).delta).toMatchObject({ direction: "up", pct: 100 });
-    expect(ok(view.commission).value).toBe(900);
+    // What the period's bookings were charged (€200 net = €242 with VAT → €10.89),
+    // not 4.5% of net revenue (€9.00).
+    expect(ok(view.commission).value).toBe(1_089 + 0 + 545);
     expect(ok(view.commission).delta).toBeNull();
   });
 

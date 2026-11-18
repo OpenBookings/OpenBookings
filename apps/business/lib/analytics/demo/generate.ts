@@ -1,3 +1,4 @@
+import { applicationFeeCents, commissionRefundDue } from "@openbookings/stripe/fees";
 import { expandNights } from "../metrics";
 import { addDays, enumerateDates, weekdayOf } from "../period";
 import type { BookingFact, Facts, InventoryFact, IsoDate } from "../types";
@@ -174,6 +175,22 @@ function drawBooking(
         ? nightlyNetCents[0]
         : 0;
 
+  // Charged as checkout charges it: the property's rate on the stay with VAT,
+  // rounded per booking. A cancellation hands back the same share of the
+  // commission as of the payment (tourist tax is left out of the demo).
+  const stayCents = Math.round(netRevenueCents * (1 + hotel.vatRate));
+  const chargedCommission = applicationFeeCents(stayCents, hotel.commissionRate);
+  const keptCents = Math.round(cancellationFeeCents * (1 + hotel.vatRate));
+  const commissionCents = cancelled
+    ? chargedCommission -
+      commissionRefundDue({
+        chargeAmount: stayCents,
+        chargeRefunded: stayCents - keptCents,
+        feeAmount: chargedCommission,
+        feeRefunded: 0,
+      })
+    : chargedCommission;
+
   const checkOut = addDays(checkIn, nights);
 
   return {
@@ -195,6 +212,7 @@ function drawBooking(
     basePriceCents,
     discountCents: basePriceCents - netRevenueCents,
     cancellationFeeCents,
+    commissionCents,
   };
 }
 

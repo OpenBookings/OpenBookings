@@ -1,4 +1,5 @@
 import { RATES_TAX_INCLUSIVE_DOC_ID } from "@openbookings/authz/rates-doc";
+import { isCurrentHostAgreement } from "@/app/(onboarding)/onboarding/_lib/host-agreement";
 import { DEMO_ORG_ID } from "@openbookings/mode";
 import type { PoolClient } from "pg";
 import type { LegalNBoringData } from "@/app/(onboarding)/onboarding/actions";
@@ -129,14 +130,19 @@ export async function provisionOrganizationTx(
     [organizationId, input.userId],
   );
 
-  // 4. Host Agreement + DPA consent rows from the signed legal step.
+  // 4. Consent rows from the legal step. The Host Agreement row's doc_id
+  // carries the version accepted (`host-agreement@1.2`); the DPA is part of
+  // it. Legacy `partnerAgreement` / `dpa` clicks showed no text and are not
+  // carried over.
+  const hostAgreement = isCurrentHostAgreement(input.legal.hostAgreement)
+    ? input.legal.hostAgreement!
+    : undefined;
   for (const [docId, signature] of [
-    ["partner-agreement", input.legal.partnerAgreement],
-    ["dpa", input.legal.dpa],
+    [hostAgreement?.docId, hostAgreement],
     // Confirmed in the same step; without it the organisation cannot set prices.
     [RATES_TAX_INCLUSIVE_DOC_ID, input.legal.ratesInclusive],
   ] as const) {
-    if (!signature) continue;
+    if (!signature || !docId) continue;
     await client.query(
       `INSERT INTO org_consent
          (organization_id, doc_id, signed_by_user_id, signer_full_name,
@@ -161,7 +167,14 @@ export async function provisionOrganizationTx(
     [
       input.userId,
       organizationId,
-      JSON.stringify({ slug, stripeAccountId: input.stripeAccountId }),
+      JSON.stringify({
+        slug,
+        stripeAccountId: input.stripeAccountId,
+        // org_consent has no column for it: where the accepted text was published.
+        ...(hostAgreement && {
+          hostAgreement: { docId: hostAgreement.docId, documentUrl: hostAgreement.documentUrl ?? null },
+        }),
+      }),
     ],
   );
 

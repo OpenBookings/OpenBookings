@@ -50,7 +50,7 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Can I pay at the property?",
-    a: "No. Every booking is paid in full on OpenBookings when you book, so there is nothing to pay at check-in.",
+    a: "Your stay and tourist tax are paid in full on OpenBookings when you book. The one exception is a cot or extra bed: if you add one, its price is shown when you book and you pay for it at the property.",
   },
   {
     q: "How do I reach the property before I arrive?",

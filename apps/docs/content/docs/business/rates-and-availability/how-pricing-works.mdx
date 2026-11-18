@@ -3,17 +3,17 @@ title: How pricing works
 description: How the final price is calculated from base rates and modifiers.
 ---
 
-*Last updated: 2 October 2026*
+*Last updated: 16 November 2026*
 
 ## Overview
 
 A price is never just a number you typed. It starts from the rate plan's base rate and is moved by adjustments that fire only when their conditions are met. 
 
-## Rates include tax
+## Rates include VAT, not tourist tax
 
-The price you enter is the price the guest pays. Enter every rate **including tourist tax, VAT and any mandatory fees**. OpenBookings does not add tax on top, and guests see your price as the total.
+Enter every rate **including VAT and any mandatory fees**. Don't include tourist tax: OpenBookings adds it on top of the room price, worked out from the tourist tax rules you set up for your property, and shows it to the guest as a separate line. The guest pays your price plus that tourist tax.
 
-Collecting and remitting those taxes is your responsibility as the host.
+Collecting and paying VAT and tourist tax to the authorities is your responsibility as the host.
 
 Before your organisation can set or change a price, an owner or admin has to confirm this once. Until then prices are locked and guests cannot book; closing dates and changing restrictions still work.
 
@@ -23,7 +23,7 @@ Every rate plan has a **base rate** — the starting point for every date. A rat
 
 ## The adjustments
 
-On top of the base rate sit adjustments (such as a weekend uplift or a longer-stay discount). They apply **in a fixed order**, and the order changes the result. 
+On top of the base rate sit adjustments (such as a weekend uplift or a longer-stay discount). **Days of the week** and **Last minute** adjustments are applied to each night first. Then at most one discount (**Length of stay** or **Early booking**) is taken off: the one that saves the guest the most. The order in which you added the rules does not change the result.
 
 ## Checking prices for longer stays
 
@@ -33,7 +33,7 @@ To see what a guest booking longer would be charged, change the stay length list
 
 ## Limitations and warnings
 
-- Booking totals at checkout enforce strict minimum amounts per currency: EUR, USD, and CHF minimum is 50; GBP is 30; SEK and NOK are 300; DKK is 250. Bookings falling below these totals are rejected during checkout.
+- Prices are in euros. A booking total below €0.50 (the smallest amount Stripe can charge) is rejected at checkout.
 
 ---
 

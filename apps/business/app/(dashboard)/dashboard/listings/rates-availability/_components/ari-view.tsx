@@ -257,11 +257,11 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         <div className="flex min-h-0 flex-1 flex-col px-4 pt-4 lg:px-6 lg:pt-6">
           <p className="pb-2 text-muted-foreground text-xs">
             {rates.confirmed ? (
-              "All rates include tax. Guests pay the price shown here."
+              "All rates include VAT. Guests pay the price shown here, plus tourist tax from your rules."
             ) : (
               <>
                 Prices are locked until your organisation confirms that its
-                rates include tax.{" "}
+                rates include VAT.{" "}
                 <button
                   type="button"
                   className="underline underline-offset-2"

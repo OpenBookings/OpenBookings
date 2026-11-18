@@ -10,11 +10,11 @@ const goals = [
   },
   {
     title: "Neutral search, always",
-    detail: "Ranking is determined by relevance to the guest. It is not, and will never be, for sale.",
+    detail: "Search shows the cheapest suitable room first, with nothing hidden. Ranking is not, and will never be, for sale.",
   },
   {
-    title: "Booking data stays in Europe",
-    detail: "EU data residency by design. Payments route directly to Stripe.",
+    title: "Booking data stored in Europe",
+    detail: "Stored in the EU by design. Payments route directly to Stripe.",
   },
 ];
 

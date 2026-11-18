@@ -56,8 +56,12 @@ describe("nights and availability", () => {
 });
 
 describe("commission", () => {
-  test("4.5%, rounded once", () => {
-    expect(commissionCents(14_447_945)).toBe(650_158);
+  test("adds up what each booking was charged, never a rate on net revenue", () => {
+    // €200 net is €242 with VAT: 4.5% of that is €10.89, not €9.00 on the net.
+    const charged = [booking(), booking({ commissionCents: 0 }), booking({ commissionCents: 1_234 })];
+    expect(charged[0]!.commissionCents).toBe(1_089);
+    expect(commissionCents(charged)).toBe(1_089 + 0 + 1_234);
+    expect(commissionCents([])).toBe(0);
   });
 });
 

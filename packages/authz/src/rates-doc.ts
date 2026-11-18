@@ -15,3 +15,12 @@ export const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
 /** Shown verbatim wherever the confirmation is asked for. */
 export const RATES_TAX_INCLUSIVE_STATEMENT =
   "All rates I enter on OpenBookings include VAT and any mandatory fees, except tourist tax, which is added from the tourist tax rules I set up. Collecting and paying VAT and tourist tax to the authorities is my responsibility.";
+
+/**
+ * Shown wherever a host types a price. It says the same thing as the
+ * statement above, as an instruction rather than a declaration, and lives
+ * beside it so a change to one is made with the other in view. It is not
+ * part of the confirmed document, so rewording it needs no new id.
+ */
+export const RATE_INCLUSIVE_NOTICE =
+  "Enter the price per night including VAT and any mandatory fees. Don't include tourist tax: OpenBookings adds it on top from your tourist tax rules, and shows the guest both.";

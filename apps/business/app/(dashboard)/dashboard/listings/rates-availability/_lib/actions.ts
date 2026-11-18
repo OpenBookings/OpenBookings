@@ -414,7 +414,7 @@ export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
  * Record that this property's organisation enters tax-inclusive rates.
  *
  * It speaks for the whole organisation, so only an owner or admin may do it.
- * Stored in org_consent beside the signed Partner Agreement, with who
+ * Stored in org_consent beside the accepted Host Agreement, with who
  * confirmed and from where, because it is the basis on which guests are told
  * the price includes tax.
  *

@@ -17,8 +17,10 @@ function bookingRow(overrides: Record<string, unknown> = {}) {
     status: "confirmed",
     check_in_date: "2026-11-01",
     check_out_date: "2026-11-03",
-    total_amount: 32500,
-    booking_fee_amount: 0,
+    total_cents: 20700,
+    rooms_total_cents: 19050,
+    tourist_tax_cents: 1650,
+    commission_cents: 857,
     currency: "EUR",
     stripe_payment_intent_id: null,
     stripe_account_id: null,
@@ -60,6 +62,17 @@ describe("host tools", () => {
     expect(call.values).toEqual(["user_host_1", "0a1b2c3d"]);
     expect(call.text).toContain('m."userId" = $1');
     expect(call.text).toContain("property_access");
+  });
+
+  it("gives the model cents only: whole-euro and always-zero fee columns stay out", async () => {
+    sqlResults.push([bookingRow()]);
+    const result = await HOST_TOOLS.get_booking.execute({ booking_reference: "#0a1b2c3d" }, ctx);
+    expect(result).toMatchObject({
+      found: true,
+      booking: { total_cents: 20700, rooms_total_cents: 19050, tourist_tax_cents: 1650, commission_cents: 857 },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/total_amount|booking_fee/);
+    expect(sqlCalls[0]!.text).not.toMatch(/b\.total_amount::|booking_fee_amount/);
   });
 
   it("answers missing and out-of-scope identically", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { getPageData } from "./get-analytics";
-import { COMMISSION_RATE } from "./metrics";
+import { bookingsCreatedIn } from "./metrics";
+import { generateDemoFacts } from "./demo/generate";
 import { resolvePeriod, type PeriodPreset } from "./period";
 import type { Widget } from "./types";
 
@@ -23,7 +24,9 @@ describe.each(PRESETS)("reconciliation over %s", (preset) => {
   test("revenue: commission, breakdowns and the series all agree with the total", async () => {
     const { view } = await getPageData("revenue", q);
     const revenue = value(view.revenue).value!;
-    expect(value(view.commission).value).toBe(Math.round(revenue * COMMISSION_RATE));
+    // Commission is what the period's bookings were charged, cancelled ones included.
+    const made = bookingsCreatedIn(generateDemoFacts(TODAY).bookings, q.period);
+    expect(value(view.commission).value).toBe(made.reduce((t, b) => t + b.commissionCents, 0));
     expect(total(value(view.byRoomType))).toBe(revenue);
     expect(total(value(view.byRatePlan))).toBe(revenue);
     expect(total(value(view.overTime))).toBe(revenue);

@@ -40,9 +40,9 @@ beforeEach(() => {
 });
 
 describe("acceptInvite outcome event", () => {
-  it("captures team_invitation_accepted anonymously, before the redirect", async () => {
+  it("captures team_invitation_accepted for the signed-in invitee (consent-gated), before the redirect", async () => {
     await expect(acceptInvite("inv-1")).rejects.toBeInstanceOf(Redirect);
-    expect(captured).toEqual([["team_invitation_accepted", "anonymous"]]);
+    expect(captured).toEqual([["team_invitation_accepted", { userId: "u1" }]]);
   });
 
   it("captures nothing when accepting fails", async () => {

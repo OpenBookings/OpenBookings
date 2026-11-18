@@ -11,13 +11,13 @@ import { isStripeAccountReady } from "@/lib/stripe-readiness";
 import { promoteOnboardingToProperty } from "./promotion";
 import { summariseStripeAccount } from "./_lib/status";
 import { parseClientStepData } from "./_lib/step-data";
-
-interface LegalSignatureRecord {
-  signedAt: string;
-  signerIp: string;
-  downloadedAt?: string;
-  downloadedFilename?: string;
-}
+import { HOST_AGREEMENT_DOC_ID, hostAgreementUrl } from "@openbookings/authz/host-agreement";
+import {
+  decideHostAgreementSignature,
+  isCurrentHostAgreement,
+  type LegalSignatureRecord,
+  type SignerDetails,
+} from "./_lib/host-agreement";
 
 interface LegalAttemptRecord {
   resetAt: string;
@@ -36,7 +36,14 @@ export interface LegalNBoringData {
   roleTitle: string;
   vatNumber: string;
   cocNumber?: string;
+  /** Acceptance of the Host Agreement, with the version accepted (see _lib/host-agreement.ts). */
+  hostAgreement?: LegalSignatureRecord;
+  /**
+   * Legacy: clicks on the unversioned "Partner Agreement" button, which showed
+   * no text. Kept as history; they do not count as accepting the Host Agreement.
+   */
   partnerAgreement?: LegalSignatureRecord;
+  /** Legacy: never asked for in the UI. The DPA is part of the Host Agreement. */
   dpa?: LegalSignatureRecord;
   /**
    * Confirmation that the host's rates include VAT, with tourist tax added on top (see
@@ -132,12 +139,24 @@ export async function loadStepData(): Promise<StepData> {
   return row?.step_data ?? {};
 }
 
-/** Record a legal document signature. Captures the signer's IP server-side. */
-export async function signLegalDocument(
-  docId: "partner-agreement" | "dpa",
-  signerDetails: { legalCompanyName: string; fullName: string; roleTitle: string; vatNumber: string; cocNumber?: string }
-): Promise<void> {
-  await getSession();
+export type SignHostAgreementResult =
+  | { ok: true; signedAt: string; alreadySigned: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Record that the host accepted the current Host Agreement. Captures the
+ * signer's IP server-side and stores the version and where its text was
+ * published.
+ *
+ * Final per version: once this version is accepted, calling again changes
+ * nothing (not the date, the IP or the signer details) and returns the
+ * original record. Accepting a newer version later is a new record.
+ *
+ * Refused when there is no text to link (a malformed HOST_AGREEMENT_URL):
+ * accepting an agreement nobody can read is no agreement.
+ */
+export async function signHostAgreement(signer: SignerDetails): Promise<SignHostAgreementResult> {
+  const session = await getSession();
   const hdrs = await headers();
 
   const ip =
@@ -148,16 +167,57 @@ export async function signLegalDocument(
   const existing = await loadStepData();
   const legal = existing["legal-n-boring"] ?? ({} as LegalNBoringData);
 
-  const signature = { signedAt: new Date().toISOString(), signerIp: ip };
-  const updated: LegalNBoringData = {
-    ...legal,
-    ...signerDetails,
-    ...(docId === "partner-agreement"
-      ? { partnerAgreement: signature }
-      : { dpa: signature }),
+  // Posted by the browser, so typed only by hope.
+  const details: SignerDetails = {
+    legalCompanyName: String(signer?.legalCompanyName ?? "").trim().slice(0, 200),
+    fullName: String(signer?.fullName ?? "").trim().slice(0, 200),
+    roleTitle: String(signer?.roleTitle ?? "").trim().slice(0, 200),
+    vatNumber: String(signer?.vatNumber ?? "").trim().slice(0, 50),
+    ...(signer?.cocNumber ? { cocNumber: String(signer.cocNumber).trim().slice(0, 50) } : {}),
   };
 
-  await saveLegalData(updated);
+  const decision = decideHostAgreementSignature(legal, {
+    signer: details,
+    ip,
+    now: new Date(),
+    documentUrl: hostAgreementUrl(),
+  });
+
+  if (
+    decision.kind === "sign" &&
+    !(details.legalCompanyName && details.fullName && details.roleTitle && details.vatNumber)
+  ) {
+    return { ok: false, error: "Fill in your company name, full name, role and VAT number first." };
+  }
+  if (decision.kind === "unavailable") {
+    return { ok: false, error: "The Host Agreement is not published yet, so it cannot be accepted." };
+  }
+  if (decision.kind === "already-signed") {
+    return { ok: true, signedAt: decision.record.signedAt, alreadySigned: true };
+  }
+
+  // The read above and this write are not one transaction. The WHERE makes the
+  // write itself refuse to replace an acceptance of this version that landed
+  // in between (a double click from two tabs).
+  const written = await query(
+    `INSERT INTO host_onboarding (user_id, completed_steps, step_data)
+     VALUES ($1, ARRAY['legal-n-boring'::text], $2::jsonb)
+     ON CONFLICT (user_id) DO UPDATE SET
+       completed_steps = (
+         SELECT array_agg(DISTINCT elem ORDER BY elem)
+         FROM unnest(array_append(host_onboarding.completed_steps, 'legal-n-boring'::text)) AS elem
+       ),
+       step_data = host_onboarding.step_data || $2::jsonb
+     WHERE host_onboarding.step_data #>> '{legal-n-boring,hostAgreement,docId}' IS DISTINCT FROM $3
+     RETURNING user_id`,
+    [session.user.id, JSON.stringify({ "legal-n-boring": decision.data }), HOST_AGREEMENT_DOC_ID],
+  );
+  if (written.length === 0) {
+    const now = (await loadStepData())["legal-n-boring"]?.hostAgreement;
+    return { ok: true, signedAt: now?.signedAt ?? decision.record.signedAt, alreadySigned: true };
+  }
+
+  return { ok: true, signedAt: decision.record.signedAt, alreadySigned: false };
 }
 
 /**
@@ -246,6 +306,9 @@ export async function completeOnboarding(): Promise<void> {
   const stepData = await loadStepData();
   const legal = stepData["legal-n-boring"];
   if (!legal) throw new Error("Legal step data is missing");
+  if (!isCurrentHostAgreement(legal.hostAgreement)) {
+    throw new Error("The current Host Agreement has not been accepted");
+  }
 
   const stripeAccountId =
     (stepData as { stripe_account_id?: string }).stripe_account_id ?? null;

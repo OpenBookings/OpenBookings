@@ -92,5 +92,8 @@ export const config = {
     // Signing in before accepting an invitation; /invite sits outside the
     // onboarding wall on purpose (a new team member has no org yet).
     "/invite/:path*",
+    // The Host Agreement is for signed-in hosts only. Its pages check the
+    // session again themselves (app/legal/host-agreement/_lib/render.tsx).
+    "/legal/:path*",
   ],
 };

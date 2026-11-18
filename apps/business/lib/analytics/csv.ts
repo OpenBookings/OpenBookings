@@ -49,7 +49,7 @@ function body(data: AnyPageData): Row[] {
         ...stat("Year to date (EUR)", v.yearToDate, euros),
         ...stat("ADR (EUR)", v.adr, euros),
         ...stat("RevPAR (EUR)", v.revpar, euros),
-        ...stat("Commission 4.5% (EUR)", v.commission, euros),
+        ...stat("Commission (EUR)", v.commission, euros),
         ...points("Revenue over time (EUR)", v.overTime, euros),
         ...shares("Revenue by room type (EUR)", v.byRoomType, euros),
         ...shares("Revenue by rate plan (EUR)", v.byRatePlan, euros),

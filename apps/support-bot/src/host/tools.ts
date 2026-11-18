@@ -44,8 +44,10 @@ function bookingView(b: HostBooking) {
     check_out_date: b.check_out_date,
     property: b.property_name,
     guest_name: b.guest_name,
-    total_amount: b.total_amount,
-    booking_fee_amount: b.booking_fee_amount,
+    total_cents: b.total_cents,
+    rooms_total_cents: b.rooms_total_cents,
+    tourist_tax_cents: b.tourist_tax_cents,
+    commission_cents: b.commission_cents,
     currency: b.currency,
     created_at: b.created_at,
     cancelled_at: b.cancelled_at,
@@ -58,6 +60,8 @@ function bookingView(b: HostBooking) {
       adults: room.adults,
       children: room.children,
       nights: room.total_nights,
+      stay_total_cents: room.stay_total_cents,
+      pay_at_property_cents: room.pay_at_property_cents,
     })),
   };
 }

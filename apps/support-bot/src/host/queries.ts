@@ -1,5 +1,5 @@
 import { propertyReadAccessSql } from "@openbookings/authz";
-import { query, ROOM_POLICY_JSON, type SupportRoomPolicy } from "@openbookings/db";
+import { BOOKING_CENTS_COLUMNS, query, ROOM_CENTS_JSON, ROOM_POLICY_JSON, type SupportRoomPolicy } from "@openbookings/db";
 
 /**
  * Booking lookups for host tickets. Every query is scoped in SQL to the
@@ -19,6 +19,8 @@ type HostBookingRoom = {
   adults: number;
   children: number;
   total_nights: number;
+  stay_total_cents: number;
+  pay_at_property_cents: number;
 };
 
 export type HostBooking = {
@@ -26,8 +28,12 @@ export type HostBooking = {
   status: string;
   check_in_date: string;
   check_out_date: string;
-  total_amount: number;
-  booking_fee_amount: number;
+  /** Money in cents; see BOOKING_CENTS_COLUMNS. `bookings.total_amount` is whole euros and never read. */
+  total_cents: number;
+  rooms_total_cents: number | null;
+  tourist_tax_cents: number | null;
+  /** OpenBookings' commission on this booking, in cents. */
+  commission_cents: number;
   currency: string;
   stripe_payment_intent_id: string | null;
   /** For the payment lookup only; never shown to the model. */
@@ -48,8 +54,8 @@ const SELECT = `
     b.status::text AS status,
     b.check_in_date::text AS check_in_date,
     b.check_out_date::text AS check_out_date,
-    b.total_amount::bigint AS total_amount,
-    b.booking_fee_amount::bigint AS booking_fee_amount,
+    ${BOOKING_CENTS_COLUMNS},
+    b.commission_cents::int AS commission_cents,
     b.currency,
     b.stripe_payment_intent_id,
     p.stripe_account_id,
@@ -68,7 +74,8 @@ const SELECT = `
           ${ROOM_POLICY_JSON},
           'adults', r.adults,
           'children', r.children,
-          'total_nights', r.total_nights
+          'total_nights', r.total_nights,
+          ${ROOM_CENTS_JSON}
         ) ORDER BY rm.name)
         FROM reservations r
         JOIN rooms rm ON rm.id = r.room_id

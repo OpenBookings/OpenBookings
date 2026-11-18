@@ -39,6 +39,7 @@ I = invoice job, R = root scripts.
 | `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET` | W | no | Sign in with Apple for guests. |
 | `GOOGLE_CLIENT_ID_BUSINESS` / `GOOGLE_CLIENT_SECRET_BUSINESS` | B | no | Google sign-in for hosts (a separate OAuth client). |
 | `TIRRENO_URL` / `TIRRENO_API_KEY` | B | no | Sign-in risk scoring with Tirreno. Off when unset. |
+| `HOST_AGREEMENT_URL` | B | no | Where hosts read the Host Agreement they accept (http or https). Unset, it is the agreement in this repository, published on the business app at `/legal/host-agreement` to signed-in users. Set it only if you publish your own agreement elsewhere. |
 
 ## Payments (Stripe)
 
@@ -70,7 +71,7 @@ I = invoice job, R = root scripts.
 | `EMAIL_FROM_ADDRESS` | W, B, S, I | no | Sender, e.g. `"Platform <noreply@example.com>"`. (`MAGIC_LINK_FROM` is an older name.) |
 | `EMAIL_TRACKING_ENABLED` | W, B, S, I | no | `true` turns on open and click tracking in the emails the platform sends, reported to PostHog. Default off. Also needs the two variables below, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_WEB_URL` and `NEXT_PUBLIC_BUSINESS_URL`. Never active with `EMAIL_TRANSPORT=console`. To turn tracking off, set it to `false` and keep `EMAIL_TRACKING_SECRET`. |
 | `EMAIL_TRACKING_SECRET` | W, B, S, I | with tracking | Base64 of 32 random bytes (`openssl rand -base64 32`). Use the same value in every app: the guest site opens the tokens the others seal. Never remove or rotate it while sent emails may still be clicked: the links in them only reach their page with the secret they were sealed with, otherwise they land on the home page. This holds after tracking is turned off too. |
-| `EMAIL_TRACKING_CONSENT_VERSION` | W, B, S, I | with tracking | A whole number, such as `2`. Anything else keeps tracking off. Only recipients whose analytics consent was given at this cookie version or later are tracked. Set it to the raised `NEXT_PUBLIC_COOKIE_VERSION`. Team invitations are tracked anonymously without consent. |
+| `EMAIL_TRACKING_CONSENT_VERSION` | W, B, S, I | with tracking | A whole number, such as `2`. Anything else keeps tracking off. Only recipients whose analytics consent was given at this cookie version or later are tracked. Set it to the raised `NEXT_PUBLIC_COOKIE_VERSION`. No email is tracked without the recipient's analytics consent, team invitations included. |
 
 ## Storage, cache and media
 

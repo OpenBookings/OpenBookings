@@ -14,8 +14,10 @@ export type SupportReservationRoom = {
   adults: number;
   children: number;
   total_nights: number;
-  price_per_night: number;
-  total_amount: number;
+  /** The room's stay, VAT included, in cents: the sum of its nights. */
+  stay_total_cents: number;
+  /** Cots and extra beds, paid at the property, in cents. Not in any total. */
+  pay_at_property_cents: number;
 };
 
 /**
@@ -44,7 +46,16 @@ export type SupportReservation = {
   status: string;
   check_in_date: string;
   check_out_date: string;
-  total_amount: number;
+  /**
+   * Money in cents. `bookings.total_amount` is whole euros, so it is never
+   * read here: the support bot is told every amount is in cents.
+   * `rooms_total_cents` and `tourist_tax_cents` are null on bookings from
+   * before the split was stored (0035); `total_cents` then falls back to the
+   * legacy whole-euro total.
+   */
+  total_cents: number;
+  rooms_total_cents: number | null;
+  tourist_tax_cents: number | null;
   currency: string;
   stripe_payment_intent_id: string | null;
   /**
@@ -67,6 +78,30 @@ export type SupportReservation = {
   rooms: SupportReservationRoom[];
 };
 
+/**
+ * A booking's money in cents, for any SELECT over `bookings b`. Shared with
+ * the host lookups so both bots get the same units. `total_cents` is 0 only on
+ * bookings from before 0035; those fall back to the whole-euro total.
+ */
+// ::int, not ::bigint: pg returns int8 as a string. A booking's cents fit int4.
+export const BOOKING_CENTS_COLUMNS = `
+    (CASE WHEN b.total_cents > 0 THEN b.total_cents ELSE b.total_amount * 100 END)::int AS total_cents,
+    (CASE WHEN b.total_cents > 0 THEN b.rooms_total_cents END)::int AS rooms_total_cents,
+    (CASE WHEN b.total_cents > 0 THEN b.tourist_tax_cents END)::int AS tourist_tax_cents`;
+
+/**
+ * A room's money in cents, as json_build_object pairs. Needs `r`
+ * (reservations). The stay is the sum of the night prices snapshotted at
+ * confirmation; `price_per_night` and `total_amount` are rounded whole euros,
+ * so they are only the fallback for a reservation without nights.
+ */
+export const ROOM_CENTS_JSON = `
+  'stay_total_cents', COALESCE(
+    (SELECT round(sum((n->>'price')::numeric) * 100) FROM jsonb_array_elements(r.nights) n),
+    r.total_amount * 100
+  )::bigint,
+  'pay_at_property_cents', round(r.pay_at_property_amount * 100)::bigint`;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const RESERVATION_SELECT = `
@@ -75,7 +110,7 @@ const RESERVATION_SELECT = `
     b.status::text AS status,
     b.check_in_date::text AS check_in_date,
     b.check_out_date::text AS check_out_date,
-    b.total_amount::bigint AS total_amount,
+    ${BOOKING_CENTS_COLUMNS},
     b.currency,
     b.stripe_payment_intent_id,
     p.stripe_account_id,
@@ -99,8 +134,7 @@ const RESERVATION_SELECT = `
           'adults', r.adults,
           'children', r.children,
           'total_nights', r.total_nights,
-          'price_per_night', r.price_per_night,
-          'total_amount', r.total_amount
+          ${ROOM_CENTS_JSON}
         ) ORDER BY rm.name)
         FROM reservations r
         JOIN rooms rm ON rm.id = r.room_id

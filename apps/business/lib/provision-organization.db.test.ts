@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client, type PoolClient } from "pg";
 import { DEMO_ORG_ID } from "@openbookings/mode";
+import { HOST_AGREEMENT_DOC_ID } from "@openbookings/authz/host-agreement";
 import { provisionOrganizationTx } from "./provision-organization";
 
 const connectionString = process.env.DATABASE_URL;
@@ -82,5 +83,38 @@ describeWithDb("provisionOrganizationTx", () => {
 
     expect(result.organizationId).toBe(realOrg);
     expect(result.alreadyProvisioned).toBe(true);
+  });
+
+  test("records the Host Agreement under its version, and drops unversioned legacy clicks", async () => {
+    const userId = await user();
+    const signedAt = "2026-11-16T10:00:00.000Z";
+    const result = await provisionOrganizationTx(db as unknown as PoolClient, {
+      userId,
+      legal: {
+        ...legal(),
+        hostAgreement: {
+          signedAt,
+          signerIp: "203.0.113.7",
+          docId: HOST_AGREEMENT_DOC_ID,
+          version: "1.2",
+          documentUrl: "https://example.test/host-agreement",
+        },
+        partnerAgreement: { signedAt, signerIp: "203.0.113.7" },
+        dpa: { signedAt, signerIp: "203.0.113.7" },
+      },
+      stripeAccountId: null,
+    });
+
+    const consents = await db.query<{ doc_id: string; signer_ip: string }>(
+      `SELECT doc_id, signer_ip FROM org_consent WHERE organization_id = $1 ORDER BY doc_id`,
+      [result.organizationId],
+    );
+    expect(consents.rows).toEqual([{ doc_id: HOST_AGREEMENT_DOC_ID, signer_ip: "203.0.113.7" }]);
+
+    const audit = await db.query<{ detail: { hostAgreement?: { documentUrl: string } } }>(
+      `SELECT detail FROM audit_log WHERE organization_id = $1 AND action = 'org.provisioned'`,
+      [result.organizationId],
+    );
+    expect(audit.rows[0]?.detail.hostAgreement?.documentUrl).toBe("https://example.test/host-agreement");
   });
 });

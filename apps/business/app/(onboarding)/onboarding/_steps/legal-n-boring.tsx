@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { InfoIcon, CheckCircle2Icon, XIcon, Signature } from "lucide-react";
+import { InfoIcon, CheckCircle2Icon, XIcon, Signature, ExternalLinkIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { RATES_TAX_INCLUSIVE_STATEMENT } from "@openbookings/authz/rates-doc";
+import { HOST_AGREEMENT_TITLE, HOST_AGREEMENT_VERSION } from "@openbookings/authz/host-agreement";
 import { Checkbox } from "@/components/ui/checkbox";
-import { setInclusiveRatesConfirmation, signLegalDocument } from "../actions";
+import { setInclusiveRatesConfirmation, signHostAgreement } from "../actions";
 
 export interface LegalNBoringValues {
   legalCompanyName: string;
@@ -15,32 +16,47 @@ export interface LegalNBoringValues {
   roleTitle: string;
   vatNumber: string;
   cocNumber: string;
-  partnerAgreementSignedAt: string | null;
-  dpaSignedAt: string | null;
+  /** When the Host Agreement version in force was accepted; null if it was not. */
+  hostAgreementSignedAt: string | null;
   ratesInclusiveConfirmedAt: string | null;
 }
 
-const DOCUMENTS = [
-  { id: "partner-agreement" as const, label: "Partner Agreement" },
-];
+const AGREEMENT_LABEL = `${HOST_AGREEMENT_TITLE} v${HOST_AGREEMENT_VERSION}`;
 
-type DocumentId = (typeof DOCUMENTS)[number]["id"];
+function AgreementLink({ href, className }: { href: string; className?: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "inline-flex items-center gap-1 text-ob-brand-light underline underline-offset-2 hover:text-white",
+        className,
+      )}
+    >
+      Read the {AGREEMENT_LABEL}
+      <ExternalLinkIcon className="size-3.5" />
+    </a>
+  );
+}
 
 interface SignModalProps {
-  doc: (typeof DOCUMENTS)[number];
+  agreementUrl: string;
   fullName: string;
   legalCompanyName: string;
   roleTitle: string;
+  error: string | null;
   onConfirm: () => void;
   onCancel: () => void;
   isPending: boolean;
 }
 
 function SignModal({
-  doc,
+  agreementUrl,
   fullName,
   legalCompanyName,
   roleTitle,
+  error,
   onConfirm,
   onCancel,
   isPending,
@@ -50,8 +66,8 @@ function SignModal({
       <div className="bg-[#13161b] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl flex flex-col gap-6">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">{doc.label}</h2>
-            <p className="text-sm text-white/40 mt-1">Review and confirm your signature</p>
+            <h2 className="text-lg font-semibold text-white">{AGREEMENT_LABEL}</h2>
+            <p className="text-sm text-white/40 mt-1">Read the agreement, then confirm</p>
           </div>
           <button
             type="button"
@@ -63,9 +79,11 @@ function SignModal({
           </button>
         </div>
 
+        <AgreementLink href={agreementUrl} className="text-sm" />
+
         <div className="rounded-lg bg-white/4 border border-white/8 p-4 flex flex-col gap-2.5 text-sm">
           <div className="flex justify-between gap-4">
-            <span className="text-white/40 shrink-0">Signing as</span>
+            <span className="text-white/40 shrink-0">Accepting as</span>
             <span className="text-white/80 font-medium text-right">{fullName}</span>
           </div>
           <div className="flex justify-between gap-4">
@@ -79,11 +97,18 @@ function SignModal({
         </div>
 
         <p className="text-xs text-white/35 leading-relaxed">
-          By clicking <strong className="text-white/55">Sign Document</strong>, you confirm that
-          you are authorized to enter into this agreement on behalf of{" "}
-          <strong className="text-white/55">{legalCompanyName}</strong> and you agree to the
-          terms set out in the {doc.label}.
+          By selecting <strong className="text-white/55">Accept agreement</strong>, you confirm
+          that you have read the {AGREEMENT_LABEL}, including the data processing agreement and
+          its annexes, that you are authorised to enter into it on behalf of{" "}
+          <strong className="text-white/55">{legalCompanyName}</strong>, and that{" "}
+          <strong className="text-white/55">{legalCompanyName}</strong> agrees to it.
         </p>
+
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         <div className="flex gap-3">
           <button
@@ -100,7 +125,7 @@ function SignModal({
             disabled={isPending}
             className="flex-1 h-10 rounded-lg bg-ob-brand hover:bg-ob-brand-light disabled:opacity-60 text-sm text-white font-medium transition-colors"
           >
-            {isPending ? "Signing…" : "Sign Document"}
+            {isPending ? "Saving…" : "Accept agreement"}
           </button>
         </div>
       </div>
@@ -108,14 +133,26 @@ function SignModal({
   );
 }
 
-function SignedModal({ onClose }: { onClose: () => void }) {
+function formatSignedAt(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function SignedModal({
+  signedAt,
+  agreementUrl,
+  onClose,
+}: {
+  signedAt: string;
+  agreementUrl: string | null;
+  onClose: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ob-sidebar/80 backdrop-blur-sm">
       <div className="bg-[#13161b] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl flex flex-col gap-6">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">Partner Agreement</h2>
-            <p className="text-sm text-white/40 mt-1">Your document is signed and on file</p>
+            <h2 className="text-lg font-semibold text-white">{AGREEMENT_LABEL}</h2>
+            <p className="text-sm text-white/40 mt-1">Your acceptance is on file</p>
           </div>
           <button
             type="button"
@@ -128,8 +165,12 @@ function SignedModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex items-center gap-3 rounded-lg bg-green-500/8 border border-green-500/20 px-4 py-3.5">
           <CheckCircle2Icon className="size-5 text-green-400/70 shrink-0" />
-          <span className="text-sm text-white/60">Signed & sent — agreement is legally binding</span>
+          <span className="text-sm text-white/60">
+            Accepted {AGREEMENT_LABEL} on {formatSignedAt(signedAt)}
+          </span>
         </div>
+
+        {agreementUrl && <AgreementLink href={agreementUrl} className="text-sm" />}
 
         <button
           type="button"
@@ -145,15 +186,18 @@ function SignedModal({ onClose }: { onClose: () => void }) {
 
 interface LegalNBoringStepProps {
   values: LegalNBoringValues;
+  /** Where the Host Agreement text is published; null when it is not, and it cannot be accepted. */
+  agreementUrl: string | null;
   onChange: (partial: Partial<LegalNBoringValues>) => void;
 }
 
-export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
-  const [signingDoc, setSigningDoc] = useState<DocumentId | null>(null);
+export function LegalNBoringStep({ values, agreementUrl, onChange }: LegalNBoringStepProps) {
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
   const [showSignedModal, setShowSignedModal] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const anySigned = Boolean(values.partnerAgreementSignedAt || values.dpaSignedAt);
+  const anySigned = Boolean(values.hostAgreementSignedAt);
 
   const fieldsComplete =
     values.legalCompanyName.trim() &&
@@ -161,29 +205,29 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
     values.roleTitle.trim() &&
     values.vatNumber.trim();
 
-  function handleSignClick(docId: DocumentId) {
-    if (!fieldsComplete) return;
-    setSigningDoc(docId);
+  function handleSignClick() {
+    if (!fieldsComplete || !agreementUrl) return;
+    setSignError(null);
+    setSigning(true);
   }
 
   function confirmSign() {
-    if (!signingDoc) return;
     startTransition(async () => {
-      await signLegalDocument(signingDoc, {
+      const result = await signHostAgreement({
         legalCompanyName: values.legalCompanyName,
         fullName: values.fullName,
         roleTitle: values.roleTitle,
         vatNumber: values.vatNumber,
         cocNumber: values.cocNumber || undefined,
       });
-      const key =
-        signingDoc === "partner-agreement" ? "partnerAgreementSignedAt" : "dpaSignedAt";
-      onChange({ [key]: new Date().toISOString() });
-      setSigningDoc(null);
+      if (!result.ok) {
+        setSignError(result.error);
+        return;
+      }
+      onChange({ hostAgreementSignedAt: result.signedAt });
+      setSigning(false);
     });
   }
-
-  const activeDoc = DOCUMENTS.find((d) => d.id === signingDoc);
 
   return (
     <>
@@ -262,7 +306,7 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
         <div className="flex gap-3 rounded-lg border border-ob-brand/20 bg-ob-brand/5 px-4 py-3">
           <InfoIcon className="mt-0.5 size-4 shrink-0 text-ob-brand-light/70" />
           <p className="text-sm text-white/50 leading-relaxed">
-            Your <span className="text-white/70 font-medium">IP address</span> is recorded at the moment of signing and stored as part of the legally binding record.
+            Your <span className="text-white/70 font-medium">IP address</span>, the time and the agreement version are recorded when you accept, as evidence of your acceptance. Your details can no longer be edited afterwards.
           </p>
         </div>
 
@@ -286,50 +330,75 @@ export function LegalNBoringStep({ values, onChange }: LegalNBoringStepProps) {
           </Label>
         </div>
 
-        {/* Sign CTA */}
-        <div className="mt-4">
-          {values.partnerAgreementSignedAt ? (
+        {/* Accept CTA */}
+        <div className="mt-4 flex flex-col items-center gap-3">
+          {values.hostAgreementSignedAt ? (
             <button
               type="button"
               onClick={() => setShowSignedModal(true)}
               className="w-full h-14 rounded-full bg-green-500/10 border border-green-500/25 flex items-center justify-center gap-2.5 text-sm font-medium text-green-400/80 transition-colors hover:bg-green-500/15 cursor-pointer"
             >
               <CheckCircle2Icon className="size-4" />
-              Signed & Sent
+              {AGREEMENT_LABEL} accepted
             </button>
+          ) : !agreementUrl ? (
+            <>
+              <button
+                type="button"
+                disabled
+                className="w-full h-14 rounded-full border flex items-center justify-center gap-2.5 text-sm font-medium bg-white/2 border-white/5 text-white/20 cursor-not-allowed"
+              >
+                <Signature className="size-4" />
+                Accept the {HOST_AGREEMENT_TITLE}
+              </button>
+              <p className="text-sm text-white/45 text-center">
+                The {HOST_AGREEMENT_TITLE} isn&apos;t published yet, so it can&apos;t be accepted
+                yet.
+              </p>
+            </>
           ) : (
-            <button
-              type="button"
-              disabled={!fieldsComplete}
-              onClick={() => handleSignClick("partner-agreement")}
-              title={!fieldsComplete ? "Fill in your details above first" : undefined}
-              className={cn(
-                "w-full h-14 rounded-full border flex items-center justify-center gap-2.5 text-sm font-medium transition-colors",
-                fieldsComplete
-                  ? "bg-ob-brand hover:bg-ob-brand-light border-ob-brand text-white cursor-pointer"
-                  : "bg-white/2 border-white/5 text-white/20 cursor-not-allowed"
-              )}
-            >
-              <Signature className="size-4" />
-              Sign the Partner Agreement
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={!fieldsComplete}
+                onClick={handleSignClick}
+                title={!fieldsComplete ? "Fill in your details above first" : undefined}
+                className={cn(
+                  "w-full h-14 rounded-full border flex items-center justify-center gap-2.5 text-sm font-medium transition-colors",
+                  fieldsComplete
+                    ? "bg-ob-brand hover:bg-ob-brand-light border-ob-brand text-white cursor-pointer"
+                    : "bg-white/2 border-white/5 text-white/20 cursor-not-allowed"
+                )}
+              >
+                <Signature className="size-4" />
+                Accept the {HOST_AGREEMENT_TITLE}
+              </button>
+              <AgreementLink href={agreementUrl} className="text-sm" />
+            </>
           )}
         </div>
       </div>
 
-      {signingDoc && activeDoc && (
+      {signing && agreementUrl && (
         <SignModal
-          doc={activeDoc}
+          agreementUrl={agreementUrl}
           fullName={values.fullName}
           legalCompanyName={values.legalCompanyName}
           roleTitle={values.roleTitle}
+          error={signError}
           onConfirm={confirmSign}
-          onCancel={() => setSigningDoc(null)}
+          onCancel={() => setSigning(false)}
           isPending={isPending}
         />
       )}
 
-      {showSignedModal && <SignedModal onClose={() => setShowSignedModal(false)} />}
+      {showSignedModal && values.hostAgreementSignedAt && (
+        <SignedModal
+          signedAt={values.hostAgreementSignedAt}
+          agreementUrl={agreementUrl}
+          onClose={() => setShowSignedModal(false)}
+        />
+      )}
     </>
   );
 }

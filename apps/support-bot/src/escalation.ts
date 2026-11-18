@@ -9,9 +9,8 @@ import type { PaymentSummary } from "@openbookings/stripe";
  *  2. `paymentTriggersEscalation` on every `get_payment_status` result inside
  *     the loop.
  *
- * Dispute/chargeback procedures are defined in the partner agreement and have
- * real financial/legal exposure, so they must never be left entirely to the
- * model.
+ * Disputes and chargebacks (Host Agreement section 5.3) carry real financial
+ * and legal exposure, so they must never be left entirely to the model.
  */
 
 /**
@@ -73,7 +72,7 @@ export function messageTriggersEscalation(message: string): string | null {
   for (const pattern of DISPUTE_PATTERNS) {
     const match = pattern.exec(normalized);
     if (match) {
-      return `Guest message mentions a dispute/chargeback ("${match[0]}") — routed straight to a human per partner-agreement dispute procedure.`;
+      return `Guest message mentions a dispute/chargeback ("${match[0]}") — routed straight to a human per the Host Agreement dispute procedure.`;
     }
   }
   return null;

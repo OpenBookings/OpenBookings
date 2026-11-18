@@ -22,6 +22,10 @@ export interface DemoHotel {
   openedOn: IsoDate;
   /** Baseline share of inventory that sells on an ordinary midweek night. */
   demand: number;
+  /** VAT on the room price. Rates are stored ex VAT here; guests pay them with VAT. */
+  vatRate: number;
+  /** `properties.commission_rate`: OpenBookings' rate on the room price including VAT. */
+  commissionRate: number;
   roomTypes: DemoRoomType[];
   ratePlans: DemoRatePlan[];
 }
@@ -31,6 +35,9 @@ export const ZEEBURG: DemoHotel = {
   seed: "zeeburg-grand",
   openedOn: "2024-06-01",
   demand: 0.62,
+  // Dutch VAT on accommodation since 1 January 2026.
+  vatRate: 0.21,
+  commissionRate: 0.045,
   roomTypes: [
     { id: "zb-standard", name: "Standard Double", units: 6 },
     { id: "zb-canal", name: "Canal View Double", units: 4 },

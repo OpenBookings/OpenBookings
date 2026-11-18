@@ -89,9 +89,9 @@ export function RangeActionBar({
       <div className="flex items-center gap-1">
         <Input
           inputMode="decimal"
-          placeholder="Price incl. tax"
+          placeholder="Price incl. VAT"
           title={RATE_INCLUSIVE_NOTICE}
-          aria-label={`Set price for ${dates.length} selected nights, including tax`}
+          aria-label={`Set price for ${dates.length} selected nights, including VAT`}
           className="h-8 w-32"
           value={price}
           onChange={(event) => setPrice(event.target.value)}

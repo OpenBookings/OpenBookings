@@ -14,7 +14,8 @@ export function deriveRevenue(ctx: DeriveContext): RevenueView {
   // Booking-date basis: what was booked in the period.
   const keptIn = (range: DateRange): BookingFact[] =>
     keptBookings(bookingsCreatedIn(facts.bookings, range));
-  const kept = keptIn(period);
+  const madeIn = bookingsCreatedIn(facts.bookings, period);
+  const kept = keptBookings(madeIn);
   const prevKept = comparison ? keptIn(comparison) : null;
   const revenue = revenueCents(kept);
 
@@ -52,7 +53,8 @@ export function deriveRevenue(ctx: DeriveContext): RevenueView {
         prevNights && prevInv ? revparCents(prevNights, prevInv) : null,
       ),
     })),
-    commission: widget("booking", kept.length, () => ({ value: commissionCents(revenue), delta: null })),
+    // Cancelled bookings count too: a fee the host kept carries its share of commission.
+    commission: widget("booking", madeIn.length, () => ({ value: commissionCents(madeIn), delta: null })),
     overTime: widget("booking", kept.length, () =>
       overlay(
         toSeries(kept, bookingDate, period, granularity, today, revenueCents),

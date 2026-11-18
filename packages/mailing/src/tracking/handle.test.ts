@@ -141,24 +141,11 @@ describe("clickDestination", () => {
 });
 
 describe("handleClick", () => {
-  it("captures an anonymous team_invitation click without a consent check", async () => {
+  it("captures nothing for a token without a user (old team invitations)", async () => {
     const h = harness();
     const payload: TrackingToken = { ...base, k: "team_invitation", u: null, l: "cta", d: "https://business.openbookings.co/x" };
     await handleClick(payload, null, h.deps);
-    expect(h.events).toEqual([
-      {
-        distinctId: "send-1",
-        event: "email_clicked",
-        anonymous: true,
-        properties: {
-          email_kind: "team_invitation",
-          send_id: "send-1",
-          seconds_after_send: 90,
-          client_proxy: null,
-          link: "cta",
-        },
-      },
-    ]);
+    expect(h.events).toEqual([]);
     expect(h.consentCalls()).toBe(0);
   });
 
