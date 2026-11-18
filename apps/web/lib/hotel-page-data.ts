@@ -97,6 +97,7 @@ function buildPropertyPageQuery(slug: string) {
         'bed_type', r.bed_type,
         'size_sqm', r.size_sqm::text,
         'max_adults', r.max_adults,
+        'max_children', r.max_children,
         'base_occupancy', r.base_occupancy,
         -- What goes on top of the rate (0040): extra guests are prepaid, cots
         -- and extra beds are paid at the hotel. Fees are whole euros.

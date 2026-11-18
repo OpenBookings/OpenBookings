@@ -129,12 +129,13 @@ export function useBookNow(i: {
     if (!pendingBook.take) return;
     const params = new URLSearchParams(searchKey);
     params.delete("book");
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // In place, as the stay pickers do: no server round trip, no skeleton.
+    window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
     const sel = pruneQuantities(rooms, views, pendingBook.take);
     setQuantities(sel);
     showRates();
     if (signedIn) void book(sel);
-  }, [bookParam, sessionPending, signedIn, quote.status, searchKey, pathname, router, rooms, views, setQuantities, showRates, book]);
+  }, [bookParam, sessionPending, signedIn, quote.status, searchKey, pathname, rooms, views, setQuantities, showRates, book]);
 
   // What the bar shows.
   const booking = stay ? buildBooking(shownRooms, shownViews, quantities, stay, extras) : null;

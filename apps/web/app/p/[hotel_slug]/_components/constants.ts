@@ -43,6 +43,9 @@ export type DbRoom = {
   bed_type: string | null;
   size_sqm: number | null;
   max_occupancy: number | null;
+  /** How many one unit sleeps. Absent on demo data. */
+  max_adults?: number;
+  max_children?: number;
   /** Guests the base rate is for. The listing's all-in price is quoted at this. */
   base_occupancy?: number;
   /** Per extra guest per night, whole euros; null = not charged (0040). Absent on demo data. */

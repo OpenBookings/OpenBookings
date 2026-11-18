@@ -4,7 +4,7 @@ import * as React from "react"
 import { Card, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PlusIcon, MinusIcon } from "lucide-react"
-import { AGE_BANDS, clampGuests, type Guests } from "./guest-limits"
+import { AGE_BANDS, clampGuests, fewestRoomsThatFit, type Guests, type RoomCapacity } from "./guest-limits"
 
 interface GuestSelectorProps {
   /** The party to start from; missing counts are 2 adults, no children or infants, 1 room. */
@@ -13,13 +13,18 @@ interface GuestSelectorProps {
   childrenWelcome?: boolean
   /** Called whenever the party changes */
   onChange?: (guests: Guests) => void
+  /**
+   * One hotel's room types (its property page): rooms go up by themselves to
+   * the fewest the party fits in there. Search covers many hotels and leaves it out.
+   */
+  roomCapacities?: RoomCapacity[]
 }
 
 const DEFAULT: Guests = { adults: 2, children: 0, infants: 0, rooms: 1 }
 
-export function GuestSelector({ initial, childrenWelcome = true, onChange }: GuestSelectorProps) {
+export function GuestSelector({ initial, childrenWelcome = true, onChange, roomCapacities }: GuestSelectorProps) {
   const [guests, setGuests] = React.useState<Guests>(() =>
-    clampGuests({ ...DEFAULT, ...initial }, { childrenWelcome }),
+    clampGuests({ ...DEFAULT, ...initial }, { childrenWelcome, roomCapacities }),
   )
 
   React.useEffect(() => {
@@ -28,7 +33,11 @@ export function GuestSelector({ initial, childrenWelcome = true, onChange }: Gue
 
   // Every change goes through clampGuests, so the party is always one search accepts.
   const update = (key: keyof Guests, delta: number) =>
-    setGuests((prev) => clampGuests({ ...prev, [key]: prev[key] + delta }, { childrenWelcome }))
+    setGuests((prev) => clampGuests({ ...prev, [key]: prev[key] + delta }, { childrenWelcome, roomCapacities }))
+
+  // Why Rooms will not go lower: the party needs that many here.
+  const fewestRooms = roomCapacities?.length ? fewestRoomsThatFit({ ...guests, rooms: 1 }, roomCapacities) : null
+  const roomsHint = fewestRooms !== null && fewestRooms > 1 ? `At least ${fewestRooms} for this party here` : undefined
 
   return (
     <div className="w-full min-w-0 max-w-lg mx-auto space-y-3 text-white">
@@ -57,7 +66,7 @@ export function GuestSelector({ initial, childrenWelcome = true, onChange }: Gue
 
           <div className="h-px w-full bg-white/10" />
 
-          <CounterRow label="Rooms" value={guests.rooms} onStep={(d) => update("rooms", d)} />
+          <CounterRow label="Rooms" hint={roomsHint} value={guests.rooms} onStep={(d) => update("rooms", d)} />
         </CardContent>
       </Card>
     </div>
