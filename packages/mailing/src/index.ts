@@ -1,5 +1,5 @@
 export { getEmailClient } from "./client";
-export { fromAddress } from "./from-address";
+export { sender, type SenderRole } from "./senders";
 export { escapeHtml, loadTemplate } from "./template";
 export { composeActionMail, type ActionMail } from "./action-mail";
 export * from "./booking-mail";

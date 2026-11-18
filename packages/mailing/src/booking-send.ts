@@ -1,7 +1,7 @@
 import { getPool } from "@openbookings/db";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { getEmailClient } from "./client";
-import { fromAddress } from "./from-address";
+import { sender } from "./senders";
 import {
   guestBookingCancelled,
   guestBookingConfirmed,
@@ -45,7 +45,7 @@ export type SendDeps = {
 
 const resolve = (d: SendDeps) => ({
   db: d.db ?? getPool(),
-  transport: d.transport ?? ((m) => getEmailClient().from(fromAddress()).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
+  transport: d.transport ?? ((m) => getEmailClient().from(sender("bookings")).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
   testing: d.testing ?? isTestingMode(),
   urls: d.urls ?? bookingMailUrls(),
   track: d.track ?? trackMail,

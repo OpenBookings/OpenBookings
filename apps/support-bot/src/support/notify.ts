@@ -1,11 +1,9 @@
 import { claimSupportReplyNotification } from "@openbookings/db";
-import { getEmailClient } from "@openbookings/mailing";
+import { getEmailClient, sender } from "@openbookings/mailing";
 import { trackMail } from "@openbookings/mailing/tracking";
 import { env } from "../env";
 import type { SupportReplyNotifyPayload } from "../tasks";
 import { trace } from "../trace";
-
-const DEFAULT_FROM = "OpenBookings Support <noreply@openbookings.co>";
 
 function escapeHtml(value: string): string {
   return value
@@ -35,7 +33,7 @@ export function renderSupportReplyEmail(input: {
     "Open the ticket in OpenBookings Business to read it and answer:",
     input.url,
     "",
-    "You get at most one of these emails per ticket per hour. This address does not receive replies.",
+    "You get at most one of these emails per ticket per hour. Answer in OpenBookings Business so your reply lands on the ticket.",
   ];
   const text = lines.join("\n");
   const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:22px;color:#111111;">${lines
@@ -84,7 +82,7 @@ export async function sendSupportReplyNotification(
   try {
     const tracked = await track({ kind: "support_reply", to: claim.email, html });
     await getClient()
-      .from(process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_FROM)
+      .from(sender("support"))
       .to(claim.email)
       .subject(subject)
       .html(tracked.html)

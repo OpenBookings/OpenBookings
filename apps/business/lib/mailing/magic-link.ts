@@ -1,8 +1,4 @@
-import { getEmailClient, loadTemplate } from "@openbookings/mailing";
-
-const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
-const FROM_ADDRESS =
-  process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
+import { getEmailClient, loadTemplate, sender } from "@openbookings/mailing";
 
 export async function sendMagicLink(
   email: string,
@@ -10,7 +6,7 @@ export async function sendMagicLink(
   _firstName?: string
 ) {
   await getEmailClient()
-    .from(FROM_ADDRESS)
+    .from(sender("magic"))
     .to(email)
     .subject("Your sign-in link for OpenBookings")
     .html(loadTemplate("magic-link", { magicLinkUrl: url, email }))

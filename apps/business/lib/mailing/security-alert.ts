@@ -1,9 +1,7 @@
-import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing"
+import { escapeHtml, getEmailClient, loadTemplate, sender } from "@openbookings/mailing"
 import type { SecurityAlert, SignInLocation } from "@openbookings/auth/host"
 import { describeDevice } from "@/lib/device"
 
-const DEFAULT_FROM = "OpenBookings Security <noreply@openbookings.co>"
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_FROM
 const SECURITY_URL = "https://business.openbookings.co/account/security"
 
 const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif"
@@ -116,7 +114,7 @@ export async function sendSecurityAlert(alert: SecurityAlert): Promise<void> {
 
   await Promise.allSettled(
     [...recipients].map((to) =>
-      getEmailClient().from(FROM_ADDRESS).to(to).subject(subject).html(html).send()
+      getEmailClient().from(sender("security")).to(to).subject(subject).html(html).send()
     )
   )
 }

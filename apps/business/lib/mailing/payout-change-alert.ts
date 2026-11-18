@@ -1,7 +1,4 @@
-import { getEmailClient } from "@openbookings/mailing"
-
-const DEFAULT_FROM = "OpenBookings Security <noreply@openbookings.co>"
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_FROM
+import { getEmailClient, sender } from "@openbookings/mailing"
 
 export type PayoutChange = {
   organisationName: string
@@ -75,7 +72,7 @@ export function renderPayoutChangeAlert(
     "",
     "If you or a colleague did this, there is nothing to do.",
     "",
-    "If this was not you: go to dashboard.stripe.com directly (type the address, do not follow a link), check the bank account under Settings, change your Stripe password and turn on two-step authentication. Then write to support@openbookings.co so we can help. This address does not receive replies.",
+    "If this was not you: go to dashboard.stripe.com directly (type the address, do not follow a link), check the bank account under Settings, change your Stripe password and turn on two-step authentication. Then write to support@openbookings.co so we can help.",
   ].filter((line): line is string => line !== null)
 
   const text = lines.join("\n")
@@ -94,7 +91,7 @@ export async function sendPayoutChangeAlert(
   const { subject, html } = renderPayoutChangeAlert(change)
   await Promise.allSettled(
     [...new Set(ownerEmails)].map((to) =>
-      getEmailClient().from(FROM_ADDRESS).to(to).subject(subject).html(html).send()
+      getEmailClient().from(sender("security")).to(to).subject(subject).html(html).send()
     )
   )
 }

@@ -27,11 +27,11 @@ const base: Row = {
 };
 
 function setup(row: Row | null, transportError?: Error) {
-  const sent: { to: string; subject: string; html: string }[] = [];
+  const sent: { from: string; to: string; subject: string; html: string }[] = [];
   const reported: unknown[] = [];
   const deps = {
     db: { query: async () => ({ rows: row ? [row] : [] }) },
-    transport: async (m: { to: string; subject: string; html: string }) => {
+    transport: async (m: { from: string; to: string; subject: string; html: string }) => {
       if (transportError) throw transportError;
       sent.push(m);
     },
@@ -48,6 +48,7 @@ describe("sendReviewReplied", () => {
     await run();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toBe("anna@example.com");
+    expect(sent[0]!.from).toBe("Roy at OpenBookings <roy@openbookings.co>");
     expect(sent[0]!.subject).toBe("Canal House replied to your review");
     expect(sent[0]!.html).toContain("Hi Anna,");
     expect(sent[0]!.html).toContain("Thank you, Anna.");
@@ -82,7 +83,7 @@ describe("sendReviewReplied", () => {
 describe("sendReviewMail tracking", () => {
   const owners = ["owner-a@example.test", "owner-b@example.test"];
   function run(mail: ReviewMail, failFor?: string) {
-    const sent: { to: string; html: string }[] = [];
+    const sent: { from: string; to: string; html: string }[] = [];
     const marked: string[] = [];
     const track: typeof trackMail = async ({ kind, to, html }) => ({
       html: `${html}<!--${kind}:${to}-->`,
@@ -92,7 +93,7 @@ describe("sendReviewMail tracking", () => {
     });
     const deps = {
       db: { query: async () => ({ rows: owners.map((email) => ({ is_demo: false, email })) }) },
-      transport: async (m: { to: string; subject: string; html: string }) => {
+      transport: async (m: { from: string; to: string; subject: string; html: string }) => {
         if (m.to === failFor) throw new Error("smtp down");
         sent.push(m);
       },
@@ -128,6 +129,15 @@ describe("sendReviewMail tracking", () => {
     await go();
     expect(sent[0]!.html.endsWith(`<!--${tracked}:anna@example.com-->`)).toBe(true);
     expect(marked).toEqual([`${tracked}:anna@example.com`]);
+  });
+
+  test("guest review mail comes from Roy, the host warning from Bookings", async () => {
+    const invite = run(guest("invitation"));
+    await invite.go();
+    expect(invite.sent[0]!.from).toBe("Roy at OpenBookings <roy@openbookings.co>");
+    const host = run(warning);
+    await host.go();
+    expect(host.sent.map((m) => m.from)).toEqual(owners.map(() => "OpenBookings Bookings <bookings@openbookings.co>"));
   });
 
   test("a host warning is tracked per owner", async () => {

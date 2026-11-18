@@ -56,7 +56,7 @@ INVOICE_DB_ENV=production|test bun run apps/invoice-job/src/main.ts --step=<step
 | `INVOICE_REPORT_EMAIL` | draft | Where the run report is emailed after a real (not dry) draft run. Required for it. |
 | `SLACK_WEBHOOK_URL` | draft, store, deliver | Optional Slack incoming webhook: the run report summary, and alerts for file conflicts and failed sends. |
 | `LETTERMINT_PROJECT_TOKEN` | draft, deliver | Lettermint project token: the run report and the invoice emails. |
-| `EMAIL_FROM_ADDRESS` | draft, deliver | Optional sender, as for the other apps (`@openbookings/mailing`). |
+| `EMAIL_DOMAIN` | draft, deliver | Optional sending domain, as for the other apps (`@openbookings/mailing`). Invoices come from `billing@`, the run report from `noreply@`. |
 | `INVOICE_TEST_RECIPIENT` | deliver | Required in test mode, ignored in live mode. The one address every invoice email goes to, marked `[TEST]`. |
 | `SELLER_LEGAL_NAME` | issue, preview | OpenBookings' legal name on every invoice. |
 | `SELLER_ADDRESS` | issue, preview | Address lines separated by newlines (or a literal `\n`), ending with "postcode city". The country is always the Netherlands. |
