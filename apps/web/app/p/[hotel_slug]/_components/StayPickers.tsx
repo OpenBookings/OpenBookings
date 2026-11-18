@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import FocusOverlay from "@/components/plug-in/FocusOverlay";
 import { Calendar05 } from "@/components/plug-in/DatePicker";
 import { GuestSelector } from "@/components/plug-in/GuestSelector";
-import type { Guests } from "@/components/plug-in/guest-limits";
+import type { Guests, RoomCapacity } from "@/components/plug-in/guest-limits";
 import type { Stay, StayDraft } from "../_lib/stay";
 
 export type StayPanel = "dates" | "guests" | null;
@@ -25,12 +25,14 @@ function formatDate(date: Date): string {
  * pick is a draft until the overlay closes; then a changed, complete pick is
  * handed to `onChange`, which writes it to the URL.
  */
-export function StayPickers({ stay, party, childrenWelcome, openPanel, onClose, onChange }: {
+export function StayPickers({ stay, party, childrenWelcome, roomCapacities, openPanel, onClose, onChange }: {
   stay: Stay | null;
   /** The party in the URL, also when it has no dates. */
   party: Guests;
   /** False on an adults-only property: the picker offers adults and rooms only. */
   childrenWelcome: boolean;
+  /** The hotel's room types: the guest picker adds rooms when the party outgrows them. */
+  roomCapacities: RoomCapacity[];
   openPanel: StayPanel;
   onClose: () => void;
   onChange: (next: StayDraft) => void;
@@ -87,7 +89,7 @@ export function StayPickers({ stay, party, childrenWelcome, openPanel, onClose, 
 
       <FocusOverlay open={openPanel === "guests"} onClose={closeGuests}>
         <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <GuestSelector initial={guests} childrenWelcome={childrenWelcome} onChange={pickGuests} />
+          <GuestSelector initial={guests} childrenWelcome={childrenWelcome} roomCapacities={roomCapacities} onChange={pickGuests} />
         </div>
       </FocusOverlay>
     </>

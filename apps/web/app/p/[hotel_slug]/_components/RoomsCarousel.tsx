@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Image from "next/image";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   motion, AnimatePresence, MotionConfig, useAnimate, useReducedMotion,
   type Transition, type Variants,
@@ -17,6 +17,8 @@ import { todayInZone } from "@/lib/booking/stay-input";
 import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, withStay, type Stay, type StayDraft } from "../_lib/stay";
 import { mergeQuote, pruneQuantities, type PricedRate, type QuoteState, type RoomView } from "../_lib/merge-quote";
 import { useStayQuote } from "../_lib/useStayQuote";
+import { fitAdvice } from "../_lib/fit-advice";
+import type { RoomCapacity } from "@/components/plug-in/guest-limits";
 import { StayPickers, type StayPanel } from "./StayPickers";
 import { BookSignIn } from "./BookSignIn";
 import { useBookNow } from "./useBookNow";
@@ -1177,20 +1179,36 @@ function RoomsSectionView({ rooms, ratesConfirmed, childrenWelcome, slug, proper
   const shown = rooms.map((room, i) => ({ room, view: allViews[i] })).filter((r) => r.view.visible);
   const shownRooms = shown.map((r) => r.room);
   const shownViews = shown.map((r) => r.view);
+  // With nothing shown, whether that is the party's size rather than the dates.
+  const advice =
+    stay && quote.status === "ready" && shownRooms.length === 0 ? fitAdvice(quote.quote.rooms, stay) : null;
+  // How many each room type sleeps, for the guest picker. Rooms without both
+  // counts (demo data, a page cached before they were loaded) are left out.
+  const roomCapacities = useMemo<RoomCapacity[]>(
+    () =>
+      rooms.flatMap((r) =>
+        typeof r.max_adults === "number" && typeof r.max_children === "number"
+          ? [{ maxAdults: r.max_adults, maxChildren: r.max_children }]
+          : [],
+      ),
+    [rooms],
+  );
   const current = Math.min(activeIndex, Math.max(0, shownRooms.length - 1));
 
   // Picks of rates the stay hides, or beyond the rooms left, are dropped.
   const pruned = pruneQuantities(rooms, allViews, quantities);
   if (pruned !== quantities) setQuantities(pruned);
 
-  // A picked stay goes into the URL, which re-runs the quote.
-  const router = useRouter();
+  // A picked stay goes into the URL, which re-runs the quote. The URL is
+  // changed in place (Next keeps useSearchParams in step with it), not with
+  // router.replace: that asks the server for the page again, and loading.tsx
+  // swaps the whole page for its skeleton meanwhile, losing the scroll.
   const pathname = usePathname();
   const [panel, setPanel] = useState<StayPanel>(null);
   const closePanel = useCallback(() => setPanel(null), []);
   const applyStay = useCallback((next: StayDraft) => {
-    router.replace(`${pathname}?${withStay(new URLSearchParams(searchKey), next).toString()}`, { scroll: false });
-  }, [router, pathname, searchKey]);
+    window.history.replaceState(null, "", `${pathname}?${withStay(new URLSearchParams(searchKey), next).toString()}`);
+  }, [pathname, searchKey]);
 
   // Cots and extra beds per room. Until the guest touches a room's steppers,
   // an infant in the party suggests a cot where the room has them.
@@ -1310,13 +1328,25 @@ function RoomsSectionView({ rooms, ratesConfirmed, childrenWelcome, slug, proper
         {shownRooms.length === 0 ? (
           // Only once the quote is in: until then every room shows.
           <div className="px-4 py-10 flex flex-col items-center gap-3">
-            <p className="text-sm text-white/90">Nothing is available for these dates.</p>
+            <p className="text-sm text-white/90 text-center">
+              {advice?.kind === "more_rooms" && stay
+                ? `${guestsLabel(party)} won't fit in ${stay.rooms === 1 ? "1 room" : `${stay.rooms} rooms`} here.`
+                : advice?.kind === "too_big"
+                  ? `This hotel can't fit ${guestsLabel(party)} for these dates.`
+                  : "Nothing is available for these dates."}
+            </p>
             <button
               type="button"
-              onClick={stayFields.onOpenDates}
+              onClick={
+                advice?.kind === "more_rooms" && stay
+                  ? () => applyStay({ ...stay, rooms: advice.rooms })
+                  : advice?.kind === "too_big"
+                    ? stayFields.onOpenGuests
+                    : stayFields.onOpenDates
+              }
               className="h-10 rounded-xl border border-white/15 bg-white/5 px-3.5 text-sm text-white/90 hover:bg-white/10 transition-colors"
             >
-              Change dates
+              {advice?.kind === "more_rooms" ? `Try ${advice.rooms} rooms` : advice?.kind === "too_big" ? "Change guests" : "Change dates"}
             </button>
           </div>
         ) : (
@@ -1343,6 +1373,7 @@ function RoomsSectionView({ rooms, ratesConfirmed, childrenWelcome, slug, proper
           stay={stay}
           party={party}
           childrenWelcome={childrenWelcome}
+          roomCapacities={roomCapacities}
           openPanel={panel}
           onClose={closePanel}
           onChange={applyStay}
