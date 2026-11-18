@@ -1,7 +1,4 @@
-import { composeActionMail, escapeHtml, getEmailClient, type ActionMail } from "@openbookings/mailing";
-
-const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
+import { composeActionMail, escapeHtml, getEmailClient, sender, type ActionMail } from "@openbookings/mailing";
 
 export type AccountMail = ActionMail;
 const compose = composeActionMail;
@@ -65,5 +62,5 @@ export function passkeyAdded(name: string, securityUrl: string): AccountMail {
 }
 
 export async function sendAccountMail(to: string, mail: AccountMail): Promise<void> {
-  await getEmailClient().from(FROM_ADDRESS).to(to).subject(mail.subject).html(mail.html).send();
+  await getEmailClient().from(sender("security")).to(to).subject(mail.subject).html(mail.html).send();
 }

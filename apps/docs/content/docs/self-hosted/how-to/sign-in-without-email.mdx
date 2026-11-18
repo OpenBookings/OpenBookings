@@ -35,9 +35,12 @@ dashboard, and guest accounts only on the guest site. See the
 ## Send real email instead
 
 Unset `EMAIL_TRANSPORT` and set a [Lettermint](https://lettermint.co) project token, plus a
-sender address on a domain you've verified there:
+the domain you've verified there:
 
 ```bash
 LETTERMINT_PROJECT_TOKEN=...
-EMAIL_FROM_ADDRESS="Your Hotel Platform <noreply@example.com>"
+EMAIL_DOMAIN=example.com
 ```
+
+Sign-in links then come from `magic@example.com`. The other emails use their own mailboxes on the
+same domain; see [`EMAIL_DOMAIN`](/self-hosted/reference/environment-variables#email).

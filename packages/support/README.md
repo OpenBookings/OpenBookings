@@ -133,7 +133,7 @@ CHATWOOT_BUSINESS_INBOX_ID=<numeric inbox id>
 CHATWOOT_ACCOUNT_WEBHOOK_SECRET=<step 5>
 BUSINESS_APP_URL=https://business.openbookings.co
 LETTERMINT_PROJECT_TOKEN=…
-EMAIL_FROM_ADDRESS="OpenBookings Support <noreply@openbookings.co>"   # optional
+EMAIL_DOMAIN=openbookings.co   # optional; reply notices come from support@ on it
 QSTASH_TOKEN=…  QSTASH_CURRENT_SIGNING_KEY=…  QSTASH_NEXT_SIGNING_KEY=…
 ```
 

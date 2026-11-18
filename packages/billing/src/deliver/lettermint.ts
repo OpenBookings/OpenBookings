@@ -1,4 +1,4 @@
-import { fromAddress, getEmailClient } from "@openbookings/mailing";
+import { getEmailClient, sender } from "@openbookings/mailing";
 import { trackMail } from "@openbookings/mailing/tracking";
 import type { InvoiceMailer } from "../steps/deliver";
 
@@ -14,7 +14,7 @@ export function lettermintInvoiceMailer(
   return async (m) => {
     // A test invoice goes to an internal address and is never tracked.
     const tracked = m.subject.startsWith("[TEST] ") ? null : await track({ kind: "commission_invoice", to: m.to, html: m.html });
-    let message = getClient().from(fromAddress()).to(m.to).subject(m.subject).html(tracked?.html ?? m.html).text(m.text);
+    let message = getClient().from(sender("billing")).to(m.to).subject(m.subject).html(tracked?.html ?? m.html).text(m.text);
     for (const a of m.attachments) message = message.attach({ filename: a.filename, content: a.base64, contentType: a.contentType });
     const { message_id } = await message.send({ idempotencyKey: m.idempotencyKey });
     await tracked?.onSent();
