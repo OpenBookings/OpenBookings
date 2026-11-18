@@ -1,10 +1,8 @@
-import { escapeHtml, getEmailClient, loadTemplate } from "@openbookings/mailing";
+import { escapeHtml, getEmailClient, loadTemplate, sender } from "@openbookings/mailing";
 import type { HostInvitationEmail } from "@openbookings/auth/host";
 import { trackMail } from "@openbookings/mailing/tracking";
 import { roleLabel } from "@openbookings/authz/role-guide";
 
-const DEFAULT_FROM = "Roy at OpenBookings <noreply@openbookings.co>";
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? process.env.MAGIC_LINK_FROM ?? DEFAULT_FROM;
 const APP_URL = (process.env.NEXT_PUBLIC_BUSINESS_URL || "https://business.openbookings.co").replace(/\/$/, "");
 
 /** Where an invitation is opened. Signing in first is handled by the proxy. */
@@ -50,6 +48,6 @@ export async function sendInvitationEmail(
   const getClient = deps.getClient ?? getEmailClient;
   const { subject, html } = renderInvitation(invite);
   const tracked = await track({ kind: "team_invitation", to: invite.email, html });
-  await getClient().from(FROM_ADDRESS).to(invite.email).subject(subject).html(tracked.html).send();
+  await getClient().from(sender("roy")).to(invite.email).subject(subject).html(tracked.html).send();
   await tracked.onSent();
 }

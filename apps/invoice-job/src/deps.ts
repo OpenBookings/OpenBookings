@@ -5,7 +5,7 @@ import type { RunReportDeps } from "@openbookings/billing/notify";
 import { poolTransaction } from "@openbookings/billing/steps/reconcile";
 import { normaliseVatId, type ViesDeps } from "@openbookings/billing/vies";
 import { getPool, type Queryable } from "@openbookings/db";
-import { fromAddress, getEmailClient } from "@openbookings/mailing";
+import { getEmailClient, sender } from "@openbookings/mailing";
 import { stripe } from "@openbookings/stripe";
 
 export type Env = Record<string, string | undefined>;
@@ -80,7 +80,7 @@ export function jobDeps(env: Env) {
         to,
         slack,
         mail: async (m) => {
-          await client.from(fromAddress()).to(m.to).subject(m.subject).text(m.text).send();
+          await client.from(sender("noreply")).to(m.to).subject(m.subject).text(m.text).send();
         },
       };
     },

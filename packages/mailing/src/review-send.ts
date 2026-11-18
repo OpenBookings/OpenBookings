@@ -3,7 +3,7 @@ import type { ReviewMail } from "@openbookings/db/reviews";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { bookingMailUrls, type BookingMailUrls } from "./booking-send";
 import { getEmailClient } from "./client";
-import { fromAddress } from "./from-address";
+import { sender, type SenderRole } from "./senders";
 import { trackMail } from "./tracking";
 import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays } from "./review-mail";
 
@@ -13,7 +13,7 @@ import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestRev
  */
 
 type Db = { query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[] }> };
-type Transport = (m: { to: string; subject: string; html: string }) => Promise<void>;
+type Transport = (m: { from: string; to: string; subject: string; html: string }) => Promise<void>;
 
 export type ReviewSendDeps = { db?: Db; transport?: Transport; testing?: boolean; urls?: BookingMailUrls; track?: typeof trackMail };
 
@@ -21,8 +21,8 @@ const resolve = (d: ReviewSendDeps) => ({
   db: d.db ?? getPool(),
   transport:
     d.transport ??
-    ((m: { to: string; subject: string; html: string }) =>
-      getEmailClient().from(fromAddress()).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
+    ((m: { from: string; to: string; subject: string; html: string }) =>
+      getEmailClient().from(m.from).to(m.to).subject(m.subject).html(m.html).send().then(() => undefined)),
   testing: d.testing ?? isTestingMode(),
   urls: d.urls ?? bookingMailUrls(),
   track: d.track ?? trackMail,
@@ -67,7 +67,7 @@ export async function sendReviewMail(mail: ReviewMail, deps: ReviewSendDeps = {}
     const results = await Promise.allSettled(
       to.map(async (address) => {
         const t = await c.track({ kind: "stays_unconfirmed_host", to: address, html: message.html });
-        await c.transport({ to: address, subject: message.subject, html: t.html });
+        await c.transport({ from: sender("bookings"), to: address, subject: message.subject, html: t.html });
         await t.onSent();
       }),
     );
@@ -85,7 +85,7 @@ export async function sendReviewMail(mail: ReviewMail, deps: ReviewSendDeps = {}
   };
   const message = mail.kind === "invitation" ? guestReviewInvitation(input) : guestReviewReminder(input);
   const t = await c.track({ kind: mail.kind === "invitation" ? "review_invitation" : "review_reminder", to: mail.to, html: message.html });
-  await c.transport({ to: mail.to, subject: message.subject, html: t.html });
+  await c.transport({ from: sender("roy"), to: mail.to, subject: message.subject, html: t.html });
   await t.onSent();
 }
 
@@ -114,7 +114,7 @@ export async function sendReviewPosted(
       pending: i.pending,
       manageUrl: reviewManageUrl(c.urls.webUrl, bookingId),
     });
-    await c.transport({ to: row.email, ...message });
+    await c.transport({ from: sender("roy"), to: row.email, ...message });
   } catch (error) {
     i.report?.(error);
   }
@@ -166,7 +166,7 @@ export async function sendReviewReplied(
       manageUrl: reviewManageUrl(c.urls.webUrl, row.booking_id),
       settingsUrl: `${trim(c.urls.webUrl)}/account/privacy`,
     });
-    await c.transport({ to: row.email, ...message });
+    await c.transport({ from: sender("roy"), to: row.email, ...message });
   } catch (error) {
     i.report?.(error);
   }
