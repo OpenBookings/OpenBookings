@@ -152,8 +152,8 @@ export type SignHostAgreementResult =
  * nothing (not the date, the IP or the signer details) and returns the
  * original record. Accepting a newer version later is a new record.
  *
- * Refused while no text is published (HOST_AGREEMENT_URL unset in
- * production): accepting an agreement nobody can read is no agreement.
+ * Refused when there is no text to link (a malformed HOST_AGREEMENT_URL):
+ * accepting an agreement nobody can read is no agreement.
  */
 export async function signHostAgreement(signer: SignerDetails): Promise<SignHostAgreementResult> {
   const session = await getSession();

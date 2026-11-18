@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs/config";
+import createMDX from "@next/mdx";
 import { DEVICE_SIZES, IMAGE_QUALITIES, IMAGE_SIZES } from "@openbookings/images";
 
 // `eval` is only needed by the dev-time React Refresh runtime, and the
@@ -90,6 +91,15 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
+      // Host-only legal texts: kept out of search engines and shared caches
+      // even if a response ever escaped the sign-in check.
+      {
+        source: "/legal/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Cache-Control", value: "private, no-store" },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [
@@ -109,7 +119,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// The Host Agreement lives in `content/legal` as MDX, imported by the
+// `/legal/host-agreement` routes. Set up as in apps/web: only the `.mdx`
+// loader is registered (pages stay .tsx), and `remark-gfm` is named as a
+// string because Turbopack serialises the MDX config to its Rust side.
+const withMDX = createMDX({
+  options: {
+    remarkPlugins: [["remark-gfm", {}]],
+  },
+});
+
+export default withSentryConfig(withMDX(nextConfig), {
   org: "openbookings",
   project: "openbookings-business",
   authToken: process.env.SENTRY_AUTH_TOKEN,
