@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Loader2, PencilLine, Plus, Trash2 } from "lucide-react";
-import { discountLabel } from "@openbookings/pricing";
+import { discountLabel, isStayDiscount } from "@openbookings/pricing";
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,7 +99,7 @@ function RuleList({
         ) : (
           <ul className="divide-y rounded-lg border">
             {plan.rules.map((rule) => {
-              const discount = rule.type === "length_of_stay" || rule.type === "early_bird";
+              const discount = isStayDiscount({ type: rule.type, adjustment_value: rule.adjustmentValue });
               return (
                 <li key={rule.id} className="flex items-center gap-3 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
@@ -152,7 +152,8 @@ function RuleList({
           </ul>
         )}
         <p className="text-muted-foreground bg-muted/50 rounded-lg p-3 text-xs">
-          Only one discount applies per booking: the one that saves the guest the most. Surcharges always apply.
+          One discount per stay: length of stay, early booking or a lower last-minute price, whichever saves the guest
+          most. Day-of-week prices and price increases always apply.
         </p>
         {error && (
           <p role="alert" className="text-(--red-9) text-sm">
@@ -359,7 +360,9 @@ function RuleEditor({
                   type: v.kind === "early_bird" ? "early_bird" : "length_of_stay",
                   trigger_condition: { min_nights: Number(v.minNights) || 0 },
                 })}”. Lowering the price is always a percentage.`
-              : "Lowering the price is always a percentage."}
+              : v.kind === "last_minute"
+                ? "Counts as a discount: if a length-of-stay or early-booking discount saves the guest more, that one applies instead. Lowering the price is always a percentage."
+                : "Lowering the price is always a percentage."}
           </p>
         )}
 
