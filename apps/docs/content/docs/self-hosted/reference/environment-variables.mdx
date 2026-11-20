@@ -50,7 +50,7 @@ I = invoice job, R = root scripts.
 | `STRIPE_WEBHOOK_SECRET` | W, B | yes | Signing secret of the app's Connect webhook endpoint (`/api/stripe/webhook`). |
 | `STRIPE_PLATFORM_WEBHOOK_SECRET` | B | yes | Signing secret of the platform webhook (`/api/stripe/platform-webhook`). |
 | `STRIPE_CONNECT_ACCOUNT_ID` | W | no | Outside production, the connected account that checkout at demo hotels charges. |
-| `STRIPE_APPLICATION_FEE_ENABLED` | W | no | `true` takes the commission as a Stripe application fee. Off otherwise. |
+| `STRIPE_APPLICATION_FEE_ENABLED` | W | no | `true` takes the commission as a Stripe application fee. Off otherwise. With a live key (`sk_live_`) the app refuses to start unless this is `true`. |
 | `STRIPE_PAYMENT_METHOD_CONFIGURATION` | W | no | A Stripe payment method configuration id for checkout. |
 | `PROPERTY_READINESS_ENFORCE` | W, B | no | `off` disables the readiness gate (Stripe account, legal details, billing profile). On by default. |
 

@@ -4,6 +4,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { assertTestingModeSafe } = await import("@openbookings/demo");
     assertTestingModeSafe();
+    const { assertApplicationFeeSafe } = await import("./lib/payments/application-fee-guard");
+    assertApplicationFeeSafe();
     await import("./sentry.server.config");
   }
   if (process.env.NEXT_RUNTIME === "edge") {
