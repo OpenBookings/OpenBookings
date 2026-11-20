@@ -1,8 +1,11 @@
 export type PriceMode = "total" | "night";
 
 export type StayAvailability =
-  /** `total` is the all-in price in euros (OpenBookings is EUR-only) for the searched dates and guests. */
-  | { status: "available"; nights: number; total: number }
+  /**
+   * `total` is the all-in price in euros (OpenBookings is EUR-only) for the
+   * searched dates, guests and `rooms` rooms (one when absent).
+   */
+  | { status: "available"; nights: number; total: number; rooms?: number }
   /** Next free window as YYYY-MM-DD check-in and check-out dates, when known. */
   | { status: "unavailable"; nextFrom?: string; nextTo?: string }
   | { status: "undated" };
@@ -84,9 +87,11 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
   }
 
   const total = formatEuro(a.total);
-  // An average, because rate modifiers can make individual nights differ.
+  // An average, because rate modifiers can make individual nights differ. With
+  // several rooms it is for all of them, as the total is; the detail says how many.
   const perNight = formatEuro(Math.round(a.total / a.nights));
-  const nights = `${a.nights} ${a.nights === 1 ? "night" : "nights"}`;
+  const rooms = (a.rooms ?? 1) > 1 ? ` · ${a.rooms} rooms` : "";
+  const nights = `${a.nights} ${a.nights === 1 ? "night" : "nights"}${rooms}`;
   const amount = mode === "total" ? total : perNight;
   return {
     kind: "price",
@@ -98,7 +103,7 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
   };
 }
 
-/** Sort by total price; stays without a price always come last, in their original order. */
+/** Sort by total price (all rooms); stays without a price always come last, in their original order. */
 export function comparePrice(a: StayPosterData, b: StayPosterData, dir: "asc" | "desc"): number {
   const pa = a.availability.status === "available" ? a.availability.total : null;
   const pb = b.availability.status === "available" ? b.availability.total : null;

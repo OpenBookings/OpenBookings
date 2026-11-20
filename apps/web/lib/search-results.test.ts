@@ -26,7 +26,14 @@ describe("mapSearchResult", () => {
       id: "h1", name: "Hotel Lago", slug: "hotel-lago", location: "Como, IT", distanceKm: 0.812,
       refundable: true, highlights: [],
       cover: { url: "https://x/a.jpg", tint: null, focalX: 0.5, focalY: 0.4 },
-      availability: { status: "available", nights: 2, total: 422 },
+      availability: { status: "available", nights: 2, total: 422, rooms: 1 },
+    }));
+  test("a search for several rooms keeps how many the total is for", () =>
+    expect(mapSearchResult({ ...base, total_price: 844, rooms: 2 }).availability).toEqual({
+      status: "available",
+      nights: 2,
+      total: 844,
+      rooms: 2,
     }));
   test("no nights → undated", () =>
     expect(mapSearchResult({ ...base, nights: [] }).availability).toEqual({ status: "undated" }));

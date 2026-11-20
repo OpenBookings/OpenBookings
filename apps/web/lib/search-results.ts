@@ -20,7 +20,10 @@ export interface HotelSearchApiResult {
    * when it can't. Absent on searches without dates.
    */
   free_cancellation_until?: string | null;
+  /** All-in, for all `rooms` rooms searched, each with its share of the party. */
   total_price: number;
+  /** How many rooms `total_price` is for. Absent from older responses: one. */
+  rooms?: number;
   nights: { date: string }[];
   /**
    * Whether the stay can be booked. Unbookable hotels only come back in
@@ -69,7 +72,7 @@ export function mapSearchResult(result: HotelSearchApiResult): StayPosterData {
     cover: coverUrl ? { url: coverUrl, tint: null, focalX: DEFAULT_FOCAL.x, focalY: DEFAULT_FOCAL.y } : null,
     availability:
       nights > 0
-        ? { status: "available", nights, total: result.total_price }
+        ? { status: "available", nights, total: result.total_price, rooms: result.rooms ?? 1 }
         : { status: "undated" },
   };
 }
