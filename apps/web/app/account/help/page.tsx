@@ -86,7 +86,7 @@ export default function HelpPage() {
         </Card>
       </Section>
 
-      <Section id="help-contact" title="Contact us" helper="Real people read every email.">
+      <Section id="help-contact" title="Contact us" helper="Replies may be drafted with help from an AI assistant. A person is always available if you ask.">
         <RowList>
           <ul className="divide-y">
             <Row

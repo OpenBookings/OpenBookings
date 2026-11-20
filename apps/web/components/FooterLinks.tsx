@@ -61,7 +61,7 @@ export function FooterLinks({ photoName }: FooterLinksProps) {
             >
               <Link href="/legal/en/privacy" className={lineLink}>Privacy</Link>
               <a href="/terms" className={lineLink}>Terms</a>
-              <a href="/support" className={lineLink}>Support</a>
+              <Link href="/account/help" className={lineLink}>Support</Link>
               {/* AGPL-3.0 §13: users of the service can get its source code. */}
               <a
                 href="https://github.com/OpenBookings/OpenBookings"
