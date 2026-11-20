@@ -58,7 +58,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </div>
         <p className="text-sm text-muted-foreground">
           {property.name} · {String(booking.check_in_date)} → {String(booking.check_out_date)} ·{" "}
-          {eur.format(Number(booking.total_amount))} · Booking fee {eur.format(Number(booking.booking_fee_amount ?? 0))}
+          {eur.format(Number(booking.total_cents) / 100)} · Commission{" "}
+          {eur.format(Number(booking.commission_cents ?? 0) / 100)}
         </p>
         <p className="text-sm">
           Guest: {guest?.name ?? "-"} <span className="text-muted-foreground">{guest?.email}</span>

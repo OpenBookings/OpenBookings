@@ -62,8 +62,10 @@ export async function loadAdminBooking(db: Queryable, id: string): Promise<Admin
     `SELECT b.*, to_char(b.check_in_date, 'YYYY-MM-DD') AS check_in_date,
             to_char(b.check_out_date, 'YYYY-MM-DD') AS check_out_date,
             to_char(b.departed_early_on, 'YYYY-MM-DD') AS departed_early_on,
-            b.total_amount::float8 AS total_amount,
-            b.booking_fee_amount::float8 AS booking_fee_amount
+            -- total_amount is whole euros; total_cents is exact. Bookings from
+            -- before total_cents existed have 0 there, so fall back for those.
+            COALESCE(NULLIF(b.total_cents, 0), b.total_amount * 100)::float8 AS total_cents,
+            b.commission_cents::float8 AS commission_cents
        FROM bookings b WHERE b.id = $1::uuid`,
     [id],
   );
