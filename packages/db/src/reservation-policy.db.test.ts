@@ -52,7 +52,7 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
     expect(res.nights.reduce((sum: number, n: { touristTax: number }) => sum + n.touristTax, 0)).toBe(
       res.tourist_tax_amount,
     );
-    expect(res.policy_version).toBe("annex-b-2026-10-30-rev2");
+    expect(res.policy_version).toBe("annex-b-2026-10-30-rev3");
 
     const booking = (await db.query(`SELECT status, confirmed_at FROM bookings WHERE id = $1`, [bookingId])).rows[0];
     expect(booking.status).toBe("confirmed");

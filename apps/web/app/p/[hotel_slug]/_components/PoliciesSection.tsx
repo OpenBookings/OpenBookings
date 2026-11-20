@@ -2,7 +2,7 @@ import { cdnImageUrl } from "@openbookings/images";
 import {
   LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog, Info,
 } from "lucide-react";
-import { EARLY_DEPARTURE_LINE, TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
+import { EARLY_DEPARTURE_LINE, NO_SHOW_LINE, TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import { BusinessDetailsButton } from "./BusinessDetailsButton";
 
@@ -38,7 +38,7 @@ export function PoliciesSection({
     {
       Icon: XCircle,
       title: `Cancellation · ${TIER_LABELS[tier]}`,
-      body: `${TIER_SUMMARIES[tier]} ${EARLY_DEPARTURE_LINE} If you don't show up, nothing is refunded. Exact dates are shown at checkout.`,
+      body: `${TIER_SUMMARIES[tier]} ${EARLY_DEPARTURE_LINE} ${NO_SHOW_LINE} Exact dates are shown at checkout.`,
     },
     ...(hasNonRefundable
       ? [{ Icon: XCircle, title: "Non-refundable rates", body: "Some rates are non-refundable and cheaper." }]
