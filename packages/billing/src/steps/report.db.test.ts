@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { recordOutsideRefund } from "@openbookings/db";
 import { applyPendingMigrations, connectionString, describeWithDb } from "@openbookings/db/testing";
 import { entry, seedHost, type Host, type StripeSide } from "./draft.fixtures";
 import { runReport } from "./report";
@@ -112,8 +113,61 @@ describeWithDb("quarterly reports", () => {
     const vat = (await read("2100Q4-vat-return.csv"))[1];
     expect(vat).toBe("2100Q4;8.93;1.87;15.00");
     const dac7 = await read("2100Q4-dac7.csv");
-    expect(dac7[0]).toBe("billing_entity_id;legal_name;fee_gross");
-    expect(dac7.slice(1, -1).sort()).toEqual([`${be.orgId};Hotel BE;15.00`, `${nl.orgId};Hotel NL;10.80`].sort());
+    expect(dac7[0]).toBe("billing_entity_id;legal_name;consideration;fee_gross");
+    expect(dac7.slice(1, -1).sort()).toEqual([`${be.orgId};Hotel BE;0.00;15.00`, `${nl.orgId};Hotel NL;0.00;10.80`].sort());
+  });
+
+  test("DAC7 consideration is net of every refund in the quarter it happened, outside ones included", async () => {
+    // €400 room price (plus tourist tax, never consideration), paid in October.
+    await db.query(
+      `UPDATE bookings SET rooms_total_cents = 40000, tourist_tax_cents = 1200, total_cents = 41200,
+              confirmed_at = '2100-10-05T10:00:00Z', stripe_payment_intent_id = $2 WHERE id = $1`,
+      [nl.bookingId, `pi_${crypto.randomUUID()}`],
+    );
+    const pi = (await db.query(`SELECT stripe_payment_intent_id FROM bookings WHERE id = $1`, [nl.bookingId])).rows[0]
+      .stripe_payment_intent_id as string;
+    const ownRefund = (o: { key: string; room: number; tax: number; status: string; at: string }) =>
+      db.query(
+        `INSERT INTO refunds (booking_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key, created_at)
+         VALUES ($1, 'guest_cancellation', $2, $3, $2::numeric + $3::numeric, $4::payment_status, $5, $6)`,
+        [nl.bookingId, o.room, o.tax, o.status, o.key, o.at],
+      );
+    // Ours in November: €100 room price and €3 tourist tax back; a failed one moved nothing.
+    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 100, tax: 3, status: "succeeded", at: "2100-11-02T10:00:00Z" });
+    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 80, tax: 0, status: "failed", at: "2100-11-03T10:00:00Z" });
+    // The host refunded €50 in their own Dashboard in December, not explained: all of it room price.
+    await recordOutsideRefund(db, {
+      source: "stripe_dashboard",
+      stripeId: `re_${crypto.randomUUID()}`,
+      paymentIntentId: pi,
+      chargeId: null,
+      stripeAccountId: nl.account,
+      amountCents: 5000,
+      occurredAt: new Date("2100-12-01T10:00:00Z"),
+    });
+    // A dispute lost in January (explained as €30 room price, €6 tourist tax) belongs to the next quarter.
+    await recordOutsideRefund(db, {
+      source: "dispute",
+      stripeId: "dp_next",
+      paymentIntentId: pi,
+      chargeId: null,
+      stripeAccountId: nl.account,
+      amountCents: 3600,
+      occurredAt: new Date("2101-01-10T10:00:00Z"),
+    });
+    await db.query(
+      `UPDATE refunds SET accommodation_amount = 30, tourist_tax_amount = 6, split_explained_at = NOW()
+        WHERE idempotency_key = 'dispute:dp_next'`,
+    );
+
+    await runReport("2100Q4", { db, outDir });
+    const nlLine = (await read("2100Q4-dac7.csv")).find((l) => l.startsWith(`${nl.orgId};`));
+    // 400 − 100 − 50.
+    expect(nlLine).toBe(`${nl.orgId};Hotel NL;250.00;10.80`);
+
+    await runReport("2101Q1", { db, outDir });
+    // Only the dispute's room price, in its own quarter; the host is listed without fees.
+    expect((await read("2101Q1-dac7.csv")).find((l) => l.startsWith(`${nl.orgId};`))).toBe(`${nl.orgId};Hotel BV;-30.00;0.00`);
   });
 
   test("returned payments are listed and net to zero", async () => {
