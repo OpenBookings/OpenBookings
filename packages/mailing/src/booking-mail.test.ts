@@ -236,3 +236,10 @@ test("a refund outside a cancellation names why and how much", () => {
   expect(refused.html).toContain("We couldn't refund");
   expect(refused.html).not.toContain("on its way");
 });
+
+test("refund mails give the same timing as the booking page", () => {
+  expect(mails.oversold.html).toContain("within 5 to 10 business days");
+  expect(mails.refundIssued.html).toContain("within 5 to 10 business days");
+  const cancelled = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: "€50.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(cancelled.html).toContain("within 5 to 10 business days");
+});

@@ -1,3 +1,4 @@
+import { REFUND_TIMING_LINE } from "@openbookings/pricing";
 import { composeActionMail, type ActionMail } from "./action-mail";
 import { formatEuro, formatStayDate } from "./format";
 import { escapeHtml } from "./template";
@@ -152,7 +153,7 @@ export function guestOversoldRefunded(i: { propertyName: string; amount: string;
     preheader: "The rooms were taken just before your payment arrived. You were refunded in full.",
     eyebrow: "Booking",
     headline: "Sorry, the rooms<br />were just taken.",
-    body: `Someone else booked the rooms at ${STRONG(i.propertyName)} just before your payment arrived, so we could not confirm your stay. We refunded ${STRONG(i.amount)} in full. It can take a few days to show on your statement.`,
+    body: `Someone else booked the rooms at ${STRONG(i.propertyName)} just before your payment arrived, so we could not confirm your stay. We refunded ${STRONG(i.amount)} in full. ${escapeHtml(REFUND_TIMING_LINE)}`,
     ctaUrl: i.searchUrl,
     ctaLabel: "Find another stay",
     footnote: FOOTNOTE,
@@ -198,7 +199,7 @@ type RefundOutcome = { sent: string | null; failed?: string | null };
 
 function refundSentences(r: RefundOutcome): string | null {
   const parts = [
-    r.sent && `Your refund of ${STRONG(r.sent)} is on its way. It can take a few days to show on your statement.`,
+    r.sent && `Your refund of ${STRONG(r.sent)} is on its way. ${escapeHtml(REFUND_TIMING_LINE)}`,
     r.failed && `We couldn't refund ${STRONG(r.failed)} yet; we're on it, and you don't need to do anything.`,
   ].filter(Boolean);
   return parts.length ? parts.join(" ") : null;

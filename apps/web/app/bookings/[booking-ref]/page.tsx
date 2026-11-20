@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { CircleCheck, CircleX, Star } from 'lucide-react';
 import { getPool } from '@openbookings/db';
 import { getReviewContext } from '@openbookings/db/reviews';
+import { REFUND_TIMING_LINE } from '@openbookings/pricing';
 import { BACKDROP_COOKIE } from '@openbookings/images';
 import { getBackdrop } from '@openbookings/images/server';
 import { getServerSession } from '@/lib/auth';
@@ -219,7 +220,10 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
                 ) : null}
                 {booking.refunded > 0 ? (
                   <div className="flex justify-between gap-4">
-                    <dt className="text-white/55">Refunded · back on your card within 5–10 days</dt>
+                    <dt className="text-white/55">
+                      Refunded
+                      <span className="block text-xs text-white/40">{REFUND_TIMING_LINE}</span>
+                    </dt>
                     <dd className="tabular-nums">{euros.format(booking.refunded)}</dd>
                   </div>
                 ) : null}
