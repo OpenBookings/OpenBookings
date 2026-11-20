@@ -120,7 +120,9 @@ export function roomPriceOfRefunds(
  * refunds that name no split (a payment that never became a booking, one the
  * ledger cannot explain, a booking without a room price) and a lost dispute
  * count in proportion to the whole charge (`unsplitRefunded`,
- * `lostDisputeAmount`).
+ * `lostDisputeAmount`). A dispute can only take back money that was still on
+ * the charge, so it counts for no more than the charge less everything
+ * refunded on it, outside refunds included (`chargeRefunded`).
  *
  * A refund the host makes in their own Stripe Dashboard is outside
  * OpenBookings and returns no commission at all: it is not an input here, only
@@ -137,6 +139,12 @@ export function commissionRefundDue(input: {
   chargeAmount: number;
   feeAmount: number;
   feeRefunded: number;
+  /**
+   * Everything refunded on the charge so far, OpenBookings' own refunds and
+   * those made outside it. Only caps a lost dispute; it returns no commission
+   * by itself.
+   */
+  chargeRefunded: number;
   /**
    * What OpenBookings' own refunds that name no room-price split took off the
    * charge (`ownUnsplitRefunded`). Never a refund made outside OpenBookings.
@@ -159,12 +167,13 @@ export function commissionRefundDue(input: {
   const roomTotal = split ? Math.min(Math.max(split.roomTotal, 1), chargeAmount) : chargeAmount;
   const splitRefunded = split ? Math.min(Math.max(split.refunded, 0), chargeAmount) : 0;
   const roomRefunded = split ? Math.min(Math.max(split.roomRefunded, 0), roomTotal) : 0;
-  // OpenBookings' unsplit refunds and a lost dispute, counted against the
-  // whole charge. Together with the split refunds they can never exceed it.
-  const unsplit = Math.min(
-    Math.max(input.unsplitRefunded ?? 0, 0) + Math.max(input.lostDisputeAmount ?? 0, 0),
-    chargeAmount - splitRefunded,
-  );
+  // A dispute takes back only what was still on the charge: an outside refund
+  // returns no commission, but it does shrink what a later dispute can claim.
+  const stillCharged = chargeAmount - Math.min(Math.max(input.chargeRefunded, 0), chargeAmount);
+  const disputed = Math.min(Math.max(input.lostDisputeAmount ?? 0, 0), stillCharged);
+  // OpenBookings' unsplit refunds and the dispute, counted against the whole
+  // charge. Together with the split refunds they can never exceed it.
+  const unsplit = Math.min(Math.max(input.unsplitRefunded ?? 0, 0) + disputed, chargeAmount - splitRefunded);
 
   // fee × (roomRefunded / roomTotal + unsplit / chargeAmount), in integers:
   // the products pass 2^53 on a large stay, so BigInt.

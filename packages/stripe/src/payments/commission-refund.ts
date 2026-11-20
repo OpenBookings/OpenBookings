@@ -88,6 +88,7 @@ export async function refundCommissionForCharge(
     chargeAmount: charge.amount,
     feeAmount: fee.amount,
     feeRefunded: fee.amount_refunded,
+    chargeRefunded: charge.amount_refunded,
     refunds,
     lostDisputeAmount: options.lostDisputeAmount,
   });
@@ -148,12 +149,15 @@ type RefundLike = { amount: number; status: string | null; metadata?: Record<str
  * OpenBookings' own refunds count (never `charge.amount_refunded`, which
  * includes refunds the host made in their own Dashboard): split ones by the
  * room price they gave back, the rest against the whole charge, like a lost
- * dispute. See `commissionRefundDue`.
+ * dispute (which counts only up to what was still on the charge). See
+ * `commissionRefundDue`.
  */
 export function commissionDueOnRefunds(input: {
   chargeAmount: number;
   feeAmount: number;
   feeRefunded: number;
+  /** Everything refunded on the charge (`charge.amount_refunded`): caps a lost dispute. */
+  chargeRefunded: number;
   refunds: RefundLike[];
   lostDisputeAmount?: number;
 }): number {
@@ -161,6 +165,7 @@ export function commissionDueOnRefunds(input: {
     chargeAmount: input.chargeAmount,
     feeAmount: input.feeAmount,
     feeRefunded: input.feeRefunded,
+    chargeRefunded: input.chargeRefunded,
     unsplitRefunded: ownUnsplitRefunded(input.refunds),
     lostDisputeAmount: input.lostDisputeAmount,
     roomPrice: roomPriceOfRefunds(input.refunds),
