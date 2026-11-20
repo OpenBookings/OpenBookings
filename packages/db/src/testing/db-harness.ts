@@ -7,6 +7,9 @@ import { describe } from "bun:test";
 import { Client } from "pg";
 import { PENDING_MIGRATIONS, pendingMigrationSql } from "./pending-migrations";
 
+/** One migration file's SQL, for a suite that replays it itself. */
+export { pendingMigrationSql };
+
 export const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString && process.env.CI) {
