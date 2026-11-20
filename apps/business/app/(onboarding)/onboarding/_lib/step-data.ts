@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EU_COUNTRY_CODES } from "@openbookings/billing/vat";
 
 /**
  * What the browser may write into `host_onboarding.step_data` through
@@ -52,4 +53,14 @@ export function parseClientStepData(step: unknown, data: unknown): unknown | nul
   if (!isClientStep(step)) return null;
   const parsed = CLIENT_STEP_SCHEMAS[step].safeParse(data);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * The property's country as an EU country code, or null. OpenBookings is for
+ * properties in the EU only; the Stripe account's country is fixed at
+ * creation, so a non-EU country has to be stopped before that.
+ */
+export function euPropertyCountry(raw: string | undefined | null): string | null {
+  const code = (raw ?? "").trim().toUpperCase();
+  return EU_COUNTRY_CODES.includes(code) ? code : null;
 }

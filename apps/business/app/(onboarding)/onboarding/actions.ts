@@ -10,7 +10,7 @@ import { completionPrecheck } from "@/lib/onboarding-completion";
 import { isStripeAccountReady } from "@/lib/stripe-readiness";
 import { promoteOnboardingToProperty } from "./promotion";
 import { summariseStripeAccount } from "./_lib/status";
-import { parseClientStepData } from "./_lib/step-data";
+import { euPropertyCountry, parseClientStepData } from "./_lib/step-data";
 import { HOST_AGREEMENT_DOC_ID, hostAgreementUrl } from "@openbookings/authz/host-agreement";
 import {
   decideHostAgreementSignature,
@@ -264,11 +264,13 @@ export async function provisionStripeAccount(): Promise<string> {
   // The country decides which regulator the account sits under and cannot be
   // changed afterwards, so it is never defaulted.
   if (!location.country) throw new Error("Property country is missing");
+  const country = euPropertyCountry(location.country);
+  if (!country) throw new Error("OpenBookings is only for properties in the EU");
 
   const accountId = await createConnectAccount({
     email: session.user.email,
     legalCompanyName: legal.legalCompanyName,
-    country: location.country,
+    country,
     userId,
   });
 

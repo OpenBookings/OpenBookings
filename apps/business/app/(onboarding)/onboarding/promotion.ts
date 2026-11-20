@@ -57,12 +57,9 @@ const COUNTRY_TIMEZONE: Record<string, string> = {
   IT: "Europe/Rome",
   PT: "Europe/Lisbon",
   AT: "Europe/Vienna",
-  CH: "Europe/Zurich",
   DK: "Europe/Copenhagen",
   SE: "Europe/Stockholm",
-  NO: "Europe/Oslo",
   IE: "Europe/Dublin",
-  GB: "Europe/London",
   PL: "Europe/Warsaw",
 };
 
