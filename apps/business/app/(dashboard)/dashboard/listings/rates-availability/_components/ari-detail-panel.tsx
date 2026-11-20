@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Ban, CalendarCog, Lock, PencilLine, Percent, Tag, Undo2 } from "lucide-react";
 import {
   Sheet,
@@ -66,7 +67,6 @@ interface DetailPanelProps {
   onEditRestrictions: (prefill: EditPrefill) => void;
   onReopen: (prefill: EditPrefill) => void;
   onEditBaseRate: (prefill: EditPrefill) => void;
-  onEditRules: (prefill: EditPrefill) => void;
   onStage: (edits: DraftEdit[]) => void;
 }
 
@@ -79,7 +79,6 @@ export function AriDetailPanel({
   onEditRestrictions,
   onReopen,
   onEditBaseRate,
-  onEditRules,
   onStage,
 }: DetailPanelProps) {
   return (
@@ -115,7 +114,6 @@ export function AriDetailPanel({
             onEditRestrictions={onEditRestrictions}
             onReopen={onReopen}
             onEditBaseRate={onEditBaseRate}
-            onEditRules={onEditRules}
             onStage={onStage}
           />
         )}
@@ -312,7 +310,6 @@ function RateDetail({
   onEditRestrictions,
   onReopen,
   onEditBaseRate,
-  onEditRules,
   onStage,
 }: {
   room: RoomTypeRow;
@@ -324,7 +321,6 @@ function RateDetail({
   onEditRestrictions: (prefill: EditPrefill) => void;
   onReopen: (prefill: EditPrefill) => void;
   onEditBaseRate: (prefill: EditPrefill) => void;
-  onEditRules: (prefill: EditPrefill) => void;
   onStage: (edits: DraftEdit[]) => void;
 }) {
   const first = run.cells[0];
@@ -527,13 +523,13 @@ function RateDetail({
           Edit restrictions
         </Button>
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => onEditRules({ ratePlanId: plan.id })}
-        >
-          <Percent className="size-4" />
-          {plan.rules.length > 0 ? `Pricing rules (${plan.rules.length})` : "Add pricing rules"}
+        {/* Rules are set for the whole property on their own page; this
+            opens it filtered to the plan the host is looking at. */}
+        <Button variant="outline" className="w-full" asChild>
+          <Link href={`/dashboard/listings/pricing-rules?plan=${plan.id}`}>
+            <Percent className="size-4" />
+            {plan.rules.length > 0 ? `Pricing rules (${plan.rules.length})` : "Add pricing rules"}
+          </Link>
         </Button>
       </div>
     </>

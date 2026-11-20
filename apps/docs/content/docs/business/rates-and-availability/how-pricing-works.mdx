@@ -3,7 +3,7 @@ title: How pricing works
 description: How the final price is calculated from base rates and modifiers.
 ---
 
-*Last updated: 16 November 2026*
+*Last updated: 20 November 2026*
 
 ## Overview
 
@@ -21,9 +21,23 @@ Before your organisation can set or change a price, an owner or admin has to con
 
 Every rate plan has a **base rate** — the starting point for every date. A rate override replaces the base rate on particular dates. 
 
-## The adjustments
+## Pricing rules
 
-On top of the base rate sit adjustments (such as a weekend uplift or a longer-stay discount). **Days of the week** and **Last minute** adjustments are applied to each night first. Then at most one discount (**Length of stay** or **Early booking**) is taken off: the one that saves the guest the most. The order in which you added the rules does not change the result.
+Pricing rules move the price for the stays they match. You manage them for the whole property on **Listings → Pricing rules**, and each rule applies to the rate plans you choose: **All rate plans** (including rate plans you add later) or the ones you tick. The page has two kinds:
+
+- **Price adjustments** always apply, to every night they match: a different price on some **days of the week** (higher or lower), or a higher price for **last-minute** bookings.
+- **Discounts**: **length of stay**, **early booking**, or a lower price for **last-minute** bookings. A stay gets at most one discount: if it qualifies for more than one, the guest gets the biggest. A discount is always a percentage.
+
+A guest's price is built like this:
+
+1. Each night's price: the base rate, or the price you set for that date.
+2. Plus every price adjustment that matches the night.
+3. Minus one discount, the biggest the stay qualifies for.
+4. Plus any extra guests, which are never discounted.
+
+Tourist tax is added on top of that. The order in which you added the rules does not change the result.
+
+To see what your rules do together, use **Try a stay** on the Pricing rules page: pick a rate plan, dates and a booking date, and it shows the price line by line, with the discount that wins and the ones it beat.
 
 ## Checking prices for longer stays
 

@@ -18,7 +18,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "What stops you from raising the rate later?",
     answer: [
-      "The rate lock: any change requires 30 days' notice, are sent to your inbox/notification center, and never applies to bookings already made. And because the platform is open source and your data is exportable, leaving is easy. Which is the strongest incentive we have to stay honest.",
+      "The rate lock: any change requires 30 days' notice by email, and never applies to bookings already made. And because the platform is open source and your data is exportable, leaving is easy. Which is the strongest incentive we have to stay honest.",
     ],
   },
   {

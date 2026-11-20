@@ -421,6 +421,29 @@ function applyEarlyBird(
   }
 }
 
+/** A lower last-minute price, as the stay's discount: a percentage of the subtotal. */
+function applyLastMinuteDiscount(
+  state: CalculationState,
+  modifier: Modifier,
+  context: ModifierContext
+): CalculationState {
+  if (modifier.type !== 'last_minute') return state
+
+  const dummyContext = { ...context, date: context.arrivalDate }
+  if (!isEligible(modifier, dummyContext)) return state
+
+  // A discount is a percentage (0050); a flat row is not one and is ignored.
+  if (modifier.adjustment_type !== 'percent') return state
+  const discount = (state.subtotal * modifier.adjustment_value) / 100
+
+  return {
+    ...state,
+    total: state.total + discount,
+    applied: new Set([...state.applied, 'last_minute']),
+    trace: traceModifier(state, 'Last minute', modifier, discount),
+  }
+}
+
 // ─────────────────────────────────────────────
 // Executor: run all modifiers in sort_order
 // ─────────────────────────────────────────────
@@ -452,10 +475,10 @@ function executeModifiers(
     early_bird: applyEarlyBird,
   }
 
-  // Date surcharges first, in rule order, so a percentage discount is always
-  // taken from the same figure whatever order the rules were added in.
+  // Price adjustments first, in rule order, so a percentage discount is
+  // always taken from the same figure whatever order the rules were added in.
   for (const modifier of sortedModifiers) {
-    if (DISCOUNT_TYPES.has(modifier.type)) continue
+    if (isStayDiscount(modifier)) continue
     const stepFn = stepFunctions[modifier.type]
     if (stepFn) state = stepFn(state, modifier, context)
   }
@@ -464,8 +487,8 @@ function executeModifiers(
   // discount always lowers the price, whatever sign it was stored with.
   let best = state
   for (const modifier of sortedModifiers) {
-    if (!DISCOUNT_TYPES.has(modifier.type)) continue
-    const stepFn = stepFunctions[modifier.type]
+    if (!isStayDiscount(modifier)) continue
+    const stepFn = discountSteps[modifier.type]
     if (!stepFn) continue
     const discounted = stepFn(state, { ...modifier, adjustment_value: -Math.abs(modifier.adjustment_value) }, context)
     if (discounted.total < best.total) best = { ...discounted, discount: modifier }
@@ -474,8 +497,28 @@ function executeModifiers(
   return best
 }
 
-/** Rules that lower the price. Only one applies per stay; see executeModifiers. */
+/** Rules that are always a discount, whatever sign they were stored with. */
 const DISCOUNT_TYPES = new Set<ModifierType>(['length_of_stay', 'early_bird'])
+
+/**
+ * Whether a rule competes as the stay's one discount (see executeModifiers).
+ *
+ * Length of stay and early booking always do. A last-minute rule does when
+ * it lowers the price: a lower last-minute price is a discount, as on Airbnb
+ * and Booking.com, so it never stacks on top of another one. Raised, it is a
+ * price adjustment and always applies. Day-of-week rules are prices, up or
+ * down, and always apply.
+ */
+export function isStayDiscount(modifier: Pick<Modifier, 'type' | 'adjustment_value'>): boolean {
+  return DISCOUNT_TYPES.has(modifier.type) || (modifier.type === 'last_minute' && modifier.adjustment_value < 0)
+}
+
+/** How each kind of stay discount comes off; all are a percentage of the subtotal. */
+const discountSteps: Partial<Record<ModifierType, ModifierStepFn>> = {
+  length_of_stay: applyLengthOfStay,
+  early_bird: applyEarlyBird,
+  last_minute: applyLastMinuteDiscount,
+}
 
 // ─────────────────────────────────────────────
 // Main resolver
@@ -646,6 +689,7 @@ function payAtPropertyLines(row: RoomRow, params: SearchParams, nights: number):
 /** The guest-facing name of a discount: "Weekly discount", "Early booking discount"… */
 export function discountLabel(modifier: Pick<Modifier, 'type' | 'trigger_condition'>): string {
   if (modifier.type === 'early_bird') return 'Early booking discount'
+  if (modifier.type === 'last_minute') return 'Last-minute discount'
   const minNights = Number(modifier.trigger_condition.min_nights)
   if (minNights >= 28) return 'Monthly discount'
   if (minNights >= 7) return 'Weekly discount'
@@ -663,7 +707,7 @@ function appliedDiscount(state: CalculationState): AppliedDiscount | null {
 /**
  * What each night actually cost, for a tourist tax percentage.
  *
- * Surcharges are per night, but a stay discount (length of stay, early bird)
+ * Surcharges are per night, but the stay discount (see isStayDiscount)
  * comes off the total. Spreading the discount over the nights in proportion
  * keeps every night's share honest and makes the nights add up to the total.
  * Extras are never discounted, so each night carries its own in full.
