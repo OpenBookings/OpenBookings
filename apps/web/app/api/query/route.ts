@@ -148,7 +148,7 @@ candidate_rooms AS (
     WHERE room_id = r.id
       AND is_active
     -- A search card shows one rate, and a Non-refundable rate may only be
-    -- offered beside a refundable one (Annex B B.4.3), so prefer refundable.
+    -- offered beside a refundable one (Annex B B.4.1), so prefer refundable.
     ORDER BY is_refundable DESC, created_at DESC
     LIMIT 1
   ) rp ON TRUE

@@ -37,7 +37,7 @@ import { MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
  *
  * Unbookable rooms and rates come back with their reasons; hiding them is the
  * page's call. The one thing left out is a Non-refundable rate that is not at
- * least 10% cheaper than a refundable rate on the same room (Annex B B.4.3),
+ * least 10% cheaper than a refundable rate on the same room (Annex B B.4.2),
  * the same rule the listing applies (`withCancellationTerms`).
  */
 
@@ -273,12 +273,12 @@ type PricedRoom = {
 
 /**
  * Each room's rate plans priced for one party, with Non-refundable rates that
- * fail Annex B B.4.3 for this stay already dropped: a Non-refundable rate is
- * offered only beside a refundable rate on the same room that can be booked
- * for these dates (no rate-plan reasons) and costs at least 10% more. The
- * comparison is on the stay's room price, the number the guest would pay, not
- * the base rate. Room-level reasons (sold out, closed…) hit every rate alike,
- * so they don't decide this.
+ * fail Annex B B.4.1 or B.4.2 for this stay already dropped: a Non-refundable
+ * rate is offered only beside a refundable rate on the same room that can be
+ * booked for these dates (no rate-plan reasons, B.4.1) and costs at least 10%
+ * more (B.4.2). The comparison is on the stay's room price, the number the
+ * guest would pay, not the base rate. Room-level reasons (sold out, closed…)
+ * hit every rate alike, so they don't decide this.
  */
 function priceRooms(
   rows: PlanRow[],
