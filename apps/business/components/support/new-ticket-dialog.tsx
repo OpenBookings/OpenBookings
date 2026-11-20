@@ -80,7 +80,7 @@ function IntakeContent({ intake }: { intake: IntakeState }) {
 
   const [category, setCategory] = React.useState(draft?.category ?? preset?.category ?? "");
   const [linked, setLinked] = React.useState<LinkOption | null>(draft?.linked ?? preset?.linked ?? null);
-  const [message, setMessage] = React.useState(draft?.message ?? "");
+  const [message, setMessage] = React.useState(draft?.message ?? preset?.message ?? "");
   const [files, setFiles] = React.useState<PickedFile[]>(() => toPicked(draft?.files ?? []));
   const locked = draft?.locked ?? preset?.locked ?? false;
   const followUpOf = draft?.followUpOf ?? preset?.followUpOf ?? null;

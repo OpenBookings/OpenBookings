@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { BookingAction } from "@openbookings/pricing";
-import { actionsForViewer, viewerCanRetryRefunds } from "./permissions";
+import { ACTION_PERMISSION, actionsForViewer, viewerCanRetryRefunds } from "./permissions";
 
 const ALL: BookingAction[] = ["cancel", "mark_checked_in", "mark_no_show", "record_early_departure", "goodwill_refund"];
 
 describe("actionsForViewer", () => {
-  test("owner and general manager get every action, refunds included", () => {
+  test("owner and general manager get every action, a goodwill request included", () => {
     expect(actionsForViewer(ALL, { role: "owner", hasPropertyAccess: false })).toEqual(ALL);
     expect(actionsForViewer(ALL, { role: "admin", hasPropertyAccess: false })).toEqual(ALL);
   });
 
-  test("a manager can cancel but not give goodwill refunds", () => {
+  test("a manager can cancel but not request goodwill refunds", () => {
     expect(actionsForViewer(ALL, { role: "manager", hasPropertyAccess: true })).toEqual([
       "cancel",
       "mark_checked_in",
@@ -38,5 +38,11 @@ describe("actionsForViewer", () => {
 
   test("never adds an action the booking's state did not allow", () => {
     expect(actionsForViewer(["cancel"], { role: "owner", hasPropertyAccess: true })).toEqual(["cancel"]);
+  });
+});
+
+describe("goodwill refunds", () => {
+  test("a host can only ask for one: the grant is request-refund, never a refund", () => {
+    expect(ACTION_PERMISSION.goodwill_refund).toEqual({ booking: ["request-refund"] });
   });
 });

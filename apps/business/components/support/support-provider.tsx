@@ -31,6 +31,8 @@ export type IntakePreset = {
   /** Opened from a contextual "Get help": category and item are fixed. */
   locked?: boolean;
   followUpOf?: string | null;
+  /** Prefills the message, e.g. a goodwill refund request. The host can still edit it. */
+  message?: string;
 };
 
 export type IntakeDraft = {

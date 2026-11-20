@@ -12,8 +12,8 @@ export const sendCancellation = (bookingId: string, cancelled: CancelledRooms) =
     Sentry.captureException(error, { tags: { area: "booking-mail", kind: extra.kind }, extra }),
   );
 
-/** Tells the guest about an early-departure, goodwill or retried refund, as Stripe answered it. Never throws. */
-export const sendRefundMail = (bookingId: string, reason: "early_departure" | "goodwill" | "retry", refunds: IssuedRefund[]) =>
+/** Tells the guest about an early-departure or retried refund, as Stripe answered it. Never throws. */
+export const sendRefundMail = (bookingId: string, reason: "early_departure" | "retry", refunds: IssuedRefund[]) =>
   sendRefundIssued(bookingId, { reason, refunds }, (error, extra) =>
     Sentry.captureException(error, { tags: { area: "booking-mail", kind: extra.kind }, extra }),
   );

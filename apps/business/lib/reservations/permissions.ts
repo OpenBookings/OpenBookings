@@ -9,15 +9,18 @@ import type { BookingAction } from "@openbookings/pricing";
  * - Day-of-stay work is `operate`: any refund it causes (early departure)
  *   follows the cancellation policy, not the host's judgement.
  * - Cancelling is `cancel`: the refund again follows the policy.
- * - A goodwill refund is money at the host's discretion: `refund`, which
- *   only owners and general managers hold.
+ * - A goodwill refund is never issued by a host (owner decision
+ *   2026-11-20). For hosts, `goodwill_refund` in the list only means they
+ *   may *request* one through support (`request-refund`, owners and general
+ *   managers); OpenBookings staff issue it from the admin app. No host server
+ *   action issues a goodwill refund.
  */
 export const ACTION_PERMISSION: Record<BookingAction, Permission> = {
   mark_checked_in: { booking: ["operate"] },
   mark_no_show: { booking: ["operate"] },
   record_early_departure: { booking: ["operate"] },
   cancel: { booking: ["cancel"] },
-  goodwill_refund: { booking: ["refund"] },
+  goodwill_refund: { booking: ["request-refund"] },
 };
 
 /**
