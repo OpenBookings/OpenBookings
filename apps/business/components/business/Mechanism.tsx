@@ -37,9 +37,9 @@ export function Mechanism() {
             </h2>
             <div className="max-w-[52ch] space-y-6 text-[15px] leading-[1.8] text-white/46">
               <p>
-                Every booking costs you exactly two things: Stripe&apos;s payment processing fee, which
-                Stripe charges directly to your Stripe account, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. There is no
-                third line. No commission tiers to climb, no visibility programs, no fees invented on the
+                Every booking carries two fees: Stripe&apos;s payment processing fee, which
+                Stripe charges directly to your Stripe account, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. No
+                commission tiers to climb, no visibility programs, no fees invented on the
                 guest&apos;s side of the receipt.
               </p>
               <p>
@@ -116,6 +116,11 @@ export function Mechanism() {
               Stripe fee shown for standard EEA cards. Stripe charges it directly to your Stripe
               account and we add nothing to it. You see both fees on every payment in your Stripe
               Dashboard.
+            </p>
+            <p className="mt-2 px-1 text-[11px] leading-[1.7] text-white/22">
+              Tourist tax is added on top for the guest and passed on to you. It carries no commission,
+              but Stripe&apos;s percentage applies to the whole payment. If a guest disputes a payment,
+              Stripe may also charge you a dispute fee.
             </p>
           </div>
         </div>
