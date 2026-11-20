@@ -100,8 +100,29 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "privacy",
     fallbackLocale: "en",
-    currentVersion: "2026-11-16",
+    // 2026-12-21 is a placeholder: rename it (folder and here) to the real
+    // TomTom switch date before merging.
+    currentVersion: "2026-12-21",
     versions: [
+      {
+        version: "2026-12-21",
+        effectiveFrom: "2026-12-21",
+        lastUpdated: "2026-12-21",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/privacy/2026-12-21/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-12-21/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/privacy/2026-12-21/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-11-16",
         effectiveFrom: "2026-11-16",

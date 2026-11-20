@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-11-16";
+const CURRENT = "2026-12-21";
 const DIR = join(import.meta.dir, "../../content/legal/privacy");
 const read = (version: string, locale: string) =>
   readFileSync(join(DIR, version, `${locale}.mdx`), "utf8");
@@ -12,9 +12,10 @@ const sectionIds = (source: string) =>
 
 // Regions as confirmed for the 2026-10-02 version, per language.
 const REGIONS: Record<(typeof LEGAL_LOCALES)[number], Record<string, string>> = {
-  en: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", MapTiler: "EU (France and Ireland)", Sentry: "EU (Germany)" },
-  nl: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", MapTiler: "EU (Frankrijk en Ierland)", Sentry: "EU (Duitsland)" },
-  fr: { Neon: "UE (Francfort)", Scaleway: "UE (Amsterdam)", MapTiler: "UE (France et Irlande)", Sentry: "UE (Allemagne)" },
+// TomTom: its data processing schedule names EU data centre locations only.
+  en: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", TomTom: "EU", Sentry: "EU (Germany)" },
+  nl: { Neon: "EU (Frankfurt)", Scaleway: "EU (Amsterdam)", TomTom: "EU", Sentry: "EU (Duitsland)" },
+  fr: { Neon: "UE (Francfort)", Scaleway: "UE (Amsterdam)", TomTom: "UE", Sentry: "UE (Allemagne)" },
 };
 
 describe("privacy policy registry", () => {
@@ -43,7 +44,7 @@ describe("current privacy policy content", () => {
     test(`${locale}: names the real vendors`, () => {
       const source = read(CURRENT, locale);
       for (const vendor of [
-        "Neon", "Scaleway", "Algolia", "MapTiler", "Lettermint", "PostHog", "Sentry", "Cloudflare", "Stripe",
+        "Neon", "Scaleway", "Algolia", "TomTom", "Lettermint", "PostHog", "Sentry", "Cloudflare", "Stripe",
         // Reviews cache and support task queue; support inbox; support assistant.
         "Upstash", "Chatwoot", "Mistral",
       ]) {
@@ -54,7 +55,7 @@ describe("current privacy policy content", () => {
     test(`${locale}: does not name vendors that get no guest data`, () => {
       const source = read(CURRENT, locale);
       // Whole words, any case: "Cartographie" is not CartoDB, "CARTO" is.
-      for (const absent of ["Google Cloud", "Tirreno", "Carto", "CartoDB", "Dicebear", "Microsoft"]) {
+      for (const absent of ["Google Cloud", "Tirreno", "Carto", "CartoDB", "Dicebear", "Microsoft", "MapTiler"]) {
         expect(source).not.toMatch(new RegExp(`\\b${absent}\\b`, "i"));
       }
     });
@@ -146,5 +147,10 @@ describe("current privacy policy content", () => {
   test("the previous version's files are untouched", () => {
     expect(read("2026-09-21", "en")).toContain("**Google Cloud**");
     expect(read("2026-11-15", "en")).toContain("No tracking pixels.");
+    expect(read("2026-11-16", "en")).toContain("**MapTiler**");
+  });
+
+  test("the version before TomTom stays registered for its archive URL", () => {
+    expect(getVersion(getDocument("privacy")!, "2026-11-16")).toBeDefined();
   });
 });
