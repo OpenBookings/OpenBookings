@@ -19,7 +19,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "What stops you from raising the rate later?",
     answer: [
-      "The rate lock: any change requires 30 days' notice by email, and never applies to bookings already made. And because the platform is open source and your data is exportable, leaving is easy. Which is the strongest incentive we have to stay honest.",
+      "The rate lock: any change requires 30 days' notice by email, and never applies to bookings already made. And because the platform is open source and there's no fixed term, leaving is easy. Which is the strongest incentive we have to stay honest.",
     ],
   },
   {
@@ -43,7 +43,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "Am I locked in?",
     answer: [
-      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours and can be exported at any time, while guest data cannot be bulk exported in line with GDPR requirements and the Host Agreement.",
+      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours. You can download your analytics and invoices at any time, and when you leave we send you a copy of your property details and booking history on request. Guest personal data can't be bulk exported, in line with GDPR and the Host Agreement.",
     ],
   },
 ];
