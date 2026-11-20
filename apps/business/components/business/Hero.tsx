@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { DEFAULT_COMMISSION_LABEL } from "@openbookings/stripe/commission-rate";
 
 /** Sets a CSS custom property on an inline style without fighting the type. */
 const arc = (from: string, speed: string, direction: "normal" | "reverse" = "normal"): CSSProperties =>
@@ -69,12 +70,12 @@ export function Hero() {
           <div className="absolute top-[calc(50%-330px)] left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[9px] whitespace-nowrap rounded-full border border-spectrum-mint/25 bg-mk-surface px-4 py-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
             <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-spectrum-mint" />
             <span className="text-[12px] font-medium text-white">Booking confirmed</span>
-            <span className="text-[11px] text-white/38">€480</span>
+            <span className="text-[11px] text-white/38">Paid into your Stripe</span>
           </div>
 
-          {/* ring 1 (r=330) · right — small trend count */}
+          {/* ring 1 (r=330) · right — small label */}
           <div className="absolute top-[calc(50%-113px)] left-[calc(50%+310px)] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap text-[12px] text-white/45">
-            <span className="text-spectrum-mint">↑</span> 12.4% Conversion
+            <span className="text-spectrum-mint">✓</span> Neutral ranking
           </div>
 
           {/* ring 1 (r=330) · bottom-left — new booking pill */}
@@ -84,16 +85,16 @@ export function Hero() {
             <span className="text-[11px] text-white/38">Ocean View · 3 nights</span>
           </div>
 
-          {/* ring 1 (r=330) · bottom-right — revenue count */}
+          {/* ring 1 (r=330) · bottom-right — payouts label */}
           <div className="absolute top-[calc(50%+234px)] left-[calc(50%+233px)] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-[13px] font-medium text-white/70">
-            €42,350 <span className="text-[11px] font-normal text-spectrum-mint">↑</span>
+            Payouts on your schedule <span className="text-[11px] font-normal text-spectrum-mint">✓</span>
           </div>
 
-          {/* ring 2 (r=470) · upper-left — occupancy card */}
+          {/* ring 2 (r=470) · upper-left — commission card */}
           <div className="absolute top-[calc(50%-235px)] left-[calc(50%-407px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-mk-surface px-4 py-[11px] text-left shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
-            <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-white/32">Occupancy</div>
-            <div className="text-[22px] font-semibold tracking-[-0.03em] text-white">87.3%</div>
-            <div className="mt-[3px] text-[10px] text-spectrum-mint">↑ 3.1% this month</div>
+            <div className="mb-1 text-[10px] uppercase tracking-[0.08em] text-white/32">Commission</div>
+            <div className="text-[22px] font-semibold tracking-[-0.03em] text-white">{DEFAULT_COMMISSION_LABEL}</div>
+            <div className="mt-[3px] text-[10px] text-spectrum-mint">Rate locked</div>
           </div>
 
           {/* ring 2 (r=470) · upper-right — GDPR circular chip */}
@@ -136,14 +137,14 @@ export function Hero() {
             </svg>
           </div>
 
-          {/* ring 3 (r=620) · left — small count label */}
+          {/* ring 3 (r=620) · left — small label */}
           <div className="absolute top-[calc(50%+310px)] left-[calc(50%-537px)] hidden -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap text-[12px] text-white/40 xl:flex">
-            <span className="text-spectrum-amber/70">★</span> 4.9 Star Reviews
+            <span className="text-spectrum-amber/70">★</span> Reviews from real stays
           </div>
 
-          {/* ring 3 (r=620) · right — small count label */}
+          {/* ring 3 (r=620) · right — small label */}
           <div className="absolute top-[calc(50%+310px)] left-[calc(50%+537px)] hidden -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap text-[12px] text-white/40 xl:flex">
-            <span className="text-spectrum-mint">↑</span> 68 bookings today
+            <span className="text-spectrum-mint">✓</span> No guest service fees
           </div>
         </div>
 
