@@ -18,9 +18,11 @@ const when = (d: Date) =>
   d.toLocaleString("en-GB", { timeZone: "Europe/Amsterdam", dateStyle: "medium", timeStyle: "short" });
 
 /**
- * Refunds hosts made outside OpenBookings, and disputes they lost. The
- * commission went back on the whole payment; staff email the host to ask what
- * the money was for (the tourist tax on it stays the host's responsibility).
+ * Refunds hosts made outside OpenBookings, and disputes they lost. A Dashboard
+ * refund returned no commission (any goodwill return is made by hand); a lost
+ * dispute returned it in proportion to the whole payment. Staff email the host
+ * to ask what the money was for (the tourist tax on it stays the host's
+ * responsibility).
  */
 export default async function FlaggedPaymentsPage() {
   requireSuperAdmin();

@@ -185,7 +185,7 @@ function drawBooking(
     ? chargedCommission -
       commissionRefundDue({
         chargeAmount: stayCents,
-        chargeRefunded: stayCents - keptCents,
+        unsplitRefunded: stayCents - keptCents,
         feeAmount: chargedCommission,
         feeRefunded: 0,
       })

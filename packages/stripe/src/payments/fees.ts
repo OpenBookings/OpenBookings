@@ -73,6 +73,19 @@ const wholeCents = (value: string | undefined): number | null => {
 };
 
 /**
+ * The room-price split one refund names in its metadata, or null if it names
+ * none (or names it in something other than whole cents).
+ */
+export function roomPriceSplitOf(
+  metadata: Record<string, string> | null | undefined,
+): { room: number; total: number } | null {
+  const room = wholeCents(metadata?.[ROOM_PRICE_REFUNDED_KEY]);
+  const total = wholeCents(metadata?.[ROOM_PRICE_TOTAL_KEY]);
+  if (room === null || total === null || total <= 0) return null;
+  return { room, total };
+}
+
+/**
  * Reads the room-price split off a charge's refunds. Only OpenBookings' own
  * refunds carry it (in their metadata); a refund made in the host's Stripe
  * Dashboard does not, and neither do refunds from before the split. Failed and
@@ -86,12 +99,11 @@ export function roomPriceOfRefunds(
   let named = false;
   for (const r of refunds) {
     if (r.status === 'failed' || r.status === 'canceled') continue;
-    const room = wholeCents(r.metadata?.[ROOM_PRICE_REFUNDED_KEY]);
-    const total = wholeCents(r.metadata?.[ROOM_PRICE_TOTAL_KEY]);
-    if (room === null || total === null || total <= 0) continue;
+    const part = roomPriceSplitOf(r.metadata);
+    if (!part) continue;
     named = true;
-    split.roomTotal = Math.max(split.roomTotal, total);
-    split.roomRefunded += Math.min(room, r.amount);
+    split.roomTotal = Math.max(split.roomTotal, part.total);
+    split.roomRefunded += Math.min(part.room, r.amount);
     split.refunded += r.amount;
   }
   return named ? split : null;
@@ -104,22 +116,32 @@ export function roomPriceOfRefunds(
  * Commission is taken on the room price, so it goes back in proportion to the
  * room price refunded: 80% of the room price back means 80% of the commission
  * back, and a refund of tourist tax alone returns none. OpenBookings' own
- * refunds say how much of each was room price (`roomPrice`). A refund that
- * does not say (one made in the host's Stripe Dashboard) and a lost dispute
- * can't be split, so they count in proportion to the whole charge.
+ * refunds say how much of each was room price (`roomPrice`). OpenBookings' own
+ * refunds that name no split (a payment that never became a booking, one the
+ * ledger cannot explain, a booking without a room price) and a lost dispute
+ * count in proportion to the whole charge (`unsplitRefunded`,
+ * `lostDisputeAmount`).
+ *
+ * A refund the host makes in their own Stripe Dashboard is outside
+ * OpenBookings and returns no commission at all: it is not an input here, only
+ * flagged for staff (`refundsOutsideOpenBookings`). Any goodwill return is
+ * made by hand.
  *
  * Stated as a target rather than a delta, which is what makes it safe to call
  * on every refund event: the commission returned so far is an input, so a
  * redelivered or repeated event computes zero. The final partial refund picks
  * up the rounding remainder, so the parts always sum to the fee exactly.
- * Rounded down, like Stripe's own proration.
+ * Rounded down, like Stripe's own proration, and never above the fee.
  */
 export function commissionRefundDue(input: {
   chargeAmount: number;
-  /** Everything refunded on the charge so far, split or not. */
-  chargeRefunded: number;
   feeAmount: number;
   feeRefunded: number;
+  /**
+   * What OpenBookings' own refunds that name no room-price split took off the
+   * charge (`ownUnsplitRefunded`). Never a refund made outside OpenBookings.
+   */
+  unsplitRefunded?: number;
   /**
    * The amount of a dispute the host lost. It counts like a refund of that
    * amount: a guest who wins back EUR 100 of a EUR 555 stay did not undo the
@@ -133,15 +155,14 @@ export function commissionRefundDue(input: {
   if (chargeAmount <= 0 || feeAmount <= 0) return 0;
 
   const split = input.roomPrice ?? null;
-  // Without a split the whole charge is the base, which is the old rule exactly.
+  // Without a split the whole charge is the base.
   const roomTotal = split ? Math.min(Math.max(split.roomTotal, 1), chargeAmount) : chargeAmount;
-  const refunded = Math.min(Math.max(input.chargeRefunded, 0), chargeAmount);
-  const splitRefunded = split ? Math.min(Math.max(split.refunded, 0), refunded) : 0;
+  const splitRefunded = split ? Math.min(Math.max(split.refunded, 0), chargeAmount) : 0;
   const roomRefunded = split ? Math.min(Math.max(split.roomRefunded, 0), roomTotal) : 0;
-  // A lost dispute does not show up in the charge's refunded amount, so it is
-  // added here; together they can never exceed the charge.
+  // OpenBookings' unsplit refunds and a lost dispute, counted against the
+  // whole charge. Together with the split refunds they can never exceed it.
   const unsplit = Math.min(
-    refunded - splitRefunded + Math.max(input.lostDisputeAmount ?? 0, 0),
+    Math.max(input.unsplitRefunded ?? 0, 0) + Math.max(input.lostDisputeAmount ?? 0, 0),
     chargeAmount - splitRefunded,
   );
 

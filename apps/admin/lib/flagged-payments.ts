@@ -5,8 +5,10 @@ import { UUID_RE } from "./search";
 /**
  * Payments flagged for staff to ask the host about: a refund the host made in
  * their own Stripe Dashboard, or a dispute the host lost. OpenBookings cannot
- * tell what that money was for (room price or tourist tax), so the commission
- * went back on the whole payment and the host is asked to explain. The
+ * tell what that money was for (room price or tourist tax), so the host is
+ * asked to explain. A Dashboard refund returned no commission (it is outside
+ * OpenBookings; any goodwill return is made by hand); a lost dispute returned
+ * it in proportion to the whole payment. The
  * business app's Stripe webhook writes these rows into `audit_log`.
  *
  * Resolving one adds a `payment.flag-resolved` row with the same dedupe key:

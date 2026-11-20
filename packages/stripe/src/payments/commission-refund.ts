@@ -1,6 +1,6 @@
 import type Stripe from 'stripe';
 import { stripe } from '../client';
-import { commissionRefundDue, roomPriceOfRefunds } from './fees';
+import { commissionRefundDue, roomPriceOfRefunds, roomPriceSplitOf } from './fees';
 import { madeByOpenBookings } from './refund-origin';
 
 export type CommissionRefund = { id: string; amount: number };
@@ -8,9 +8,8 @@ export type CommissionRefund = { id: string; amount: number };
 /**
  * A refund on the charge that OpenBookings did not make (see
  * `madeByOpenBookings`): the host refunded the guest in their own Stripe
- * Dashboard. OpenBookings cannot tell what it was for, room price or tourist
- * tax, so the commission went back in proportion to the whole payment and
- * the host is asked to explain it.
+ * Dashboard. It is outside OpenBookings: no commission goes back on it, and
+ * the host is asked to explain it (any goodwill return is made by hand).
  */
 export type OutsideRefund = {
   id: string;
@@ -36,12 +35,13 @@ export type CommissionReturn = {
  *
  * The commission goes back in proportion to the room price refunded, never
  * the tourist tax (see `commissionRefundDue`). Refunds OpenBookings makes name
- * their room-price part in their metadata, read here off the charge's refunds.
+ * their room-price part in their metadata, read here off the charge's refunds;
+ * OpenBookings' own refunds that name none, and a lost dispute, count against
+ * the whole charge. A refund the host makes in their own Stripe Dashboard
+ * returns no commission: it is outside OpenBookings, and only flagged.
  * `refundPayment` calls this right after each refund it makes; the
- * `charge.refunded` webhook calls it again as the backstop, and for refunds
- * hosts make in their own Stripe Dashboard, where Stripe does not return the
- * platform's application fee by default. Both work out the same target, so
- * whichever runs second finds nothing left to do.
+ * `charge.refunded` webhook calls it again as the backstop. Both work out the
+ * same target, so whichever runs second finds nothing left to do.
  *
  * This moves only OpenBookings' own money, back to the host; it never touches
  * the host's balance in the other direction.
@@ -84,13 +84,12 @@ export async function refundCommissionForCharge(
     amount: r.amount,
   }));
 
-  const due = commissionRefundDue({
+  const due = commissionDueOnRefunds({
     chargeAmount: charge.amount,
-    chargeRefunded: charge.amount_refunded,
     feeAmount: fee.amount,
     feeRefunded: fee.amount_refunded,
+    refunds,
     lostDisputeAmount: options.lostDisputeAmount,
-    roomPrice: roomPriceOfRefunds(refunds),
   });
   if (due <= 0) return { commissionRefunds: existing, outsideRefunds };
 
@@ -122,4 +121,48 @@ export function refundsOutsideOpenBookings(
       status: r.status ?? null,
       paymentIntentId: typeof r.payment_intent === 'string' ? r.payment_intent : (r.payment_intent?.id ?? null),
     }));
+}
+
+/**
+ * What OpenBookings' own refunds that name no room-price split took off the
+ * charge: a payment that could not become a booking, one the commission
+ * ledger cannot explain, a booking without a room price. These count against
+ * the whole charge. Refunds made outside OpenBookings are left out (they
+ * return no commission), and so are the split ones (`roomPriceOfRefunds`
+ * counts those), failed and canceled ones.
+ */
+export function ownUnsplitRefunded(refunds: RefundLike[]): number {
+  let total = 0;
+  for (const r of refunds) {
+    if (r.status === 'failed' || r.status === 'canceled') continue;
+    if (!madeByOpenBookings(r.metadata) || roomPriceSplitOf(r.metadata)) continue;
+    total += r.amount;
+  }
+  return total;
+}
+
+type RefundLike = { amount: number; status: string | null; metadata?: Record<string, string> | null };
+
+/**
+ * The commission still due back on a charge, read off its refund list. Only
+ * OpenBookings' own refunds count (never `charge.amount_refunded`, which
+ * includes refunds the host made in their own Dashboard): split ones by the
+ * room price they gave back, the rest against the whole charge, like a lost
+ * dispute. See `commissionRefundDue`.
+ */
+export function commissionDueOnRefunds(input: {
+  chargeAmount: number;
+  feeAmount: number;
+  feeRefunded: number;
+  refunds: RefundLike[];
+  lostDisputeAmount?: number;
+}): number {
+  return commissionRefundDue({
+    chargeAmount: input.chargeAmount,
+    feeAmount: input.feeAmount,
+    feeRefunded: input.feeRefunded,
+    unsplitRefunded: ownUnsplitRefunded(input.refunds),
+    lostDisputeAmount: input.lostDisputeAmount,
+    roomPrice: roomPriceOfRefunds(input.refunds),
+  });
 }

@@ -114,7 +114,8 @@ export type ApplicationFeePayload = {
 
 /**
  * A refund on a host's charge that OpenBookings did not make: the host
- * refunded in their own Stripe Dashboard. Declared structurally, like the fee
+ * refunded in their own Stripe Dashboard. It returns no commission and is
+ * flagged for staff. Declared structurally, like the fee
  * payloads, so `refundCommissionForCharge`'s own type fits.
  */
 export type OutsideRefundPayload = {
@@ -129,8 +130,10 @@ export type OutsideRefundPayload = {
 /**
  * Audit actions that flag a payment for staff to ask the host about. Money
  * left the host's charge in a way OpenBookings cannot split into room price
- * and tourist tax, so the commission went back on the whole payment and the
- * host stays responsible for the tourist tax on it.
+ * and tourist tax, and the host stays responsible for the tourist tax on it.
+ * A refund made in the host's own Stripe Dashboard returns no commission (it
+ * is outside OpenBookings; any goodwill return is made by hand); a lost
+ * dispute returns it in proportion to the whole payment.
  */
 export const PAYMENT_FLAG_ACTIONS = {
   refundOutside: "payment.refund-outside-openbookings",
@@ -341,8 +344,9 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
  *
  * Also flags each refund on the charge that OpenBookings did not make, so
  * staff can ask the host what it was for. Hosts should refund through
- * OpenBookings; one made in their own Stripe Dashboard returns commission on
- * the whole payment, and the tourist tax on it stays the host's to account for.
+ * OpenBookings; one made in their own Stripe Dashboard is outside OpenBookings
+ * and returns no commission, and the tourist tax on it stays the host's to
+ * account for.
  */
 type CommissionDeps = Required<Pick<StripeEventDeps, "refundCommission" | "audit">>;
 
