@@ -28,6 +28,16 @@ function defaultStyles(): { light: string; dark: string } | null {
 export const DEFAULT_MAP_STYLES = defaultStyles();
 
 /**
+ * Which theme's map to show. The business app has a theme provider; the guest
+ * site has none and is always dark (the `dark` class on <html>), so without a
+ * provider the page's class decides.
+ */
+export function pickMapTheme(resolvedTheme: string | undefined, documentIsDark: boolean): MapTheme {
+  if (resolvedTheme === "dark" || resolvedTheme === "light") return resolvedTheme;
+  return documentIsDark ? "dark" : "light";
+}
+
+/**
  * The style for each theme, or null when either theme would have none. All or
  * nothing on purpose: a map built for one theme and missing for the other
  * would render under its own "unavailable" placeholder.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveMapStyles, tomtomSearchUrl, tomtomStyleUrl } from "./index";
+import { pickMapTheme, resolveMapStyles, tomtomSearchUrl, tomtomStyleUrl } from "./index";
 
 describe("tomtomStyleUrl", () => {
   test("builds the Orbis style URL per theme", () => {
@@ -72,5 +72,17 @@ describe("tomtomSearchUrl", () => {
   test("is null without a key, so no request is sent that can only fail", () => {
     expect(tomtomSearchUrl("Dam 1", undefined, { idxSet: "PAD", countrySet: "NL", limit: 5 })).toBeNull();
     expect(tomtomSearchUrl("Dam 1", " ", { idxSet: "PAD", countrySet: "NL", limit: 5 })).toBeNull();
+  });
+});
+
+describe("pickMapTheme", () => {
+  test("follows the theme provider when there is one", () => {
+    expect(pickMapTheme("dark", false)).toBe("dark");
+    expect(pickMapTheme("light", true)).toBe("light");
+  });
+
+  test("without a provider, follows the page's dark class (the guest site is always dark)", () => {
+    expect(pickMapTheme(undefined, true)).toBe("dark");
+    expect(pickMapTheme(undefined, false)).toBe("light");
   });
 });

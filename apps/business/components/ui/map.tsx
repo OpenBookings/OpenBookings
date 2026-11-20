@@ -27,7 +27,7 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { DEFAULT_MAP_STYLES, resolveMapStyles } from "@openbookings/maps";
+import { DEFAULT_MAP_STYLES, pickMapTheme, resolveMapStyles } from "@openbookings/maps";
 
 /**
  * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
@@ -258,7 +258,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     if (!containerRef.current || !mapStyles) return;
 
     const initialStyle =
-      resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
+      mapStyles[pickMapTheme(resolvedTheme, document.documentElement.classList.contains("dark"))];
     currentStyleRef.current = initialStyle;
 
     const map = new MapLibreGL.Map({
@@ -363,10 +363,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
   // Handle style change
   useEffect(() => {
-    if (!mapInstance || !resolvedTheme || !mapStyles) return;
+    if (!mapInstance || !mapStyles) return;
 
     const newStyle =
-      resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
+      mapStyles[pickMapTheme(resolvedTheme, document.documentElement.classList.contains("dark"))];
 
     if (currentStyleRef.current === newStyle) return;
 
