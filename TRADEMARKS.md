@@ -1,7 +1,7 @@
 # Trademark Policy
 
 The OpenBookings source code is open source. The OpenBookings **name, logo and visual identity**
-(the *marks*) are not. They belong to Wouter van der Wal, and this policy explains how you may
+(the *marks*) are not. They belong to OpenBookings B.V., and this policy explains how you may
 and may not use them.
 
 The goal is simple: anyone who sees the OpenBookings name should be able to trust that it means

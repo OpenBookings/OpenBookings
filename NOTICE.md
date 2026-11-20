@@ -10,7 +10,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 Affero General Public License for more details.
 
-The OpenBookings name, logo and branding are trademarks of Wouter van der Wal and are **not**
+The OpenBookings name, logo and branding are trademarks of OpenBookings B.V. and are **not**
 covered by that license. Their use is governed by the [Trademark Policy](./TRADEMARKS.md).
 
 ## Third-party software
