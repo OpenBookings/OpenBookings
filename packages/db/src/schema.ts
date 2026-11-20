@@ -281,6 +281,7 @@ export const ratePlans = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => [
+    check("rate_plans_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_rate_plans_room_id").on(table.roomId, table.isActive),
     check("rate_plans_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
   ],
@@ -657,6 +658,7 @@ export const bookings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("bookings_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_bookings_dates").on(table.checkInDate, table.checkOutDate),
     index("idx_bookings_hotel_id").on(table.hotelId),
     index("idx_bookings_status").on(table.status),
@@ -776,6 +778,7 @@ export const transactions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("transactions_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_transactions_booking_id").on(table.bookingId),
     index("idx_transactions_provider_payment").on(table.providerPaymentId),
     index("idx_transactions_status").on(table.status),
@@ -811,6 +814,7 @@ export const bookingIntents = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("booking_intents_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_booking_intents_status_hold").on(table.status, table.holdExpiresAt),
     index("idx_booking_intents_user_status").on(table.userId, table.status),
     index("idx_booking_intents_property").on(table.propertyId),
