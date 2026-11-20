@@ -11,6 +11,9 @@ export type MailRoom = {
   name: string;
   ratePlan: string;
   guests: string;
+  /** False for a non-refundable rate. */
+  refundable: boolean;
+  /** Null once the free-cancellation deadline has passed (or for a non-refundable rate). */
   freeCancellationUntil: string | null;
   nights: { date: string; price: number }[];
   touristTaxLines: { label: string; amount: number }[];
@@ -78,7 +81,11 @@ export function nightRuns(nights: { date: string; price: number }[]): { label: s
 
 function roomRows(rooms: MailRoom[]): Row[] {
   return rooms.flatMap((r) => {
-    const cancel = r.freeCancellationUntil ? `free cancellation until ${r.freeCancellationUntil}` : "non-refundable";
+    const cancel = !r.refundable
+      ? "non-refundable"
+      : r.freeCancellationUntil
+        ? `free cancellation until ${r.freeCancellationUntil}`
+        : "free cancellation period has passed";
     return [
       { label: escapeHtml(r.name), kind: "room" as const },
       { label: escapeHtml(`${r.ratePlan}, ${r.guests}, ${cancel}`), kind: "note" as const },

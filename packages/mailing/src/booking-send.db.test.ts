@@ -106,13 +106,20 @@ describeWithDb("booking emails against Postgres", () => {
     expect(hostMail).toContain("€394.00");
   });
 
-  test("a free-cancellation deadline shows with its time, and a past one shows as non-refundable", async () => {
+  test("a free-cancellation deadline shows with its time and zone; a past one is not called non-refundable", async () => {
     await db.query(`UPDATE reservations SET full_refund_until = '2099-03-11T14:00:00Z' WHERE id = $1`, [reservationIds[0]]);
     await db.query(`UPDATE reservations SET full_refund_until = '2000-01-01T00:00:00Z' WHERE id = $1`, [reservationIds[1]]);
     await sendBookingConfirmed(bookingId, deps());
     const html = sent.find((m) => m.to === guestEmail)!.html;
-    expect(html).toContain("free cancellation until Wed 11 Mar 2099, 15:00");
-    expect(html).toContain("non-refundable");
+    expect(html).toContain("free cancellation until Wed 11 Mar 2099, 15:00 (property&#39;s local time)");
+    expect(html).toContain("free cancellation period has passed");
+    expect(html).not.toContain("non-refundable");
+  });
+
+  test("a non-refundable room says so", async () => {
+    await db.query(`UPDATE reservations SET cancellation_tier = 'non_refundable', full_refund_until = NULL WHERE id = $1`, [reservationIds[1]]);
+    await sendBookingConfirmed(bookingId, deps());
+    expect(sent.find((m) => m.to === guestEmail)!.html).toContain("non-refundable");
   });
 
   test("in testing mode a demo hotel's host mail goes to the guest", async () => {

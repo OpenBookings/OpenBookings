@@ -109,6 +109,8 @@ type BookingRow = {
     rate_plan: string;
     adults: number;
     children: number;
+    /** False only for a non-refundable rate: the room price never comes back. */
+    refundable: boolean;
     free_until: string | null;
     nights: { date: string; price: number }[];
     tax_lines: { label: string; amount: number }[];
@@ -127,6 +129,8 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
             COALESCE((
               SELECT json_agg(json_build_object(
                 'name', rm.name, 'rate_plan', rp.name, 'adults', r.adults, 'children', r.children,
+                -- The tier the room was booked under; the rate's flag for one not snapshotted yet.
+                'refundable', COALESCE(r.cancellation_tier::text <> 'non_refundable', rp.is_refundable),
                 -- A deadline that has passed is no longer a free-cancellation promise.
                 'free_until', CASE WHEN r.full_refund_until > NOW()
                   THEN to_char(r.full_refund_until AT TIME ZONE p.timezone, 'YYYY-MM-DD HH24:MI') END,
@@ -153,11 +157,14 @@ const guestsText = (adults: number, children: number) => {
   return `${n} ${n === 1 ? "guest" : "guests"}`;
 };
 
-/** "Thu 11 Mar 2027, 15:00" from "2027-03-11 15:00" (the property's local time). */
+/**
+ * "Thu 11 Mar 2027, 15:00 (property's local time)" from "2027-03-11 15:00".
+ * The guest may be in another time zone, so the mail says whose clock it is.
+ */
 function deadline(local: string | null): string | null {
   if (!local) return null;
   const [date, time] = local.split(" ");
-  return `${formatStayDate(date!)}, ${time}`;
+  return `${formatStayDate(date!)}, ${time} (property's local time)`;
 }
 
 const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
@@ -165,6 +172,7 @@ const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
     name: r.name,
     ratePlan: r.rate_plan,
     guests: guestsText(r.adults, r.children),
+    refundable: r.refundable !== false,
     freeCancellationUntil: deadline(r.free_until),
     nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
     touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amount: Number(t.amount) })),

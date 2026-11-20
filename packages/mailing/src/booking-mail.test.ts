@@ -15,6 +15,7 @@ const rooms = [
     name: "Deluxe <Room>",
     ratePlan: "Flexible",
     guests: "2 guests",
+    refundable: true,
     freeCancellationUntil: "Fri 5 Mar 2027",
     nights: [
       { date: "2027-03-12", price: 100 },
@@ -26,6 +27,7 @@ const rooms = [
     name: "Garden Suite",
     ratePlan: "Non-refundable",
     guests: "1 guest",
+    refundable: false,
     freeCancellationUntil: null,
     nights: [
       { date: "2027-03-12", price: 49.5 },
@@ -165,4 +167,18 @@ test("tourist tax labels are escaped", () => {
     bookingUrl: "https://web.test/b",
   });
   expect(evil.html).toContain("Tourist tax (&lt;b&gt;&amp;)");
+});
+
+test("a refundable room booked inside its window is not called non-refundable", () => {
+  const late = guestBookingConfirmed({
+    propertyName: "Hotel",
+    ...stay,
+    rooms: [{ ...rooms[0], freeCancellationUntil: null }],
+    money,
+    seller,
+    reference: "AB12CD34",
+    bookingUrl: "https://web.test/b",
+  });
+  expect(late.html).toContain("free cancellation period has passed");
+  expect(late.html).not.toContain("non-refundable");
 });
