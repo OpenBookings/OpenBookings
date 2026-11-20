@@ -2,6 +2,7 @@ import { describe, expect, setSystemTime, test } from "bun:test";
 import {
   extraGuests,
   hasStayLengthDiscount,
+  isStayDiscount,
   todayInZone,
   resolveNightlyRates,
   resolveRoom,
@@ -374,6 +375,48 @@ describe("modifier fixes", () => {
     expect(named(3)).toEqual({ label: "3+ night discount", percent: 10, amount: 42 });
     expect(stay([discount("early_bird", -15, 1)]).discount).toEqual({ label: "Early booking discount", percent: 15, amount: 45 });
     expect(stay([]).discount).toBeNull();
+  });
+
+  const lastMinute = (value: number, flat = false): Modifier => ({
+    type: "last_minute",
+    adjustment_type: flat ? "flat" : "percent",
+    adjustment_value: value,
+    trigger_condition: { days_till_arrival: 40 },
+    sort_order: 5,
+  });
+
+  test("a lower last-minute price is a discount: it competes, it does not stack", () => {
+    // Audit C15: 3 nights × 100, last minute −20% and 3+ nights −10% used to
+    // stack to 216. Only the biggest applies now.
+    const r = stay([discount("length_of_stay", -10, 1), lastMinute(-20)]);
+    expect(r.room_price).toBe(240);
+    expect(r.applied_modifiers).toEqual(["last_minute"]);
+    expect(r.discount).toEqual({ label: "Last-minute discount", percent: 20, amount: 60 });
+  });
+
+  test("a bigger stay discount beats a lower last-minute price", () => {
+    const r = stay([discount("early_bird", -25, 1), lastMinute(-20)]);
+    expect(r.room_price).toBe(225);
+    expect(r.discount?.label).toBe("Early booking discount");
+  });
+
+  test("a raised last-minute price is an adjustment: it applies on top of the discount", () => {
+    // 300 + 10% = 330, then −10% = 297.
+    const r = stay([discount("length_of_stay", -10, 1), lastMinute(10)]);
+    expect(r.room_price).toBe(297);
+    expect(r.discount?.label).toBe("3+ night discount");
+  });
+
+  test("a lower last-minute fixed amount is not a discount: it is ignored", () => {
+    expect(stay([lastMinute(-30, true)]).room_price).toBe(300);
+  });
+
+  test("isStayDiscount sorts rules into discounts and price adjustments", () => {
+    expect(isStayDiscount({ type: "length_of_stay", adjustment_value: -10 })).toBe(true);
+    expect(isStayDiscount({ type: "early_bird", adjustment_value: -10 })).toBe(true);
+    expect(isStayDiscount({ type: "last_minute", adjustment_value: -10 })).toBe(true);
+    expect(isStayDiscount({ type: "last_minute", adjustment_value: 10 })).toBe(false);
+    expect(isStayDiscount({ type: "day_of_week", adjustment_value: -10 })).toBe(false);
   });
 
   test("the largest discount for the guest wins, not the first", () => {
