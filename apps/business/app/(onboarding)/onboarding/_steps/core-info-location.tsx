@@ -6,9 +6,11 @@ import { Map, MapMarker, MarkerContent, type MapRef } from "@/components/ui/map"
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { maptilerGeocodingUrl } from "@openbookings/maps";
-
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
+import { TOMTOM_API_KEY } from "@openbookings/maps";
+import {
+  searchAddresses,
+  type AddressCandidate,
+} from "@/app/(dashboard)/dashboard/listings/property/_lib/address-lookup";
 
 interface GeocodeSuggestion {
   id: string;
@@ -33,33 +35,16 @@ interface CoreInfoLocationStepProps {
   onChange: (values: Partial<CoreInfoLocationValues>) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Postal code regex (NL, DE, FR, US, UK, BE)
-// ---------------------------------------------------------------------------
-const POSTAL_CODE_RE = /\b([A-Z]{1,2}\d[A-Z\d]?\s\d[A-Z]{2}|\d{4,5}(?:\s?[A-Z]{2})?)\b/i;
-
-function parseGeocodeFeature(feature: Record<string, unknown>): GeocodeSuggestion {
-  const context = (feature.context as Array<{ id: string; text: string }>) ?? [];
-  const postalCtx = context.find(
-    (c) => c.id.startsWith("postcode") || c.id.startsWith("postal_code") || c.id.startsWith("zip")
-  );
-  const city =
-    context.find((c) => c.id.startsWith("place") || c.id.startsWith("locality"))?.text ?? "";
-  const country = context.find((c) => c.id.startsWith("country"))?.text ?? "";
-  const placeName = (feature.place_name as string) ?? "";
-  const postalCode = postalCtx?.text ?? POSTAL_CODE_RE.exec(placeName)?.[1] ?? "";
-  const streetNum = (feature.address as string) ?? "";
-  const streetName = (feature.text as string) ?? "";
-  const street = streetNum ? `${streetName} ${streetNum}` : streetName;
-
+/** A search result as a suggestion. The country is the ISO-2 code ("NL"), as the property row expects. */
+function toSuggestion(c: AddressCandidate): GeocodeSuggestion {
   return {
-    id: (feature.id as string) ?? String(Math.random()),
-    placeName,
-    center: feature.center as [number, number],
-    street,
-    city,
-    country,
-    postalCode,
+    id: c.id,
+    placeName: c.label,
+    center: [c.lon, c.lat],
+    street: c.addressLine1,
+    city: c.city,
+    country: c.country,
+    postalCode: c.postalCode,
   };
 }
 
@@ -90,25 +75,26 @@ function AddressSearch({
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(hasPrefilledAddress);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isConfirmed = confirmed && streetAddress && city;
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 3) { setSuggestions([]); return; }
+    // No key, no search: the request could only fail.
+    if (q.length < 3 || !TOMTOM_API_KEY) { setSuggestions([]); return; }
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     try {
-      const url = maptilerGeocodingUrl(q, MAPTILER_KEY);
-      // No key, no search: the request could only fail.
-      if (!url) { setSuggestions([]); return; }
-      const res = await fetch(url);
-      const data = await res.json();
-      setSuggestions((data.features ?? []).map(parseGeocodeFeature));
+      const found = await searchAddresses(q, TOMTOM_API_KEY, controller.signal);
+      setSuggestions(found.map(toSuggestion));
       setOpen(true);
     } catch {
-      // ignore network errors
+      // ignore network errors and superseded requests
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) setLoading(false);
     }
   }, []);
 
