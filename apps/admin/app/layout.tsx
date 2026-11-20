@@ -22,6 +22,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/invoices" className="font-medium">
             Invoices
           </Link>
+          <Link href="/flagged-payments" className="font-medium">
+            Flagged payments
+          </Link>
         </header>
         <main className="p-4">{children}</main>
       </body>
