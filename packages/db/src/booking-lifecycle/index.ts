@@ -113,7 +113,22 @@ function eventData(a: Actor, data: Record<string, unknown>): Record<string, unkn
 export type RefundStatus = "pending" | "succeeded" | "failed";
 
 /** What a cancelRooms call itself cancelled, so a caller can tell the guest exactly that. */
-export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+export type CancelledRooms = {
+  reservationIds: string[];
+  /** What the cancellation refunds, euros. */
+  refundTotal: number;
+  /**
+   * The part of `refundTotal` Stripe refused, euros: it is owed but has not
+   * gone yet (a retry sends it). The rest went, or is on its way.
+   */
+  refundFailed: number;
+  cancelsBooking: boolean;
+};
+
+/** What Stripe refused among `refunds`, euros. */
+export function failedRefundTotal(refunds: { amount: number; status: RefundStatus }[]): number {
+  return refunds.filter((r) => r.status === "failed").reduce((sum, r) => sum + Math.round(r.amount * 100), 0) / 100;
+}
 
 export type LifecycleResult =
   | {
@@ -548,11 +563,8 @@ export async function cancelRooms(
     };
   });
   if (!done.ok) return done;
-  return {
-    ok: true,
-    refunds: await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor),
-    cancelled: done.cancelled,
-  };
+  const refunds = await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor);
+  return { ok: true, refunds, cancelled: { ...done.cancelled, refundFailed: failedRefundTotal(refunds) } };
 }
 
 async function setStatus(

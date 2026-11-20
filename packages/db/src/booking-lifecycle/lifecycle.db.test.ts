@@ -81,7 +81,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(result).toEqual({
       ok: true,
       refunds: [{ reservationId: reservationIds[0], amount: 309, status: "succeeded" }],
-      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, cancelsBooking: false },
+      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, refundFailed: 0, cancelsBooking: false },
     });
     expect(calls.map((c) => c.amountCents)).toEqual([30_900]);
     // Room price €300 of the €309, out of €600 on the booking: half the commission goes back.
@@ -188,6 +188,8 @@ describeWithDb("booking lifecycle against Postgres", () => {
     };
     const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
     expect(result.ok && result.refunds[0].status).toBe("failed");
+    // The guest's mail says this part has not gone yet.
+    expect(result.ok && result.cancelled).toMatchObject({ refundTotal: 309, refundFailed: 309 });
     expect((await one<{ status: string }>(`SELECT status FROM refunds WHERE reservation_id = $1`, [reservationIds[0]])).status).toBe(
       "failed",
     );

@@ -17,7 +17,7 @@ import {
 } from "@openbookings/db/booking-lifecycle";
 import type { BookingAction } from "@openbookings/pricing";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
-import { sendBookingCancelled as sendCancellation } from "@openbookings/mailing/booking-send";
+import { sendBookingCancelled as sendCancellation, sendRefundIssued } from "@openbookings/mailing/booking-send";
 import { actorFor, type ActAs } from "./actor";
 import { UUID_RE } from "./search";
 import { isStripeTestMode, requireSuperAdmin } from "./super-admin";
@@ -102,7 +102,11 @@ export async function adminMarkNoShow(bookingId: string, as: ActAs) {
 export async function adminRecordEarlyDeparture(bookingId: string, as: ActAs, lastNightStayed: string) {
   requireSuperAdmin();
   if (badIds(bookingId, null) || typeof lastNightStayed !== "string" || !DATE_RE.test(lastNightStayed)) return invalid;
-  return run(bookingId, as, (actor) => recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed }));
+  return run(bookingId, as, async (actor) => {
+    const result = await recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed });
+    if (result.ok) await sendRefundIssued(bookingId, { reason: "early_departure", refunds: result.refunds });
+    return result;
+  });
 }
 
 /** Always as host. */
@@ -110,7 +114,11 @@ export async function adminGoodwillRefund(bookingId: string, amount: number) {
   requireSuperAdmin();
   if (badIds(bookingId, null)) return invalid;
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
-  return run(bookingId, "host", (actor) => issueGoodwillRefund(deps, { bookingId, actor, amount }));
+  return run(bookingId, "host", async (actor) => {
+    const result = await issueGoodwillRefund(deps, { bookingId, actor, amount });
+    if (result.ok) await sendRefundIssued(bookingId, { reason: "goodwill", refunds: result.refunds });
+    return result;
+  });
 }
 
 export async function adminRetryRefunds(bookingId: string) {
@@ -118,6 +126,7 @@ export async function adminRetryRefunds(bookingId: string) {
   if (!isStripeTestMode()) return notTestMode;
   if (badIds(bookingId, null)) return invalid;
   const result = await retryRefunds(deps, { bookingId, via: "admin" });
+  if (result.ok) await sendRefundIssued(bookingId, { reason: "retry", refunds: result.refunds });
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }

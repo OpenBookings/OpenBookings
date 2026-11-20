@@ -6,9 +6,11 @@ import {
   guestBookingCancelled,
   guestBookingConfirmed,
   guestOversoldRefunded,
+  guestRefundIssued,
   hostBookingCancelled,
   hostNewBooking,
   type MailRoom,
+  type RefundIssuedReason,
 } from "./booking-mail";
 import { formatEuro, formatStayDate } from "./format";
 import type { ActionMail } from "./action-mail";
@@ -250,8 +252,23 @@ export async function sendOversoldRefunded(intentId: string, deps: SendDeps = {}
   );
 }
 
-/** What `cancelRooms` returned in `cancelled`. */
-export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+/**
+ * What `cancelRooms` returned in `cancelled`. `refundFailed` is the part of
+ * `refundTotal` Stripe refused (absent: none).
+ */
+export type CancelledRooms = { reservationIds: string[]; refundTotal: number; refundFailed?: number; cancelsBooking: boolean };
+
+const euroCents = (euros: number) => Math.round(euros * 100);
+
+/** Splits a refund into what went (or is on its way) and what Stripe refused, formatted; null for nothing. */
+function refundAmounts(total: number, failed: number): { refund: string | null; refundFailed: string | null } {
+  const failedCents = Math.min(Math.max(euroCents(failed), 0), Math.max(euroCents(total), 0));
+  const sentCents = Math.max(euroCents(total), 0) - failedCents;
+  return {
+    refund: sentCents > 0 ? formatEuro(sentCents / 100) : null,
+    refundFailed: failedCents > 0 ? formatEuro(failedCents / 100) : null,
+  };
+}
 
 /**
  * Tells the guest and the host which rooms a cancelRooms call cancelled, from
@@ -295,7 +312,7 @@ export async function sendBookingCancelled(
           guestBookingCancelled({
             propertyName: row.property_name,
             rooms: row.rooms,
-            refund: cancelled.refundTotal > 0 ? formatEuro(cancelled.refundTotal) : null,
+            ...refundAmounts(cancelled.refundTotal, cancelled.refundFailed ?? 0),
             cancelsBooking,
             bookingUrl: bookingUrl(c, bookingId),
           }),
@@ -316,6 +333,59 @@ export async function sendBookingCancelled(
   } catch (error) {
     try {
       report(error, { kind: "cancellation", bookingId });
+    } catch {
+      // Reporting must not throw either.
+    }
+  }
+}
+
+/** What a lifecycle action returned in `refunds`: each refund row and what Stripe did with it. */
+export type IssuedRefund = { amount: number; status: "pending" | "succeeded" | "failed" };
+
+/**
+ * Tells the guest about a refund made outside a cancellation: an early
+ * departure, a goodwill refund, or a retried refund. Says what went and what
+ * Stripe refused, from what the action returned. Sends nothing when there is
+ * nothing to say. After a retry only the refunds that went through are
+ * mentioned: a refund that failed again was already reported as owed.
+ *
+ * Never throws: a failed email must not mask a refund that already happened;
+ * `report` hears about it.
+ */
+export async function sendRefundIssued(
+  bookingId: string,
+  issued: { reason: RefundIssuedReason; refunds: IssuedRefund[] },
+  report: (error: unknown, context: { kind: string; bookingId: string }) => void = (error) =>
+    console.error("[booking-mail] refund email failed:", error instanceof Error ? error.message : error),
+  deps: SendDeps = {},
+): Promise<void> {
+  try {
+    const sum = (rows: IssuedRefund[]) => rows.reduce((total, r) => total + euroCents(r.amount), 0) / 100;
+    const counted = issued.reason === "retry" ? issued.refunds.filter((r) => r.status === "succeeded") : issued.refunds;
+    const amounts = refundAmounts(sum(counted), sum(counted.filter((r) => r.status === "failed")));
+    if (!amounts.refund && !amounts.refundFailed) return;
+
+    const c = resolve(deps);
+    const row = (
+      await rowsOf<{ property_name: string; guestEmail: string }>(
+        c.db,
+        `SELECT p.name AS property_name, u.email AS "guestEmail"
+           FROM bookings b
+           JOIN properties p ON p.id = b.hotel_id
+           JOIN "user" u ON u.id = b.user_id
+          WHERE b.id = $1::uuid`,
+        [bookingId],
+      )
+    )[0];
+    if (!row) throw new Error(`Booking ${bookingId} not found for its refund email`);
+    await deliver(
+      c,
+      [row.guestEmail],
+      guestRefundIssued({ propertyName: row.property_name, reason: issued.reason, ...amounts, bookingUrl: bookingUrl(c, bookingId) }),
+    );
+  } catch (error) {
+    try {
+      report(error, { kind: `refund_${issued.reason}`, bookingId });
     } catch {
       // Reporting must not throw either.
     }

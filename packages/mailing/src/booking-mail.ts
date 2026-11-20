@@ -190,23 +190,74 @@ export function hostNewBooking(i: {
   });
 }
 
-/** `refund` is null when nothing is due back. `cancelsBooking`: every room is now cancelled. */
+/**
+ * What happened to the money, as Stripe answered: `sent` went (or is on its
+ * way), `failed` was refused and is still owed. Null for none of either.
+ */
+type RefundOutcome = { sent: string | null; failed?: string | null };
+
+function refundSentences(r: RefundOutcome): string | null {
+  const parts = [
+    r.sent && `Your refund of ${STRONG(r.sent)} is on its way. It can take a few days to show on your statement.`,
+    r.failed && `We couldn't refund ${STRONG(r.failed)} yet; we're on it, and you don't need to do anything.`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" ") : null;
+}
+
+/**
+ * `refund` is what went back (null when nothing did), `refundFailed` what
+ * Stripe refused and is still owed. `cancelsBooking`: every room is now cancelled.
+ */
 export function guestBookingCancelled(i: {
   propertyName: string;
   rooms: string[];
   refund: string | null;
+  refundFailed?: string | null;
   cancelsBooking: boolean;
   bookingUrl: string;
 }): ActionMail {
-  const refund = i.refund
-    ? `Refund: ${STRONG(i.refund)}. It can take a few days to show on your statement.`
-    : "No refund is due under your cancellation terms.";
+  const refund =
+    refundSentences({ sent: i.refund, failed: i.refundFailed }) ?? "No refund is due under your cancellation terms.";
   return composeActionMail({
     subject: i.cancelsBooking ? `Booking cancelled: ${i.propertyName}` : `Rooms cancelled: ${i.propertyName}`,
     preheader: i.cancelsBooking ? `Your booking at ${i.propertyName} was cancelled.` : `Part of your booking at ${i.propertyName} was cancelled.`,
     eyebrow: "Booking",
     headline: i.cancelsBooking ? "Your booking<br />was cancelled." : "Some rooms<br />were cancelled.",
     body: `Cancelled at ${STRONG(i.propertyName)}: ${roomNames(i.rooms)}.${i.cancelsBooking ? "" : " The rest of your booking stands."}<br /><br />${refund}`,
+    ctaUrl: i.bookingUrl,
+    ctaLabel: "View your booking",
+    footnote: FOOTNOTE,
+  });
+}
+
+/** Why a refund was made outside a cancellation. */
+export type RefundIssuedReason = "early_departure" | "goodwill" | "retry";
+
+const REFUND_INTRO: Record<RefundIssuedReason, (property: string) => string> = {
+  early_departure: (p) => `${p} recorded that you left early, so you get back what your booking's terms allow for the nights you didn't stay.`,
+  goodwill: (p) => `${p} sent you a refund on your booking.`,
+  retry: (p) => `We've sent the refund we owed you for your booking at ${p}.`,
+};
+
+/**
+ * A refund made outside a cancellation: an early departure, a goodwill
+ * refund from the hotel, or a refund that failed before and went through now.
+ * `refund` is what went (or is on its way), `refundFailed` what Stripe refused.
+ */
+export function guestRefundIssued(i: {
+  propertyName: string;
+  reason: RefundIssuedReason;
+  refund: string | null;
+  refundFailed?: string | null;
+  bookingUrl: string;
+}): ActionMail {
+  const amount = i.refund ?? i.refundFailed ?? "";
+  return composeActionMail({
+    subject: i.refund ? `Refund on its way: ${i.propertyName}` : `About your refund: ${i.propertyName}`,
+    preheader: i.refund ? `${amount} is on its way back to you.` : `We couldn't refund ${amount} yet.`,
+    eyebrow: "Booking",
+    headline: i.refund ? "Your refund<br />is on its way." : "Your refund<br />is delayed.",
+    body: `${REFUND_INTRO[i.reason](STRONG(i.propertyName))}<br /><br />${refundSentences({ sent: i.refund, failed: i.refundFailed }) ?? ""}`,
     ctaUrl: i.bookingUrl,
     ctaLabel: "View your booking",
     footnote: FOOTNOTE,
