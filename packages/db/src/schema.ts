@@ -328,9 +328,19 @@ export const rateModifiers = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: smallint("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // One rule across several rate plans: one row per plan, sharing this id (0050).
+    ruleGroupId: uuid("rule_group_id").notNull().defaultRandom(),
+    // Set for "All rate plans": a trigger copies the rule onto new plans (0050).
+    appliesToAll: boolean("applies_to_all").notNull().default(false),
   },
   (table) => [
     index("idx_rate_modifiers_plan_active").on(table.ratePlanId, table.isActive),
+    uniqueIndex("uq_rate_modifiers_group_plan").on(table.ruleGroupId, table.ratePlanId),
+    // A lower last-minute price is a stay discount, so a percentage (0050).
+    check(
+      "rate_modifiers_last_minute_discount_percent",
+      sql`${table.type} <> 'last_minute' OR ${table.adjustmentValue} > 0 OR ${table.adjustmentType} = 'percent'`,
+    ),
     // Discounts lower the price, so they are stored negative (0041).
     check(
       "rate_modifiers_discount_sign",
