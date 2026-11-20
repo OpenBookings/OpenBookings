@@ -25,6 +25,8 @@ export type StripeEventLike = {
   livemode: boolean;
   /** The connected account the object belongs to, for Connect events. */
   account?: string;
+  /** When Stripe created the event, Unix seconds. */
+  created?: number;
   data: { object: unknown };
 };
 
@@ -307,6 +309,8 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
             amount,
             reason: str(object.reason),
             created: typeof object.created === "number" ? object.created : null,
+            // When it was lost: the dispute's `created` is when it was opened.
+            ...(typeof event.created === "number" ? { lostAt: event.created } : {}),
           },
         });
       };

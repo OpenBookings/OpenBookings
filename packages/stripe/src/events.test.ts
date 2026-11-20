@@ -122,6 +122,18 @@ describe("handleStripeEvent", () => {
     expect(t.calls[1]).toEqual(["audit", "commission.refunded", "acct_1", { chargeId: "ch_1", feeRefundId: "fr_1", amount: 100 }, "fr_1"]);
   });
 
+  test("a lost dispute says when it was lost: the event's time, not the dispute's", async () => {
+    const t = setup();
+    await handleStripeEvent(
+      {
+        ...event("charge.dispute.closed", { id: "dp_1", charge: "ch_1", status: "lost", amount: 10_000, created: 1_790_000_000 }),
+        created: 1_795_000_000,
+      },
+      t.deps,
+    );
+    expect(t.calls.at(-1)?.[3]).toMatchObject({ created: 1_790_000_000, lostAt: 1_795_000_000 });
+  });
+
   test("a won dispute is not flagged", async () => {
     const t = setup();
     await handleStripeEvent(event("charge.dispute.closed", { id: "dp_1", charge: "ch_1", status: "won", amount: 10_000 }), t.deps);

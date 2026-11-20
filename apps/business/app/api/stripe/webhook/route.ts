@@ -4,9 +4,10 @@ import {
   refundCommissionForCharge,
   type StripeEventDeps,
 } from "@openbookings/stripe";
-import { isStripeEventProcessed, markStripeEventProcessed, query } from "@openbookings/db";
+import { isStripeEventProcessed, markStripeEventProcessed, query, recordOutsideRefund, withTransaction } from "@openbookings/db";
 import * as Sentry from "@sentry/nextjs";
 import { writeStripeAudit } from "@/lib/stripe/audit";
+import { outsideRefundFromFlag } from "@/lib/stripe/outside-refund";
 import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,12 @@ const deps: StripeEventDeps = {
   markProcessed: markStripeEventProcessed,
   refundCommission: refundCommissionForCharge,
   audit: async (entry) => {
+    // The money is gone from the booking too: write it there, so what is left
+    // to refund, the host's pages and the DAC7 figures know. Keyed by the
+    // Stripe id, so a retried event writes it once; a payment that paid no
+    // booking keeps just the flag.
+    const outside = outsideRefundFromFlag(entry);
+    if (outside) await withTransaction((client) => recordOutsideRefund(client, outside));
     const inserted = await writeStripeAudit(entry);
     // A refund made outside OpenBookings, or a lost dispute: staff ask the
     // host to explain it (admin app, Flagged payments). Once per flag.
