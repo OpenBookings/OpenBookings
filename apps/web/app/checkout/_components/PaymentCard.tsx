@@ -86,7 +86,7 @@ function HoldLabel({ expiresAt }: { expiresAt: number }) {
 
 const NEXT_STEPS = (propertyName: string) => [
   { Icon: Mail, text: 'Confirmation by email straight away.' },
-  { Icon: UserRound, text: 'Change, cancel or message the hotel from your account.' },
+  { Icon: UserRound, text: 'Cancel or message the hotel from your account.' },
   { Icon: Lock, text: `You pay ${propertyName} directly. Stripe handles your card; OpenBookings never sees it.` },
 ];
 
