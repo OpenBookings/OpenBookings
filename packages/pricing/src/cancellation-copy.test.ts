@@ -30,6 +30,9 @@ describe("labels", () => {
     expect(TIER_SUMMARIES.standard).toBe(
       "Free cancellation until 7 days before check-in. After that, the room price isn't refunded.",
     );
+    expect(TIER_SUMMARIES.non_refundable).toBe(
+      "The room price isn't refunded if you cancel. Cheaper than the refundable rate.",
+    );
     expect(Object.keys(TIER_SUMMARIES).sort()).toEqual(["flex", "non_refundable", "standard"]);
   });
 });

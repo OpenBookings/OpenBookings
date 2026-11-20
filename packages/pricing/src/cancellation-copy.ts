@@ -13,7 +13,7 @@ export const TIER_LABELS: Record<CancellationTier, string> = {
 export const TIER_SUMMARIES: Record<CancellationTier, string> = {
   flex: "Free cancellation until 24 hours before check-in. After that, the room price isn't refunded.",
   standard: "Free cancellation until 7 days before check-in. After that, the room price isn't refunded.",
-  non_refundable: "No refund if you cancel. Cheaper than the refundable rate.",
+  non_refundable: "The room price isn't refunded if you cancel. Cheaper than the refundable rate.",
 };
 
 export const EARLY_DEPARTURE_LINE =
