@@ -243,13 +243,14 @@ export async function getBookingSummary(
   const plans = new Map((roomsResult.rows as RoomRow[]).map((r) => [r.rate_plan_id, r]));
 
   const now = new Date();
-  const rooms = intent.rooms.map((room, index): StayRoom => {
+  const rooms = intent.rooms.map((room): StayRoom => {
     const plan = plans.get(room.ratePlanId);
     if (!plan) throw new BookingNotFoundError(intent.id, `rate plan ${room.ratePlanId} no longer exists`);
-    // What the guest was shown when the rooms were held, when it lines up;
-    // the rows otherwise. The two only differ if the host renamed something.
-    const shown = intent.snapshot.rooms[index];
-    const snap = shown?.roomId === room.roomId && shown.ratePlanId === room.ratePlanId ? shown : null;
+    // What the guest was shown when the rooms were held; the rows otherwise.
+    // Names only differ if the host renamed something, terms if the host has
+    // changed them since. Matched by room and rate as the booking is when it
+    // is confirmed, so the terms read here are the ones it gets.
+    const snap = intent.snapshot.rooms?.find((s) => s.roomId === room.roomId && s.ratePlanId === room.ratePlanId);
     const isRefundable = snap?.isRefundable ?? plan.is_refundable;
     return {
       intentRoomId: room.id,
@@ -277,7 +278,7 @@ export async function getBookingSummary(
       touristTaxLines: room.touristTaxLines,
       includesBreakfast: plan.includes_breakfast === true,
       cancellation: checkoutCancellationTerms({
-        propertyTier: property.cancellation_tier,
+        propertyTier: snap?.cancellationTier ?? property.cancellation_tier,
         isRefundable,
         timeZone: property.timezone,
         checkInTime: property.check_in_time,

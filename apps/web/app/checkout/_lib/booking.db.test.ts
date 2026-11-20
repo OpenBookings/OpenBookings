@@ -166,6 +166,58 @@ describeWithDb("checkout summary of a booking intent", () => {
     expect(s.currency).toBe("eur");
   });
 
+  test("the cancellation terms are the ones held on the intent, not the host's current ones", async () => {
+    const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13)];
+    const snapshot: IntentSnapshot = {
+      roomsTotal: 200,
+      touristTaxTotal: 13,
+      total: 213,
+      commissionCents: 0,
+      commissionRate: 0.1,
+      commissionVatTreatment: null,
+      commissionNetCents: null,
+      commissionVatCents: null,
+      currency: "EUR",
+      rooms: [
+        {
+          roomId: ids.roomId,
+          ratePlanId: ids.ratePlanId,
+          roomName: "Double",
+          ratePlanName: "Room only",
+          isRefundable: true,
+          cancellationTier: "standard",
+          freeCancellationUntil: null,
+        },
+      ],
+    };
+    const created = await createBookingIntent(savepointDb(db), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error("intent not created");
+    // After the hold the host moves to Flex and makes the rate non-refundable.
+    await db.query(`UPDATE properties SET cancellation_tier = 'flex' WHERE id = $1`, [ids.propertyId]);
+    await db.query(`UPDATE rate_plans SET is_refundable = false WHERE id = $1`, [ids.ratePlanId]);
+
+    const s = await summary(created.intentId);
+    expect(s.rooms[0]!.isRefundable).toBe(true);
+    expect(s.rooms[0]!.cancellation.cancellationTier).toBe("standard");
+    expect(s.rooms[0]!.cancellation.requiresNonRefundableConsent).toBe(false);
+  });
+
+  test("an intent held before the tier was kept reads the property's tier", async () => {
+    await db.query(`UPDATE properties SET cancellation_tier = 'standard' WHERE id = $1`, [ids.propertyId]);
+    const { intentId } = await twoRoomIntent();
+    const s = await summary(intentId);
+    expect(s.rooms[0]!.cancellation.cancellationTier).toBe("standard");
+    expect(s.rooms[1]!.cancellation.cancellationTier).toBe("non_refundable");
+  });
+
   test("getBookingSummary returns includesBreakfast and the breakdown per room", async () => {
     await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [nrPlanId]);
     const extra = {
