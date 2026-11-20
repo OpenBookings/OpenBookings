@@ -18,8 +18,8 @@ export const TIER_SUMMARIES: Record<CancellationTier, string> = {
 
 export const EARLY_DEPARTURE_LINE =
   "If you leave early, the next 7 nights are charged and any nights after that are refunded.";
-export const TOURIST_TAX_LINE = "Tourist tax is refunded for nights you don't stay.";
-export const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
+export const TOURIST_TAX_LINE = "Tourist tax is refunded for nights you don't stay, unless you don't show up.";
+export const NO_SHOW_LINE = "If you don't show up, nothing is refunded, tourist tax included.";
 export const REFUND_TIMING_LINE =
   "Refunds usually show on your statement within 5 to 10 business days, depending on your bank.";
 

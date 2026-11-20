@@ -15,8 +15,8 @@ const snapshot = (tier: CancellationTier) =>
 const EARLY = new Date("2026-10-05T10:00:00Z");
 
 const EARLY_LINE = "If you leave early, the next 7 nights are charged and any nights after that are refunded.";
-const TAX_LINE = "Tourist tax is refunded for nights you don't stay.";
-const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
+const TAX_LINE = "Tourist tax is refunded for nights you don't stay, unless you don't show up.";
+const NO_SHOW_LINE = "If you don't show up, nothing is refunded, tourist tax included.";
 
 describe("labels", () => {
   test("the three tier names", () => {
