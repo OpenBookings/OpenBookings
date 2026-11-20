@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-11-16";
+const CURRENT = "2026-11-20";
 const DIR = join(import.meta.dir, "../../content/legal/privacy");
 const read = (version: string, locale: string) =>
   readFileSync(join(DIR, version, `${locale}.mdx`), "utf8");
@@ -28,6 +28,10 @@ describe("privacy policy registry", () => {
     const old = getVersion(doc, "2026-09-21");
     expect(old).toBeDefined();
     expect(Object.keys(old!.locales).sort()).toEqual(["en", "fr", "nl"]);
+  });
+
+  test("the previous current version stays registered", () => {
+    expect(getVersion(doc, "2026-11-16")).toBeDefined();
   });
 
   test("only English is marked translated", () => {
@@ -132,6 +136,27 @@ describe("current privacy policy content", () => {
       expect(row).toMatch(/\| 5 (years|jaar|ans) \|/);
     });
 
+    test(`${locale}: keeps account data until the account is deleted`, () => {
+      const row = read(CURRENT, locale)
+        .split("\n")
+        .find((l) => /^\| (Account data|Accountgegevens|Données de compte) \|/.test(l))!;
+      // No inactive-account purge exists.
+      expect(row).not.toMatch(/last login|laatste login|dernière connexion/);
+      expect(row).toMatch(/delete your account|uw account verwijdert|suppression de votre compte/);
+    });
+
+    test(`${locale}: support is by email, with no AI answering first`, () => {
+      const source = read(CURRENT, locale);
+      expect(source).not.toMatch(/answers first|antwoordt eerst|répond en premier/);
+      expect(source).toMatch(/ask for a person|om een medewerker vragen|parler à une personne/);
+    });
+
+    test(`${locale}: sets the same minimum age as the Terms (18)`, () => {
+      const source = read(CURRENT, locale);
+      expect(source).toMatch(/under 18|onder de 18 jaar|moins de 18 ans/);
+      expect(source).not.toMatch(/under 16|onder de 16|moins de 16/);
+    });
+
     test(`${locale}: no longer tells visitors to clear storage to change their mind`, () => {
       expect(read(CURRENT, locale)).not.toMatch(/Clear this site's storage|Wis de opslag|Effacez les données de stockage/);
     });
@@ -146,5 +171,6 @@ describe("current privacy policy content", () => {
   test("the previous version's files are untouched", () => {
     expect(read("2026-09-21", "en")).toContain("**Google Cloud**");
     expect(read("2026-11-15", "en")).toContain("No tracking pixels.");
+    expect(read("2026-11-16", "en")).toContain("Our AI assistant answers first.");
   });
 });
