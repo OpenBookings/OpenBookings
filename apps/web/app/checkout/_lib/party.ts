@@ -1,9 +1,11 @@
+import { AGE_RANGES } from '@openbookings/pricing';
+
 /** "2 adults", "1 child, 2–12", "1 infant, under 2": who is coming, zero counts left out. */
 export function partyFacts(r: { adults: number; children: number; infants: number }): string[] {
   const facts: string[] = [];
   if (r.adults > 0) facts.push(`${r.adults} ${r.adults === 1 ? 'adult' : 'adults'}`);
-  if (r.children > 0) facts.push(`${r.children} ${r.children === 1 ? 'child' : 'children'}, 2–12`);
-  if (r.infants > 0) facts.push(`${r.infants} ${r.infants === 1 ? 'infant' : 'infants'}, under 2`);
+  if (r.children > 0) facts.push(`${r.children} ${r.children === 1 ? 'child' : 'children'}, ${AGE_RANGES.children}`);
+  if (r.infants > 0) facts.push(`${r.infants} ${r.infants === 1 ? 'infant' : 'infants'}, ${AGE_RANGES.infants}`);
   return facts;
 }
 
