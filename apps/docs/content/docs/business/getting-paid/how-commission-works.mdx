@@ -34,6 +34,18 @@ Guest payments are made directly to your own Stripe account. Stripe charges its 
 
 If a booking is refunded, the commission is returned to your Stripe account in proportion to the room price the guest gets back: if the guest gets 80% of the room price back, you get 80% of the commission back, and a full refund of the room price returns all of it. Tourist tax never counts. Refunding tourist tax returns no commission, because none was charged on it. Stripe does not return its own processing fee on a refund.
 
+### Refund through OpenBookings
+
+Always refund a guest from the reservation in OpenBookings (cancel, early departure or goodwill refund). Then every refund says how much was room price and how much was tourist tax, and the commission follows the room price exactly.
+
+A refund you make directly in your Stripe Dashboard happens outside OpenBookings. We can't see what it was for, so:
+
+- we return commission in proportion to the whole payment, tourist tax included, as if the refund were spread evenly over room price and tourist tax;
+- you are responsible for the tourist tax on it. Tourist tax is yours to pay to the municipality, and only you know whether that refund changes what you owe;
+- we may ask you to explain the refund.
+
+The same applies when you lose a dispute: the bank takes money back without saying what it was for.
+
 ## Changes to the rate
 
 Any change to the commission rate requires 30 days' notice before taking effect, and never applies to bookings already made.

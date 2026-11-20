@@ -69,6 +69,14 @@ describe("Host Agreement 1.4 states what the code does", () => {
     expect(body).toMatch(/80% of the Accommodation Price back, OpenBookings returns 80% of its Commission/);
   });
 
+  test("refunds outside OpenBookings and lost disputes count against the whole payment", () => {
+    expect(body).toContain(
+      "OpenBookings returns its Commission in the same proportion as the amount refunded or lost bears to the full amount the Guest paid",
+    );
+    expect(body).toContain("The Host remains responsible for the Tourist Tax on such refunds");
+    expect(body).toContain("OpenBookings never holds it");
+  });
+
   test("keeps the no-show rule: nothing refunded, commission stands", () => {
     expect(body).toContain("The Host keeps the full amount paid, and the Commission on the Booking stands");
     expect(body).toContain("no amount is refunded, including Tourist Tax and Non-Delivered Services");
