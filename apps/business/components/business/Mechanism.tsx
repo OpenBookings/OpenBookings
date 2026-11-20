@@ -37,8 +37,8 @@ export function Mechanism() {
             </h2>
             <div className="max-w-[52ch] space-y-6 text-[15px] leading-[1.8] text-white/46">
               <p>
-                Every booking costs you exactly two things: Stripe&apos;s payment processing fee, passed
-                through at cost, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. There is no
+                Every booking costs you exactly two things: Stripe&apos;s payment processing fee, which
+                Stripe charges directly to your Stripe account, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. There is no
                 third line. No commission tiers to climb, no visibility programs, no fees invented on the
                 guest&apos;s side of the receipt.
               </p>
@@ -75,7 +75,7 @@ export function Mechanism() {
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-white/40">
-                    Stripe processing <span className="text-white/22">· 1.5% + €0.25, at cost</span>
+                    Stripe processing <span className="text-white/22">· 1.5% + €0.25, charged by Stripe</span>
                   </span>
                   <span className="text-white/40">−{money(stripeFeeCents)}</span>
                 </div>
@@ -113,7 +113,9 @@ export function Mechanism() {
             </div>
 
             <p className="mt-4 px-1 text-[11px] leading-[1.7] text-white/22">
-              Stripe fee shown for standard EEA cards. We add no markup to payment processing.
+              Stripe fee shown for standard EEA cards. Stripe charges it directly to your Stripe
+              account and we add nothing to it. You see both fees on every payment in your Stripe
+              Dashboard.
             </p>
           </div>
         </div>
