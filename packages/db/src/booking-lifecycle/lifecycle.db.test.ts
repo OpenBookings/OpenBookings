@@ -84,6 +84,8 @@ describeWithDb("booking lifecycle against Postgres", () => {
       cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, cancelsBooking: false },
     });
     expect(calls.map((c) => c.amountCents)).toEqual([30_900]);
+    // Room price €300 of the €309, out of €600 on the booking: half the commission goes back.
+    expect(calls.map((c) => c.roomPrice)).toEqual([{ refundCents: 30_000, totalCents: 60_000 }]);
 
     const res = await one<{ cancelled_at: Date | null }>(`SELECT cancelled_at FROM reservations WHERE id = $1`, [reservationIds[0]]);
     expect(res.cancelled_at).not.toBeNull();
@@ -142,6 +144,15 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([309, 309]);
     expect(calls.map((c) => c.amountCents)).toEqual([30_900, 30_900]);
     expect(new Set(calls.map((c) => c.idempotencyKey)).size).toBe(2);
+  });
+
+  test("a late guest cancellation refunds the tourist tax alone and names no room price, so no commission goes back", async () => {
+    const late = new Date(CHECK_IN_AT - 2 * 3_600_000);
+    const result = await cancelRooms(deps(late), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([9]);
+    expect(calls.map((c) => ({ amountCents: c.amountCents, roomPrice: c.roomPrice }))).toEqual([
+      { amountCents: 900, roomPrice: { refundCents: 0, totalCents: 60_000 } },
+    ]);
   });
 
   test("a no-show can't be marked before the arrival window closes, and moves no money after", async () => {

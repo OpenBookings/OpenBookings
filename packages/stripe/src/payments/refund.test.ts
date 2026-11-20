@@ -8,13 +8,37 @@ import {
 } from "./refund";
 
 describe("buildRefundParams", () => {
-  test("refunds the payment on the host's account and returns our fee in proportion", () => {
+  test("refunds the payment on the host's account and leaves our fee to refundPayment", () => {
     expect(buildRefundParams({ paymentIntentId: "pi_1", amountCents: 41_500, metadata: { bookingId: "b1" } })).toEqual({
       payment_intent: "pi_1",
       amount: 41_500,
-      refund_application_fee: true,
+      refund_application_fee: false,
       metadata: { bookingId: "b1" },
     });
+  });
+
+  test("names the room-price part, so tourist tax in it returns no commission", () => {
+    // EUR 360 stay + EUR 45 tax; a late cancellation refunds the tax alone.
+    const params = buildRefundParams({
+      paymentIntentId: "pi_1",
+      amountCents: 4_500,
+      metadata: { bookingId: "b1", refundId: "r1" },
+      roomPrice: { refundCents: 0, totalCents: 36_000 },
+    });
+    expect(params.refund_application_fee).toBe(false);
+    expect(params.metadata).toEqual({
+      bookingId: "b1",
+      refundId: "r1",
+      accommodationCents: "0",
+      accommodationTotalCents: "36000",
+    });
+  });
+
+  test("refuses a room-price part larger than the refund or not in whole cents", () => {
+    const base = { paymentIntentId: "pi_1", amountCents: 1_000, metadata: {} };
+    expect(() => buildRefundParams({ ...base, roomPrice: { refundCents: 1_001, totalCents: 5_000 } })).toThrow();
+    expect(() => buildRefundParams({ ...base, roomPrice: { refundCents: 10.5, totalCents: 5_000 } })).toThrow();
+    expect(() => buildRefundParams({ ...base, roomPrice: { refundCents: -1, totalCents: 5_000 } })).toThrow();
   });
 
   test("never reverses a transfer: there is none on a direct charge", () => {

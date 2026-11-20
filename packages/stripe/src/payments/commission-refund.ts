@@ -1,5 +1,5 @@
 import { stripe } from '../client';
-import { commissionRefundDue } from './fees';
+import { commissionRefundDue, roomPriceOfRefunds } from './fees';
 
 export type CommissionRefund = { id: string; amount: number };
 
@@ -7,8 +7,15 @@ export type CommissionRefund = { id: string; amount: number };
  * Hand OpenBookings' commission back for a charge that was refunded or lost
  * to a dispute. If the booking did not happen, OpenBookings does not earn.
  *
- * Hosts refund from their own Stripe Dashboard, and Stripe does not return the
- * platform's application fee there by default, so the platform does it here.
+ * The commission goes back in proportion to the room price refunded, never
+ * the tourist tax (see `commissionRefundDue`). Refunds OpenBookings makes name
+ * their room-price part in their metadata, read here off the charge's refunds.
+ * `refundPayment` calls this right after each refund it makes; the
+ * `charge.refunded` webhook calls it again as the backstop, and for refunds
+ * hosts make in their own Stripe Dashboard, where Stripe does not return the
+ * platform's application fee by default. Both work out the same target, so
+ * whichever runs second finds nothing left to do.
+ *
  * This moves only OpenBookings' own money, back to the host; it never touches
  * the host's balance in the other direction.
  *
@@ -39,12 +46,20 @@ export async function refundCommissionForCharge(
     amount: r.amount,
   }));
 
+  const refunds: { amount: number; status: string | null; metadata?: Record<string, string> | null }[] = [];
+  if (charge.amount_refunded > 0) {
+    for await (const refund of stripe.refunds.list({ charge: chargeId, limit: 100 }, { stripeAccount: stripeAccountId })) {
+      refunds.push({ amount: refund.amount, status: refund.status, metadata: refund.metadata });
+    }
+  }
+
   const due = commissionRefundDue({
     chargeAmount: charge.amount,
     chargeRefunded: charge.amount_refunded,
     feeAmount: fee.amount,
     feeRefunded: fee.amount_refunded,
     lostDisputeAmount: options.lostDisputeAmount,
+    roomPrice: roomPriceOfRefunds(refunds),
   });
   if (due <= 0) return existing;
 

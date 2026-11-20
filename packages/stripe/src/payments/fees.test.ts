@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applicationFeeCents, bookingSplitCents, commissionRefundDue } from "./fees";
+import { applicationFeeCents, bookingSplitCents, commissionRefundDue, roomPriceOfRefunds } from "./fees";
 
 describe("applicationFeeCents", () => {
   test("4.5% of the full guest price", () => {
@@ -82,6 +82,67 @@ describe("commissionRefundDue", () => {
     expect(commissionRefundDue({ chargeAmount: 55_500, feeAmount: 0, chargeRefunded: 55_500, feeRefunded: 0 })).toBe(0);
     expect(commissionRefundDue({ chargeAmount: 0, feeAmount: 2498, chargeRefunded: 0, feeRefunded: 0 })).toBe(0);
     expect(commissionRefundDue({ ...charge, chargeRefunded: 0, feeRefunded: 0 })).toBe(0);
+  });
+});
+
+describe("commissionRefundDue on the room price", () => {
+  // EUR 360 stay + EUR 45 tourist tax; 4.5% of the stay is EUR 16.20.
+  const charge = { chargeAmount: 40_500, feeAmount: 1_620 };
+  const split = (roomRefunded: number, refunded: number) => ({ roomTotal: 36_000, roomRefunded, refunded });
+
+  test("a late cancellation that refunds only the tourist tax returns no commission", () => {
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 4_500, feeRefunded: 0, roomPrice: split(0, 4_500) })).toBe(0);
+  });
+
+  test("80% of the room price back returns 80% of the commission, whatever the tax does", () => {
+    const refunded = 28_800 + 4_500;
+    expect(commissionRefundDue({ ...charge, chargeRefunded: refunded, feeRefunded: 0, roomPrice: split(28_800, refunded) })).toBe(1_296);
+  });
+
+  test("a full refund returns the whole commission", () => {
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 40_500, feeRefunded: 0, roomPrice: split(36_000, 40_500) })).toBe(1_620);
+  });
+
+  test("tax first, then the room price: the parts sum to the fee exactly", () => {
+    const first = commissionRefundDue({ ...charge, chargeRefunded: 4_500, feeRefunded: 0, roomPrice: split(0, 4_500) });
+    const second = commissionRefundDue({ ...charge, chargeRefunded: 40_500, feeRefunded: first, roomPrice: split(36_000, 40_500) });
+    expect([first, second]).toEqual([0, 1_620]);
+  });
+
+  test("the backstop after refundPayment already returned it finds nothing left", () => {
+    const refunded = 28_800 + 4_500;
+    expect(commissionRefundDue({ ...charge, chargeRefunded: refunded, feeRefunded: 1_296, roomPrice: split(28_800, refunded) })).toBe(0);
+  });
+
+  test("a Dashboard refund with no split counts against the whole charge, next to a split one", () => {
+    // Ours: the tax alone. The host's own: EUR 81 (a fifth of the charge).
+    expect(
+      commissionRefundDue({ ...charge, chargeRefunded: 4_500 + 8_100, feeRefunded: 0, roomPrice: split(0, 4_500) }),
+    ).toBe(324);
+  });
+
+  test("never returns more than was collected", () => {
+    expect(commissionRefundDue({ ...charge, chargeRefunded: 40_500, feeRefunded: 0, roomPrice: split(99_999, 40_500), lostDisputeAmount: 40_500 })).toBe(1_620);
+  });
+});
+
+describe("roomPriceOfRefunds", () => {
+  test("adds up the refunds that name their room price, and skips the rest", () => {
+    expect(
+      roomPriceOfRefunds([
+        { amount: 4_500, status: "succeeded", metadata: { accommodationCents: "0", accommodationTotalCents: "36000" } },
+        { amount: 10_000, status: "pending", metadata: { accommodationCents: "9000", accommodationTotalCents: "36000" } },
+        { amount: 8_100, status: "succeeded", metadata: {} },
+        { amount: 5_000, status: "failed", metadata: { accommodationCents: "5000", accommodationTotalCents: "36000" } },
+      ]),
+    ).toEqual({ roomTotal: 36_000, roomRefunded: 9_000, refunded: 14_500 });
+  });
+
+  test("is null when no refund names a split, or the metadata is not whole cents", () => {
+    expect(roomPriceOfRefunds([{ amount: 100, status: "succeeded", metadata: null }])).toBeNull();
+    expect(
+      roomPriceOfRefunds([{ amount: 100, status: "succeeded", metadata: { accommodationCents: "1.5", accommodationTotalCents: "100" } }]),
+    ).toBeNull();
   });
 });
 

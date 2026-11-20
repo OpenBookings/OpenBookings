@@ -43,4 +43,5 @@ export {
   refundPayment,
   returnUnexplainedPayment,
   type RefundPaymentInput,
+  type RefundRoomPrice,
 } from './payments/refund';
