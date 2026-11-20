@@ -121,7 +121,16 @@ function buildPropertyPageQuery(slug: string) {
             'bar', rp.bar,
             'currency', rp.currency,
             'is_refundable', rp.is_refundable,
-            'meal_plan', 'Breakfast included'
+            -- The rate's own meals, worded as the stay quote words them (mealPlan).
+            'meal_plan', CASE
+              WHEN rp.includes_breakfast AND rp.includes_lunch AND rp.includes_dinner THEN 'Full board'
+              WHEN rp.includes_breakfast AND rp.includes_dinner THEN 'Half board'
+              WHEN rp.includes_breakfast AND rp.includes_lunch THEN 'Breakfast and lunch included'
+              WHEN rp.includes_lunch AND rp.includes_dinner THEN 'Lunch and dinner included'
+              WHEN rp.includes_breakfast THEN 'Breakfast included'
+              WHEN rp.includes_lunch THEN 'Lunch included'
+              WHEN rp.includes_dinner THEN 'Dinner included'
+            END
           ) ORDER BY rp.bar ASC)
           FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true AND rp.archived_at IS NULL),
           '[]'::json
