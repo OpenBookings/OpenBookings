@@ -166,12 +166,40 @@ function resultPostcode(r: TomtomResult): string {
   return r.address.extendedPostalCode?.split(",")[0]?.trim() || r.address.postalCode || "";
 }
 
-/** "The Leading Hotels of the World Hotel Okura Amsterdam" → "Hotel Okura Amsterdam". */
+/**
+ * Membership labels TomTom puts in front of a hotel's own name. Unlike a
+ * chain's brand ("Holiday Inn Express Amsterdam South"), they are not part of
+ * the hotel's name.
+ */
+const AFFILIATIONS = new Set(
+  [
+    "The Leading Hotels of the World",
+    "Small Luxury Hotels of the World",
+    "Relais & Châteaux",
+    "Design Hotels",
+    "Preferred Hotels & Resorts",
+  ].map((b) => b.toLowerCase()),
+);
+
+/**
+ * The hotel's own name. TomTom prefixes some names with a brand: drop it when
+ * it is a membership label ("The Leading Hotels of the World Hotel Okura
+ * Amsterdam") or doubled ("NH Collection Hotels NH Collection Wien Zentrum"),
+ * and keep it when it is the start of the name itself.
+ */
 function poiName(r: TomtomResult): string | undefined {
   const name = r.poi?.name?.trim();
-  const brand = r.poi?.brands?.[0]?.name;
-  if (name && brand && name.startsWith(`${brand} `)) return name.slice(brand.length + 1).trim() || name;
-  return name || undefined;
+  const brand = r.poi?.brands?.[0]?.name?.trim();
+  if (!name || !brand || !name.startsWith(`${brand} `)) return name || undefined;
+  const rest = name.slice(brand.length + 1).trim();
+  const brandStem = brand.replace(/\s+Hotels?(\s*&\s*Resorts)?$/i, "");
+  const doubled = brandStem !== brand && rest.startsWith(`${brandStem} `);
+  return rest && (AFFILIATIONS.has(brand.toLowerCase()) || doubled) ? rest : name;
+}
+
+/** Whether a postcode is complete enough to save. A Dutch one needs its letters. */
+function fullPostcode(postcode: string, country: string): boolean {
+  return country !== "NL" || /^\d{4}[A-Z]{2}$/.test(normalizePostcode(postcode));
 }
 
 /** A search result as an address the host can confirm. */
@@ -187,7 +215,7 @@ export function propertyCandidate(r: TomtomResult): AddressCandidate | null {
   const street = r.type === "Geography" ? undefined : a.streetName;
   const addressLine1 = [street, street ? a.streetNumber : undefined].filter(Boolean).join(" ");
   const rawPostcode = resultPostcode(r);
-  const postalCode = rawPostcode ? formatPostcode(rawPostcode, country) : "";
+  const postalCode = rawPostcode && fullPostcode(rawPostcode, country) ? formatPostcode(rawPostcode, country) : "";
   const city = a.localName ?? a.municipality ?? "";
 
   const missing = (
@@ -323,6 +351,17 @@ export function isExactNumber(found: string | undefined, typed: string): boolean
   return !!f && f === lead(typed);
 }
 
+/**
+ * Whether a result is the very house typed: an address or a place on the
+ * typed street with the typed number. A place found by its own name ("Bar
+ * Roma") on another street is not the house at "Via Roma 5".
+ */
+export function isExactMatch(r: TomtomResult, typedLine: string, typedNumber: string): boolean {
+  if (r.type !== "Point Address" && r.type !== "POI") return false;
+  if (!isExactNumber(r.address.streetNumber, typedNumber)) return false;
+  return r.type === "Point Address" || sharesName(typedLine, r.address.streetName ?? "");
+}
+
 /** Whether a result's name shares a distinctive word with what the host typed. */
 export function sharesName(typed: string, found: string): boolean {
   const want = new Set(nameWords(typed));
@@ -391,7 +430,7 @@ export async function locateTypedAddress(
   const r = near.find((x) => sharesName(input.addressLine1, [x.poi?.name, x.address.streetName].filter(Boolean).join(" ")));
   if (!r?.position) return null;
 
-  const exact = !!parsed && (r.type === "Point Address" || r.type === "POI") && isExactNumber(r.address.streetNumber, parsed.number);
+  const exact = !!parsed && isExactMatch(r, input.addressLine1, parsed.number);
   return {
     lon: r.position.lon,
     lat: r.position.lat,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   distanceKm,
   formatPostcode,
+  isExactMatch,
   isExactNumber,
   nearPostcode,
   normalizePostcode,
@@ -115,6 +116,21 @@ describe("propertyCandidate", () => {
     expect(propertyCandidate({ ...okura, poi: { name: "Hilton", brands: [{ name: "Hilton" }] } })?.name).toBe("Hilton");
   });
 
+  test("keeps a chain's own name that starts with its brand", () => {
+    const hie = { ...okura, poi: { name: "Holiday Inn Express Amsterdam South", brands: [{ name: "Holiday Inn Express" }] } };
+    expect(propertyCandidate(hie)?.name).toBe("Holiday Inn Express Amsterdam South");
+  });
+
+  test("drops a doubled brand prefix", () => {
+    const nh = { ...okura, poi: { name: "NH Collection Hotels NH Collection Wien Zentrum", brands: [{ name: "NH Collection Hotels" }] } };
+    expect(propertyCandidate(nh)?.name).toBe("NH Collection Wien Zentrum");
+  });
+
+  test("a Dutch result with only the postcode digits reports the postcode as missing", () => {
+    const digitsOnly = { ...okura, address: { ...okura.address, extendedPostalCode: undefined } };
+    expect(propertyCandidate(digitsOnly)).toMatchObject({ postalCode: "", missing: ["postalCode"] });
+  });
+
   test("takes the first postcode from a list", () => {
     expect(
       propertyCandidate({ ...okura, address: { ...okura.address, extendedPostalCode: "1072 LH, 1072 LJ" } })?.postalCode,
@@ -194,6 +210,22 @@ describe("placing a typed address", () => {
     expect(isExactNumber("2/B", "2b")).toBe(true);
     expect(isExactNumber("77", "7")).toBe(false);
     expect(isExactNumber(undefined, "7")).toBe(false);
+  });
+
+  test("isExactMatch needs the typed street and number, not just a shared name", () => {
+    const at = { lat: 41.9, lon: 12.5 };
+    const house: TomtomResult = { type: "Point Address", address: { streetName: "Via Roma", streetNumber: "5" }, position: at };
+    const barOnOtherStreet: TomtomResult = {
+      type: "POI",
+      poi: { name: "Bar Roma" },
+      address: { streetName: "Via Garibaldi", streetNumber: "5" },
+      position: at,
+    };
+    const hotelOnStreet: TomtomResult = { ...barOnOtherStreet, poi: { name: "Hotel Sole" }, address: { streetName: "Via Roma", streetNumber: "5" } };
+    expect(isExactMatch(house, "Via Roma 5", "5")).toBe(true);
+    expect(isExactMatch(barOnOtherStreet, "Via Roma 5", "5")).toBe(false);
+    expect(isExactMatch(hotelOnStreet, "Via Roma 5", "5")).toBe(true);
+    expect(isExactMatch({ ...house, type: "Street" }, "Via Roma 5", "5")).toBe(false);
   });
 
   test("nearPostcode keeps nearby results and drops far ones and whole regions", () => {
