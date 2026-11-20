@@ -2,7 +2,7 @@ import { cdnImageUrl } from "@openbookings/images";
 import {
   LogIn, LogOut, Clock, XCircle, CreditCard, Baby, BedDouble, AlertCircle, Dog, Info,
 } from "lucide-react";
-import { EARLY_DEPARTURE_LINE, NO_SHOW_LINE, TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
+import { AGE_RANGES, EARLY_DEPARTURE_LINE, NO_SHOW_LINE, TIER_LABELS, TIER_SUMMARIES } from "@openbookings/pricing";
 import type { HotelPageData } from "@/app/api/query/pr/route";
 import { BusinessDetailsButton } from "./BusinessDetailsButton";
 
@@ -56,7 +56,7 @@ export function PoliciesSection({
       : []),
   ];
 
-  // Age bands are the same at every hotel (guest-limits AGE_BANDS); prices
+  // Age bands are the same at every hotel (AGE_RANGES in @openbookings/pricing); prices
   // for cots and extra beds differ per room, so they stay on the room card.
   const childrenWelcome = hotel.children_welcome ?? true;
   const childrenAndBeds = [
@@ -65,7 +65,7 @@ export function PoliciesSection({
       ? [
           {
             Icon: Info,
-            text: "Adults are 13 or over, children 2–12, infants under 2. Infants stay free and don't take a place in the room.",
+            text: `Adults are ${AGE_RANGES.adults}, children ${AGE_RANGES.children}, infants ${AGE_RANGES.infants}. Infants stay free and don't take a place in the room.`,
           },
         ]
       : []),
