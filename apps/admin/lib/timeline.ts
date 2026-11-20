@@ -60,11 +60,13 @@ function coveredByStored(stored: TimelineEntry[]): (f: TimelineEntry) => boolean
   const refundIds = new Set(
     stored.filter((e) => e.kind.startsWith("refund_")).map((e) => e.data.refundId),
   );
+  const outsideIds = new Set(stored.filter((e) => e.kind === "outside_refund").map((e) => e.data.refundId));
   return (f) => {
     if (f.kind === "confirmed" || f.kind === "no_show") return has(f.kind);
     if (f.kind === "room_cancelled") return f.reservationId !== null && cancelledRooms.has(f.reservationId);
     if (f.kind === "booking_cancelled") return cancelsBooking;
     if (f.kind.startsWith("refund_")) return refundIds.has(f.data.refundId);
+    if (f.kind === "outside_refund") return outsideIds.has(f.data.refundId);
     return false;
   };
 }
@@ -93,6 +95,11 @@ export function buildTimeline(b: Input): TimelineEntry[] {
   }
   if (booking.no_show_reported_at) facts.push(rec(booking.no_show_reported_at, "no_show"));
   for (const r of b.refunds) {
+    // Money the host refunded in their own Stripe, or lost in a dispute (0053).
+    if (r.source && r.source !== "openbookings") {
+      facts.push(rec(r.created_at, "outside_refund", { actorKind: "system", data: { amount: r.amount, refundId: r.id, source: r.source } }));
+      continue;
+    }
     facts.push(
       rec(r.created_at, `refund_${r.status}`, {
         actorKind: r.created_by ? "unknown" : "system",

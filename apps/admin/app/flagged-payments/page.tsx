@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getPool } from "@openbookings/db";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { bookingRef, loadFlaggedPayments, type FlagKind } from "@/lib/flagged-payments";
+import { bookingRef, loadFlaggedPayments, type FlaggedPayment, type FlagKind } from "@/lib/flagged-payments";
 import { requireSuperAdmin } from "@/lib/super-admin";
 import { ResolveForm } from "./resolve-form";
 
@@ -13,6 +13,29 @@ const KIND_LABEL: Record<FlagKind, string> = {
 
 const euro = (cents: number | null) =>
   cents === null ? "—" : new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(cents / 100);
+
+/**
+ * What the booking holds for this money (0053). The webhook writes it there,
+ * counted as room price until staff enter the host's split on resolving.
+ */
+function RecordLine({ flag }: { flag: FlaggedPayment }) {
+  const r = flag.record;
+  if (!r) {
+    return <div className="text-xs text-muted-foreground">{flag.bookingId ? "Not on the booking" : "No booking"}</div>;
+  }
+  return (
+    <div className="text-xs text-muted-foreground">
+      {r.amountCents !== flag.amountCents && <div>On the booking: {euro(r.amountCents)}</div>}
+      {r.split ? (
+        <div>
+          Room {euro(r.split.roomPriceCents)} · tax {euro(r.split.touristTaxCents)}
+        </div>
+      ) : (
+        <div>Split not explained</div>
+      )}
+    </div>
+  );
+}
 
 const when = (d: Date) =>
   d.toLocaleString("en-GB", { timeZone: "Europe/Amsterdam", dateStyle: "medium", timeStyle: "short" });
@@ -35,7 +58,8 @@ export default async function FlaggedPaymentsPage() {
         <h1 className="text-lg font-semibold">Flagged payments</h1>
         <p className="text-sm text-muted-foreground">
           Refunds made in the host&apos;s own Stripe Dashboard and lost disputes. OpenBookings cannot tell whether
-          that money was room price or tourist tax, so ask the host to explain. {open} open, {flags.length - open}{" "}
+          that money was room price or tourist tax, so ask the host to explain, and enter their split when you
+          resolve it: until then the booking counts all of it as room price. {open} open, {flags.length - open}{" "}
           resolved.
         </p>
       </div>
@@ -80,7 +104,10 @@ export default async function FlaggedPaymentsPage() {
                   <Badge variant={f.kind === "dispute-lost" ? "destructive" : "secondary"}>{KIND_LABEL[f.kind]}</Badge>
                   {f.reason && <div className="mt-1 text-xs text-muted-foreground">{f.reason}</div>}
                 </TableCell>
-                <TableCell className="text-right">{euro(f.amountCents)}</TableCell>
+                <TableCell className="text-right">
+                  <div>{euro(f.amountCents)}</div>
+                  <RecordLine flag={f} />
+                </TableCell>
                 <TableCell className="font-mono text-xs">
                   <div>{f.objectId}</div>
                   <div className="text-muted-foreground">{f.chargeId}</div>
@@ -94,7 +121,7 @@ export default async function FlaggedPaymentsPage() {
                       {f.resolvedNote && <div className="text-xs text-muted-foreground">{f.resolvedNote}</div>}
                     </div>
                   ) : (
-                    <ResolveForm flagId={f.id} />
+                    <ResolveForm flagId={f.id} recordCents={f.record?.amountCents ?? null} />
                   )}
                 </TableCell>
               </TableRow>

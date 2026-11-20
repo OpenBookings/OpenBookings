@@ -31,8 +31,15 @@ export type AdminBooking = {
   refunds: (Record<string, unknown> & {
     id: string;
     reservation_id: string | null;
-    reason: string;
+    /** Null for money that left outside OpenBookings (`source` not 'openbookings', 0053). */
+    reason: string | null;
+    /** 'openbookings', 'stripe_dashboard' (the host refunded in their own Stripe) or 'dispute' (lost). */
+    source?: string;
     amount: number;
+    accommodation_amount?: number;
+    tourist_tax_amount?: number;
+    /** When the host's room price / tourist tax split of an outside row was entered; null = not yet. */
+    split_explained_at?: Date | null;
     status: string;
     created_by: string | null;
     created_at: Date;
