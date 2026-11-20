@@ -21,6 +21,12 @@ export type HostAgreementVersion = {
  */
 export const HOST_AGREEMENT_VERSIONS: readonly HostAgreementVersion[] = [
   {
+    version: "1.4",
+    effectiveFrom: "2026-11-20",
+    lastUpdated: "2026-11-20",
+    load: () => import("@/content/legal/host-agreement/1.4/en.mdx"),
+  },
+  {
     version: "1.3",
     effectiveFrom: "2026-11-18",
     lastUpdated: "2026-11-18",
