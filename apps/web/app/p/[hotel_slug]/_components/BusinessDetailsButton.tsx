@@ -79,8 +79,9 @@ export function BusinessDetailsButton({ hotel }: { hotel: HotelPageData }) {
 
           <div className="border-t border-white/8 pt-6">
             <p className="text-xs text-white/30 leading-relaxed">
-              This information is provided for transparency purposes. OpenBookings verifies operator
-              registrations at the time of onboarding. For disputes or complaints, contact us at{" "}
+              These details come from the property and are shown for transparency. OpenBookings
+              doesn&apos;t verify them; you can check the VAT number on the European Commission&apos;s
+              VIES service. For disputes or complaints, contact us at{" "}
               <span className="text-white/50">support@openbookings.co</span>.
             </p>
           </div>
