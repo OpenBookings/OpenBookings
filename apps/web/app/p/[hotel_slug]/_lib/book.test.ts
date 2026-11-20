@@ -87,7 +87,7 @@ describe("buildBooking", () => {
       { id: NR, name: "Non-refundable", bar: 90, currency: "EUR", is_refundable: false, meal_plan: null },
     ],
   };
-  const priced = (ratePlanId: string, total: number) => ({
+  const priced = (ratePlanId: string, total: number, partyTotals: Record<string, number> = {}) => ({
     ratePlanId,
     stayTotal: total,
     touristTax: 0,
@@ -96,6 +96,7 @@ describe("buildBooking", () => {
     discount: null,
     freeCancellationUntil: null,
     saving: 0,
+    partyTotals,
   });
   const view: RoomView = {
     roomId: ROOM_A,
@@ -117,6 +118,30 @@ describe("buildBooking", () => {
       ],
       expectedTotal: 570.3,
     });
+  });
+
+  test("an uneven party: each room is priced for the party it is given, as booking charges it", () => {
+    // 3 adults in 2 rooms: the quote's rate is for the larger share (2 adults,
+    // with an extra-guest fee or per-person tourist tax in it); the second
+    // room only has 1 adult and costs less.
+    const uneven: RoomView = { ...view, rates: { [FLEX]: priced(FLEX, 330, { "2/0/0": 330, "1/0/0": 291 }) } };
+    expect(buildBooking([room], [uneven], { [FLEX]: 2 }, { adults: 3, children: 0 })).toEqual({
+      ok: true,
+      rooms: [
+        { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0 },
+        { roomId: ROOM_A, ratePlanId: FLEX, adults: 1, children: 0, infants: 0, cots: 0, extraBeds: 0 },
+      ],
+      expectedTotal: 621,
+    });
+  });
+
+  test("infants count in the party a room is priced for", () => {
+    const withInfant: RoomView = {
+      ...view,
+      rates: { [FLEX]: priced(FLEX, 330, { "1/0/1": 300, "1/0/0": 291 }) },
+    };
+    const b = buildBooking([room], [withInfant], { [FLEX]: 2 }, { adults: 2, children: 0, infants: 1 });
+    expect(b).toMatchObject({ ok: true, expectedTotal: 591 });
   });
 
   test("unpriced picks cannot be booked", () => {
@@ -245,7 +270,7 @@ describe("cots and extra beds", () => {
       maxAdults: 2,
       maxChildren: 1,
       rates: {
-        [FLEX]: { ratePlanId: FLEX, stayTotal: 200, touristTax: 0, total: 200, perNight: 100, freeCancellationUntil: null, saving: 0, discount: null },
+        [FLEX]: { ratePlanId: FLEX, stayTotal: 200, touristTax: 0, total: 200, perNight: 100, freeCancellationUntil: null, saving: 0, discount: null, partyTotals: {} },
       },
     };
     const b = buildBooking([room()], [view], { [FLEX]: 2 }, { adults: 2, children: 0, infants: 1 }, { [ROOM_A]: { cots: 1, extraBeds: 1 } });

@@ -26,7 +26,8 @@ import { billingTreatmentForProperty } from "@openbookings/billing/profiles";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
 import { toCents } from "@/app/checkout/_lib/booking-lines";
 import { stayBoundErrors } from "@/app/api/query/search-bounds";
-import { MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
+import { possibleRoomParties, partyKey } from "./room-parties";
+import { MAX_INFANTS_PER_ROOM, MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
 
 /**
  * Exact prices and availability for a stay at one property: every active room
@@ -52,6 +53,14 @@ export type QuotedRatePlan = {
   freeCancellationUntil: string | null;
   /** The stay discount already in `stayTotal`, for the rate row's chip. */
   discount: AppliedDiscount | null;
+  /**
+   * One unit's all-in price (stay plus tourist tax) for every party it could
+   * be given when the guest's party is split over the rooms picked, by
+   * `partyKey`. The fields above are for the largest even share
+   * (perRoomParty); a split that gives a room fewer guests is priced here, so
+   * the page adds up what booking will charge.
+   */
+  partyTotals: Record<string, number>;
   reasons: UnavailableReason[];
 };
 
@@ -333,6 +342,11 @@ export async function quoteStay(
     const reasons = roomReasons(a, party);
     // Every rate was a Non-refundable one that may not be offered alone.
     if (room.plans.length === 0 && !reasons.includes("not_on_sale")) reasons.push("not_on_sale");
+    const parties = possibleRoomParties(i.stay, {
+      maxAdults: a.maxAdults,
+      maxChildren: a.maxChildren,
+      maxInfants: MAX_INFANTS_PER_ROOM,
+    });
     rooms.push({
       roomId: room.roomId,
       name: room.name,
@@ -353,6 +367,9 @@ export async function quoteStay(
         touristTax: priced.tourist_tax,
         freeCancellationUntil: cancellationUntil(property, row.is_refundable, checkIn, i.now),
         discount: priced.discount,
+        partyTotals: Object.fromEntries(
+          parties.map((p) => [partyKey(p), resolveRoom(row, { ...p, arrivalDate: checkIn }, today).total_price]),
+        ),
         reasons: a.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"],
       })),
     });

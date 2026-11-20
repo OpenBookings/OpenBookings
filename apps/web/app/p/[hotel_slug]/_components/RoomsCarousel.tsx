@@ -776,6 +776,11 @@ type BookBar = {
   pickGuests: Record<string, string>;
   /** One line in place of the total's caption, or null. */
   message: string | null;
+  /**
+   * The stay's total for the picks, each room priced for the party it is
+   * given (what booking charges); null when they can't be booked as they stand.
+   */
+  total: number | null;
   /** The total to show instead of the summed one, once the price changed. */
   totalOverride: number | null;
   /** Keeps the bar up with nothing picked, so its message is still seen. */
@@ -817,9 +822,11 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
     }
     if (picks.length > 0) groups.push({ roomIndex, picks });
   });
-  // With dates, the stay's quoted total; without, today's price for one night.
+  // With dates, the stay's quoted total, each room for its own share of the
+  // party (rooms × the largest share's price only while the picks can't be
+  // booked); without, today's price for one night.
   const shownTotal = bookBar.totalOverride ?? (stay
-    ? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null)
+    ? (bookBar.total ?? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null))
     : Math.round(nightlyTotal * 100) / 100);
   const groupsKey = groups.map((g) => g.roomIndex).join(",");
 

@@ -14,6 +14,11 @@ export type PricedRate = {
   saving: number;
   /** The stay discount already in the price ("Weekly discount", 10 %), or null. */
   discount: AppliedDiscount | null;
+  /**
+   * `total` is for one room's largest share of the party. What one room costs
+   * for each other party it may be given, by `partyKey`; see QuotedRatePlan.
+   */
+  partyTotals: Record<string, number>;
 };
 
 /**
@@ -92,6 +97,7 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
           freeCancellationUntil: qp.freeCancellationUntil,
           saving: 0,
           discount: qp.discount ?? null,
+          partyTotals: qp.partyTotals ?? {},
         };
       }
       // Same comparison as the listing (withCancellationTerms), on the stay's prices.

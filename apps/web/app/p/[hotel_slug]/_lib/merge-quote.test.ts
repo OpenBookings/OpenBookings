@@ -36,6 +36,7 @@ const quoted = (ratePlanId: string, over: Partial<QuotedRatePlan> = {}): QuotedR
   touristTax: { total: 9, lines: [] },
   freeCancellationUntil: "2026-12-15T14:00:00.000Z",
   discount: null,
+  partyTotals: { "2/0/0": 369, "1/0/0": 339 },
   reasons: [],
   ...over,
 });
@@ -92,6 +93,7 @@ describe("mergeQuote", () => {
       freeCancellationUntil: "2026-12-15T14:00:00.000Z",
       saving: 0,
       discount: null,
+      partyTotals: { "2/0/0": 369, "1/0/0": 339 },
     });
   });
 

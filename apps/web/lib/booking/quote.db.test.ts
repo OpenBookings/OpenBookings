@@ -147,6 +147,26 @@ describeWithDb("stay quote against Postgres", () => {
     expect(plan.freeCancellationUntil).not.toBeNull();
   });
 
+  test("an uneven party: the quote prices each share, and they add up to what the selection charges", async () => {
+    // 3 adults in 2 rooms: one room gets 2, the other 1. Base occupancy 1 with
+    // an extra-adult fee and a per-person tourist tax, so the shares differ.
+    await db.query(`UPDATE rooms SET base_occupancy = 1, max_adults = 2, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    await db.query(
+      `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+      [ids.propertyId],
+    );
+    const stay = { ...STAY, adults: 3, rooms: 2 };
+    const plan = (await quoteStay(db, { propertyId: ids.propertyId, stay, now: NOW, testing: false }))!.rooms[0].ratePlans[0];
+    // The rate row is for the larger share.
+    expect(plan.stayTotal + plan.touristTax.total).toBe(3 * 120 + 2 * 3 * 2.5);
+    expect(plan.partyTotals["2/0/0"]).toBe(375);
+    expect(plan.partyTotals["1/0/0"]).toBe(307.5);
+
+    const priced = await select([double({ adults: 2 }), double({ adults: 1 })]);
+    expect(priced.ok && priced.snapshot.total).toBe(375 + 307.5);
+  });
+
   test("a Non-refundable rate not at least 10% cheaper is left out", async () => {
     const tooDear = await nrPlan(95);
     const cheapEnough = await nrPlan(90);
