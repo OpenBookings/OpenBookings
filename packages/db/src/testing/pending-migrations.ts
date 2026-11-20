@@ -34,6 +34,10 @@ export const PENDING_MIGRATIONS: string[] = [
   "0048_revoke_data_api_grants.sql",
   "0049_rls_guest_data.sql",
   "0050_pricing_rule_groups.sql",
+  "0051_eur_only.sql",
+  "0052_tourist_tax_infants.sql",
+  "0053_outside_refunds.sql",
+  "0054_admin_roles.sql",
 ];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);

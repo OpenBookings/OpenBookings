@@ -1,5 +1,5 @@
 import type { Queryable } from "@openbookings/db";
-import { returnUnexplainedPayment } from "@openbookings/stripe";
+import { returnRestOfCommission, returnUnexplainedPayment } from "@openbookings/stripe";
 import type { Period } from "../period";
 import type { BalanceTransactionLike, StripeLedgerSource } from "../steps/reconcile";
 import type { ChargeInfo, FeeLike, FeeRefundLike, LedgerDeps } from "./ingest";
@@ -35,7 +35,8 @@ export type FeeStripe = {
 
 /**
  * Wires the ledger to Stripe: the real `chargeInfo`, the refund that returns
- * an unexplained payment, and the caller's database, audit log and reporter.
+ * an unexplained payment, the one that returns the rest of a fee, and the
+ * caller's database, audit log and reporter.
  * The platform webhook and the invoice job both build their ledger this way.
  *
  * Imports the Stripe client, so it has its own subpath
@@ -52,6 +53,7 @@ export function buildStripeLedgerDeps(input: {
     db: input.db,
     chargeInfo: (chargeId, accountId) => retrieveChargeInfo(input.stripe, chargeId, accountId),
     returnPayment: returnUnexplainedPayment,
+    returnFee: returnRestOfCommission,
     audit: input.audit,
     report: input.report,
   };

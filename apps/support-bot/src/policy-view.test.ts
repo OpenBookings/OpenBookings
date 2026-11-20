@@ -18,10 +18,10 @@ describe("policyView", () => {
         "Free cancellation until Mon 9 Nov 2026, 15:00.",
         "After that, the room price isn't refunded.",
         "If you leave early, the next 7 nights are charged and any nights after that are refunded.",
-        "Tourist tax is refunded for nights you don't stay.",
-        "If you don't show up, nothing is refunded.",
+        "Tourist tax is refunded for nights you don't stay, unless you don't show up.",
+        "If you don't show up, nothing is refunded, tourist tax included.",
       ],
-      no_show: "If you don't show up, nothing is refunded.",
+      no_show: "If you don't show up, nothing is refunded, tourist tax included.",
       cancelled_at: null,
     });
   });

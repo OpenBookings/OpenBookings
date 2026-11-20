@@ -15,8 +15,8 @@ const snapshot = (tier: CancellationTier) =>
 const EARLY = new Date("2026-10-05T10:00:00Z");
 
 const EARLY_LINE = "If you leave early, the next 7 nights are charged and any nights after that are refunded.";
-const TAX_LINE = "Tourist tax is refunded for nights you don't stay.";
-const NO_SHOW_LINE = "If you don't show up, nothing is refunded.";
+const TAX_LINE = "Tourist tax is refunded for nights you don't stay, unless you don't show up.";
+const NO_SHOW_LINE = "If you don't show up, nothing is refunded, tourist tax included.";
 
 describe("labels", () => {
   test("the three tier names", () => {
@@ -29,6 +29,9 @@ describe("labels", () => {
     );
     expect(TIER_SUMMARIES.standard).toBe(
       "Free cancellation until 7 days before check-in. After that, the room price isn't refunded.",
+    );
+    expect(TIER_SUMMARIES.non_refundable).toBe(
+      "The room price isn't refunded if you cancel. Cheaper than the refundable rate.",
     );
     expect(Object.keys(TIER_SUMMARIES).sort()).toEqual(["flex", "non_refundable", "standard"]);
   });
@@ -98,6 +101,13 @@ describe("describePolicySteps", () => {
   test("flex after the deadline drops the free step", () => {
     const kinds = steps("flex", new Date("2026-11-09T20:00:00Z")).map((s) => s.kind);
     expect(kinds).toEqual(["after", "no_show"]);
+  });
+
+  test("every step kind appears once, so it can key a list", () => {
+    for (const tier of ["flex", "standard", "non_refundable"] as const) {
+      const kinds = steps(tier, EARLY).map((s) => s.kind);
+      expect(new Set(kinds).size).toBe(kinds.length);
+    }
   });
 
   test("non-refundable: non-refundable and no-show", () => {

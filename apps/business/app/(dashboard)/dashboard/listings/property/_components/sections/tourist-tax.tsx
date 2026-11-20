@@ -135,6 +135,7 @@ export function TouristTaxSection({ data }: SectionProps) {
         today={today}
         waitingFrom={groups.upcoming[0]?.effectiveFrom ?? null}
         commissionRate={commissionRate}
+        country={property.country}
         open={adding}
         onOpenChange={setAdding}
       />
@@ -166,6 +167,7 @@ function RuleCard({
 
   const options = [
     rule.childrenExempt && "Children don't pay",
+    !rule.childrenExempt && rule.infantsTaxed && "Infants pay too",
     rule.maxNights && `At most ${rule.maxNights} ${rule.maxNights === 1 ? "night" : "nights"} taxed`,
   ].filter(Boolean) as string[];
 

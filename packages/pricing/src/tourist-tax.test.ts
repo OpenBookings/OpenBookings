@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   calculateTouristTax,
+  infantsPayTouristTax,
   ruleInForce,
   touristTaxByNight,
   type TouristTaxCharge,
@@ -247,5 +248,42 @@ describe("touristTaxByNight", () => {
   test("nights past the cap owe nothing", () => {
     const rules = [rule([fixed(3, { perPerson: true, perNight: true })], { maxNights: 2 })];
     expect(touristTaxByNight(rules, stay())).toEqual([6, 6, 0]);
+  });
+});
+
+describe("infants", () => {
+  const perPerson = [fixed(2, { perPerson: true, perNight: true })];
+
+  test("don't pay unless the rule says so", () => {
+    expect(calculateTouristTax([rule(perPerson)], stay({ infants: 1 })).total).toBe(12);
+    expect(calculateTouristTax([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 })).total).toBe(18);
+  });
+
+  test("don't pay when children don't", () => {
+    const r = rule(perPerson, { childrenExempt: true, infantsTaxed: true });
+    expect(calculateTouristTax([r], stay({ children: 1, infants: 1 })).total).toBe(12);
+  });
+
+  test("are left out of per-night refunds the same way", () => {
+    expect(touristTaxByNight([rule(perPerson)], stay({ infants: 1 }))).toEqual([4, 4, 4]);
+    expect(touristTaxByNight([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 }))).toEqual([6, 6, 6]);
+  });
+
+  describe("infantsPayTouristTax", () => {
+    test("false without a rule that taxes infants per person", () => {
+      expect(infantsPayTouristTax([], "2026-07-01")).toBe(false);
+      expect(infantsPayTouristTax([rule(perPerson)], "2026-07-01")).toBe(false);
+      expect(infantsPayTouristTax([rule([percent(5)], { infantsTaxed: true })], "2026-07-01")).toBe(false);
+      expect(infantsPayTouristTax([rule(perPerson, { infantsTaxed: true, childrenExempt: true })], "2026-07-01")).toBe(false);
+    });
+
+    test("true for the rule in force or one still to start, not an old one", () => {
+      const old = rule(perPerson, { infantsTaxed: true });
+      const now = rule(perPerson, { effectiveFrom: "2026-06-01" });
+      const next = rule(perPerson, { effectiveFrom: "2027-01-01", infantsTaxed: true });
+      expect(infantsPayTouristTax([old], "2026-07-01")).toBe(true);
+      expect(infantsPayTouristTax([old, now], "2026-07-01")).toBe(false);
+      expect(infantsPayTouristTax([old, now, next], "2026-07-01")).toBe(true);
+    });
   });
 });

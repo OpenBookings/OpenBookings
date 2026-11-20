@@ -6,9 +6,11 @@ import {
   guestBookingCancelled,
   guestBookingConfirmed,
   guestOversoldRefunded,
+  guestRefundIssued,
   hostBookingCancelled,
   hostNewBooking,
   type MailRoom,
+  type RefundIssuedReason,
 } from "./booking-mail";
 import { formatEuro, formatStayDate } from "./format";
 import type { ActionMail } from "./action-mail";
@@ -104,11 +106,18 @@ type BookingRow = {
   tourist_tax_cents: number;
   total_cents: number;
   commission_cents: number;
+  /** Owed at the hotel for cots and extra beds, never charged online; cents. */
+  pay_at_property_cents: number;
   rooms: {
     name: string;
     rate_plan: string;
     adults: number;
     children: number;
+    infants: number;
+    cots: number;
+    extra_beds: number;
+    /** False only for a non-refundable rate: the room price never comes back. */
+    refundable: boolean;
     free_until: string | null;
     nights: { date: string; price: number }[];
     tax_lines: { label: string; amount: number }[];
@@ -124,9 +133,15 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
             u.email AS "guestEmail", COALESCE(u.name, u.email) AS "guestName",
             b.rooms_total_cents::float8 AS rooms_total_cents, b.tourist_tax_cents::float8 AS tourist_tax_cents,
             b.total_cents::float8 AS total_cents, b.commission_cents::float8 AS commission_cents,
+            -- pay_at_property_amount is euros (numeric 10,2); the mail works in cents.
+            (SELECT ROUND(COALESCE(SUM(r.pay_at_property_amount), 0) * 100)::float8
+               FROM reservations r WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS pay_at_property_cents,
             COALESCE((
               SELECT json_agg(json_build_object(
                 'name', rm.name, 'rate_plan', rp.name, 'adults', r.adults, 'children', r.children,
+                'infants', r.infants, 'cots', r.cots, 'extra_beds', r.extra_beds,
+                -- The tier the room was booked under; the rate's flag for one not snapshotted yet.
+                'refundable', COALESCE(r.cancellation_tier::text <> 'non_refundable', rp.is_refundable),
                 -- A deadline that has passed is no longer a free-cancellation promise.
                 'free_until', CASE WHEN r.full_refund_until > NOW()
                   THEN to_char(r.full_refund_until AT TIME ZONE p.timezone, 'YYYY-MM-DD HH24:MI') END,
@@ -148,23 +163,33 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
   return rows[0] ?? null;
 }
 
-const guestsText = (adults: number, children: number) => {
-  const n = adults + children;
-  return `${n} ${n === 1 ? "guest" : "guests"}`;
-};
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Thu 11 Mar 2027, 15:00" from "2027-03-11 15:00" (the property's local time). */
+/** "2 guests", or "2 guests, 1 infant": infants (under 2) take no place, so they are not guests. */
+const guestsText = (adults: number, children: number, infants = 0) =>
+  [plural(adults + children, "guest", "guests"), infants > 0 && plural(infants, "infant", "infants")].filter(Boolean).join(", ");
+
+/** "1 cot", "1 cot, 2 extra beds", or null when the room has neither. */
+const extrasText = (cots = 0, extraBeds = 0) =>
+  [cots > 0 && plural(cots, "cot", "cots"), extraBeds > 0 && plural(extraBeds, "extra bed", "extra beds")].filter(Boolean).join(", ") || null;
+
+/**
+ * "Thu 11 Mar 2027, 15:00 (property's local time)" from "2027-03-11 15:00".
+ * The guest may be in another time zone, so the mail says whose clock it is.
+ */
 function deadline(local: string | null): string | null {
   if (!local) return null;
   const [date, time] = local.split(" ");
-  return `${formatStayDate(date!)}, ${time}`;
+  return `${formatStayDate(date!)}, ${time} (property's local time)`;
 }
 
 const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
   rooms.map((r) => ({
     name: r.name,
     ratePlan: r.rate_plan,
-    guests: guestsText(r.adults, r.children),
+    guests: guestsText(r.adults, r.children, r.infants),
+    extras: extrasText(r.cots, r.extra_beds),
+    refundable: r.refundable !== false,
     freeCancellationUntil: deadline(r.free_until),
     nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
     touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amount: Number(t.amount) })),
@@ -183,7 +208,12 @@ export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {
     checkIn: b.check_in_date,
     checkOut: b.check_out_date,
     rooms: mailRooms(b.rooms),
-    money: { roomsCents: b.rooms_total_cents, touristTaxCents: b.tourist_tax_cents, totalCents: b.total_cents },
+    money: {
+      roomsCents: b.rooms_total_cents,
+      touristTaxCents: b.tourist_tax_cents,
+      totalCents: b.total_cents,
+      payAtPropertyCents: Number(b.pay_at_property_cents) || 0,
+    },
     reference: bookingReference(bookingId),
   };
   const seller = { legalName: b.legal_name, vatNumber: b.vat_number };
@@ -222,8 +252,23 @@ export async function sendOversoldRefunded(intentId: string, deps: SendDeps = {}
   );
 }
 
-/** What `cancelRooms` returned in `cancelled`. */
-export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+/**
+ * What `cancelRooms` returned in `cancelled`. `refundFailed` is the part of
+ * `refundTotal` Stripe refused (absent: none).
+ */
+export type CancelledRooms = { reservationIds: string[]; refundTotal: number; refundFailed?: number; cancelsBooking: boolean };
+
+const euroCents = (euros: number) => Math.round(euros * 100);
+
+/** Splits a refund into what went (or is on its way) and what Stripe refused, formatted; null for nothing. */
+function refundAmounts(total: number, failed: number): { refund: string | null; refundFailed: string | null } {
+  const failedCents = Math.min(Math.max(euroCents(failed), 0), Math.max(euroCents(total), 0));
+  const sentCents = Math.max(euroCents(total), 0) - failedCents;
+  return {
+    refund: sentCents > 0 ? formatEuro(sentCents / 100) : null,
+    refundFailed: failedCents > 0 ? formatEuro(failedCents / 100) : null,
+  };
+}
 
 /**
  * Tells the guest and the host which rooms a cancelRooms call cancelled, from
@@ -267,7 +312,7 @@ export async function sendBookingCancelled(
           guestBookingCancelled({
             propertyName: row.property_name,
             rooms: row.rooms,
-            refund: cancelled.refundTotal > 0 ? formatEuro(cancelled.refundTotal) : null,
+            ...refundAmounts(cancelled.refundTotal, cancelled.refundFailed ?? 0),
             cancelsBooking,
             bookingUrl: bookingUrl(c, bookingId),
           }),
@@ -288,6 +333,59 @@ export async function sendBookingCancelled(
   } catch (error) {
     try {
       report(error, { kind: "cancellation", bookingId });
+    } catch {
+      // Reporting must not throw either.
+    }
+  }
+}
+
+/** What a lifecycle action returned in `refunds`: each refund row and what Stripe did with it. */
+export type IssuedRefund = { amount: number; status: "pending" | "succeeded" | "failed" };
+
+/**
+ * Tells the guest about a refund made outside a cancellation: an early
+ * departure, a goodwill refund, or a retried refund. Says what went and what
+ * Stripe refused, from what the action returned. Sends nothing when there is
+ * nothing to say. After a retry only the refunds that went through are
+ * mentioned: a refund that failed again was already reported as owed.
+ *
+ * Never throws: a failed email must not mask a refund that already happened;
+ * `report` hears about it.
+ */
+export async function sendRefundIssued(
+  bookingId: string,
+  issued: { reason: RefundIssuedReason; refunds: IssuedRefund[] },
+  report: (error: unknown, context: { kind: string; bookingId: string }) => void = (error) =>
+    console.error("[booking-mail] refund email failed:", error instanceof Error ? error.message : error),
+  deps: SendDeps = {},
+): Promise<void> {
+  try {
+    const sum = (rows: IssuedRefund[]) => rows.reduce((total, r) => total + euroCents(r.amount), 0) / 100;
+    const counted = issued.reason === "retry" ? issued.refunds.filter((r) => r.status === "succeeded") : issued.refunds;
+    const amounts = refundAmounts(sum(counted), sum(counted.filter((r) => r.status === "failed")));
+    if (!amounts.refund && !amounts.refundFailed) return;
+
+    const c = resolve(deps);
+    const row = (
+      await rowsOf<{ property_name: string; guestEmail: string }>(
+        c.db,
+        `SELECT p.name AS property_name, u.email AS "guestEmail"
+           FROM bookings b
+           JOIN properties p ON p.id = b.hotel_id
+           JOIN "user" u ON u.id = b.user_id
+          WHERE b.id = $1::uuid`,
+        [bookingId],
+      )
+    )[0];
+    if (!row) throw new Error(`Booking ${bookingId} not found for its refund email`);
+    await deliver(
+      c,
+      [row.guestEmail],
+      guestRefundIssued({ propertyName: row.property_name, reason: issued.reason, ...amounts, bookingUrl: bookingUrl(c, bookingId) }),
+    );
+  } catch (error) {
+    try {
+      report(error, { kind: `refund_${issued.reason}`, bookingId });
     } catch {
       // Reporting must not throw either.
     }

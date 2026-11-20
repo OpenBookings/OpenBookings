@@ -10,7 +10,7 @@ import type { BookingAction } from "@openbookings/pricing";
  *   follows the cancellation policy, not the host's judgement.
  * - Cancelling is `cancel`: the refund again follows the policy.
  * - A goodwill refund is money at the host's discretion: `refund`, which
- *   only owners and general managers hold.
+ *   which owners, general managers and managers hold.
  */
 export const ACTION_PERMISSION: Record<BookingAction, Permission> = {
   mark_checked_in: { booking: ["operate"] },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isClientStep, parseClientStepData } from "./step-data";
+import { euPropertyCountry, isClientStep, parseClientStepData } from "./step-data";
 
 const text = { displayName: "Villa", tagline: "Quiet", description: "Nice", houseRulesText: "No parties" };
 const location = { streetAddress: "1 Main St", city: "Amsterdam", country: "NL", postalCode: "1011AB", coordinates: [4.9, 52.37] };
@@ -45,6 +45,19 @@ describe("step payloads", () => {
   test("coordinates must be a [lng, lat] pair on the globe", () => {
     for (const coordinates of [[200, 0], [0, 91], [1], [1, 2, 3], ["1", "2"], [Number.NaN, 0]]) {
       expect(parseClientStepData("core-info-location", { ...location, coordinates })).toBeNull();
+    }
+  });
+});
+
+describe("euPropertyCountry", () => {
+  test("accepts EU country codes in any case", () => {
+    expect(euPropertyCountry("nl")).toBe("NL");
+    expect(euPropertyCountry(" DE ")).toBe("DE");
+  });
+
+  test("refuses countries outside the EU and anything that isn't a code", () => {
+    for (const raw of ["CH", "GB", "NO", "IS", "Netherlands", "", null, undefined]) {
+      expect(euPropertyCountry(raw)).toBeNull();
     }
   });
 });

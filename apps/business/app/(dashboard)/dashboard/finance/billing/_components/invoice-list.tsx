@@ -18,8 +18,8 @@ export function InvoiceList({ invoices }: { invoices: InvoiceListRow[] }) {
       <CardHeader>
         <CardTitle>Invoices</CardTitle>
         <CardDescription>
-          One invoice per month for the commission OpenBookings keeps on your bookings. A refund after an invoice was
-          issued shows up as a credit note in the month it happens.
+          One invoice per month for the commission OpenBookings keeps on your bookings. A refund is deducted on the
+          invoice of the month it happens. If refunds outweigh commission that month, you get a credit note instead.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -25,6 +25,8 @@ export type StripeEventLike = {
   livemode: boolean;
   /** The connected account the object belongs to, for Connect events. */
   account?: string;
+  /** When Stripe created the event, Unix seconds. */
+  created?: number;
   data: { object: unknown };
 };
 
@@ -46,12 +48,18 @@ export type StripeEventDeps = {
   isProcessed: (eventId: string) => Promise<boolean>;
   /** Called only after the event's work has succeeded. */
   markProcessed: (eventId: string) => Promise<void>;
-  /** Returns every commission refund that now exists on the charge. Wired together with `audit`. */
+  /**
+   * Returns every commission refund that now exists on the charge, and the
+   * charge's refunds that OpenBookings did not make. Wired together with `audit`.
+   */
   refundCommission?: (
     chargeId: string,
     stripeAccountId: string,
     options: { lostDisputeAmount?: number },
-  ) => Promise<Array<{ id: string; amount: number }>>;
+  ) => Promise<{
+    commissionRefunds: Array<{ id: string; amount: number }>;
+    outsideRefunds: OutsideRefundPayload[];
+  }>;
   audit?: (entry: StripeAuditEntry) => Promise<void>;
   /** A host's payout bank account was added, changed or removed. */
   onExternalAccountChanged?: (input: {
@@ -105,6 +113,34 @@ export type ApplicationFeePayload = {
   account: string;
   charge: string;
 };
+
+/**
+ * A refund on a host's charge that OpenBookings did not make: the host
+ * refunded in their own Stripe Dashboard. It returns no commission and is
+ * flagged for staff. Declared structurally, like the fee
+ * payloads, so `refundCommissionForCharge`'s own type fits.
+ */
+export type OutsideRefundPayload = {
+  id: string;
+  amount: number;
+  /** Unix seconds. */
+  created: number;
+  reason: string | null;
+  paymentIntentId: string | null;
+};
+
+/**
+ * Audit actions that flag a payment for staff to ask the host about. Money
+ * left the host's charge in a way OpenBookings cannot split into room price
+ * and tourist tax, and the host stays responsible for the tourist tax on it.
+ * A refund made in the host's own Stripe Dashboard returns no commission (it
+ * is outside OpenBookings; any goodwill return is made by hand); a lost
+ * dispute returns it in proportion to the whole payment.
+ */
+export const PAYMENT_FLAG_ACTIONS = {
+  refundOutside: "payment.refund-outside-openbookings",
+  disputeLost: "payment.dispute-lost",
+} as const;
 
 /** The fields of a Stripe fee refund that OpenBookings records. */
 export type ApplicationFeeRefundPayload = { id: string; amount: number; created: number; fee: string };
@@ -256,10 +292,28 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
 
     case "charge.dispute.closed": {
       const chargeId = str(object.charge);
+      const disputeId = str(object.id);
       const amount = typeof object.amount === "number" ? object.amount : 0;
       const commission = commissionDeps(deps);
-      if (!commission || !account || !chargeId || object.status !== "lost" || amount <= 0) return null;
-      return () => returnCommission(commission, chargeId, account, { lostDisputeAmount: amount });
+      if (!commission || !account || !chargeId || !disputeId || object.status !== "lost" || amount <= 0) return null;
+      return async () => {
+        await returnCommission(commission, chargeId, account, { lostDisputeAmount: amount });
+        await commission.audit({
+          action: PAYMENT_FLAG_ACTIONS.disputeLost,
+          stripeAccountId: account,
+          dedupeKey: disputeId,
+          detail: {
+            chargeId,
+            disputeId,
+            paymentIntentId: str(object.payment_intent),
+            amount,
+            reason: str(object.reason),
+            created: typeof object.created === "number" ? object.created : null,
+            // When it was lost: the dispute's `created` is when it was opened.
+            ...(typeof event.created === "number" ? { lostAt: event.created } : {}),
+          },
+        });
+      };
     }
 
     case "charge.dispute.created": {
@@ -291,6 +345,12 @@ function route(event: StripeEventLike, deps: StripeEventDeps): (() => Promise<vo
  * Records every commission refund on the charge, each keyed by its Stripe id.
  * Not just the one this event caused: if an earlier attempt moved the money
  * and failed before writing its record, this is where that record gets made.
+ *
+ * Also flags each refund on the charge that OpenBookings did not make, so
+ * staff can ask the host what it was for. Hosts should refund through
+ * OpenBookings; one made in their own Stripe Dashboard is outside OpenBookings
+ * and returns no commission, and the tourist tax on it stays the host's to
+ * account for.
  */
 type CommissionDeps = Required<Pick<StripeEventDeps, "refundCommission" | "audit">>;
 
@@ -306,13 +366,30 @@ async function returnCommission(
   stripeAccountId: string,
   options: { lostDisputeAmount?: number },
 ): Promise<void> {
-  const refunds = await deps.refundCommission(chargeId, stripeAccountId, options);
-  for (const refund of refunds) {
+  const { commissionRefunds, outsideRefunds } = await deps.refundCommission(chargeId, stripeAccountId, options);
+  for (const refund of commissionRefunds) {
     await deps.audit({
       action: "commission.refunded",
       stripeAccountId,
       dedupeKey: refund.id,
       detail: { chargeId, feeRefundId: refund.id, amount: refund.amount },
+    });
+  }
+  // Every one on the charge, each keyed by its refund id: a retried event, or
+  // the next refund on the same charge, re-sends them and none is recorded twice.
+  for (const refund of outsideRefunds) {
+    await deps.audit({
+      action: PAYMENT_FLAG_ACTIONS.refundOutside,
+      stripeAccountId,
+      dedupeKey: refund.id,
+      detail: {
+        chargeId,
+        refundId: refund.id,
+        paymentIntentId: refund.paymentIntentId,
+        amount: refund.amount,
+        created: refund.created,
+        reason: refund.reason,
+      },
     });
   }
 }

@@ -1,11 +1,13 @@
 import {
   handleWebhookRequest,
+  PAYMENT_FLAG_ACTIONS,
   refundCommissionForCharge,
   type StripeEventDeps,
 } from "@openbookings/stripe";
-import { isStripeEventProcessed, markStripeEventProcessed, query } from "@openbookings/db";
+import { isStripeEventProcessed, markStripeEventProcessed, query, recordOutsideRefund, withTransaction } from "@openbookings/db";
 import * as Sentry from "@sentry/nextjs";
-import { recordStripeAudit } from "@/lib/stripe/audit";
+import { writeStripeAudit } from "@/lib/stripe/audit";
+import { outsideRefundFromFlag } from "@/lib/stripe/outside-refund";
 import { sendPayoutChangeAlert } from "@/lib/mailing/payout-change-alert";
 
 export const dynamic = "force-dynamic";
@@ -24,12 +26,31 @@ export const dynamic = "force-dynamic";
  * Locally: `stripe listen --forward-connect-to localhost:3001/api/stripe/webhook`,
  * and put the `whsec_…` it prints in this app's STRIPE_WEBHOOK_SECRET.
  */
+const FLAGS = new Set<string>(Object.values(PAYMENT_FLAG_ACTIONS));
+
 const deps: StripeEventDeps = {
   livemode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_live_"),
   isProcessed: isStripeEventProcessed,
   markProcessed: markStripeEventProcessed,
   refundCommission: refundCommissionForCharge,
-  audit: recordStripeAudit,
+  audit: async (entry) => {
+    // The money is gone from the booking too: write it there, so what is left
+    // to refund, the host's pages and the DAC7 figures know. Keyed by the
+    // Stripe id, so a retried event writes it once; a payment that paid no
+    // booking keeps just the flag.
+    const outside = outsideRefundFromFlag(entry);
+    if (outside) await withTransaction((client) => recordOutsideRefund(client, outside));
+    const inserted = await writeStripeAudit(entry);
+    // A refund made outside OpenBookings, or a lost dispute: staff ask the
+    // host to explain it (admin app, Flagged payments). Once per flag.
+    if (inserted && FLAGS.has(entry.action)) {
+      Sentry.captureMessage(`Payment flagged: ${entry.action}`, {
+        level: "warning",
+        tags: { area: "payment-flag", action: entry.action },
+        extra: { stripeAccountId: entry.stripeAccountId, ...entry.detail },
+      });
+    }
+  },
 };
 
 /**

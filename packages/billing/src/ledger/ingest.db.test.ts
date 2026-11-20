@@ -43,6 +43,9 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       charge = { ...charge, amountRefunded: charge.amount };
       return { refundId: `re_${chargeId}` };
     },
+    returnFee: async (feeId) => {
+      throw new Error(`Unexpected returnFee ${feeId}`);
+    },
     audit: async (entry) => {
       calls.audit.push(entry);
     },

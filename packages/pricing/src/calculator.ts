@@ -590,7 +590,8 @@ export function resolveRoom(
   const touristTax = calculateTouristTax(row.tourist_tax_rules ?? [], {
     nights: pricedNights(state),
     adults,
-    children: children + (params.infants ?? 0),
+    children,
+    infants: params.infants ?? 0,
     rooms: 1,
   })
 

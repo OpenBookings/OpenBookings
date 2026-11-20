@@ -131,7 +131,7 @@ export const SCENARIOS: Readonly<Record<DemoScenario, ScenarioSpec>> = {
 
 /**
  * The non-refundable bar for a refundable one: whole euros, 15% off, which
- * stays clear of Annex B B.4.3 (a non-refundable rate must be at least 10%
+ * stays clear of Annex B B.4.2 (a non-refundable rate must be at least 10%
  * cheaper than the refundable rate beside it).
  */
 export function nonRefundableBar(refundableBar: number): number {

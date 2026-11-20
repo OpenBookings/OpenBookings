@@ -1,7 +1,8 @@
 import type { SelectedRoom } from "@/lib/booking/quote";
+import { partyKey } from "@/lib/booking/room-parties";
 import { MAX_ROOMS } from "@/lib/booking/stay-input";
 import type { DbRoom } from "../_components/constants";
-import type { RoomView } from "./merge-quote";
+import type { PricedRate, RoomView } from "./merge-quote";
 import { splitParty, type SplitResult, type Unit } from "./split-party";
 import { guestsLabel } from "./stay";
 
@@ -125,7 +126,8 @@ export type Booking =
 
 /**
  * The rooms a selection books, the party split over them, and the total the
- * guest was shown. `views` line up with `rooms`.
+ * guest is shown: each room at the price for the party it is given, the way
+ * booking charges it. `views` line up with `rooms`.
  */
 export function buildBooking(
   rooms: DbRoom[],
@@ -135,7 +137,8 @@ export function buildBooking(
   extras: Record<string, RoomExtras> = {},
 ): Booking {
   const units: Unit[] = [];
-  let total = 0;
+  const prices = new Map<string, PricedRate>();
+  let unpriced = false;
   rooms.forEach((room, i) => {
     const view = views[i];
     const roomUnits: Unit[] = [];
@@ -144,10 +147,10 @@ export function buildBooking(
       if (qty === 0) continue;
       const priced = view?.rates[rate.id];
       if (!priced || view.maxAdults === null || view.maxChildren === null) {
-        total = NaN;
+        unpriced = true;
         continue;
       }
-      total += qty * priced.total;
+      prices.set(rate.id, priced);
       for (let n = 0; n < qty; n++) {
         roomUnits.push({ roomId: room.id, ratePlanId: rate.id, maxAdults: view.maxAdults, maxChildren: view.maxChildren });
       }
@@ -155,9 +158,17 @@ export function buildBooking(
     dealExtras(room, roomUnits, extras[room.id] ?? NONE);
     units.push(...roomUnits);
   });
-  if (Number.isNaN(total)) return { ok: false, reason: "unpriced" };
+  if (unpriced) return { ok: false, reason: "unpriced" };
   const split = splitParty(party, units);
   if (!split.ok) return split;
+  let total = 0;
+  for (const r of split.rooms) {
+    const priced = prices.get(r.ratePlanId);
+    // The quote prices every party a room can be given. Should one be
+    // missing, the largest share's price stands in and booking answers
+    // "price changed".
+    total += priced?.partyTotals[partyKey(r)] ?? priced?.total ?? 0;
+  }
   return { ok: true, rooms: split.rooms, expectedTotal: Math.round(total * 100) / 100 };
 }
 

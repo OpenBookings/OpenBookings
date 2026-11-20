@@ -39,7 +39,6 @@ const ADULTS = 2;
 /** Tax-inclusive, like every rate: this is what the guest pays per night. */
 const PRICE_PER_NIGHT = 185;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
-const BOOKING_FEE_RATE = 0.045;
 
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -60,18 +59,19 @@ async function main() {
 
     // The Deluxe room shipped with no rate plan of its own, so the demo brings
     // the one it is priced against. Refundable: it follows the property's
-    // cancellation tier.
+    // cancellation tier. booking_fee_rate is a legacy column and stays 0:
+    // commission is the property's commission_rate, on bookings.commission_cents.
     await pool.query(
       `insert into rate_plans
          (id, room_id, name, bar, currency, is_refundable,
           booking_fee_rate, min_stay, is_active)
-       values ($1, $2, 'Flexible', $3, 'EUR', true, $4, 1, true)
+       values ($1, $2, 'Flexible', $3, 'EUR', true, 0, 1, true)
        on conflict (id) do update set
          bar = excluded.bar,
          is_refundable = true,
-         booking_fee_rate = excluded.booking_fee_rate,
+         booking_fee_rate = 0,
          updated_at = now()`,
-      [DEMO_RATE_PLAN_ID, ROOM_ID, PRICE_PER_NIGHT, BOOKING_FEE_RATE.toFixed(4)],
+      [DEMO_RATE_PLAN_ID, ROOM_ID, PRICE_PER_NIGHT],
     );
 
     // Checkout refuses a property whose organisation has not confirmed that

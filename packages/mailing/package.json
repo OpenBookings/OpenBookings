@@ -16,6 +16,7 @@
     "@openbookings/analytics": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/demo": "workspace:*",
+    "@openbookings/pricing": "workspace:*",
     "lettermint": "^3.3.0"
   },
   "devDependencies": {

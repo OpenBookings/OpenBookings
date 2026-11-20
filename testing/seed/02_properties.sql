@@ -125,11 +125,11 @@ SELECT '5eed2000-0000-4000-8000-000000000002', d::date, 1, 'Leaking radiator', '
 FROM generate_series(current_date + 7, current_date + 10, interval '1 day') AS d
 ON CONFLICT (room_id, date) DO NOTHING;
 
--- Tourist tax. Amsterdam: 12.5% of the room price before 9% VAT.
+-- Tourist tax. Amsterdam: 12.5% of the room price before 21% VAT (NL accommodation since 1 January 2026).
 -- Utrecht: a fixed amount per person per night. (Illustrative rates.)
 INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt, max_nights, created_by) VALUES
   ('5eed1000-0000-4000-8000-000000000001', '2000-01-01',
-   '[{"kind": "percent", "amount": 12.5, "perPerson": false, "perNight": false, "perRoom": false, "vatIncludedPercent": 9}]',
+   '[{"kind": "percent", "amount": 12.5, "perPerson": false, "perNight": false, "perRoom": false, "vatIncludedPercent": 21}]',
    false, NULL, 'seed-user-owner'),
   ('5eed1000-0000-4000-8000-000000000002', '2000-01-01',
    '[{"kind": "fixed", "amount": 3.5, "perPerson": true, "perNight": true, "perRoom": false}]',

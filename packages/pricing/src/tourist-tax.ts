@@ -36,6 +36,12 @@ export interface TouristTaxRule {
   charges: TouristTaxCharge[];
   /** Per-person charges count adults only. */
   childrenExempt: boolean;
+  /**
+   * Per-person charges count infants (under 2) too. Only while children pay:
+   * a rule that exempts children exempts infants as well. Left out = infants
+   * don't pay, which is also the default for a new rule.
+   */
+  infantsTaxed?: boolean;
   /** Per-night charges stop after this many nights of the stay. Null = no cap. */
   maxNights: number | null;
 }
@@ -45,6 +51,8 @@ export interface TouristTaxStay {
   nights: { date: string; price: number }[];
   adults: number;
   children: number;
+  /** Under 2. Counted only where the rule says infants pay. */
+  infants?: number;
   rooms: number;
 }
 
@@ -87,8 +95,7 @@ export function calculateTouristTax(
     else exact.set(key, { rule, charge: rule.charges[index], amount });
   };
 
-  const guests = (rule: TouristTaxRule) =>
-    rule.childrenExempt ? stay.adults : stay.adults + stay.children;
+  const guests = (rule: TouristTaxRule) => taxedGuests(rule, stay);
 
   stay.nights.forEach((night, nightIndex) => {
     const rule = ruleInForce(rules, night.date);
@@ -132,8 +139,7 @@ export function calculateTouristTax(
 export function touristTaxByNight(rules: TouristTaxRule[], stay: TouristTaxStay): number[] {
   if (stay.nights.length === 0) return [];
 
-  const guests = (rule: TouristTaxRule) =>
-    rule.childrenExempt ? stay.adults : stay.adults + stay.children;
+  const guests = (rule: TouristTaxRule) => taxedGuests(rule, stay);
 
   const exact = stay.nights.map((night, nightIndex) => {
     const rule = ruleInForce(rules, night.date);
@@ -157,6 +163,27 @@ export function touristTaxByNight(rules: TouristTaxRule[], stay: TouristTaxStay)
   const totalCents = Math.round(calculateTouristTax(rules, stay).total * 100);
   cents[0] += totalCents - cents.reduce((sum, c) => sum + c, 0);
   return cents.map((c) => c / 100);
+}
+
+/** The people a per-person charge counts under this rule. */
+function taxedGuests(rule: TouristTaxRule, stay: TouristTaxStay): number {
+  if (rule.childrenExempt) return stay.adults;
+  return stay.adults + stay.children + (rule.infantsTaxed ? (stay.infants ?? 0) : 0);
+}
+
+/**
+ * Whether infants pay tourist tax under the rule in force on `today` or any
+ * rule after it: a per-person charge, under a rule that taxes infants.
+ */
+export function infantsPayTouristTax(rules: TouristTaxRule[], today: string): boolean {
+  const current = ruleInForce(rules, today);
+  return rules.some(
+    (rule) =>
+      (rule === current || rule.effectiveFrom > today) &&
+      rule.infantsTaxed === true &&
+      !rule.childrenExempt &&
+      rule.charges.some((c) => c.kind === "fixed" && c.perPerson),
+  );
 }
 
 function fixedAmount(charge: TouristTaxCharge, guests: number, rooms: number): number {

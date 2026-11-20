@@ -36,7 +36,7 @@ const DISCLOSED_AGENT =
   "Commission for intermediation in accommodation bookings, acting as disclosed agent in the name and on behalf of the host, under the Host Agreement. Accommodation value is the price of the stay including VAT, excluding tourist tax.";
 const SPEC_POINTER = "Specification per booking: see attachment. Also available as CSV in OpenBookings Business → Billing.";
 const SPEC_NOTE =
-  "“Paid” is the date the guest paid (or the refund was made). Commission is taken as a Stripe application fee on each payment; refunds reverse it in proportion. Each Stripe payment ID matches the payment in your own Stripe Dashboard.";
+  "“Paid” is the date the guest paid (or the refund was made). Commission is taken as a Stripe application fee on each payment; refunds reverse it in proportion to the room price refunded. Each Stripe payment ID matches the payment in your own Stripe Dashboard.";
 
 export type RenderPdfOptions = {
   /** Print a large grey diagonal word on every page (previews of drafts). */

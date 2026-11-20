@@ -29,6 +29,7 @@ type ReservationRow = {
   total_nights: number;
   adults: number;
   children: number;
+  infants: number;
   is_refundable: boolean;
   cancellation_tier: PropertyCancellationTier;
   timezone: string;
@@ -53,6 +54,12 @@ const DAY = 86_400_000;
  * guest paid), split over the nights as the rules would split it. Refunds read
  * that split, so they never return more or less tax than was paid.
  *
+ * `policy` is the cancellation terms the guest was shown, per reservation id:
+ * the property's tier and the rate's refundability when the rooms were held.
+ * Those are what the guest agreed to, so they win over the live values, which
+ * the host may have changed while the guest was paying. A field missing from
+ * it (intents made before the tier was kept) falls back to the live value.
+ *
  * Idempotent: a reservation that already has a snapshot is left alone, and
  * `confirmed_at` is only set once.
  */
@@ -63,11 +70,12 @@ export async function confirmBookingPolicy(
     confirmedAt: Date;
     nightPrices?: Record<string, { date: string; price: number }[]>;
     touristTax?: Record<string, number>;
+    policy?: Record<string, { tier?: PropertyCancellationTier; isRefundable?: boolean }>;
   },
 ): Promise<void> {
   const { rows } = await db.query(
     `SELECT res.id AS reservation_id, b.check_in_date::text AS check_in_date,
-            res.price_per_night, res.total_nights, res.adults, res.children,
+            res.price_per_night, res.total_nights, res.adults, res.children, res.infants,
             rp.is_refundable, p.cancellation_tier, p.timezone,
             to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
             COALESCE((
@@ -75,6 +83,7 @@ export async function confirmBookingPolicy(
                 'effectiveFrom', t.effective_from::text,
                 'charges', t.charges,
                 'childrenExempt', t.children_exempt,
+                'infantsTaxed', t.infants_taxed,
                 'maxNights', t.max_nights
               ) ORDER BY t.effective_from)
               FROM tourist_tax_rules t WHERE t.property_id = p.id
@@ -96,9 +105,10 @@ export async function confirmBookingPolicy(
         price: Number(row.price_per_night),
       }));
 
+    const shown = input.policy?.[row.reservation_id];
     const { snapshot, nights: ruled } = reservationPolicy({
-      propertyTier: row.cancellation_tier,
-      isRefundable: row.is_refundable,
+      propertyTier: shown?.tier ?? row.cancellation_tier,
+      isRefundable: shown?.isRefundable ?? row.is_refundable,
       timeZone: row.timezone,
       checkInTime: row.check_in_time,
       arrivalDate: row.check_in_date,
@@ -107,6 +117,7 @@ export async function confirmBookingPolicy(
       touristTaxRules: row.tourist_tax_rules,
       adults: row.adults,
       children: row.children,
+      infants: row.infants,
     });
     const charged = input.touristTax?.[row.reservation_id];
     const nights = charged === undefined ? ruled : fitTouristTax(ruled, charged);

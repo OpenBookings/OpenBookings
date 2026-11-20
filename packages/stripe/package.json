@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./fees": "./src/payments/fees.ts"
+    "./fees": "./src/payments/fees.ts",
+    "./commission-rate": "./src/payments/commission-rate.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { animate } from "framer-motion";
+import { DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
 
-const OB_RATE = 0.045;
+const OB_RATE = DEFAULT_COMMISSION_RATE;
 const STRIPE_RATE = 0.015;
 const STRIPE_FIXED = 0.25;
 
@@ -215,7 +216,7 @@ export function CostCalculator() {
             <p className="mt-4 px-1 text-[11px] leading-[1.7] text-white/22">
               Competitor figures are typical published commission rates and vary by market and agreement.
               OpenBookings cost includes Stripe processing (1.5% + €0.25 per booking, standard EEA cards),
-              passed through with no markup.
+              which Stripe charges you directly. We add nothing to it.
             </p>
           </div>
         </div>

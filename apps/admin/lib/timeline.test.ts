@@ -122,6 +122,15 @@ describe("buildTimeline", () => {
       expect(buildTimeline(b).filter((e) => e.kind === "no_show")).toHaveLength(1);
     });
 
+    test("money that left outside OpenBookings is its own entry, not a refund OpenBookings made", () => {
+      const b = base();
+      b.refunds.push({ id: "f3", reservation_id: null, reason: null, source: "dispute", amount: 20, status: "succeeded", created_by: null, created_at: t("12:30:00") } as never);
+      const outside = buildTimeline(b).filter((e) => e.kind === "outside_refund");
+      expect(outside.map((e) => e.data)).toEqual([{ amount: 20, refundId: "f3", source: "dispute" }]);
+      b.events = [evd("outside_refund", t("12:30:01"), { refundId: "f3", amount: 20 })];
+      expect(buildTimeline(b).filter((e) => e.kind === "outside_refund").map((e) => e.reconstructed)).toEqual([false]);
+    });
+
     test("a reconstructed refund is only dropped for the refund a stored event names", () => {
       const b = base();
       b.refunds.push({ id: "f2", reservation_id: "r2", reason: "x", amount: 5, status: "pending", created_by: null, created_at: t("11:40:00") });

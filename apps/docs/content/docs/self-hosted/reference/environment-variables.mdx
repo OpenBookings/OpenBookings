@@ -50,7 +50,7 @@ I = invoice job, R = root scripts.
 | `STRIPE_WEBHOOK_SECRET` | W, B | yes | Signing secret of the app's Connect webhook endpoint (`/api/stripe/webhook`). |
 | `STRIPE_PLATFORM_WEBHOOK_SECRET` | B | yes | Signing secret of the platform webhook (`/api/stripe/platform-webhook`). |
 | `STRIPE_CONNECT_ACCOUNT_ID` | W | no | Outside production, the connected account that checkout at demo hotels charges. |
-| `STRIPE_APPLICATION_FEE_ENABLED` | W | no | `true` takes the commission as a Stripe application fee. Off otherwise. |
+| `STRIPE_APPLICATION_FEE_ENABLED` | W | no | `true` takes the commission as a Stripe application fee. Off otherwise. With a live key (`sk_live_`) the app refuses to start unless this is `true`. |
 | `STRIPE_PAYMENT_METHOD_CONFIGURATION` | W | no | A Stripe payment method configuration id for checkout. |
 | `PROPERTY_READINESS_ENFORCE` | W, B | no | `off` disables the readiness gate (Stripe account, legal details, billing profile). On by default. |
 
@@ -114,6 +114,42 @@ I = invoice job, R = root scripts.
 | --- | --- | --- | --- |
 | `TESTING` | W, B, R | no | `true`, with an `sk_test_` key, turns on testing mode: demo hotels and test-only behaviour. Refused with a live key. |
 | `ADMIN_SUPER_MODE` | A | no | `1` enables super-admin actions, only with `NODE_ENV=development`. |
+| `ADMIN_DATABASE_URL_READ` | A | no | A login user acting as `ob_admin_read` (SELECT only). Every admin page reads through it. Unset (with `_WRITE` unset too): `DATABASE_URL`. |
+| `ADMIN_DATABASE_URL_WRITE` | A | no | A login user acting as `ob_admin_write`, for admin actions only. Unset while `_READ` is set: the console is read-only. Set alone: refused. |
+
+### Admin console database roles
+
+To look at production from the admin console without the apps' full-access `DATABASE_URL`,
+give it the two roles migration `0054_admin_roles.sql` creates. `ob_admin_read` may only read
+what the pages show; `ob_admin_write` may only make the changes the admin actions make (booking
+lifecycle, refunds, forced edits, resolving a flagged payment). Neither can change the schema
+or read password hashes, tokens or 2FA secrets. Both bypass row-level security: staff see every
+host's bookings.
+
+The roles cannot log in. Once `0054` is applied, create one login user for each in the Neon SQL
+editor, as `neondb_owner`. Use SQL, not the Neon console: a role made in the console is added
+to `neon_superuser`, which defeats the point.
+
+```sql
+CREATE ROLE admin_reader LOGIN PASSWORD '<long random password>' IN ROLE ob_admin_read;
+ALTER ROLE admin_reader SET role = 'ob_admin_read';
+
+-- Only if the console should be able to act, not just look:
+CREATE ROLE admin_writer LOGIN PASSWORD '<another long random password>' IN ROLE ob_admin_write;
+ALTER ROLE admin_writer SET role = 'ob_admin_write';
+```
+
+`SET role` makes each session act as the role itself. Membership alone is not enough:
+`BYPASSRLS` is never inherited, so without it row-level-secured tables such as `bookings` would
+look empty.
+
+Put the connection strings (same host and database as `DATABASE_URL`, `?sslmode=require`) in
+`apps/admin/.env.local` as `ADMIN_DATABASE_URL_READ` and `ADMIN_DATABASE_URL_WRITE`, and remove
+the production `DATABASE_URL` from it. The red banner shows where each connection goes. To check
+a login, connect with it and run `SELECT current_user;` (expect `ob_admin_read`) and
+`INSERT INTO audit_log (action) VALUES ('probe');` (expect `permission denied`). The invoice job
+needs full access, so the console refuses to run it while these are set. To revoke access, `DROP
+ROLE admin_reader;` (or `admin_writer`).
 
 ## Support bot
 

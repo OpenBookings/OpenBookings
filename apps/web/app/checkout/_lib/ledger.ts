@@ -7,7 +7,7 @@
  * difference, so a guest never sees a breakdown that disagrees with the charge.
  */
 
-import type { ExtraGuestLine, PayAtPropertyLine, TouristTaxLine } from '@openbookings/pricing';
+import { AGE_RANGES, type ExtraGuestLine, type PayAtPropertyLine, type TouristTaxLine } from '@openbookings/pricing';
 
 export type LedgerRoom = {
   roomName: string;
@@ -102,7 +102,7 @@ export function buildLedger(rooms: LedgerRoom[], propertyName: string, stripeTot
     });
     for (const guest of room.extraGuests) {
       rows.push({
-        label: guest.kind === 'child' ? 'Extra child (2–12)' : 'Extra adult',
+        label: guest.kind === 'child' ? `Extra child (${AGE_RANGES.children})` : 'Extra adult',
         detail: `${unitMoney(guest.per_night)} × ${guest.nights} ${plural(guest.nights, 'night', 'nights')}`,
         amount: guest.amount,
         kind: 'extra',

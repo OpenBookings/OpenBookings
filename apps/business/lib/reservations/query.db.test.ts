@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import type { SessionLike } from "@openbookings/authz";
-import { confirmBookingPolicy } from "@openbookings/db";
+import { confirmBookingPolicy, recordOutsideRefund } from "@openbookings/db";
 import { applyPendingMigrations } from "@/app/(dashboard)/dashboard/listings/_lib/pending-migrations";
 import { DEMO_ORG_ID } from "@openbookings/mode";
 import { userOwnsProperty } from "@openbookings/authz";
@@ -109,6 +109,26 @@ describeWithDb("loadHostReservations against Postgres", () => {
     );
     const booking = (await loadHostReservations(session(owner), hostDb(session(owner)))).find((r) => r.id === bookingId);
     expect(booking).toMatchObject({ guests: 4, partyLabel: "4 adults, 1 infant", extrasLabel: "1 cot", atHotelAmount: 50 });
+  });
+
+  test("a refund the host made in their own Stripe shows as its own line, and counts as refunded", async () => {
+    const pi = `pi_${crypto.randomUUID()}`;
+    await db.query(`UPDATE bookings SET stripe_payment_intent_id = $2 WHERE id = $1`, [bookingId, pi]);
+    await recordOutsideRefund(db, {
+      source: "stripe_dashboard",
+      stripeId: `re_${crypto.randomUUID()}`,
+      paymentIntentId: pi,
+      chargeId: null,
+      stripeAccountId: "acct_x",
+      amountCents: 7_500,
+      occurredAt: new Date("2031-01-02T09:00:00Z"),
+    });
+    const booking = (await loadHostReservations(session(owner), hostDb(session(owner)))).find((r) => r.id === bookingId);
+    expect(booking?.refundedAmount).toBe(75);
+    expect(booking?.outsideRefunds).toEqual([
+      { kind: "refund", amount: 75, at: expect.stringMatching(/^2031-01-02T09:00:00/), split: null },
+    ]);
+    expect(booking?.refundIssue).toBe(false);
   });
 
   test("another host sees nothing", async () => {

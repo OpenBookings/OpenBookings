@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:te
 import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import type { trackMail } from "./tracking";
-import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, type SendDeps } from "./booking-send";
+import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, sendRefundIssued, type SendDeps } from "./booking-send";
 
 let db: Client;
 let sent: { to: string; subject: string; html: string }[];
@@ -106,13 +106,33 @@ describeWithDb("booking emails against Postgres", () => {
     expect(hostMail).toContain("€394.00");
   });
 
-  test("a free-cancellation deadline shows with its time, and a past one shows as non-refundable", async () => {
+  test("a free-cancellation deadline shows with its time and zone; a past one is not called non-refundable", async () => {
     await db.query(`UPDATE reservations SET full_refund_until = '2099-03-11T14:00:00Z' WHERE id = $1`, [reservationIds[0]]);
     await db.query(`UPDATE reservations SET full_refund_until = '2000-01-01T00:00:00Z' WHERE id = $1`, [reservationIds[1]]);
     await sendBookingConfirmed(bookingId, deps());
     const html = sent.find((m) => m.to === guestEmail)!.html;
-    expect(html).toContain("free cancellation until Wed 11 Mar 2099, 15:00");
-    expect(html).toContain("non-refundable");
+    expect(html).toContain("free cancellation until Wed 11 Mar 2099, 15:00 (property&#39;s local time)");
+    expect(html).toContain("free cancellation period has passed");
+    expect(html).not.toContain("non-refundable");
+  });
+
+  test("a non-refundable room says so", async () => {
+    await db.query(`UPDATE reservations SET cancellation_tier = 'non_refundable', full_refund_until = NULL WHERE id = $1`, [reservationIds[1]]);
+    await sendBookingConfirmed(bookingId, deps());
+    expect(sent.find((m) => m.to === guestEmail)!.html).toContain("non-refundable");
+  });
+
+  test("cots, extra beds and infants are in both mails, with what is left to pay at the hotel", async () => {
+    await db.query(
+      `UPDATE reservations SET cots = 1, extra_beds = 1, infants = 1, pay_at_property_amount = 37.50 WHERE id = $1`,
+      [reservationIds[0]],
+    );
+    await sendBookingConfirmed(bookingId, deps());
+    for (const mail of sent) {
+      expect(mail.html).toContain("1 infant, 1 cot, 1 extra bed");
+      expect(mail.html).toContain("To pay at the hotel (cots and extra beds)");
+      expect(mail.html).toContain("€37.50");
+    }
   });
 
   test("in testing mode a demo hotel's host mail goes to the guest", async () => {
@@ -172,6 +192,37 @@ describeWithDb("booking emails against Postgres", () => {
       expect(m.subject).toStartWith("Rooms cancelled");
     }
     expect(sent.find((m) => m.to === guestEmail)!.html).toContain("€103.00");
+  });
+
+  test("a cancellation whose refund Stripe refused tells the guest it is still owed", async () => {
+    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotal: 103, refundFailed: 103, cancelsBooking: false }, undefined, deps());
+    const guest = sent.find((m) => m.to === guestEmail)!.html;
+    expect(guest).toContain("We couldn't refund");
+    expect(guest).toContain("€103.00");
+    expect(guest).not.toContain("on its way");
+  });
+
+  test("an early departure refund mails the guest only, with what went and what didn't", async () => {
+    await sendRefundIssued(
+      bookingId,
+      { reason: "early_departure", refunds: [{ amount: 100, status: "succeeded" }, { amount: 3, status: "failed" }] },
+      undefined,
+      deps(),
+    );
+    expect(to()).toEqual([guestEmail]);
+    expect(sent[0].subject).toBe("Refund on its way: Hotel <Test>");
+    expect(sent[0].html).toContain("€100.00");
+    expect(sent[0].html).toContain("We couldn't refund");
+    expect(sent[0].html).toContain("€3.00");
+  });
+
+  test("a retry mails only the refunds that went through, and nothing when none did", async () => {
+    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amount: 50, status: "failed" }] }, undefined, deps());
+    expect(sent).toHaveLength(0);
+    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amount: 50, status: "succeeded" }, { amount: 9, status: "failed" }] }, undefined, deps());
+    expect(sent).toHaveLength(1);
+    expect(sent[0].html).toContain("€50.00");
+    expect(sent[0].html).not.toContain("€9.00");
   });
 
   test("an oversold refund states the intent's total, which already includes tourist tax", async () => {

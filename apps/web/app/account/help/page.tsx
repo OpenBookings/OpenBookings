@@ -4,6 +4,7 @@ import { ChevronDown, FileText, LifeBuoy, LockKeyhole, Mail, MessageSquare, Cale
 import {
   EARLY_DEPARTURE_LINE,
   NO_SHOW_LINE,
+  REFUND_TIMING_LINE,
   TIER_LABELS,
   TIER_SUMMARIES,
   TOURIST_TAX_LINE,
@@ -46,7 +47,7 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "When does my refund arrive?",
-    a: "Refunds go back to the card you paid with. It can take 5–10 days to show on your statement.",
+    a: `Refunds go back to the card you paid with. ${REFUND_TIMING_LINE}`,
   },
   {
     q: "Can I pay at the property?",
@@ -85,7 +86,7 @@ export default function HelpPage() {
         </Card>
       </Section>
 
-      <Section id="help-contact" title="Contact us" helper="Real people read every email.">
+      <Section id="help-contact" title="Contact us" helper="Replies may be drafted with help from an AI assistant. A person is always available if you ask.">
         <RowList>
           <ul className="divide-y">
             <Row

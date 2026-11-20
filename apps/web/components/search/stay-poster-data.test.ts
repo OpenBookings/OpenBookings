@@ -91,6 +91,12 @@ describe("posterPrice", () => {
     expect(posterPrice(avail(487, 3), "night")).toMatchObject({ amount: "€162" });
     expect(posterPrice(avail(162, 1), "total")).toMatchObject({ detail: "1 night · avg €162 / night" });
   });
+  test("several rooms: the price is for all of them and the detail says how many", () => {
+    const two = { status: "available", nights: 3, total: 972, rooms: 2 } as const;
+    expect(posterPrice(two, "total")).toMatchObject({ amount: "€972", detail: "3 nights · 2 rooms · avg €324 / night" });
+    expect(posterPrice(two, "night")).toMatchObject({ amount: "€324", detail: "€972 total · 3 nights · 2 rooms" });
+    expect(posterPrice({ ...two, rooms: 1 }, "total")).toMatchObject({ detail: "3 nights · avg €324 / night" });
+  });
   // Measured on the narrowest (260px) card: up to 7 visible characters fit at 26px.
   test("more than 7 characters → long", () => {
     expect(posterPrice(avail(99_999, 3), "total")).toMatchObject({ amount: "€99,999", long: false });

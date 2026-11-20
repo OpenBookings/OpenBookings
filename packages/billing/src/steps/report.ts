@@ -41,18 +41,55 @@ async function icp(db: Queryable, quarter: string): Promise<Table> {
   };
 }
 
+/**
+ * DAC7, per host and quarter: the consideration their guests paid, and
+ * OpenBookings' fees.
+ *
+ * Consideration is the room price (VAT included, tourist tax left out: that
+ * is the town's, collected for it) of each booking in the quarter it was
+ * paid, less the room-price part of every refund that went through in the
+ * quarter it went through. That covers OpenBookings' own refunds, refunds the
+ * host made in their own Stripe Dashboard and disputes they lost (0053), each
+ * in its own quarter, so a refund in a later quarter lowers that quarter, not
+ * the one the booking was paid in. Outside money the host has not explained
+ * yet counts as room price in full.
+ *
+ * Fees are the invoices and credit notes issued in the quarter.
+ */
 async function dac7(db: Queryable, quarter: string): Promise<Table> {
   const { rows } = await db.query(
-    `SELECT billing_entity_id, legal_name, fee_gross::text AS fee_gross FROM v_dac7_fees_quarter WHERE quarter = $1 ORDER BY legal_name, billing_entity_id`,
+    `WITH moves AS (
+       SELECT p.organization_id AS entity, b.rooms_total_cents::bigint AS cents, b.confirmed_at AS at
+         FROM bookings b JOIN properties p ON p.id = b.hotel_id
+        WHERE b.confirmed_at IS NOT NULL AND p.organization_id IS NOT NULL
+       UNION ALL
+       SELECT p.organization_id, -round(rf.accommodation_amount * 100)::bigint, rf.created_at
+         FROM refunds rf JOIN bookings b ON b.id = rf.booking_id JOIN properties p ON p.id = b.hotel_id
+        WHERE rf.status = 'succeeded' AND p.organization_id IS NOT NULL
+     ), consideration AS (
+       SELECT entity, SUM(cents)::bigint AS cents FROM moves
+        WHERE to_char(at AT TIME ZONE 'Europe/Amsterdam', 'YYYY')
+                || 'Q' || extract(quarter FROM at AT TIME ZONE 'Europe/Amsterdam')::int = $1
+        GROUP BY entity
+     ), fees AS (
+       SELECT billing_entity_id, legal_name, fee_gross FROM v_dac7_fees_quarter WHERE quarter = $1
+     )
+     SELECT e.id AS billing_entity_id,
+            COALESCE(f.legal_name, bp.legal_name, o.name, '') AS legal_name,
+            COALESCE(c.cents, 0)::text AS consideration,
+            COALESCE(f.fee_gross, 0)::text AS fee_gross
+       FROM (SELECT billing_entity_id AS id FROM fees UNION SELECT entity FROM consideration) e
+       LEFT JOIN fees f ON f.billing_entity_id = e.id
+       LEFT JOIN consideration c ON c.entity = e.id
+       LEFT JOIN billing_profiles bp ON bp.organization_id = e.id
+       LEFT JOIN "organization" o ON o.id = e.id
+      ORDER BY 2, 1`,
     [quarter],
   );
+  type R = { billing_entity_id: string; legal_name: string; consideration: string; fee_gross: string };
   return {
-    header: ["billing_entity_id", "legal_name", "fee_gross"],
-    rows: (rows as { billing_entity_id: string; legal_name: string; fee_gross: string }[]).map((r) => [
-      r.billing_entity_id,
-      r.legal_name,
-      decimal(BigInt(r.fee_gross)),
-    ]),
+    header: ["billing_entity_id", "legal_name", "consideration", "fee_gross"],
+    rows: (rows as R[]).map((r) => [r.billing_entity_id, r.legal_name, decimal(BigInt(r.consideration)), decimal(BigInt(r.fee_gross))]),
   };
 }
 

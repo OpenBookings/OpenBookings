@@ -143,11 +143,12 @@ class DryRunRollback extends Error {}
 
 const DRY_RUN_SAVEPOINT = "reconcile_dry_run";
 
-/** The ledger for a dry run: reads Stripe as usual, but returns no payment, writes no audit row and reports nothing. */
+/** The ledger for a dry run: reads Stripe as usual, but returns no payment or fee, writes no audit row and reports nothing. */
 function dryRunLedger(ledger: LedgerDeps): LedgerDeps {
   return {
     ...ledger,
     returnPayment: async (chargeId) => ({ refundId: `dry-run:${chargeId}` }),
+    returnFee: async (feeId) => ({ refundId: `dry-run:${feeId}` }),
     audit: async () => {},
     report: () => {},
   };
@@ -171,7 +172,11 @@ function dryRunLedger(ledger: LedgerDeps): LedgerDeps {
  * in full, counting its fee refunds in any month. One that is short has its
  * Stripe refunds recorded first; still short, its payment is returned to the
  * guest (`ledger.returnPayment`), audited and reported, and its refund
- * recorded. One that is still short after that blocks the run. Every payment
+ * recorded. Once the charge is refunded in full, whoever refunded it (a
+ * refund the host made in their own Stripe Dashboard included), the rest of
+ * the fee goes back to the host (`ledger.returnFee`), reported, and its refund
+ * recorded: the payment never became a booking, so OpenBookings does not earn
+ * on it. One that is still short after that blocks the run. Every payment
  * returned by this run, here or by the ledger while backfilling, is listed in
  * `returned`.
  *
@@ -344,8 +349,15 @@ const short = (fee: ReturnedFee) => BigInt(fee.refunded) < BigInt(fee.gross);
  * with the host, returns it in full (a returned payment normally goes back
  * through the booking confirmation, so one still here at month end is
  * reported) and records its refund. A payment this run already returned is
- * not returned again. Whatever is still short is listed in `notYetReturned`;
- * in a dry run, a payment it would return counts as returned.
+ * not returned again.
+ *
+ * A charge refunded in full can still leave part of its fee with us: Stripe
+ * hands the fee back only in proportion to a refund that names it, and a
+ * refund the host made in their own Stripe Dashboard returns none. The payment
+ * never became a booking, so the rest of the fee goes back too.
+ *
+ * Whatever is still short is listed in `notYetReturned`; in a dry run, a
+ * payment or fee it would return counts as returned.
  */
 async function settleReturnedFees(
   period: Period,
@@ -364,9 +376,12 @@ async function settleReturnedFees(
     }
   };
 
-  /** Refunded in full in the ledger; in a dry run, also a payment the run would have returned (Stripe holds no refund for it). */
+  /** Fees a dry run would have returned the rest of. */
+  const restReturned = new Set<string>();
+
+  /** Refunded in full in the ledger; in a dry run, also a payment or fee the run would have returned (Stripe holds no refund for it). */
   const covered = async (fee: ReturnedFee) => {
-    if (dryRun && fee.charge && returns.has(fee.charge)) return true;
+    if (dryRun && ((fee.charge && returns.has(fee.charge)) || restReturned.has(fee.fee_id))) return true;
     const now = (await returnedFees(db, period, fee.fee_id))[0]?.refunded ?? fee.refunded;
     return BigInt(now) >= BigInt(fee.gross);
   };
@@ -381,34 +396,47 @@ async function settleReturnedFees(
       result.notYetReturned.push(fee.fee_id);
       continue;
     }
-    const charge = await ledger.chargeInfo(fee.charge, fee.account);
-    if (charge.amountRefunded >= charge.amount) {
-      ledger.report(new Error(`Returned fee ${fee.fee_id}: the charge is refunded but the application fee is not`), {
-        level: "error",
+    let charge = await ledger.chargeInfo(fee.charge, fee.account);
+    if (charge.amountRefunded < charge.amount) {
+      ledger.report(new Error(`Returned fee ${fee.fee_id} was still not refunded at month end; returning payment ${fee.charge} now`), {
+        level: "warning",
         extra,
       });
-      result.notYetReturned.push(fee.fee_id);
-      continue;
+      try {
+        const { refundId } = await ledger.returnPayment(fee.charge, fee.account, "unexplained");
+        returns.set(fee.charge, { refundedGross: fee.refunded });
+        await ledger.audit({
+          action: "payment.unexplained-returned",
+          stripeAccountId: fee.account,
+          dedupeKey: fee.charge,
+          detail: { ...extra, paymentIntentId: charge.paymentIntentId, refundId, by: "reconciliation" },
+        });
+        await syncRefunds(fee);
+      } catch (error) {
+        ledger.report(error, { level: "error", extra });
+        result.notYetReturned.push(fee.fee_id);
+        continue;
+      }
+      if (await covered(fee)) continue;
+      charge = await ledger.chargeInfo(fee.charge, fee.account);
     }
 
-    ledger.report(new Error(`Returned fee ${fee.fee_id} was still not refunded at month end; returning payment ${fee.charge} now`), {
-      level: "warning",
-      extra,
-    });
-    try {
-      const { refundId } = await ledger.returnPayment(fee.charge, fee.account, "unexplained");
-      returns.set(fee.charge, { refundedGross: fee.refunded });
-      await ledger.audit({
-        action: "payment.unexplained-returned",
-        stripeAccountId: fee.account,
-        dedupeKey: fee.charge,
-        detail: { ...extra, paymentIntentId: charge.paymentIntentId, refundId, by: "reconciliation" },
-      });
-      await syncRefunds(fee);
-    } catch (error) {
-      ledger.report(error, { level: "error", extra });
-      result.notYetReturned.push(fee.fee_id);
-      continue;
+    // The whole payment is back with the guest, but part of the fee is not
+    // back with the host: return the rest.
+    if (charge.amountRefunded >= charge.amount) {
+      try {
+        const { refundId } = await ledger.returnFee(fee.fee_id);
+        if (dryRun) restReturned.add(fee.fee_id);
+        ledger.report(new Error(`Returned fee ${fee.fee_id}: payment ${fee.charge} is refunded in full, so the rest of the fee went back`), {
+          level: "warning",
+          extra: { ...extra, feeRefundId: refundId },
+        });
+        await syncRefunds(fee);
+      } catch (error) {
+        ledger.report(error, { level: "error", extra });
+        result.notYetReturned.push(fee.fee_id);
+        continue;
+      }
     }
     if (!(await covered(fee))) result.notYetReturned.push(fee.fee_id);
   }

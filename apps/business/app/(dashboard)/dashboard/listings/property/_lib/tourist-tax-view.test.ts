@@ -59,6 +59,23 @@ describe("exampleStay", () => {
     });
   });
 
+  test("infants pay tourist tax only where the rule says so", () => {
+    const stay = (r: TouristTaxRule) =>
+      exampleStay({
+        rules: [r],
+        commissionRate: 0.045,
+        arrival: "2026-11-01",
+        nights: 2,
+        pricePerNight: 100,
+        adults: 2,
+        children: 0,
+        infants: 1,
+        rooms: 1,
+      }).touristTax.total;
+    expect(stay(perPersonPerNight)).toBe(10);
+    expect(stay({ ...perPersonPerNight, infantsTaxed: true })).toBe(15);
+  });
+
   test("the room price is per room, so more rooms raise the stay", () => {
     const result = exampleStay({
       rules: [],

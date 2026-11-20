@@ -82,7 +82,7 @@ export async function searchBookings(db: Queryable, input: SearchInput): Promise
             to_char(b.check_in_date, 'YYYY-MM-DD') AS check_in,
             to_char(b.check_out_date, 'YYYY-MM-DD') AS check_out,
             (SELECT count(*)::int FROM reservations r WHERE r.booking_id = b.id) AS rooms,
-            b.status, b.total_amount, b.created_at
+            b.status, COALESCE(NULLIF(b.total_cents, 0), b.total_amount * 100) AS total_cents, b.created_at
        FROM bookings b
        JOIN properties p ON p.id = b.hotel_id
        LEFT JOIN "user" u ON u.id = b.user_id
@@ -100,7 +100,7 @@ export async function searchBookings(db: Queryable, input: SearchInput): Promise
     checkOut: r.check_out as string,
     rooms: r.rooms as number,
     status: r.status as string,
-    totalAmount: Number(r.total_amount),
+    totalAmount: Number(r.total_cents) / 100,
     createdAt: r.created_at as Date,
   }));
 }

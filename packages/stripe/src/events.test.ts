@@ -10,7 +10,7 @@ function setup(over: Partial<StripeEventDeps> = {}) {
     markProcessed: async (id) => void processed.add(id),
     refundCommission: async (charge, account, options) => {
       calls.push(["refund", charge, account, options]);
-      return [{ id: "fr_1", amount: 100 }];
+      return { commissionRefunds: [{ id: "fr_1", amount: 100 }], outsideRefunds: [] };
     },
     audit: async (entry) => void calls.push(["audit", entry.action, entry.stripeAccountId, entry.detail, entry.dedupeKey]),
     ...over,
@@ -57,14 +57,86 @@ describe("handleStripeEvent", () => {
   test("every commission refund on the charge is audited, keyed so none is recorded twice", async () => {
     // A retry after the money moved but the audit write failed: nothing more is
     // due, yet the earlier refund must still end up in the log.
-    const t = setup({ refundCommission: async () => [{ id: "fr_1", amount: 1249 }, { id: "fr_2", amount: 1249 }] });
+    const t = setup({
+      refundCommission: async () => ({
+        commissionRefunds: [{ id: "fr_1", amount: 1249 }, { id: "fr_2", amount: 1249 }],
+        outsideRefunds: [],
+      }),
+    });
     await handleStripeEvent(event("charge.refunded", { id: "ch_1" }), t.deps);
     expect(t.calls.map((c) => c[4])).toEqual(["fr_1", "fr_2"]);
   });
 
   test("nothing is recorded when the charge carried no commission", async () => {
-    const t = setup({ refundCommission: async () => [] });
+    const t = setup({ refundCommission: async () => ({ commissionRefunds: [], outsideRefunds: [] }) });
     await handleStripeEvent(event("charge.refunded", { id: "ch_1" }), t.deps);
+    expect(t.calls).toEqual([]);
+  });
+
+  test("a refund the host made outside OpenBookings is flagged, once per refund, after the commission records", async () => {
+    const outside = { id: "re_dash", amount: 5000, created: 1_790_000_000, reason: "requested_by_customer", paymentIntentId: "pi_1" };
+    const t = setup({
+      refundCommission: async () => ({ commissionRefunds: [{ id: "fr_1", amount: 225 }], outsideRefunds: [outside] }),
+    });
+    await handleStripeEvent(event("charge.refunded", { id: "ch_1" }), t.deps);
+    expect(t.calls).toEqual([
+      ["audit", "commission.refunded", "acct_1", { chargeId: "ch_1", feeRefundId: "fr_1", amount: 225 }, "fr_1"],
+      [
+        "audit",
+        "payment.refund-outside-openbookings",
+        "acct_1",
+        { chargeId: "ch_1", refundId: "re_dash", paymentIntentId: "pi_1", amount: 5000, created: 1_790_000_000, reason: "requested_by_customer" },
+        "re_dash",
+      ],
+    ]);
+  });
+
+  test("a charge refunded only through OpenBookings flags nothing", async () => {
+    const t = setup();
+    await handleStripeEvent(event("charge.refunded", { id: "ch_1" }), t.deps);
+    expect(t.calls.filter((c) => c[1] === "payment.refund-outside-openbookings")).toEqual([]);
+  });
+
+  test("a lost dispute is flagged for the host to explain, keyed by the dispute", async () => {
+    const t = setup();
+    await handleStripeEvent(
+      event("charge.dispute.closed", {
+        id: "dp_1",
+        charge: "ch_1",
+        payment_intent: "pi_1",
+        status: "lost",
+        amount: 10_000,
+        reason: "fraudulent",
+        created: 1_790_000_000,
+      }),
+      t.deps,
+    );
+    expect(t.calls.at(-1)).toEqual([
+      "audit",
+      "payment.dispute-lost",
+      "acct_1",
+      { chargeId: "ch_1", disputeId: "dp_1", paymentIntentId: "pi_1", amount: 10_000, reason: "fraudulent", created: 1_790_000_000 },
+      "dp_1",
+    ]);
+    // The commission records come first, unchanged.
+    expect(t.calls[1]).toEqual(["audit", "commission.refunded", "acct_1", { chargeId: "ch_1", feeRefundId: "fr_1", amount: 100 }, "fr_1"]);
+  });
+
+  test("a lost dispute says when it was lost: the event's time, not the dispute's", async () => {
+    const t = setup();
+    await handleStripeEvent(
+      {
+        ...event("charge.dispute.closed", { id: "dp_1", charge: "ch_1", status: "lost", amount: 10_000, created: 1_790_000_000 }),
+        created: 1_795_000_000,
+      },
+      t.deps,
+    );
+    expect(t.calls.at(-1)?.[3]).toMatchObject({ created: 1_790_000_000, lostAt: 1_795_000_000 });
+  });
+
+  test("a won dispute is not flagged", async () => {
+    const t = setup();
+    await handleStripeEvent(event("charge.dispute.closed", { id: "dp_1", charge: "ch_1", status: "won", amount: 10_000 }), t.deps);
     expect(t.calls).toEqual([]);
   });
 
@@ -92,7 +164,7 @@ describe("handleStripeEvent", () => {
     const t = setup({
       refundCommission: async () => {
         if (attempts++ === 0) throw new Error("Stripe unreachable");
-        return [{ id: "fr_1", amount: 100 }];
+        return { commissionRefunds: [{ id: "fr_1", amount: 100 }], outsideRefunds: [] };
       },
     });
     await expect(handleStripeEvent(event("charge.refunded", { id: "ch_1" }), t.deps)).rejects.toThrow();

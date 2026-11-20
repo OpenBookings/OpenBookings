@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { NO_SHOW_LINE } from "@openbookings/pricing";
 import { checkoutCancellationTerms } from "./cancellation-terms";
 
 const stay = {
@@ -15,7 +16,7 @@ describe("checkoutCancellationTerms", () => {
     expect(terms.cancellationTier).toBe("flex");
     expect(terms.tierLabel).toBe("Flex");
     expect(terms.policyLines[0]).toBe("Free cancellation until Mon 9 Nov 2026, 15:00.");
-    expect(terms.policyLines).toContain("If you don't show up, nothing is refunded.");
+    expect(terms.policyLines).toContain(NO_SHOW_LINE);
     expect(terms.requiresNonRefundableConsent).toBe(false);
   });
 

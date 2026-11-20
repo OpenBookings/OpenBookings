@@ -100,7 +100,7 @@ describe("buildPolicySnapshot", () => {
 
   test("records the policy version", () => {
     expect(snapshot("flex").policyVersion).toBe(POLICY_VERSION);
-    expect(POLICY_VERSION).toBe("annex-b-2026-10-30-rev2");
+    expect(POLICY_VERSION).toBe("annex-b-2026-10-30-rev3");
   });
 
   test("Flex: free cancellation until 24 hours before check-in", () => {

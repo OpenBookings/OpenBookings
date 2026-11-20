@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { getPool } from "@openbookings/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { readPool } from "@/lib/db";
 import { searchBookings } from "@/lib/search";
 import { requireSuperAdmin } from "@/lib/super-admin";
 
@@ -27,7 +27,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     from: first(sp.from) || undefined,
     to: first(sp.to) || undefined,
   };
-  const db = getPool();
+  const db = readPool();
   const [rows, props] = await Promise.all([
     searchBookings(db, input),
     db.query("SELECT id, name FROM properties ORDER BY name"),

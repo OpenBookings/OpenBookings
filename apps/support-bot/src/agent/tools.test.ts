@@ -173,7 +173,7 @@ describe("get_cancellation_policy", () => {
     expect(result.ok).toBe(true);
     const policy = (result as { ok: true; result: { policies: Record<string, unknown>[] } }).result.policies[0];
     expect(policy.tier).toBe("Standard");
-    expect(policy.no_show).toBe("If you don't show up, nothing is refunded.");
+    expect(policy.no_show).toBe("If you don't show up, nothing is refunded, tourist tax included.");
   });
 });
 

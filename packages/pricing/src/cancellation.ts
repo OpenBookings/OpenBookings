@@ -1,10 +1,10 @@
 /**
- * Cancellation tiers and refunds — Host Agreement Annex B (draft v1.3, rev. 2,
- * 30 Oct 2026), with two calls Wouter made the same day: the tier is set once
- * per property (Non-refundable is a type of rate), and a no-show gets nothing
- * back on any tier, tourist tax included.
+ * Cancellation tiers and refunds — Host Agreement Annex B (draft v1.3, rev. 3,
+ * 30 Oct 2026). Rev. 3 is rev. 2 plus two calls Wouter made the same day: the
+ * tier is set once per property (Non-refundable is a type of rate), and a
+ * no-show gets nothing back on any tier, tourist tax included.
  *
- * Rev. 2 in short: free cancellation until a deadline (Flex 24h, Standard 7
+ * In short: free cancellation until a deadline (Flex 24h, Standard 7
  * days before check-in), nothing back on the room price after it; one
  * early-departure rule for every tier (the next 7 unused nights are kept).
  *
@@ -19,7 +19,7 @@
 
 import { touristTaxByNight, type TouristTaxRule } from "./tourist-tax";
 
-export const POLICY_VERSION = "annex-b-2026-10-30-rev2";
+export const POLICY_VERSION = "annex-b-2026-10-30-rev3";
 
 /** What a property picks. Non-refundable is a type of rate, not a property setting. */
 export type PropertyCancellationTier = "flex" | "standard";
@@ -352,6 +352,8 @@ export function reservationPolicy(i: {
   touristTaxRules: TouristTaxRule[];
   adults: number;
   children: number;
+  /** Under 2: taxed only where the tourist tax rule says so. */
+  infants?: number;
 }): { snapshot: PolicySnapshot; nights: NightValue[] } {
   const snapshot = buildPolicySnapshot({
     tier: snapshotTier(i.propertyTier, i.isRefundable),
@@ -364,6 +366,7 @@ export function reservationPolicy(i: {
     nights: i.nightPrices,
     adults: i.adults,
     children: i.children,
+    infants: i.infants ?? 0,
     // A reservation is one room.
     rooms: 1,
   });

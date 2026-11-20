@@ -53,6 +53,18 @@ const hostReservationsSql = (testing: boolean = isTestingMode()) => `
               WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::float8 AS refunded,
     (SELECT COUNT(*) FROM refunds rf
      WHERE rf.booking_id = b.id AND rf.status IN ('pending', 'failed'))::int AS unsettled_refunds,
+    -- Money the host refunded in their own Stripe, or lost in a dispute (0053).
+    -- Its split shows once the host has explained it to OpenBookings.
+    COALESCE((
+      SELECT json_agg(json_build_object(
+        'source', rf.source,
+        'amount', rf.amount::float8,
+        'at', rf.created_at,
+        'room_price', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.accommodation_amount::float8 END,
+        'tourist_tax', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.tourist_tax_amount::float8 END
+      ) ORDER BY rf.created_at, rf.id)
+      FROM refunds rf WHERE rf.booking_id = b.id AND rf.source <> 'openbookings' AND rf.status = 'succeeded'
+    ), '[]'::json) AS outside_refunds,
     COALESCE((
       SELECT json_agg(json_build_object(
         'reservation_id', r.id,

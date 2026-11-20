@@ -13,7 +13,7 @@ import {
   seedProperty,
 } from "@openbookings/db/testing";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
-import { priceSelection, quoteStay, type SelectedRoom } from "./quote";
+import { priceSelection, priceTonight, quoteStay, type SelectedRoom } from "./quote";
 
 const CHECK_IN = "2031-11-10";
 const CHECK_OUT = "2031-11-13"; // 3 nights
@@ -145,6 +145,51 @@ describeWithDb("stay quote against Postgres", () => {
     ]);
     expect(plan.touristTax.total).toBe(15); // 2 adults × 3 nights × €2.50
     expect(plan.freeCancellationUntil).not.toBeNull();
+  });
+
+  test("an uneven party: the quote prices each share, and they add up to what the selection charges", async () => {
+    // 3 adults in 2 rooms: one room gets 2, the other 1. Base occupancy 1 with
+    // an extra-adult fee and a per-person tourist tax, so the shares differ.
+    await db.query(`UPDATE rooms SET base_occupancy = 1, max_adults = 2, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    await db.query(
+      `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+      [ids.propertyId],
+    );
+    const stay = { ...STAY, adults: 3, rooms: 2 };
+    const plan = (await quoteStay(db, { propertyId: ids.propertyId, stay, now: NOW, testing: false }))!.rooms[0].ratePlans[0];
+    // The rate row is for the larger share.
+    expect(plan.stayTotal + plan.touristTax.total).toBe(3 * 120 + 2 * 3 * 2.5);
+    expect(plan.partyTotals["2/0/0"]).toBe(375);
+    expect(plan.partyTotals["1/0/0"]).toBe(307.5);
+
+    const priced = await select([double({ adults: 2 }), double({ adults: 1 })]);
+    expect(priced.ok && priced.snapshot.total).toBe(375 + 307.5);
+  });
+
+  test("tonight's listing price is the quote's: an override and the tourist tax count", async () => {
+    const today = "2031-10-01"; // NOW in Europe/Amsterdam
+    await db.query(
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night) VALUES ($1, $2, $2, 140)`,
+      [ids.ratePlanId, today],
+    );
+    await db.query(
+      `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+      [ids.propertyId],
+    );
+    const tonight = await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW);
+    // 140 for the night, plus 2 adults (base occupancy) × €2.50.
+    expect(tonight[ids.ratePlanId]).toEqual({ price: 145, sellable: true });
+  });
+
+  test("tonight's listing price: a rate that can't be sold for one night says so", async () => {
+    await db.query(`UPDATE rate_plans SET min_stay = 2 WHERE id = $1`, [ids.ratePlanId]);
+    await db.query(`UPDATE rate_plans SET is_active = false, archived_at = now() WHERE id = $1`, [await nrPlan(80)]);
+    const tonight = await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW);
+    expect(tonight[ids.ratePlanId]).toEqual({ price: 100, sellable: false });
+    // An archived rate is not priced at all.
+    expect(Object.keys(tonight)).toEqual([ids.ratePlanId]);
   });
 
   test("a Non-refundable rate not at least 10% cheaper is left out", async () => {
@@ -334,6 +379,8 @@ describeWithDb("stay quote against Postgres", () => {
       roomName: "Double",
       ratePlanName: "Room only",
       isRefundable: true,
+      // Kept so the booking is confirmed under the tier the guest was shown.
+      cancellationTier: "flex",
     });
 
     process.env.STRIPE_APPLICATION_FEE_ENABLED = "false";

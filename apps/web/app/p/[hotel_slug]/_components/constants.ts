@@ -29,10 +29,13 @@ export type DbRatePlan = {
   /** Non-refundable only: how much less a night costs than the cheapest refundable rate. */
   saving_vs_refundable?: number;
   /**
-   * What the guest pays for one night, all-in: `bar` plus tourist tax. Set at
-   * render time by withAllInPrices; absent on demo data.
+   * What the guest pays for one night from today, all-in: the rate with its
+   * overrides and modifiers, plus tourist tax. Set at render time by
+   * withAllInPrices; absent on demo data.
    */
   price_per_night?: number;
+  /** Tonight can't be booked on this rate: `price_per_night` is the base rate, shown as "from". */
+  price_from?: boolean;
 };
 
 export type DbRoom = {

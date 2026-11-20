@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPool } from "@openbookings/db";
 import { CopyId } from "./copy-id";
 import { ForcedPanel } from "./forced-panel";
 import { RealActionsPanel } from "./real-actions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { refundedSplit } from "@openbookings/db";
 import { loadAdminBooking } from "@/lib/booking";
+import { readPool } from "@/lib/db";
 import { buildTimeline } from "@/lib/timeline";
 import { allowedFor } from "@/lib/real-actions";
 import { requireSuperAdmin } from "@/lib/super-admin";
@@ -34,7 +35,7 @@ function Section({ id, title, children }: { id?: string; title: string; children
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   requireSuperAdmin();
   const { id } = await params;
-  const data = await loadAdminBooking(getPool(), id);
+  const data = await loadAdminBooking(readPool(), id);
   if (!data) notFound();
 
   const { booking, guest, property, rooms, transactions, refunds, messages, tickets } = data;
@@ -44,7 +45,20 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   const sum = (xs: { amount: number }[]) => xs.reduce((a, x) => a + Number(x.amount), 0);
   const paid = sum(transactions.filter((t) => t.type === "charge" && t.status === "succeeded"));
-  const refunded = sum(refunds.filter((r) => r.status === "succeeded"));
+  // Money the host refunded in their own Stripe, or lost in a dispute (0053), apart from OpenBookings' own.
+  const isOutside = (r: (typeof refunds)[number]) => !!r.source && r.source !== "openbookings";
+  const refunded = sum(refunds.filter((r) => r.status === "succeeded" && !isOutside(r)));
+  const refundedOutside = sum(refunds.filter((r) => r.status === "succeeded" && isOutside(r)));
+  const touristTaxBooked = rooms.reduce((a, r) => a + Math.round(Number(r.tourist_tax_amount ?? 0) * 100), 0) / 100;
+  const refundedParts = refundedSplit(
+    refunds.map((r) => ({
+      source: r.source ?? "openbookings",
+      status: r.status,
+      accommodation: Number(r.accommodation_amount ?? 0),
+      touristTax: Number(r.tourist_tax_amount ?? 0),
+      explained: !!r.split_explained_at,
+    })),
+  );
   const pending = sum(refunds.filter((r) => r.status !== "succeeded"));
   const failedCharges = sum(transactions.filter((t) => t.type === "charge" && t.status !== "succeeded"));
 
@@ -58,7 +72,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </div>
         <p className="text-sm text-muted-foreground">
           {property.name} · {String(booking.check_in_date)} → {String(booking.check_out_date)} ·{" "}
-          {eur.format(Number(booking.total_amount))} · Booking fee {eur.format(Number(booking.booking_fee_amount ?? 0))}
+          {eur.format(Number(booking.total_cents) / 100)} · Commission{" "}
+          {eur.format(Number(booking.commission_cents ?? 0) / 100)}
         </p>
         <p className="text-sm">
           Guest: {guest?.name ?? "-"} <span className="text-muted-foreground">{guest?.email}</span>
@@ -116,8 +131,16 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
       <Section title="Money">
         <p className="text-sm">
-          Paid {eur.format(paid)} · Refunded {eur.format(refunded)} · Pending/failed refunds {eur.format(pending)}
+          Paid {eur.format(paid)} · Refunded {eur.format(refunded)}
+          {refundedOutside > 0 ? ` · Refunded outside OpenBookings ${eur.format(refundedOutside)}` : ""} · Pending/failed
+          refunds {eur.format(pending)}
           {failedCharges > 0 ? ` · Unsuccessful charges ${eur.format(failedCharges)}` : ""}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Tourist tax booked {eur.format(touristTaxBooked)} · refunded {eur.format(refundedParts.touristTax)}
+          {refundedParts.unexplained > 0
+            ? ` · ${eur.format(refundedParts.unexplained)} refunded outside OpenBookings not explained yet (counted as room price)`
+            : ""}
         </p>
         <h3 className="text-sm font-medium">Transactions</h3>
         {transactions.length === 0 ? (
@@ -170,7 +193,20 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
               {refunds.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{fmt(r.created_at, tz)}</TableCell>
-                  <TableCell>{r.reason}</TableCell>
+                  <TableCell>
+                    {isOutside(r) ? (
+                      <>
+                        <div>{r.source === "dispute" ? "Lost dispute" : "Refunded outside OpenBookings"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.split_explained_at
+                            ? `Room ${eur.format(Number(r.accommodation_amount))} · tax ${eur.format(Number(r.tourist_tax_amount))}`
+                            : "Split not explained"}
+                        </div>
+                      </>
+                    ) : (
+                      r.reason
+                    )}
+                  </TableCell>
                   <TableCell>{r.status}</TableCell>
                   <TableCell className="font-mono">{r.reservation_id?.slice(0, 8) ?? "-"}</TableCell>
                   <TableCell className="font-mono">{String(r.stripe_refund_id ?? "-")}</TableCell>

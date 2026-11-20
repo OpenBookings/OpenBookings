@@ -163,6 +163,8 @@ export const touristTaxRules = pgTable(
     effectiveFrom: date("effective_from").notNull(),
     charges: jsonb("charges").notNull().default(sql`'[]'::jsonb`),
     childrenExempt: boolean("children_exempt").notNull().default(false),
+    /** Per-person charges count infants too, unless children are exempt (0052). */
+    infantsTaxed: boolean("infants_taxed").notNull().default(false),
     maxNights: integer("max_nights"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     /** Better Auth user id of whoever added it. */
@@ -281,6 +283,7 @@ export const ratePlans = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => [
+    check("rate_plans_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_rate_plans_room_id").on(table.roomId, table.isActive),
     check("rate_plans_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
   ],
@@ -667,6 +670,7 @@ export const bookings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("bookings_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_bookings_dates").on(table.checkInDate, table.checkOutDate),
     index("idx_bookings_hotel_id").on(table.hotelId),
     index("idx_bookings_status").on(table.status),
@@ -728,6 +732,9 @@ export const reservations = pgTable(
   ],
 );
 
+/** Who moved a refund's money (0053). */
+export type RefundSource = "openbookings" | "stripe_dashboard" | "dispute";
+
 /** One row per refund OpenBookings executes or records (0027). `transactions` stays the payment ledger. */
 export const refunds = pgTable(
   "refunds",
@@ -738,7 +745,15 @@ export const refunds = pgTable(
       .references(() => bookings.id),
     /** NULL for refunds that cover the whole booking (goodwill). */
     reservationId: uuid("reservation_id").references(() => reservations.id),
-    reason: refundReasonEnum("reason").notNull(),
+    /** NULL exactly when `source` is not 'openbookings' (0053): OpenBookings did not decide why that money went. */
+    reason: refundReasonEnum("reason"),
+    /**
+     * Who moved the money (0053): 'openbookings', or outside it — 'stripe_dashboard'
+     * (the host refunded in their own Stripe) or 'dispute' (lost). An outside row
+     * is `succeeded`, keyed '<source>:<Stripe id>', and until explained holds its
+     * whole amount as `accommodationAmount` (`splitExplainedAt` NULL).
+     */
+    source: text("source").$type<RefundSource>().notNull().default("openbookings"),
     accommodationAmount: numeric("accommodation_amount", { precision: 10, scale: 2 }).notNull(),
     touristTaxAmount: numeric("tourist_tax_amount", { precision: 10, scale: 2 }).notNull(),
     amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
@@ -752,6 +767,9 @@ export const refunds = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     /** When the row was last sent to Stripe (0047); a retry skips a `pending` row tried in the last five minutes. */
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    /** When staff entered the host's room price / tourist tax split of an outside row (0053). */
+    splitExplainedAt: timestamp("split_explained_at", { withTimezone: true }),
+    splitExplainedBy: text("split_explained_by"),
   },
   (table) => [
     index("idx_refunds_booking_id").on(table.bookingId),
@@ -760,6 +778,9 @@ export const refunds = pgTable(
       sql`${table.amount} = ${table.accommodationAmount} + ${table.touristTaxAmount} AND ${table.amount} >= 0`,
     ),
     // NaN satisfies the check above; see drizzle/0030_refunds_reject_nan.sql.
+    check("refunds_source_check", sql`${table.source} IN ('openbookings', 'stripe_dashboard', 'dispute')`),
+    check("refunds_reason_by_source", sql`(${table.source} = 'openbookings') = (${table.reason} IS NOT NULL)`),
+    check("refunds_split_explained", sql`${table.splitExplainedAt} IS NULL OR ${table.source} <> 'openbookings'`),
     check(
       "refunds_amounts_finite",
       sql`${table.amount} <> 'NaN'::numeric AND ${table.accommodationAmount} <> 'NaN'::numeric AND ${table.touristTaxAmount} <> 'NaN'::numeric`,
@@ -786,6 +807,7 @@ export const transactions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("transactions_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_transactions_booking_id").on(table.bookingId),
     index("idx_transactions_provider_payment").on(table.providerPaymentId),
     index("idx_transactions_status").on(table.status),
@@ -821,6 +843,7 @@ export const bookingIntents = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check("booking_intents_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_booking_intents_status_hold").on(table.status, table.holdExpiresAt),
     index("idx_booking_intents_user_status").on(table.userId, table.status),
     index("idx_booking_intents_property").on(table.propertyId),

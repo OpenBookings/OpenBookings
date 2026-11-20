@@ -43,6 +43,19 @@ describe("withAllInPrices", () => {
     expect(r.rate_plans[0].price_per_night).toBe(100);
   });
 
+  test("tonight's price, where tonight can be booked, replaces the base rate", () => {
+    const [r] = withAllInPrices([room()], [perPersonPerNight], "2026-10-30", { p1: { price: 147.5, sellable: true } });
+    expect(r.rate_plans[0].price_per_night).toBe(147.5);
+    expect(r.rate_plans[0].price_from).toBeUndefined();
+  });
+
+  test("a rate that can't be booked tonight shows its base rate, as \"from\"", () => {
+    const [r] = withAllInPrices([room()], [perPersonPerNight], "2026-10-30", { p1: { price: 147.5, sellable: false } });
+    expect(r.rate_plans[0]).toMatchObject({ price_per_night: 105, price_from: true });
+    const [unpriced] = withAllInPrices([room()], [perPersonPerNight], "2026-10-30");
+    expect(unpriced.rate_plans[0]).toMatchObject({ price_per_night: 105, price_from: true });
+  });
+
   test("a room without a standard occupancy is priced for one guest", () => {
     const [r] = withAllInPrices([room({ base_occupancy: undefined })], [perPersonPerNight], "2026-10-30");
     expect(r.rate_plans[0].price_per_night).toBe(102.5);

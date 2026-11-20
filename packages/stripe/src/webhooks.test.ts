@@ -16,7 +16,7 @@ function setup(over: Partial<WebhookRequestOptions> = {}) {
     livemode: false,
     isProcessed: async () => false,
     markProcessed: async () => {},
-    refundCommission: async () => [],
+    refundCommission: async () => ({ commissionRefunds: [], outsideRefunds: [] }),
     audit: async () => {},
   };
   const options: WebhookRequestOptions = {

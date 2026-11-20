@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ShieldCheckIcon } from "lucide-react";
-import { TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
+import { AGE_RANGES, TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
 import {
   Field,
   FieldContent,
@@ -265,8 +265,8 @@ function PoliciesFields({
         <FieldContent>
           <FieldLabel htmlFor="childrenWelcome">Children welcome</FieldLabel>
           <FieldDescription>
-            Guests may bring children (2–12) and infants (under 2). Turn off if your property is
-            adults-only.
+            Guests may bring children ({AGE_RANGES.children}) and infants ({AGE_RANGES.infants}). Turn off if
+            your property is adults-only.
           </FieldDescription>
         </FieldContent>
         <Switch

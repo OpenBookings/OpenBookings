@@ -6,6 +6,7 @@ import {
   guestBookingConfirmed,
   guestOversoldRefunded,
   hostBookingCancelled,
+  guestRefundIssued,
   hostNewBooking,
 } from "./index";
 
@@ -15,6 +16,7 @@ const rooms = [
     name: "Deluxe <Room>",
     ratePlan: "Flexible",
     guests: "2 guests",
+    refundable: true,
     freeCancellationUntil: "Fri 5 Mar 2027",
     nights: [
       { date: "2027-03-12", price: 100 },
@@ -26,6 +28,7 @@ const rooms = [
     name: "Garden Suite",
     ratePlan: "Non-refundable",
     guests: "1 guest",
+    refundable: false,
     freeCancellationUntil: null,
     nights: [
       { date: "2027-03-12", price: 49.5 },
@@ -44,6 +47,7 @@ const mails = {
   hostNew: hostNewBooking({ propertyName: EVIL, guestName: EVIL, ...stay, rooms, money, commissionCents: 1350, reference: "AB12CD34", reservationsUrl: "https://biz.test/r" }),
   cancelled: guestBookingCancelled({ propertyName: EVIL, rooms: ["Deluxe <Room>"], refund: "€100.00", cancelsBooking: true, bookingUrl: "https://web.test/bookings/b1" }),
   hostCancelled: hostBookingCancelled({ propertyName: EVIL, guestName: EVIL, rooms: ["Deluxe <Room>"], cancelsBooking: true, reservationsUrl: "https://biz.test/r" }),
+  refundIssued: guestRefundIssued({ propertyName: EVIL, reason: "goodwill", refund: "€20.00", bookingUrl: "https://web.test/bookings/b1" }),
 };
 
 test("every composer escapes the property name", () => {
@@ -165,4 +169,77 @@ test("tourist tax labels are escaped", () => {
     bookingUrl: "https://web.test/b",
   });
   expect(evil.html).toContain("Tourist tax (&lt;b&gt;&amp;)");
+});
+
+test("a refundable room booked inside its window is not called non-refundable", () => {
+  const late = guestBookingConfirmed({
+    propertyName: "Hotel",
+    ...stay,
+    rooms: [{ ...rooms[0], freeCancellationUntil: null }],
+    money,
+    seller,
+    reference: "AB12CD34",
+    bookingUrl: "https://web.test/b",
+  });
+  expect(late.html).toContain("free cancellation period has passed");
+  expect(late.html).not.toContain("non-refundable");
+});
+
+test("cots and extra beds show on the room and as what is left to pay at the hotel", () => {
+  const withExtras = { ...money, payAtPropertyCents: 2500 };
+  const extrasRooms = [{ ...rooms[0], guests: "2 guests, 1 infant", extras: "1 cot, 1 extra bed" }];
+  const guest = guestBookingConfirmed({ propertyName: "Hotel", ...stay, rooms: extrasRooms, money: withExtras, seller, reference: "AB12CD34", bookingUrl: "https://web.test/b" });
+  const host = hostNewBooking({ propertyName: "Hotel", guestName: "G", ...stay, rooms: extrasRooms, money: withExtras, commissionCents: 1350, reference: "AB12CD34", reservationsUrl: "https://biz.test/r" });
+  for (const mail of [guest, host]) {
+    expect(mail.html).toContain("2 guests, 1 infant, 1 cot, 1 extra bed");
+    expect(mail.html).toContain("To pay at the hotel (cots and extra beds)");
+    expect(mail.html).toContain("€25.00");
+    // Below what was paid online, never added to it.
+    expect(mail.html.indexOf("To pay at the hotel")).toBeGreaterThan(mail.html.indexOf("Total paid"));
+    expect(mail.html).toContain("€312.00");
+  }
+  // The host still receives the online payment less commission: €312 − €13.50.
+  expect(host.html).toContain("€298.50");
+});
+
+test("no pay-at-hotel row without cots or extra beds", () => {
+  expect(mails.confirmed.html).not.toContain("To pay at the hotel");
+  expect(mails.hostNew.html).not.toContain("To pay at the hotel");
+});
+
+test("a cancellation refund that went says it is on its way", () => {
+  const sent = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: "€50.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(sent.html).toContain("Your refund of");
+  expect(sent.html).toContain("is on its way");
+  expect(sent.html).not.toContain("couldn't refund");
+});
+
+test("a cancellation refund Stripe refused is not promised", () => {
+  const failed = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: null, refundFailed: "€50.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(failed.html).toContain("We couldn't refund");
+  expect(failed.html).toContain("€50.00");
+  expect(failed.html).not.toContain("on its way");
+  expect(failed.html).not.toContain("No refund is due");
+  // Part went, part did not: both are said.
+  const mixed = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A", "B"], refund: "€30.00", refundFailed: "€20.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(mixed.html).toContain("on its way");
+  expect(mixed.html).toContain("We couldn't refund");
+});
+
+test("a refund outside a cancellation names why and how much", () => {
+  const early = guestRefundIssued({ propertyName: "Hotel", reason: "early_departure", refund: "€120.00", bookingUrl: "https://web.test/b" });
+  expect(early.subject).toBe("Refund on its way: Hotel");
+  expect(early.html).toContain("left early");
+  expect(early.html).toContain("€120.00");
+  const refused = guestRefundIssued({ propertyName: "Hotel", reason: "goodwill", refund: null, refundFailed: "€20.00", bookingUrl: "https://web.test/b" });
+  expect(refused.subject).toBe("About your refund: Hotel");
+  expect(refused.html).toContain("We couldn't refund");
+  expect(refused.html).not.toContain("on its way");
+});
+
+test("refund mails give the same timing as the booking page", () => {
+  expect(mails.oversold.html).toContain("within 5 to 10 business days");
+  expect(mails.refundIssued.html).toContain("within 5 to 10 business days");
+  const cancelled = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: "€50.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
+  expect(cancelled.html).toContain("within 5 to 10 business days");
 });

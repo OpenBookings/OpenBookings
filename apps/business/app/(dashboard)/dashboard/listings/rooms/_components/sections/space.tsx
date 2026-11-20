@@ -10,6 +10,7 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field";
+import { AGE_BANDS, AGE_RANGES } from "@openbookings/pricing";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
@@ -218,7 +219,9 @@ function SpaceFields({
       <Field orientation="horizontal">
         <FieldContent>
           <FieldLabel htmlFor="maxGuests">Max guests</FieldLabel>
-          <FieldDescription>Adults and children together. Infants (under 2) don&apos;t count.</FieldDescription>
+          <FieldDescription>
+            Adults and children together. Infants ({AGE_RANGES.infants}) don&apos;t count.
+          </FieldDescription>
         </FieldContent>
         <Input
           id="maxGuests"
@@ -259,7 +262,7 @@ function SpaceFields({
             <FeeField
               id="extraAdultFee"
               label="Each extra adult"
-              description="Ages 13 or above. Leave empty for free."
+              description={`${AGE_BANDS.adults}. Leave empty for free.`}
               defaultValue={v.extraAdultFee}
               error={state.errors?.extraAdultFee?.[0]}
               disabled={pending}
@@ -269,7 +272,7 @@ function SpaceFields({
             <FeeField
               id="extraChildFee"
               label="Each extra child"
-              description="Ages 2–12. Leave empty for free."
+              description={`${AGE_BANDS.children}. Leave empty for free.`}
               defaultValue={v.extraChildFee}
               error={state.errors?.extraChildFee?.[0]}
               disabled={pending}
@@ -288,7 +291,7 @@ function SpaceFields({
       <ExtraToggle
         id="cotsOn"
         label="Cots"
-        description="For infants under 2."
+        description={`For infants ${AGE_RANGES.infants}.`}
         on={cotsOn}
         onChange={(on) => {
           setCotsOn(on);

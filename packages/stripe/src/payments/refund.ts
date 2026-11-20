@@ -1,26 +1,49 @@
 import type Stripe from 'stripe';
 import { stripe } from '../client';
+import { refundCommissionForCharge } from './commission-refund';
+import { ROOM_PRICE_REFUNDED_KEY, ROOM_PRICE_TOTAL_KEY } from './fees';
+
+/**
+ * How much of a refund is room price, and the room price on the whole
+ * booking. The rest of the refund is tourist tax. OpenBookings' commission
+ * goes back in proportion to the room price refunded only (B.5.7).
+ */
+export type RefundRoomPrice = { refundCents: number; totalCents: number };
 
 /**
  * A refund OpenBookings makes on the host's behalf (Annex B B.5.8): created on
  * the host's connected account, from the host's balance, because the booking
- * was a direct charge there. `refund_application_fee` hands back OpenBookings'
- * commission in the same proportion (B.5.7), so the `charge.refunded` webhook
- * then finds nothing left to return.
+ * was a direct charge there.
+ *
+ * `refund_application_fee` stays off: Stripe would hand the commission back in
+ * proportion to the whole charge, tourist tax included, so a refund of the tax
+ * alone would return commission on a stay that happened. Instead the refund
+ * names its room-price part in its metadata, and `refundPayment` returns that
+ * share of the commission itself (`refundCommissionForCharge`).
  */
 export function buildRefundParams(i: {
   paymentIntentId: string;
   amountCents: number;
   metadata: Record<string, string>;
+  roomPrice?: RefundRoomPrice;
 }): Stripe.RefundCreateParams {
   if (!Number.isInteger(i.amountCents) || i.amountCents <= 0) {
     throw new Error(`A refund must be a whole, positive number of cents (got ${i.amountCents})`);
   }
+  const room = i.roomPrice;
+  if (room) {
+    const ok = (n: number) => Number.isInteger(n) && n >= 0;
+    if (!ok(room.refundCents) || !ok(room.totalCents) || room.refundCents > i.amountCents) {
+      throw new Error(`A refund's room price must be whole cents within the refund (got ${room.refundCents} of ${i.amountCents})`);
+    }
+  }
   return {
     payment_intent: i.paymentIntentId,
     amount: i.amountCents,
-    refund_application_fee: true,
-    metadata: i.metadata,
+    refund_application_fee: false,
+    metadata: room
+      ? { ...i.metadata, [ROOM_PRICE_REFUNDED_KEY]: String(room.refundCents), [ROOM_PRICE_TOTAL_KEY]: String(room.totalCents) }
+      : i.metadata,
   };
 }
 
@@ -31,13 +54,38 @@ export type RefundPaymentInput = {
   /** Same key, same refund: a retry after a timeout never pays out twice. */
   idempotencyKey: string;
   metadata: Record<string, string>;
+  /**
+   * The room-price part of the refund. Without it (a payment that never
+   * became a booking) the refund counts against the whole charge, which for
+   * a full refund returns the whole commission.
+   */
+  roomPrice?: RefundRoomPrice;
 };
 
-export async function refundPayment(i: RefundPaymentInput): Promise<{ id: string; status: string }> {
+/**
+ * Refunds the guest, then hands back OpenBookings' share of the commission.
+ *
+ * The commission step never fails the refund: the guest's money has moved,
+ * and the `charge.refunded` webhook runs the same step as a backstop, from
+ * the same metadata, so a commission refund missed here is made there.
+ */
+export async function refundPayment(
+  i: RefundPaymentInput,
+  returnCommission: (chargeId: string, stripeAccountId: string) => Promise<unknown> = refundCommissionForCharge,
+): Promise<{ id: string; status: string }> {
   const refund = await stripe.refunds.create(buildRefundParams(i), {
     stripeAccount: i.stripeAccountId,
     idempotencyKey: i.idempotencyKey,
   });
+  const chargeId = typeof refund.charge === 'string' ? refund.charge : refund.charge?.id;
+  if (chargeId) {
+    await returnCommission(chargeId, i.stripeAccountId).catch((error: unknown) => {
+      console.error(
+        `[refunds] commission for refund ${refund.id} not returned yet; the charge.refunded webhook will:`,
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
   return { id: refund.id, status: refund.status ?? 'pending' };
 }
 
@@ -45,7 +93,10 @@ export async function refundPayment(i: RefundPaymentInput): Promise<{ id: string
  * The refund for a payment the commission ledger cannot explain (spec
  * decision 8): the whole charge back to the guest, on the host's account, with
  * OpenBookings' application fee handed back too. No amount is named, so
- * whatever is left of the charge goes back. The idempotency key is the charge,
+ * whatever is left of the charge goes back. Unlike `buildRefundParams` this
+ * keeps `refund_application_fee`: the payment is no booking, so it has no
+ * room price to split from tourist tax, and the whole fee goes back with the
+ * whole charge (any remainder is picked up by the `charge.refunded` backstop). The idempotency key is the charge,
  * so a retry within Stripe's key window (about a day) never pays out twice;
  * after that the ledger only calls this while the charge is not fully refunded.
  */

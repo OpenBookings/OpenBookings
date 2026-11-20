@@ -20,7 +20,7 @@ import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
 import { goodwillAmount } from "./goodwill-amount";
-import { sendCancellation } from "@/lib/mailing/booking-mail";
+import { sendCancellation, sendRefundMail } from "@/lib/mailing/booking-mail";
 import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
 
 /**
@@ -86,18 +86,30 @@ export async function hostMarkNoShow(bookingId: string) {
 }
 
 export async function hostRecordEarlyDeparture(bookingId: string, lastNightStayed: string) {
-  return run(bookingId, ACTION_PERMISSION.record_early_departure, (actor) => recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed }));
+  return run(bookingId, ACTION_PERMISSION.record_early_departure, async (actor) => {
+    const result = await recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed });
+    if (result.ok) await sendRefundMail(bookingId, "early_departure", result.refunds);
+    return result;
+  });
 }
 
 /** `amount` is whatever the browser sent; the dialog builds it with Number(text), so junk arrives as NaN. */
 export async function hostGoodwillRefund(bookingId: string, amount: number) {
   const parsed = goodwillAmount.safeParse(amount);
   if (!parsed.success) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
-  return run(bookingId, ACTION_PERMISSION.goodwill_refund, (actor) => issueGoodwillRefund(deps, { bookingId, actor, amount: parsed.data }));
+  return run(bookingId, ACTION_PERMISSION.goodwill_refund, async (actor) => {
+    const result = await issueGoodwillRefund(deps, { bookingId, actor, amount: parsed.data });
+    if (result.ok) await sendRefundMail(bookingId, "goodwill", result.refunds);
+    return result;
+  });
 }
 
 export async function hostRetryRefunds(bookingId: string) {
-  return run(bookingId, RETRY_REFUND_PERMISSION, () => retryRefunds(deps, { bookingId }));
+  return run(bookingId, RETRY_REFUND_PERMISSION, async () => {
+    const result = await retryRefunds(deps, { bookingId });
+    if (result.ok) await sendRefundMail(bookingId, "retry", result.refunds);
+    return result;
+  });
 }
 
 /** What an early departure after `lastNightStayed` would refund, for the confirm dialog. */

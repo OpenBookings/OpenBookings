@@ -73,8 +73,8 @@ export async function addTouristTaxRule(
   // takes the latest rule that has started).
   const row = await deps.queryOne<{ id: string }>(
     `INSERT INTO tourist_tax_rules
-       (property_id, effective_from, charges, children_exempt, max_nights, created_by)
-     SELECT p.id, $2::date, $3::jsonb, $4, $5, $6
+       (property_id, effective_from, charges, children_exempt, infants_taxed, max_nights, created_by)
+     SELECT p.id, $2::date, $3::jsonb, $4, $5, $6, $7
      FROM properties p
      WHERE p.id = $1
        AND $2::date >= ${PROPERTY_TODAY}
@@ -89,6 +89,8 @@ export async function addTouristTaxRule(
       rule.effectiveFrom,
       JSON.stringify(rule.charges),
       rule.childrenExempt,
+      // Children exempt means infants are too; store what is charged.
+      rule.infantsTaxed && !rule.childrenExempt,
       rule.maxNights,
       session.user.id,
     ],

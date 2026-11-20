@@ -1,25 +1,13 @@
 import Link from 'next/link';
-import { Building2, Code, Server, User } from 'lucide-react';
+import { Building2, Server } from 'lucide-react';
 import { InkField } from '@/components/ink-field';
 
 const areas = [
-  {
-    href: '/guest',
-    title: 'Guest',
-    icon: User,
-    description: 'Booking a stay, changing it, and getting help as a traveller.',
-  },
   {
     href: '/business',
     title: 'Business',
     icon: Building2,
     description: 'Rates, availability, reservations and payouts in the Business Portal.',
-  },
-  {
-    href: '/api',
-    title: 'API',
-    icon: Code,
-    description: 'Authentication, endpoints and webhooks for integrating with OpenBookings.',
   },
   {
     href: '/self-hosted',
@@ -58,8 +46,8 @@ export default function HomePage() {
             Everything OpenBookings does, written down.
           </h1>
           <p className="font-body text-fd-foreground/70 mt-7 max-w-[46ch] text-lg leading-relaxed">
-            Whether you are booking a room, running a property, building against the API or hosting
-            the whole thing yourself — start with the area that fits.
+            Whether you are running a property or hosting the whole thing yourself — start with the
+            area that fits.
           </p>
         </div>
       </section>

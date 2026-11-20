@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEFAULT_COMMISSION_LABEL } from "@openbookings/stripe/commission-rate";
 import { Footer } from "./Footer";
 
 export function FinalCTA() {
@@ -21,7 +22,7 @@ export function FinalCTA() {
             Keep your margin.
           </h2>
           <p className="mx-auto mb-11 max-w-[46ch] text-[16px] leading-[1.7] font-light text-white/46 sm:text-[17px]">
-            List your property in minutes, or talk to us first. Either way, the rate is 4.5% — same as it
+            List your property in minutes, or talk to us first. Either way, the rate is {DEFAULT_COMMISSION_LABEL} — same as it
             says on the tin.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
@@ -31,12 +32,12 @@ export function FinalCTA() {
             >
               List Your Property →
             </Link>
-            <Link
-              href="/login"
+            <a
+              href="mailto:support@openbookings.co?subject=A%20question%20about%20OpenBookings"
               className="rounded-[10px] border border-white/13 px-7 py-[15px] text-[15px] text-white/48 transition-colors hover:border-white/20 hover:text-white/70"
             >
-              Book a Demo
-            </Link>
+              Talk to Us
+            </a>
           </div>
         </div>
 

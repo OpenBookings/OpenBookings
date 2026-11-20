@@ -31,6 +31,12 @@ export type GuestBookingRow = {
     full_refund_until: string | null;
     nights: NightValue[];
     cancelled_at: string | null;
+    /** Under 2, no place taken. Absent on rows read before these columns were selected. */
+    infants?: number;
+    cots?: number;
+    extra_beds?: number;
+    /** Owed at the hotel for the cots and extra beds, euros. Postgres numeric arrives as text or number. */
+    pay_at_property_amount?: number | string;
   }[];
 };
 
@@ -42,6 +48,10 @@ type GuestBookingRoom = {
   cancelHint: string;
   cancelledAt: string | null;
   paid: number;
+  /** "1 cot · 1 extra bed · 1 infant", or null when there is none of these. */
+  extras: string | null;
+  /** Owed at the hotel for cots and extra beds, euros. */
+  payAtProperty: number;
 };
 
 export type GuestBooking = {
@@ -54,6 +64,8 @@ export type GuestBooking = {
   status: BookingStatus;
   canCancel: boolean;
   totalPaid: number;
+  /** Still to pay at the hotel for the cots and extra beds of rooms not cancelled, euros. */
+  payAtProperty: number;
   refunded: number;
   rooms: GuestBookingRoom[];
   /** What cancelling the whole booking would mean right now. */
@@ -62,6 +74,17 @@ export type GuestBooking = {
 };
 
 const cents = (euros: number) => Math.round(euros * 100);
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function extrasText(r: GuestBookingRow['rooms'][number]): string | null {
+  const parts = [
+    (r.cots ?? 0) > 0 && plural(r.cots ?? 0, 'cot', 'cots'),
+    (r.extra_beds ?? 0) > 0 && plural(r.extra_beds ?? 0, 'extra bed', 'extra beds'),
+    (r.infants ?? 0) > 0 && plural(r.infants ?? 0, 'infant', 'infants'),
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
   const snapshotted = row.rooms.length > 0 && row.rooms.every((r) => r.cancellation_tier && r.check_in_at);
@@ -78,6 +101,8 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
           : "The room price isn't refunded. Tourist tax is.",
       cancelledAt: r.cancelled_at,
       paid: r.nights.reduce((sum, n) => sum + cents(n.price) + cents(n.touristTax), 0) / 100,
+      extras: extrasText(r),
+      payAtProperty: Number(r.pay_at_property_amount ?? 0) || 0,
     };
   });
 
@@ -108,6 +133,7 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
     status: row.status,
     canCancel,
     totalPaid: rooms.reduce((sum, r) => sum + cents(r.paid), 0) / 100,
+    payAtProperty: rooms.filter((r) => !r.cancelledAt).reduce((sum, r) => sum + cents(r.payAtProperty), 0) / 100,
     refunded: Number(row.refunded),
     rooms,
     cancelHint: bookingCancelHint(rooms),

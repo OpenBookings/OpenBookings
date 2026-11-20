@@ -157,6 +157,9 @@ export function quietLedger(db: Client): LedgerDeps {
     returnPayment: async (chargeId) => {
       throw new Error(`Unexpected returnPayment ${chargeId}`);
     },
+    returnFee: async (feeId) => {
+      throw new Error(`Unexpected returnFee ${feeId}`);
+    },
     audit: async () => {
       throw new Error("Unexpected audit");
     },

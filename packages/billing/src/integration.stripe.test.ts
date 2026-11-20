@@ -1,8 +1,8 @@
 /**
  * End to end against Stripe test mode and a real (throwaway) database: two
  * connected accounts take direct charges with application fees, one payment is
- * refunded in full and one by half (fee refunded with it); then the monthly
- * steps run for real (reconcile and draft, issue, store, deliver) and the
+ * refunded in full and one by half (`refundPayment` refunds the fee with it);
+ * then the monthly steps run for real (reconcile and draft, issue, store, deliver) and the
  * ledger, the two documents, the stored files and the emails are checked.
  *
  * Use a DEDICATED Stripe sandbox for STRIPE_TEST_SECRET_KEY, not the test key
@@ -30,7 +30,7 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Pool } from "pg";
-import { buildConnectAccountParams, stripe } from "@openbookings/stripe";
+import { buildConnectAccountParams, refundPayment, stripe } from "@openbookings/stripe";
 import { ensureCommittedMigrations } from "@openbookings/db/testing";
 import { buildStripeLedgerDeps, stripeLedgerSource } from "./ledger/stripe-deps";
 import { periodFor, periodOf } from "./period";
@@ -172,10 +172,18 @@ describe.skipIf(!enabled || !migrated)("commission invoices against Stripe test 
       const feeId = await feeOf(String(pi.latest_charge));
       mine.add(feeId);
       if (p.refund) {
-        await stripe.refunds.create(
-          { payment_intent: pi.id, ...(p.refund === "half" ? { amount: p.stay / 2 } : {}), refund_application_fee: true },
-          { stripeAccount: account.id },
-        );
+        // As the booking lifecycle refunds: the refund names its room price, and
+        // refundPayment hands back that share of the fee itself. No tourist tax
+        // here, so the whole refund is room price.
+        const amountCents = p.refund === "half" ? p.stay / 2 : p.stay;
+        await refundPayment({
+          paymentIntentId: pi.id,
+          stripeAccountId: account.id,
+          amountCents,
+          idempotencyKey: `${id}-refund-${pi.id}`,
+          metadata: { integrationTest: id },
+          roomPrice: { refundCents: amountCents, totalCents: p.stay },
+        });
       }
       const refunds = await stripe.applicationFees.listRefunds(feeId, { limit: 10 });
       for (const r of refunds.data) mine.add(r.id);

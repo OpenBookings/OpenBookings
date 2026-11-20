@@ -57,6 +57,13 @@ export type RefundFn = (i: {
   amountCents: number;
   idempotencyKey: string;
   metadata: Record<string, string>;
+  /**
+   * How much of `amountCents` is room price (the rest is tourist tax), and the
+   * room price on the whole booking. OpenBookings' commission goes back in
+   * proportion to the room price refunded only. Absent for a booking without
+   * a policy snapshot, whose nights are unknown.
+   */
+  roomPrice?: { refundCents: number; totalCents: number };
 }) => Promise<{ id: string; status: string }>;
 
 export type LifecycleDb = Queryable & {
@@ -106,7 +113,22 @@ function eventData(a: Actor, data: Record<string, unknown>): Record<string, unkn
 export type RefundStatus = "pending" | "succeeded" | "failed";
 
 /** What a cancelRooms call itself cancelled, so a caller can tell the guest exactly that. */
-export type CancelledRooms = { reservationIds: string[]; refundTotal: number; cancelsBooking: boolean };
+export type CancelledRooms = {
+  reservationIds: string[];
+  /** What the cancellation refunds, euros. */
+  refundTotal: number;
+  /**
+   * The part of `refundTotal` Stripe refused, euros: it is owed but has not
+   * gone yet (a retry sends it). The rest went, or is on its way.
+   */
+  refundFailed: number;
+  cancelsBooking: boolean;
+};
+
+/** What Stripe refused among `refunds`, euros. */
+export function failedRefundTotal(refunds: { amount: number; status: RefundStatus }[]): number {
+  return refunds.filter((r) => r.status === "failed").reduce((sum, r) => sum + Math.round(r.amount * 100), 0) / 100;
+}
 
 export type LifecycleResult =
   | {
@@ -161,7 +183,9 @@ export type BookingState = {
   /**
    * Refund rows on the whole booking so far, euros — failed and pending ones
    * included, until they are reconciled, so a cap never assumes money that
-   * may already have left.
+   * may already have left. Money the host refunded outside OpenBookings, or
+   * lost in a dispute, is in here too (0053): Stripe would refuse to refund it
+   * again.
    */
   refunded: number;
 };
@@ -284,6 +308,8 @@ type RefundRow = {
   id: string;
   reservationId: string | null;
   amount: number;
+  /** The room-price part of `amount`, euros; the rest is tourist tax. */
+  accommodation: number;
   key: string;
   status?: "pending" | "failed";
   createdAt?: Date;
@@ -300,11 +326,11 @@ async function insertRefund(
        (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount,
         breakdown, idempotency_key, created_by)
      VALUES ($1, $2, $3::refund_reason, $4, $5, $4::numeric + $5::numeric, $6::jsonb, $7, $8)
-     RETURNING id, amount::float8 AS amount`,
+     RETURNING id, amount::float8 AS amount, accommodation_amount::float8 AS accommodation`,
     [bookingId, r.reservationId, r.reason, r.accommodation, r.touristTax, JSON.stringify(r.breakdown), r.key, actor.userId],
   );
-  const row = rows[0] as { id: string; amount: number };
-  return { id: row.id, reservationId: r.reservationId, amount: row.amount, key: r.key };
+  const row = rows[0] as { id: string; amount: number; accommodation: number };
+  return { id: row.id, reservationId: r.reservationId, amount: row.amount, accommodation: row.accommodation, key: r.key };
 }
 
 async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, planned: PlannedRefund[]) {
@@ -345,6 +371,8 @@ async function sendRefunds(
   deps: LifecycleDeps,
   db: Queryable,
   booking: BookingRow,
+  /** The room price on the whole booking, cents; 0 when its nights are unknown. */
+  roomsTotalCents: number,
   rows: RefundRow[],
   retry = false,
   actor?: { via?: "admin" },
@@ -376,14 +404,23 @@ async function sendRefunds(
         !!deps.findRefund &&
         (row.status === "failed" ||
           (row.createdAt !== undefined && now.getTime() - row.createdAt.getTime() >= RETRY_KEY_WINDOW_MS));
+      const amountCents = Math.round(row.amount * 100);
       const refund =
         existing ??
         (await deps.refund({
           paymentIntentId: pi,
           stripeAccountId: account,
-          amountCents: Math.round(row.amount * 100),
+          amountCents,
           idempotencyKey: freshKey ? `${row.key}:r${Math.floor(now.getTime() / RETRY_KEY_WINDOW_MS)}` : row.key,
           metadata: { bookingId: booking.id, refundId: row.id },
+          ...(roomsTotalCents > 0
+            ? {
+                roomPrice: {
+                  refundCents: Math.min(Math.max(Math.round(row.accommodation * 100), 0), amountCents),
+                  totalCents: roomsTotalCents,
+                },
+              }
+            : {}),
         }));
       await db.query(
         `UPDATE refunds SET status = 'succeeded', stripe_refund_id = $1 WHERE id = $2 AND status <> 'succeeded'`,
@@ -431,6 +468,11 @@ async function sendRefunds(
 /** What the guest paid for every room on the booking, euros. */
 function bookingPaid(state: BookingState): number {
   return state.rooms.reduce((sum, r) => sum + Math.round(roomPaid(r) * 100), 0) / 100;
+}
+
+/** The room price on the whole booking, tourist tax left out, cents: the commission's base. */
+export function roomsTotalCents(rooms: Pick<RoomState, "nights">[]): number {
+  return rooms.reduce((sum, r) => sum + r.nights.reduce((s, n) => s + Math.round(n.price * 100), 0), 0);
 }
 
 function context(deps: LifecycleDeps) {
@@ -517,16 +559,14 @@ export async function cancelRooms(
     return {
       ok: true as const,
       booking: state.booking,
+      roomsTotalCents: roomsTotalCents(state.rooms),
       rows,
       cancelled: { reservationIds, refundTotal: plan.totalCents / 100, cancelsBooking: plan.cancelsBooking },
     };
   });
   if (!done.ok) return done;
-  return {
-    ok: true,
-    refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor),
-    cancelled: done.cancelled,
-  };
+  const refunds = await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor);
+  return { ok: true, refunds, cancelled: { ...done.cancelled, refundFailed: failedRefundTotal(refunds) } };
 }
 
 async function setStatus(
@@ -597,10 +637,10 @@ export async function recordEarlyDeparture(
       actor: eventActor(i.actor),
       data: eventData(i.actor, { lastNightStayed: i.lastNightStayed }),
     });
-    return { ok: true as const, booking: state.booking, rows };
+    return { ok: true as const, booking: state.booking, roomsTotalCents: roomsTotalCents(state.rooms), rows };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor) };
 }
 
 /** The host refunds an amount of their choosing, capped at what is left unrefunded. Hosts only. */
@@ -641,14 +681,15 @@ export async function issueGoodwillRefund(
       actor: eventActor(i.actor),
       data: eventData(i.actor, { requested: i.amount, amount: plan.amount }),
     });
-    return { ok: true as const, booking: state.booking, rows: [row] };
+    return { ok: true as const, booking: state.booking, roomsTotalCents: roomsTotalCents(state.rooms), rows: [row] };
   });
   if (!done.ok) return done;
-  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.rows, false, i.actor) };
+  return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor) };
 }
 
 /**
- * Send refunds that failed, or whose outcome is unknown, again. Each is first
+ * Send refunds that failed, or whose outcome is unknown, again. Only
+ * OpenBookings' own: a row for money that left outside it is never sent. Each is first
  * looked up on Stripe (when `findRefund` is given), so one that did go through
  * is recorded rather than paid twice.
  *
@@ -666,10 +707,11 @@ export async function retryRefunds(
   if (!state) return { ok: false, error: "not_found" };
   const claim = await db.transaction(async (tx) => {
     const { rows } = await tx.query(
-      `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount, idempotency_key AS key,
+      `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount,
+              accommodation_amount::float8 AS accommodation, idempotency_key AS key,
               status, created_at AS "createdAt"
        FROM refunds
-       WHERE booking_id = $1 AND status IN ('pending', 'failed')
+       WHERE booking_id = $1 AND status IN ('pending', 'failed') AND source = 'openbookings'
          AND (status = 'failed' OR COALESCE(last_attempt_at, created_at) <= $2::timestamptz - make_interval(secs => $3))
        ORDER BY created_at
        FOR UPDATE SKIP LOCKED`,
@@ -684,11 +726,14 @@ export async function retryRefunds(
       return { claimed, open: true };
     }
     const { rows: open } = await tx.query(
-      `SELECT 1 FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') LIMIT 1`,
+      `SELECT 1 FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') AND source = 'openbookings' LIMIT 1`,
       [i.bookingId],
     );
     return { claimed, open: open.length > 0 };
   });
   if (claim.claimed.length === 0) return { ok: false, error: claim.open ? "refund_in_progress" : "nothing_to_refund" };
-  return { ok: true, refunds: await sendRefunds(deps, db, state.booking, claim.claimed, true, { via: i.via }) };
+  return {
+    ok: true,
+    refunds: await sendRefunds(deps, db, state.booking, roomsTotalCents(state.rooms), claim.claimed, true, { via: i.via }),
+  };
 }

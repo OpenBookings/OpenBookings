@@ -50,6 +50,8 @@ export const touristTaxRuleSchema = z.object({
   effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date this rule starts."),
   charges: z.array(charge).max(MAX_CHARGES, `A rule can have at most ${MAX_CHARGES} charges.`),
   childrenExempt: z.boolean(),
+  /** Off unless the host turns it on: most towns don't tax infants. */
+  infantsTaxed: z.boolean().default(false),
   maxNights: z
     .number()
     .int("Enter at least 1 night, or leave it empty.")

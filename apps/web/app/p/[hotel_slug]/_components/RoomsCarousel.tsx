@@ -77,8 +77,8 @@ function euro(amount: number): string {
 }
 
 /**
- * The all-in price for one night (tourist tax included, see withAllInPrices),
- * falling back to the host's rate where it was not worked out.
+ * The all-in price for one night from today (tourist tax included, see
+ * withAllInPrices), falling back to the host's rate where it was not worked out.
  */
 function nightlyPrice(plan: DbRatePlan): number {
   return plan.price_per_night ?? plan.bar;
@@ -471,6 +471,8 @@ function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, on
   const tier = tierOf(rate);
   const saving = priced ? priced.saving : hasStay ? 0 : (rate.saving_vs_refundable ?? 0);
   const price = priced ? euro(priced.perNight) : hasStay ? "—" : euro(nightlyPrice(rate));
+  // Without dates, a rate that can't be booked tonight shows its base rate.
+  const from = !priced && !hasStay && (rate.price_from || rate.price_per_night === undefined);
 
   return (
     <motion.div
@@ -524,7 +526,10 @@ function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, on
       {/* What it costs */}
       <div className="flex items-center gap-5 shrink-0 ml-auto">
         <div className="text-right">
-          <p className="font-serif text-3xl text-white leading-none">{price}</p>
+          <p className="font-serif text-3xl text-white leading-none">
+            {from && <span className="font-sans text-sm text-white/60 mr-1.5">from</span>}
+            {price}
+          </p>
           {/* Only claimed once the host has confirmed, on record, that their
               rates include tax. Until then the property cannot be booked. */}
           <p className="text-xs text-white/60 mt-1.5">
@@ -776,6 +781,11 @@ type BookBar = {
   pickGuests: Record<string, string>;
   /** One line in place of the total's caption, or null. */
   message: string | null;
+  /**
+   * The stay's total for the picks, each room priced for the party it is
+   * given (what booking charges); null when they can't be booked as they stand.
+   */
+  total: number | null;
   /** The total to show instead of the summed one, once the price changed. */
   totalOverride: number | null;
   /** Keeps the bar up with nothing picked, so its message is still seen. */
@@ -817,9 +827,11 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
     }
     if (picks.length > 0) groups.push({ roomIndex, picks });
   });
-  // With dates, the stay's quoted total; without, today's price for one night.
+  // With dates, the stay's quoted total, each room for its own share of the
+  // party (rooms × the largest share's price only while the picks can't be
+  // booked); without, today's price for one night.
   const shownTotal = bookBar.totalOverride ?? (stay
-    ? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null)
+    ? (bookBar.total ?? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null))
     : Math.round(nightlyTotal * 100) / 100);
   const groupsKey = groups.map((g) => g.roomIndex).join(",");
 

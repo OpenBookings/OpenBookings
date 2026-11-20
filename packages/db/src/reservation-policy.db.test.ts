@@ -52,7 +52,7 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
     expect(res.nights.reduce((sum: number, n: { touristTax: number }) => sum + n.touristTax, 0)).toBe(
       res.tourist_tax_amount,
     );
-    expect(res.policy_version).toBe("annex-b-2026-10-30-rev2");
+    expect(res.policy_version).toBe("annex-b-2026-10-30-rev3");
 
     const booking = (await db.query(`SELECT status, confirmed_at FROM bookings WHERE id = $1`, [bookingId])).rows[0];
     expect(booking.status).toBe("confirmed");
@@ -72,6 +72,26 @@ describeWithDb("confirmBookingPolicy against Postgres", () => {
     ).rows[0];
     expect(res.cancellation_tier).toBe("standard");
     expect(res.full_refund_until.toISOString()).toBe("2031-11-03T14:00:00.000Z");
+  });
+
+  test("the terms the guest was shown win over the live ones the host changed since", async () => {
+    // Held under Standard on a refundable rate; the host then switched to Flex and Non-refundable.
+    const ids = await seedProperty(db, { tier: "flex", isRefundable: false });
+    const { bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: "2031-11-10", nights: 2, rooms: 2 });
+    await confirmBookingPolicy(db, {
+      bookingId,
+      confirmedAt: new Date("2031-10-01T10:00:00Z"),
+      policy: {
+        [reservationIds[0]]: { tier: "standard", isRefundable: true },
+        // An intent from before the tier was kept: refundability only, the live tier for the rest.
+        [reservationIds[1]]: { isRefundable: true },
+      },
+    });
+    const tiers = (
+      await db.query(`SELECT id, cancellation_tier FROM reservations WHERE id = ANY($1::uuid[])`, [reservationIds])
+    ).rows.reduce((all: Record<string, string>, r: { id: string; cancellation_tier: string }) => ({ ...all, [r.id]: r.cancellation_tier }), {});
+    expect(tiers[reservationIds[0]]).toBe("standard");
+    expect(tiers[reservationIds[1]]).toBe("flex");
   });
 
   test("a non-refundable rate is snapshotted as Non-refundable", async () => {

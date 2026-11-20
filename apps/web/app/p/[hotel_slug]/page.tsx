@@ -1,4 +1,9 @@
 import { notFound } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
+import { getPool } from "@openbookings/db";
+import { infantsPayTouristTax, isValidTimeZone } from "@openbookings/pricing";
+import { priceTonight, type TonightPrice } from "@/lib/booking/quote";
+import { todayInZone } from "@/lib/booking/stay-input";
 import { getHotelPage } from "@/lib/hotel-page-data";
 import { withAllInPrices, withCancellationTerms } from "@/lib/listing-prices";
 import { getPropertyReviews } from "@/lib/property-reviews";
@@ -17,8 +22,8 @@ import { FootnoteSection }  from "./_components/FootnoteSection";
 // The page is the same for every visitor (the nav loads the session in the
 // browser), so it is rendered once and cached, here and at Cloudflare.
 // Host edits refresh it straight away through /api/revalidate; this is the
-// backstop. Prices are "for today", so a page cached just before midnight can
-// show yesterday's rate for up to five minutes. Checkout prices live.
+// backstop. Prices are tonight's at the property, so a page cached just before
+// its midnight can show yesterday's for up to five minutes. Checkout prices live.
 export const revalidate = 300;
 
 // No slugs are rendered at build time (the build has no database). An empty
@@ -42,10 +47,24 @@ export default async function HotelPage({
   const { hotel, amenities: rawAmenities } = page;
   // Cached for a day on its own (lib/property-reviews.ts); never throws.
   const reviews = await getPropertyReviews(hotel.id);
-  // All-in per night, tourist tax included, priced for today.
-  // Non-refundable rates that are not at least 10% cheaper are left out.
+  // All-in per night, tourist tax included: tonight at the property, priced
+  // as the stay quote prices it, or the base rate as "from" where tonight
+  // can't be booked. Non-refundable rates that are not at least 10% cheaper
+  // are left out.
+  const now = new Date();
+  // Without a usable zone (pages cached before it was stored): the EU's
+  // earliest today, as search uses.
+  const timeZone = hotel.timezone && isValidTimeZone(hotel.timezone) ? hotel.timezone : "Atlantic/Azores";
+  const today = todayInZone(timeZone, now);
+  const tonight = await priceTonight(getPool(), { id: hotel.id, timezone: timeZone }, now).catch(
+    (err): Record<string, TonightPrice> => {
+      // The page still renders, at base rates shown as "from".
+      Sentry.captureException(err, { tags: { area: "property-page", phase: "tonight-prices" } });
+      return {};
+    },
+  );
   const rooms = withCancellationTerms(
-    withAllInPrices(page.rooms, page.touristTaxRules ?? [], new Date().toISOString().slice(0, 10)),
+    withAllInPrices(page.rooms, page.touristTaxRules ?? [], today, tonight),
     hotel.cancellation_tier ?? "standard",
   );
 
@@ -81,13 +100,13 @@ export default async function HotelPage({
         childrenWelcome={hotel.children_welcome ?? true}
         slug={slug}
         propertyId={hotel.id}
-        // Pages cached before the zone was stored: the EU's earliest today, as
-        // search uses. The stay quote judges "in the past" itself.
-        timeZone={hotel.timezone ?? "Atlantic/Azores"}
+        // The stay quote judges "in the past" itself.
+        timeZone={timeZone}
       />
       <PoliciesSection
         hotel={hotel}
         hasNonRefundable={rooms.some((room) => room.rate_plans.some((plan) => !plan.is_refundable))}
+        infantsPayTouristTax={infantsPayTouristTax(page.touristTaxRules ?? [], today)}
         extras={{
           cots: rooms.some((room) => (room.cots_max ?? 0) > 0),
           extraBeds: rooms.some((room) => (room.extra_beds_max ?? 0) > 0),

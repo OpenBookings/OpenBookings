@@ -81,9 +81,11 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(result).toEqual({
       ok: true,
       refunds: [{ reservationId: reservationIds[0], amount: 309, status: "succeeded" }],
-      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, cancelsBooking: false },
+      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, refundFailed: 0, cancelsBooking: false },
     });
     expect(calls.map((c) => c.amountCents)).toEqual([30_900]);
+    // Room price €300 of the €309, out of €600 on the booking: half the commission goes back.
+    expect(calls.map((c) => c.roomPrice)).toEqual([{ refundCents: 30_000, totalCents: 60_000 }]);
 
     const res = await one<{ cancelled_at: Date | null }>(`SELECT cancelled_at FROM reservations WHERE id = $1`, [reservationIds[0]]);
     expect(res.cancelled_at).not.toBeNull();
@@ -144,6 +146,15 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(new Set(calls.map((c) => c.idempotencyKey)).size).toBe(2);
   });
 
+  test("a late guest cancellation refunds the tourist tax alone and names no room price, so no commission goes back", async () => {
+    const late = new Date(CHECK_IN_AT - 2 * 3_600_000);
+    const result = await cancelRooms(deps(late), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([9]);
+    expect(calls.map((c) => ({ amountCents: c.amountCents, roomPrice: c.roomPrice }))).toEqual([
+      { amountCents: 900, roomPrice: { refundCents: 0, totalCents: 60_000 } },
+    ]);
+  });
+
   test("a no-show can't be marked before the arrival window closes, and moves no money after", async () => {
     expect(await markNoShow(deps(), { bookingId, actor: host })).toEqual({ ok: false, error: "not_allowed" });
 
@@ -177,6 +188,8 @@ describeWithDb("booking lifecycle against Postgres", () => {
     };
     const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
     expect(result.ok && result.refunds[0].status).toBe("failed");
+    // The guest's mail says this part has not gone yet.
+    expect(result.ok && result.cancelled).toMatchObject({ refundTotal: 309, refundFailed: 309 });
     expect((await one<{ status: string }>(`SELECT status FROM refunds WHERE reservation_id = $1`, [reservationIds[0]])).status).toBe(
       "failed",
     );

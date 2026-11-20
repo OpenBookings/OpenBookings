@@ -7,13 +7,14 @@ import {
   withTransaction,
 } from "@openbookings/db";
 import { ensureDemoHotels, hasDemoHotelsNear, isTestingMode } from "@openbookings/demo";
-import { freeCancellationUntil, isValidTimeZone, perRoomParty, resolveSearchResults, snapshotTier } from "@openbookings/pricing";
+import { freeCancellationUntil, isValidTimeZone, perRoomParty, snapshotTier } from "@openbookings/pricing";
 import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
 import { parseStayInput, todayInZone, type StayInput } from "@/lib/booking/stay-input";
 import { orderByAvailability, priceCandidates } from "./availability-order";
 import { pointBoundErrors } from "./search-bounds";
+import { priceSearchStays } from "./search-pricing";
 import { resolveSearchTarget } from "./search-target";
 
 type SearchInput = StayInput & {
@@ -148,7 +149,7 @@ candidate_rooms AS (
     WHERE room_id = r.id
       AND is_active
     -- A search card shows one rate, and a Non-refundable rate may only be
-    -- offered beside a refundable one (Annex B B.4.3), so prefer refundable.
+    -- offered beside a refundable one (Annex B B.4.1), so prefer refundable.
     ORDER BY is_refundable DESC, created_at DESC
     LIMIT 1
   ) rp ON TRUE
@@ -274,6 +275,7 @@ LEFT JOIN LATERAL (
     'effectiveFrom',               t.effective_from::text,
     'charges',                     t.charges,
     'childrenExempt',              t.children_exempt,
+    'infantsTaxed',                t.infants_taxed,
     'maxNights',                   t.max_nights
   ) ORDER BY t.effective_from) AS rules
   FROM tourist_tax_rules t
@@ -304,13 +306,15 @@ async function runSearch(input: SearchInput, testing: boolean) {
     now,
   })
   const availability = summariseSearchAvailability(rooms, { propertyIds, ...input })
-  // Each card is priced for one room's share of the party.
+  // A room qualifies when it takes the largest share of the party; the card
+  // is priced for all the rooms searched, each with its own share.
   const party = perRoomParty(input)
 
-  const results = resolveSearchResults(priceCandidates(roomRows, rooms, availability, party), {
-    adults: party.adults,
-    children: party.children,
-    infants: party.infants,
+  const results = priceSearchStays(priceCandidates(roomRows, rooms, availability, party), {
+    adults: input.adults,
+    children: input.children,
+    infants: input.infants,
+    rooms: input.rooms,
     arrivalDate: input.checkIn,
   }).map(result => {
     // A stored timezone is not trusted: a bad one must not fail the whole search.

@@ -32,7 +32,12 @@ const GUEST_BOOKING_SQL = `
         'check_in_at', r.check_in_at,
         'full_refund_until', r.full_refund_until,
         'nights', r.nights,
-        'cancelled_at', r.cancelled_at
+        'cancelled_at', r.cancelled_at,
+        'infants', r.infants,
+        'cots', r.cots,
+        'extra_beds', r.extra_beds,
+        -- Euros (numeric 10,2): cots and extra beds, owed at the hotel, never charged online.
+        'pay_at_property_amount', r.pay_at_property_amount
       ) ORDER BY r.created_at, r.id)
       FROM reservations r JOIN rooms rm ON rm.id = r.room_id
       WHERE r.booking_id = b.id

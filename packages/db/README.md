@@ -61,10 +61,14 @@ They apply once an app connects as one of the roles 0049 creates:
 | `ob_business`  | host dashboard (member of `ob_app`)                    | enforced |
 | `ob_auth`      | Better Auth's pool and hooks                           | bypassed |
 | `ob_system`    | Stripe webhooks, crons, invoice job, support bot, mail | bypassed |
+| `ob_admin_read`  | admin console pages: SELECT only (0054)              | bypassed |
+| `ob_admin_write` | admin console actions: only what they change (0054)  | bypassed |
 | `neondb_owner` | migrations only                                        | bypassed |
 
 The roles are created without LOGIN; give one a password by hand
-(`ALTER ROLE ob_web LOGIN PASSWORD '…'`), never in a migration. App roles
+(`ALTER ROLE ob_web LOGIN PASSWORD '…'`), never in a migration. The admin
+roles stay NOLOGIN: separate login users act as them (setup in
+`apps/docs/content/docs/self-hosted/reference/environment-variables.mdx`). App roles
 cannot read password hashes, session tokens or 2FA secrets, and only read the
 invoicing tables.
 

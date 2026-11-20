@@ -169,6 +169,7 @@ export function useBookNow(i: {
     bar: {
       pickGuests,
       message: shownNotice?.text ?? problem,
+      total: booking?.ok ? booking.expectedTotal : null,
       totalOverride: shownNotice?.total ?? null,
       keepOpen: shownNotice !== null,
       atHotel,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EU_COUNTRY_CODES } from "@openbookings/billing/vat";
 
 import { hasPin } from "./geo";
 import { EU_TIMEZONES } from "./timezones";
@@ -97,7 +98,9 @@ export const locationSchema = z.object({
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{2}$/, "Pick a country."),
+    .regex(/^[A-Z]{2}$/, "Pick a country.")
+    // OpenBookings is EU-only: the property has to be in one of the 27 member states.
+    .refine((v) => EU_COUNTRY_CODES.includes(v), "Pick a country in the EU."),
   timezone: requiredText("Timezone").refine((v) => EU_TIMEZONES.has(v), "Pick a timezone from the list."),
   lat: z
     .string()

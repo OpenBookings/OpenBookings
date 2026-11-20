@@ -26,7 +26,8 @@ import { billingTreatmentForProperty } from "@openbookings/billing/profiles";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
 import { toCents } from "@/app/checkout/_lib/booking-lines";
 import { stayBoundErrors } from "@/app/api/query/search-bounds";
-import { MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
+import { possibleRoomParties, partyKey } from "./room-parties";
+import { MAX_INFANTS_PER_ROOM, MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
 
 /**
  * Exact prices and availability for a stay at one property: every active room
@@ -37,7 +38,7 @@ import { MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
  *
  * Unbookable rooms and rates come back with their reasons; hiding them is the
  * page's call. The one thing left out is a Non-refundable rate that is not at
- * least 10% cheaper than a refundable rate on the same room (Annex B B.4.3),
+ * least 10% cheaper than a refundable rate on the same room (Annex B B.4.2),
  * the same rule the listing applies (`withCancellationTerms`).
  */
 
@@ -52,6 +53,14 @@ export type QuotedRatePlan = {
   freeCancellationUntil: string | null;
   /** The stay discount already in `stayTotal`, for the rate row's chip. */
   discount: AppliedDiscount | null;
+  /**
+   * One unit's all-in price (stay plus tourist tax) for every party it could
+   * be given when the guest's party is split over the rooms picked, by
+   * `partyKey`. The fields above are for the largest even share
+   * (perRoomParty); a split that gives a room fewer guests is priced here, so
+   * the page adds up what booking will charge.
+   */
+  partyTotals: Record<string, number>;
   reasons: UnavailableReason[];
 };
 
@@ -219,6 +228,7 @@ tax AS (
     'effectiveFrom',  t.effective_from::text,
     'charges',        t.charges,
     'childrenExempt', t.children_exempt,
+    'infantsTaxed',   t.infants_taxed,
     'maxNights',      t.max_nights
   ) ORDER BY t.effective_from), '[]'::jsonb) AS rules
   FROM tourist_tax_rules t
@@ -273,12 +283,12 @@ type PricedRoom = {
 
 /**
  * Each room's rate plans priced for one party, with Non-refundable rates that
- * fail Annex B B.4.3 for this stay already dropped: a Non-refundable rate is
- * offered only beside a refundable rate on the same room that can be booked
- * for these dates (no rate-plan reasons) and costs at least 10% more. The
- * comparison is on the stay's room price, the number the guest would pay, not
- * the base rate. Room-level reasons (sold out, closed…) hit every rate alike,
- * so they don't decide this.
+ * fail Annex B B.4.1 or B.4.2 for this stay already dropped: a Non-refundable
+ * rate is offered only beside a refundable rate on the same room that can be
+ * booked for these dates (no rate-plan reasons, B.4.1) and costs at least 10%
+ * more (B.4.2). The comparison is on the stay's room price, the number the
+ * guest would pay, not the base rate. Room-level reasons (sold out, closed…)
+ * hit every rate alike, so they don't decide this.
  */
 function priceRooms(
   rows: PlanRow[],
@@ -333,6 +343,11 @@ export async function quoteStay(
     const reasons = roomReasons(a, party);
     // Every rate was a Non-refundable one that may not be offered alone.
     if (room.plans.length === 0 && !reasons.includes("not_on_sale")) reasons.push("not_on_sale");
+    const parties = possibleRoomParties(i.stay, {
+      maxAdults: a.maxAdults,
+      maxChildren: a.maxChildren,
+      maxInfants: MAX_INFANTS_PER_ROOM,
+    });
     rooms.push({
       roomId: room.roomId,
       name: room.name,
@@ -353,12 +368,57 @@ export async function quoteStay(
         touristTax: priced.tourist_tax,
         freeCancellationUntil: cancellationUntil(property, row.is_refundable, checkIn, i.now),
         discount: priced.discount,
+        partyTotals: Object.fromEntries(
+          parties.map((p) => [partyKey(p), resolveRoom(row, { ...p, arrivalDate: checkIn }, today).total_price]),
+        ),
         reasons: a.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"],
       })),
     });
   }
 
   return { propertyId: property.id, slug: property.slug, currency: "EUR", stay: i.stay, rooms };
+}
+
+/** One rate's price for tonight, for the listing without dates. */
+export type TonightPrice = {
+  /** All-in, one night at the room's base occupancy: rate, modifiers and tourist tax. */
+  price: number;
+  /** Whether tonight can be booked on this rate at all (stock, closures, minimum stay…). */
+  sellable: boolean;
+};
+
+const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Tonight's price for every rate the property page lists, by rate plan id:
+ * a one-night stay from today at the property (its time zone), at each
+ * room's base occupancy, through the same rows, resolver and availability
+ * rule as the stay quote. So overrides and modifiers count, as they will
+ * once the guest picks dates.
+ */
+export async function priceTonight(
+  db: Queryable,
+  property: { id: string; timezone: string },
+  now: Date,
+): Promise<Record<string, TonightPrice>> {
+  const checkIn = todayInZone(property.timezone, now);
+  const checkOut = nextDay(checkIn);
+  const [rows, availability] = await Promise.all([
+    loadPlanRows(db, { propertyId: property.id, checkIn, checkOut }),
+    loadStayAvailability(db, { propertyId: property.id, checkIn, checkOut, now }),
+  ]);
+  const byRoom = new Map(availability.map((a) => [a.roomId, a]));
+  const prices: Record<string, TonightPrice> = {};
+  for (const row of rows) {
+    const party = { adults: Math.max(1, row.base_occupancy), children: 0, infants: 0 };
+    const a = byRoom.get(row.room_id);
+    const planReasons = a?.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"];
+    prices[row.rate_plan_id] = {
+      price: resolveRoom(row, { ...party, arrivalDate: checkIn }, checkIn).total_price,
+      sellable: a !== undefined && roomReasons(a, party).length === 0 && planReasons.length === 0,
+    };
+  }
+  return prices;
 }
 
 /** Why a room can't take the cots and extra beds asked for, or null when it can. */
@@ -540,6 +600,8 @@ export async function priceSelection(
         roomName: room.name,
         ratePlanName: plan.row.rate_plan_name,
         isRefundable: plan.row.is_refundable,
+        // Kept so the booking is confirmed under the terms shown, even if the host changes the tier mid-payment.
+        cancellationTier: property.cancellationTier,
         freeCancellationUntil: cancellationUntil(property, plan.row.is_refundable, i.checkIn, i.now),
       })),
     },

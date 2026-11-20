@@ -4,7 +4,7 @@ import * as React from "react";
 import { AlertCircleIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import posthog from "posthog-js";
 import { toast } from "sonner";
-import { describeCharge, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
+import { describeCharge, vatRatesFor, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,6 +83,8 @@ interface RuleDialogProps {
    */
   waitingFrom: string | null;
   commissionRate: number;
+  /** The property's country, for the accommodation VAT rate the VAT field starts from. */
+  country: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -92,12 +94,14 @@ export function RuleDialog({
   today,
   waitingFrom,
   commissionRate,
+  country,
   open,
   onOpenChange,
 }: RuleDialogProps) {
   const [effectiveFrom, setEffectiveFrom] = React.useState(today);
   const [charges, setCharges] = React.useState<ChargeDraft[]>(() => [newCharge()]);
   const [childrenExempt, setChildrenExempt] = React.useState(false);
+  const [infantsTaxed, setInfantsTaxed] = React.useState(false);
   const [maxNights, setMaxNights] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
@@ -106,6 +110,7 @@ export function RuleDialog({
     setEffectiveFrom(today);
     setCharges([newCharge()]);
     setChildrenExempt(false);
+    setInfantsTaxed(false);
     setMaxNights("");
     setError(null);
   }
@@ -117,6 +122,8 @@ export function RuleDialog({
     effectiveFrom,
     charges: charges.map(toCharge),
     childrenExempt,
+    // Children exempt means infants are too.
+    infantsTaxed: infantsTaxed && !childrenExempt,
     maxNights: num(maxNights),
   };
   const parsed = touristTaxRuleSchema.safeParse(draft);
@@ -127,6 +134,7 @@ export function RuleDialog({
     effectiveFrom,
     charges: draft.charges.filter((c) => Number.isFinite(c.amount) && c.amount > 0),
     childrenExempt,
+    infantsTaxed: draft.infantsTaxed,
     maxNights: draft.maxNights && draft.maxNights >= 1 ? Math.floor(draft.maxNights) : null,
   };
 
@@ -156,6 +164,7 @@ export function RuleDialog({
       posthog.capture("tourist_tax_rule_added", {
         charges: parsed.data.charges.map((c) => c.kind),
         children_exempt: parsed.data.childrenExempt,
+        infants_taxed: parsed.data.infantsTaxed,
       });
       onOpenChange(false);
       reset();
@@ -212,6 +221,7 @@ export function RuleDialog({
                   key={c.key}
                   index={i}
                   charge={c}
+                  defaultVat={vatRatesFor(country, "hotel", effectiveFrom)?.accommodation ?? null}
                   disabled={pending}
                   onChange={(patch) => update(c.key, patch)}
                   onRemove={() => setCharges((cs) => cs.filter((x) => x.key !== c.key))}
@@ -240,6 +250,23 @@ export function RuleDialog({
               <div className="flex flex-col gap-1">
                 <FieldLabel htmlFor="tt-children">Children don&apos;t pay</FieldLabel>
                 <FieldDescription>Per-person charges count adults only.</FieldDescription>
+              </div>
+            </Field>
+
+            <Field orientation="horizontal" data-disabled={childrenExempt || undefined}>
+              <Switch
+                id="tt-infants"
+                checked={infantsTaxed && !childrenExempt}
+                onCheckedChange={setInfantsTaxed}
+                disabled={pending || childrenExempt}
+              />
+              <div className="flex flex-col gap-1">
+                <FieldLabel htmlFor="tt-infants">Infants (under 2) pay tourist tax</FieldLabel>
+                <FieldDescription>
+                  {childrenExempt
+                    ? "Children don't pay, so infants don't either."
+                    : "Off: per-person charges leave infants out. Turn on if your town taxes them too."}
+                </FieldDescription>
               </div>
             </Field>
 
@@ -297,12 +324,14 @@ export function RuleDialog({
 interface ChargeEditorProps {
   index: number;
   charge: ChargeDraft;
+  /** Accommodation VAT in the property's country on the rule's start date, if known. */
+  defaultVat: number | null;
   disabled: boolean;
   onChange: (patch: Partial<ChargeDraft>) => void;
   onRemove: () => void;
 }
 
-function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEditorProps) {
+function ChargeEditor({ index, charge, defaultVat, disabled, onChange, onRemove }: ChargeEditorProps) {
   const id = `tt-charge-${charge.key}`;
   const amount = num(charge.amount);
   const summary =
@@ -389,7 +418,12 @@ function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEdi
             <Checkbox
               id={`${id}-vat`}
               checked={charge.vatOff}
-              onCheckedChange={(v) => onChange({ vatOff: v === true })}
+              onCheckedChange={(v) => {
+                const on = v === true;
+                // Start from the country's accommodation VAT; the host can still change it.
+                const prefill = on && charge.vat === "" && defaultVat !== null ? String(defaultVat) : charge.vat;
+                onChange({ vatOff: on, vat: prefill });
+              }}
               disabled={disabled}
             />
             <Label htmlFor={`${id}-vat`} className="font-normal">
@@ -402,7 +436,7 @@ function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEdi
                   min={0}
                   step="0.1"
                   inputMode="decimal"
-                  placeholder="9"
+                  placeholder={defaultVat !== null ? String(defaultVat) : undefined}
                   value={charge.vat}
                   onChange={(e) => onChange({ vat: e.target.value })}
                   disabled={disabled}

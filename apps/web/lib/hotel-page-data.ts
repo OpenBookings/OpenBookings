@@ -27,8 +27,9 @@ export interface PropertyPagePayload {
   rooms: DbRoom[];
   /**
    * Raw rules, not prices: the page works out the all-in price when it
-   * renders (see withAllInPrices). Optional because entries cached before
-   * tourist tax existed do not have it.
+   * renders (see withAllInPrices), and uses these for the base-rate "from"
+   * price where tonight can't be booked. Optional because entries cached
+   * before tourist tax existed do not have it.
    */
   touristTaxRules?: TouristTaxRule[];
 }
@@ -120,9 +121,18 @@ function buildPropertyPageQuery(slug: string) {
             'bar', rp.bar,
             'currency', rp.currency,
             'is_refundable', rp.is_refundable,
-            'meal_plan', 'Breakfast included'
+            -- The rate's own meals, worded as the stay quote words them (mealPlan).
+            'meal_plan', CASE
+              WHEN rp.includes_breakfast AND rp.includes_lunch AND rp.includes_dinner THEN 'Full board'
+              WHEN rp.includes_breakfast AND rp.includes_dinner THEN 'Half board'
+              WHEN rp.includes_breakfast AND rp.includes_lunch THEN 'Breakfast and lunch included'
+              WHEN rp.includes_lunch AND rp.includes_dinner THEN 'Lunch and dinner included'
+              WHEN rp.includes_breakfast THEN 'Breakfast included'
+              WHEN rp.includes_lunch THEN 'Lunch included'
+              WHEN rp.includes_dinner THEN 'Dinner included'
+            END
           ) ORDER BY rp.bar ASC)
-          FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true),
+          FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true AND rp.archived_at IS NULL),
           '[]'::json
         ),
         'tags', COALESCE(
@@ -133,13 +143,14 @@ function buildPropertyPageQuery(slug: string) {
         )
       ) ORDER BY r.name), '[]'::json)
       FROM rooms r
-      WHERE r.property_id = hero.id AND r.is_active = true
+      WHERE r.property_id = hero.id AND r.is_active = true AND r.archived_at IS NULL
     ) AS page_rooms,
     (
       SELECT COALESCE(json_agg(json_build_object(
         'effectiveFrom', t.effective_from::text,
         'charges', t.charges,
         'childrenExempt', t.children_exempt,
+        'infantsTaxed', t.infants_taxed,
         'maxNights', t.max_nights
       ) ORDER BY t.effective_from), '[]'::json)
       FROM tourist_tax_rules t

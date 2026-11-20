@@ -127,6 +127,9 @@ function StayTicket({ reservation }: { reservation: HostReservation }) {
  */
 function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
   const count = reservation.rooms.length;
+  // Refunds OpenBookings made; money that left outside it has lines of its own.
+  const outside = reservation.outsideRefunds.reduce((sum, r) => sum + Math.round(r.amount * 100), 0);
+  const ownRefunded = Math.max(0, Math.round(reservation.refundedAmount * 100) - outside) / 100;
   return (
     <section aria-labelledby="panel-rooms">
       <h3 id="panel-rooms" className="text-muted-foreground text-xs">
@@ -154,12 +157,28 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
           <dt className="text-muted-foreground">Paid</dt>
           <dd className="font-medium tabular-nums">{currencyFormatter.format(reservation.totalAmount)}</dd>
         </div>
-        {reservation.refundedAmount > 0 ? (
+        {ownRefunded > 0 ? (
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Refunded</dt>
-            <dd className="tabular-nums">− {currencyFormatter.format(reservation.refundedAmount)}</dd>
+            <dd className="tabular-nums">− {currencyFormatter.format(ownRefunded)}</dd>
           </div>
         ) : null}
+        {reservation.outsideRefunds.map((r, index) => (
+          <div key={`${r.at}-${index}`} className="flex flex-col">
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">
+                {r.kind === "dispute" ? "Lost dispute" : "Refunded outside OpenBookings"} ·{" "}
+                {shortDate.format(new Date(r.at))}
+              </dt>
+              <dd className="tabular-nums">− {currencyFormatter.format(r.amount)}</dd>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {r.split
+                ? `Room price ${currencyFormatter.format(r.split.roomPrice)} · tourist tax ${currencyFormatter.format(r.split.touristTax)}`
+                : "Not explained yet: OpenBookings support will ask you what it was for."}
+            </p>
+          </div>
+        ))}
         {reservation.atHotelAmount > 0 ? (
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">To collect at check-in</dt>

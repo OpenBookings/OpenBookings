@@ -6,27 +6,39 @@ import {
   type TouristTaxRule,
 } from "@openbookings/pricing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
+import type { TonightPrice } from "@/lib/booking/quote";
 
 /**
  * The listing page shows a price per night before the guest has picked dates
- * or guests. It is still the all-in price: one night tonight, at the room's
- * standard occupancy, with the tourist tax in force today. Search and checkout
- * price the real stay exactly.
+ * or guests. It is still the all-in price: one night from today at the
+ * property, at the room's base occupancy, as the stay quote prices it
+ * (`priceTonight`: overrides, modifiers and tourist tax). A rate that can't
+ * be booked tonight (sold out, closed, a minimum stay…), or wasn't priced,
+ * shows its base rate with the tourist tax in force today instead, marked
+ * `price_from`: the page says "from". Search and checkout price the real
+ * stay exactly.
  *
- * Worked out at render time rather than cached with the page, so a tourist
- * tax rule that starts tomorrow applies from tomorrow, not an hour later.
+ * Worked out at render time rather than cached with the page data, so a
+ * tourist tax rule or override that starts tomorrow applies from tomorrow.
  */
-export function withAllInPrices(rooms: DbRoom[], rules: TouristTaxRule[], today: string): DbRoom[] {
+export function withAllInPrices(
+  rooms: DbRoom[],
+  rules: TouristTaxRule[],
+  today: string,
+  tonight: Record<string, TonightPrice> = {},
+): DbRoom[] {
   return rooms.map((room) => ({
     ...room,
     rate_plans: room.rate_plans.map((plan) => {
+      const t = tonight[plan.id];
+      if (t?.sellable) return { ...plan, price_per_night: t.price };
       const tax = calculateTouristTax(rules, {
         nights: [{ date: today, price: plan.bar }],
         adults: Math.max(1, room.base_occupancy ?? 1),
         children: 0,
         rooms: 1,
       });
-      return { ...plan, price_per_night: Math.round((plan.bar + tax.total) * 100) / 100 };
+      return { ...plan, price_per_night: Math.round((plan.bar + tax.total) * 100) / 100, price_from: true };
     }),
   }));
 }
@@ -38,8 +50,9 @@ export function withAllInPrices(rooms: DbRoom[], rules: TouristTaxRule[], today:
  * host's editor enforces this on the base rate when it is saved; this catches
  * a rate that drifted out of line afterwards.
  *
- * The listing has no dates, so it compares base rates. Checkout prices the
- * actual stay.
+ * Whether a Non-refundable rate is shown is judged on base rates, as the
+ * editor does; the saving is on the prices shown. With dates, the stay quote
+ * judges both on the stay's own prices.
  */
 export function withCancellationTerms(rooms: DbRoom[], tier: PropertyCancellationTier): DbRoom[] {
   return rooms.map((room) => {

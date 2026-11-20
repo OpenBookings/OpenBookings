@@ -54,19 +54,11 @@ const MIN_HOLD_MS = 30 * 60 * 1000;
 const HOLD_MARGIN_MS = 60 * 1000;
 
 /**
- * Smallest chargeable amount per currency, in minor units. Stripe rejects
- * anything below it, so we catch it here where we can say something useful
- * instead of surfacing "Amount must be at least €0.50".
+ * Smallest chargeable amount in euro cents. Stripe rejects anything below it,
+ * so we catch it here where we can say something useful instead of surfacing
+ * "Amount must be at least €0.50". OpenBookings charges in euros only.
  */
-const MINIMUM_CHARGE: Record<string, number> = {
-  eur: 50,
-  gbp: 30,
-  usd: 50,
-  chf: 50,
-  sek: 300,
-  dkk: 250,
-  nok: 300,
-};
+const MINIMUM_CHARGE_EUR_CENTS = 50;
 
 class CheckoutError extends Error {
   constructor(
@@ -129,11 +121,15 @@ function assertChargeable(summary: BookingSummary): number {
     );
   }
 
-  const minimum = MINIMUM_CHARGE[summary.currency.toLowerCase()] ?? 50;
-  if (total < minimum) {
+  // EUR only, and the database enforces it too (0051). Anything else is a bug.
+  if (summary.currency.toUpperCase() !== 'EUR') {
+    throw new CheckoutError('booking_invalid', `Booking currency ${summary.currency} is not EUR`);
+  }
+
+  if (total < MINIMUM_CHARGE_EUR_CENTS) {
     throw new CheckoutError(
       'booking_invalid',
-      `Total ${total} is below the ${summary.currency} minimum of ${minimum}`
+      `Total ${total} is below the EUR minimum of ${MINIMUM_CHARGE_EUR_CENTS}`
     );
   }
 

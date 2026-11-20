@@ -4,7 +4,9 @@ export type BookingEventKind =
   | "confirmed" | "rooms_cancelled" | "checked_in" | "no_show" | "early_departure"
   | "goodwill_refund" | "refund_succeeded" | "refund_failed" | "refund_uncertain"
   | "forced_status" | "forced_uncancel" | "forced_cancel" | "forced_refund_deleted"
-  | "forced_refund_status" | "forced_markers_cleared";
+  | "forced_refund_status" | "forced_markers_cleared"
+  // Money that left outside OpenBookings (0053), and the host's split of it.
+  | "outside_refund" | "outside_refund_explained";
 
 export type BookingEventActor = { kind: "guest" | "host" | "system" | "admin"; id: string | null };
 

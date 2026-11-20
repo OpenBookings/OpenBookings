@@ -425,6 +425,29 @@ describeWithDb("converting a paid booking intent", () => {
     expect((await db.query(`SELECT count(*)::int AS n FROM transactions WHERE provider_payment_id = 'pi_convert'`)).rows[0].n).toBe(1);
   });
 
+  test("the booking keeps the cancellation tier shown at hold time, not one the host set while the guest paid", async () => {
+    const rooms = [room(ids.roomId, ids.ratePlanId)];
+    const shown = snapshot(rooms);
+    shown.rooms = shown.rooms.map((r) => ({ ...r, cancellationTier: "flex" as const }));
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: shown,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    await db.query(`UPDATE properties SET cancellation_tier = 'standard' WHERE id = $1`, [ids.propertyId]);
+    await db.query(`UPDATE rate_plans SET is_refundable = false WHERE id = $1`, [ids.ratePlanId]);
+
+    const result = await convert(created.intentId);
+    const bookingId = (result as { bookingId: string }).bookingId;
+    const tiers = (await db.query(`SELECT cancellation_tier FROM reservations WHERE booking_id = $1`, [bookingId])).rows;
+    expect(tiers).toEqual([{ cancellation_tier: "flex" }]);
+  });
+
   test("late payment on a free room confirms", async () => {
     const { intentId } = await intent();
     await attach(intentId);

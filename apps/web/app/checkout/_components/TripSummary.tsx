@@ -395,11 +395,13 @@ function Ledger({ propertyName, ledgerRooms }: { propertyName: string; ledgerRoo
 
         {/* The one rule the ledger keeps: it separates the parts from the sum. */}
         <div className="mt-5 flex items-baseline justify-between gap-6 border-t border-white/20 pt-5">
-          <span className="text-[15px] font-medium text-white/70">Total incl. tax &amp; fees</span>
+          <span className="text-[15px] font-medium text-white/70">Total for your stay</span>
           <span className="font-serif text-3xl leading-none text-white tabular-nums sm:text-4xl">
             {checkout.total.total.amount}
           </span>
         </div>
+
+        <p className="mt-4 text-xs text-white/60">Incl. VAT. No booking or card fees.</p>
       </div>
     );
   }

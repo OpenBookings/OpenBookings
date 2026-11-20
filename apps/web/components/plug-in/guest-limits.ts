@@ -4,11 +4,7 @@ import { MAX_ADULTS, MAX_CHILDREN, MAX_INFANTS_PER_ROOM, MAX_ROOMS } from "@/lib
 export type Guests = { adults: number; children: number; infants: number; rooms: number };
 
 /** What each band means, for every place guests are counted. */
-export const AGE_BANDS = {
-  adults: "Ages 13 or above",
-  children: "Ages 2–12",
-  infants: "Under 2",
-} as const;
+export { AGE_BANDS } from "@openbookings/pricing";
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, Math.trunc(n)));
 

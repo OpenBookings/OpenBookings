@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { EU_COUNTRY_CODES } from "@openbookings/billing/vat";
+import { COUNTRIES } from "./countries";
 import {
   identitySchema,
   legalSchema,
@@ -200,6 +202,16 @@ describe("locationSchema", () => {
 
   test("rejects a country that is not two letters", () => {
     expect(locationSchema.safeParse({ ...valid, country: "ITA" }).success).toBe(false);
+  });
+
+  test("rejects a country outside the EU", () => {
+    for (const country of ["GB", "CH", "NO", "IS", "LI", "US"]) {
+      expect(locationSchema.safeParse({ ...valid, country }).success).toBe(false);
+    }
+  });
+
+  test("offers exactly the EU-27 in the country picker", () => {
+    expect(COUNTRIES.map((c) => c.code).sort()).toEqual([...EU_COUNTRY_CODES]);
   });
 
   test("uppercases the country code", () => {
