@@ -2,7 +2,7 @@ import * as React from "react";
 import { KeyRound, Laptop } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import { formatSecurityTimestamp } from "@/lib/security-timestamp";
 import { describeDevice } from "@/lib/device";
 import { DANGER_OUTLINE, PendingButton } from "./pending-button";
@@ -95,18 +95,10 @@ function Row({
   );
 }
 
-function SkeletonRows() {
+function LoadingRows({ what }: { what: string }) {
   return (
     <RowList>
-      {[0, 1].map((row) => (
-        <div key={row} className="flex items-center gap-4 px-5 py-4">
-          <Skeleton className="size-10 rounded-[10px]" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-4 w-40 max-w-full" />
-            <Skeleton className="h-3.5 w-28" />
-          </div>
-        </div>
-      ))}
+      <InlineLoader label={`Loading ${what}`} />
     </RowList>
   );
 }
@@ -153,7 +145,7 @@ export function PasskeysSection({
       }
     >
       {load.loading ? (
-        <SkeletonRows />
+        <LoadingRows what="passkeys" />
       ) : load.failed ? (
         <LoadError what="passkeys" onRetry={load.onRetry} retrying={load.retrying} />
       ) : passkeys.length > 0 ? (
@@ -232,7 +224,7 @@ export function SessionsSection({
       footnote={ready ? "Do not recognise a session? Sign it out, then remove any passkey you did not add." : null}
     >
       {load.loading ? (
-        <SkeletonRows />
+        <LoadingRows what="sessions" />
       ) : load.failed ? (
         <LoadError what="sessions" onRetry={load.onRetry} retrying={load.retrying} />
       ) : (

@@ -5,7 +5,7 @@ import { query } from "@openbookings/db";
 import { propertyReadiness, readinessCopy, readinessEnforced } from "@openbookings/billing/readiness";
 import { getServerSession } from "@/lib/auth";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { PropertyEditor } from "./_components/property-editor";
 import { loadAmenityCatalog, loadEditorData } from "./_lib/query";
 
@@ -18,7 +18,7 @@ export default function PropertyPage({ searchParams }: PageProps) {
     // No header of its own: the listings layout already renders the section
     // name above this, and a second one only steals pane height.
     <div className="flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={<EditorSkeleton />}>
+      <Suspense fallback={<PageLoading id="property" />}>
         <EditorContent searchParams={searchParams} />
       </Suspense>
     </div>
@@ -48,7 +48,11 @@ async function EditorContent({ searchParams }: PageProps) {
       ).missing.map((item) => ({ item, label: readinessCopy(item) }))
     : [];
 
-  return <PropertyEditor data={data} amenities={amenities} readiness={readiness} />;
+  return (
+    <PageHold id="property" fill>
+      <PropertyEditor data={data} amenities={amenities} readiness={readiness} />
+    </PageHold>
+  );
 }
 
 /**
@@ -76,14 +80,5 @@ function NoProperty() {
         </a>
       </EmptyContent>
     </Empty>
-  );
-}
-
-function EditorSkeleton() {
-  return (
-    <div className="flex flex-1 gap-4 p-4 lg:p-6">
-      <Skeleton className="hidden h-96 w-56 md:block" />
-      <Skeleton className="h-96 flex-1" />
-    </div>
   );
 }
