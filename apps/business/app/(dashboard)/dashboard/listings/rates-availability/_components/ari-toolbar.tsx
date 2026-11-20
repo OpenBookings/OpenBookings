@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CalendarCog,
   CalendarDays,
@@ -9,6 +10,7 @@ import {
   FilterX,
   Plus,
   PencilLine,
+  Percent,
   Undo2,
   UploadCloud,
 } from "lucide-react";
@@ -287,6 +289,12 @@ export function AriToolbar({
             <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           </>
         )}
+        <Button variant="outline" className="rounded-full" asChild>
+          <Link href="/dashboard/listings/pricing-rules">
+            <Percent className="size-4" />
+            Pricing rules
+          </Link>
+        </Button>
         <Button
           variant="outline"
           className="rounded-full"

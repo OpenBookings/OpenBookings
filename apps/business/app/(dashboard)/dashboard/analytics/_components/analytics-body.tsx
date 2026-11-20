@@ -1,7 +1,8 @@
 "use client";
 
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { holdRemaining, loaderClock } from "@/lib/analytics/loader-timing";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useRouteHandover } from "@/components/dashboard/loader-hold";
+import { holdRemaining } from "@/lib/analytics/loader-timing";
 import type { PageId } from "@/lib/analytics/pages";
 import { AnalyticsLoader, LoaderStage } from "./analytics-loader";
 import { useAnalyticsPending } from "./analytics-pending";
@@ -45,57 +46,6 @@ export function AnalyticsBody({ page, children }: { page: PageId; children: Reac
       ) : null}
     </div>
   );
-}
-
-const subscribeNever = () => () => {};
-
-/** The page the content area last showed, to tell a tab switch from a period change on the same tab. */
-let lastPage: PageId | null = null;
-
-/**
- * When the loader in front of this content started, while it still has to
- * stay up. That is the route loader this content replaced, or, when the tab
- * opened instantly from the router cache, now. A full page load is left alone:
- * its figures are already on screen from the server.
- */
-function useRouteHandover(page: PageId): number | null {
-  // False while hydrating server HTML, true when React mounts this on a client navigation.
-  const onClient = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
-  const mountedOnClient = useRef(onClient);
-  // A ref, so React's development double-run of effects reads the handover once.
-  const taken = useRef<number | null | undefined>(undefined);
-  const [holding, setHolding] = useState<number | null>(null);
-
-  // Can run again later (React re-runs layout effects when a boundary is
-  // re-shown), so every path ends with the hold either running or released.
-  useLayoutEffect(() => {
-    if (taken.current === undefined) {
-      const now = performance.now();
-      const tabSwitch = mountedOnClient.current && lastPage !== page;
-      taken.current = loaderClock.handover(now) ?? (tabSwitch ? now : null);
-      lastPage = page;
-    }
-    const startedAt = taken.current;
-    if (startedAt === null) return;
-    const release = () => {
-      taken.current = null;
-      setHolding(null);
-    };
-    const remaining = holdRemaining(startedAt, performance.now());
-    if (remaining <= 0) {
-      release();
-      return;
-    }
-    setHolding(startedAt);
-    const timer = setTimeout(release, remaining);
-    return () => clearTimeout(timer);
-  }, [page]);
-
-  return holding;
 }
 
 /** When `active` turned on, for as long as it stays on and the rest of the hold after. Null otherwise. */

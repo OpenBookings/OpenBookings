@@ -1,3 +1,4 @@
+import { PageHold } from "@/components/dashboard/page-loaders";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ReviewsView } from "@/components/dashboard/reviews/reviews-view";
@@ -10,8 +11,10 @@ export default async function ReviewsPage() {
   const reviews = await loadHostReviews(session);
 
   return (
-    <Suspense>
-      <ReviewsView reviews={reviews} />
-    </Suspense>
+    <PageHold id="reviews" fill>
+      <Suspense>
+        <ReviewsView reviews={reviews} />
+      </Suspense>
+    </PageHold>
   );
 }

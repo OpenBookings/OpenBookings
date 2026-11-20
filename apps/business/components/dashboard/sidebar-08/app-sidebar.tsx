@@ -79,6 +79,7 @@ const navMain: NavItem[] = [
     icon: PencilSparkles,
     items: [
       { title: "R&A", url: "/dashboard/listings/rates-availability" },
+      { title: "Pricing rules", url: "/dashboard/listings/pricing-rules" },
       { title: "Property", url: "/dashboard/listings/property" },
       { title: "Rooms", url: "/dashboard/listings/rooms" },
     ],

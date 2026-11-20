@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { BuildingIcon } from "lucide-react";
 import { getServerSession } from "@/lib/auth";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { RoomsIndex } from "./_components/rooms-index";
 import { loadRoomsIndex } from "./_lib/query";
 
@@ -16,7 +16,7 @@ export default function RoomsPage({ searchParams }: PageProps) {
     // No header of its own, like the Property page: the listings layout
     // already names the section.
     <div className="flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={<IndexSkeleton />}>
+      <Suspense fallback={<PageLoading id="rooms" />}>
         <IndexContent searchParams={searchParams} />
       </Suspense>
     </div>
@@ -31,7 +31,11 @@ async function IndexContent({ searchParams }: PageProps) {
   const data = await loadRoomsIndex(session, property);
   if (!data) return <NoProperty />;
 
-  return <RoomsIndex data={data} />;
+  return (
+    <PageHold id="rooms" fill>
+      <RoomsIndex data={data} />
+    </PageHold>
+  );
 }
 
 /** Same dead end as the Property page: rooms hang off a property onboarding creates. */
@@ -54,14 +58,5 @@ function NoProperty() {
         </a>
       </EmptyContent>
     </Empty>
-  );
-}
-
-function IndexSkeleton() {
-  return (
-    <div className="flex flex-col gap-3 px-4 lg:px-6">
-      <Skeleton className="h-9 w-40 self-end" />
-      <Skeleton className="h-64 w-full" />
-    </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
@@ -29,7 +30,7 @@ import { TouristTaxSection } from "./sections/tourist-tax";
 // it is fetched when the tab is first opened.
 const LocationSection = dynamic(() => import("./sections/location").then((m) => m.LocationSection), {
   ssr: false,
-  loading: () => <div className="h-96 animate-pulse rounded-xl bg-muted" aria-hidden />,
+  loading: () => <InlineLoader label="Loading the map" className="h-96" />,
 });
 
 interface PropertyEditorProps {

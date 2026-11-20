@@ -33,6 +33,7 @@ export const PENDING_MIGRATIONS: string[] = [
   "0047_refund_last_attempt.sql",
   "0048_revoke_data_api_grants.sql",
   "0049_rls_guest_data.sql",
+  "0050_pricing_rule_groups.sql",
   "0051_eur_only.sql",
   "0052_tourist_tax_infants.sql",
   "0053_outside_refunds.sql",

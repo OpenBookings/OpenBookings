@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { RoomEditor } from "../_components/room-editor";
 import { loadRoomEditor } from "../_lib/query";
 
@@ -13,7 +13,7 @@ interface PageProps {
 export default function RoomEditorPage({ params }: PageProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={<EditorSkeleton />}>
+      <Suspense fallback={<PageLoading id="room" />}>
         <EditorContent params={params} />
       </Suspense>
     </div>
@@ -33,16 +33,9 @@ async function EditorContent({ params }: PageProps) {
   return (
     <>
       <BreadcrumbLabel segment={roomId} label={data.room.name} />
-      <RoomEditor data={data} />
+      <PageHold id="room" fill>
+        <RoomEditor data={data} />
+      </PageHold>
     </>
-  );
-}
-
-function EditorSkeleton() {
-  return (
-    <div className="flex flex-1 gap-4 p-4 lg:p-6">
-      <Skeleton className="hidden h-96 w-56 md:block" />
-      <Skeleton className="h-96 flex-1" />
-    </div>
   );
 }

@@ -32,7 +32,6 @@ import {
 } from "../_lib/actions";
 import type { AriGridData, EditPrefill, RoomTypeRow } from "../_lib/types";
 import { RateInclusiveNotice } from "./rate-inclusive-notice";
-import { PricingRulesDialog } from "./pricing-rules-dialog";
 
 /**
  * The three bulk-edit modals, plus the reopen path off the detail panel.
@@ -49,8 +48,7 @@ type DialogKind =
   | "restrictions"
   | "rate-plan"
   | "reopen"
-  | "base-rate"
-  | "pricing-rules";
+  | "base-rate";
 
 interface DialogState {
   kind: DialogKind;
@@ -705,14 +703,6 @@ function BaseRateDialog({
   );
 }
 
-/** The rules dialog for the plan in the prefill, read from the grid data so it refreshes with it. */
-function RulesForPlan({ rooms, prefill }: { rooms: RoomTypeRow[]; prefill: EditPrefill }) {
-  const room = rooms.find((r) => r.ratePlans.some((p) => p.id === prefill.ratePlanId));
-  const plan = room?.ratePlans.find((p) => p.id === prefill.ratePlanId);
-  if (!room || !plan) return null;
-  return <PricingRulesDialog plan={plan} roomName={room.name} />;
-}
-
 // ─────────────────────────────────────────────
 // Host
 // ─────────────────────────────────────────────
@@ -758,7 +748,6 @@ export function AriEditDialogs({
             onDone={onClose}
           />
         )}
-        {state?.kind === "pricing-rules" && <RulesForPlan rooms={data.rooms} prefill={state.prefill} />}
         {state?.kind === "rate-plan" && (
           <AddRatePlanDialog
             rooms={data.rooms}
