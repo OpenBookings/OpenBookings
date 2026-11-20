@@ -379,6 +379,48 @@ export async function quoteStay(
   return { propertyId: property.id, slug: property.slug, currency: "EUR", stay: i.stay, rooms };
 }
 
+/** One rate's price for tonight, for the listing without dates. */
+export type TonightPrice = {
+  /** All-in, one night at the room's base occupancy: rate, modifiers and tourist tax. */
+  price: number;
+  /** Whether tonight can be booked on this rate at all (stock, closures, minimum stay…). */
+  sellable: boolean;
+};
+
+const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Tonight's price for every rate the property page lists, by rate plan id:
+ * a one-night stay from today at the property (its time zone), at each
+ * room's base occupancy, through the same rows, resolver and availability
+ * rule as the stay quote. So overrides and modifiers count, as they will
+ * once the guest picks dates.
+ */
+export async function priceTonight(
+  db: Queryable,
+  property: { id: string; timezone: string },
+  now: Date,
+): Promise<Record<string, TonightPrice>> {
+  const checkIn = todayInZone(property.timezone, now);
+  const checkOut = nextDay(checkIn);
+  const [rows, availability] = await Promise.all([
+    loadPlanRows(db, { propertyId: property.id, checkIn, checkOut }),
+    loadStayAvailability(db, { propertyId: property.id, checkIn, checkOut, now }),
+  ]);
+  const byRoom = new Map(availability.map((a) => [a.roomId, a]));
+  const prices: Record<string, TonightPrice> = {};
+  for (const row of rows) {
+    const party = { adults: Math.max(1, row.base_occupancy), children: 0, infants: 0 };
+    const a = byRoom.get(row.room_id);
+    const planReasons = a?.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"];
+    prices[row.rate_plan_id] = {
+      price: resolveRoom(row, { ...party, arrivalDate: checkIn }, checkIn).total_price,
+      sellable: a !== undefined && roomReasons(a, party).length === 0 && planReasons.length === 0,
+    };
+  }
+  return prices;
+}
+
 /** Why a room can't take the cots and extra beds asked for, or null when it can. */
 function extrasError(room: PlanRow, s: SelectedRoom): string | null {
   const name = room.room_name;

@@ -27,8 +27,9 @@ export interface PropertyPagePayload {
   rooms: DbRoom[];
   /**
    * Raw rules, not prices: the page works out the all-in price when it
-   * renders (see withAllInPrices). Optional because entries cached before
-   * tourist tax existed do not have it.
+   * renders (see withAllInPrices), and uses these for the base-rate "from"
+   * price where tonight can't be booked. Optional because entries cached
+   * before tourist tax existed do not have it.
    */
   touristTaxRules?: TouristTaxRule[];
 }
@@ -122,7 +123,7 @@ function buildPropertyPageQuery(slug: string) {
             'is_refundable', rp.is_refundable,
             'meal_plan', 'Breakfast included'
           ) ORDER BY rp.bar ASC)
-          FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true),
+          FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true AND rp.archived_at IS NULL),
           '[]'::json
         ),
         'tags', COALESCE(
@@ -133,7 +134,7 @@ function buildPropertyPageQuery(slug: string) {
         )
       ) ORDER BY r.name), '[]'::json)
       FROM rooms r
-      WHERE r.property_id = hero.id AND r.is_active = true
+      WHERE r.property_id = hero.id AND r.is_active = true AND r.archived_at IS NULL
     ) AS page_rooms,
     (
       SELECT COALESCE(json_agg(json_build_object(
