@@ -166,6 +166,7 @@ function RuleCard({
 
   const options = [
     rule.childrenExempt && "Children don't pay",
+    !rule.childrenExempt && rule.infantsTaxed && "Infants pay too",
     rule.maxNights && `At most ${rule.maxNights} ${rule.maxNights === 1 ? "night" : "nights"} taxed`,
   ].filter(Boolean) as string[];
 

@@ -140,6 +140,7 @@ function buildPropertyPageQuery(slug: string) {
         'effectiveFrom', t.effective_from::text,
         'charges', t.charges,
         'childrenExempt', t.children_exempt,
+        'infantsTaxed', t.infants_taxed,
         'maxNights', t.max_nights
       ) ORDER BY t.effective_from), '[]'::json)
       FROM tourist_tax_rules t

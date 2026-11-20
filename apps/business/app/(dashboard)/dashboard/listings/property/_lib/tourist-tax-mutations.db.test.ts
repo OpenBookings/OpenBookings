@@ -38,11 +38,12 @@ describeWithDb("Tourist tax rules against Postgres", () => {
   const day = async (offset: number) =>
     (await one<{ d: string }>(`SELECT ($1::date + $2::int)::text AS d`, [today, offset]))!.d;
 
-  const rule = (effectiveFrom: string) => ({
+  const rule = (effectiveFrom: string, extra: { childrenExempt?: boolean; infantsTaxed?: boolean } = {}) => ({
     effectiveFrom,
     charges: [{ kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false }],
     childrenExempt: true,
     maxNights: 7,
+    ...extra,
   });
 
   beforeAll(async () => {
@@ -100,7 +101,7 @@ describeWithDb("Tourist tax rules against Postgres", () => {
     const result = await addTouristTaxRule(session(owner), propertyId, rule(today), deps);
     expect(result.ok).toBe(true);
     const row = await one<Record<string, unknown>>(
-      `SELECT effective_from::text, charges, children_exempt, max_nights, created_by
+      `SELECT effective_from::text, charges, children_exempt, infants_taxed, max_nights, created_by
        FROM tourist_tax_rules WHERE property_id = $1`,
       [propertyId],
     );
@@ -110,9 +111,23 @@ describeWithDb("Tourist tax rules against Postgres", () => {
         { kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false, vatIncludedPercent: null },
       ],
       children_exempt: true,
+      infants_taxed: false,
       max_nights: 7,
       created_by: owner,
     });
+  });
+
+  test("infants pay only when the host says so and children pay too", async () => {
+    const saved = async (extra: { childrenExempt: boolean; infantsTaxed: boolean }) => {
+      await db.query("DELETE FROM tourist_tax_rules WHERE property_id = $1", [propertyId]);
+      expect((await addTouristTaxRule(session(owner), propertyId, rule(today, extra), deps)).ok).toBe(true);
+      return (await one<{ infants_taxed: boolean }>(
+        "SELECT infants_taxed FROM tourist_tax_rules WHERE property_id = $1",
+        [propertyId],
+      ))!.infants_taxed;
+    };
+    expect(await saved({ childrenExempt: false, infantsTaxed: true })).toBe(true);
+    expect(await saved({ childrenExempt: true, infantsTaxed: true })).toBe(false);
   });
 
   test("a rule cannot start in the past", async () => {

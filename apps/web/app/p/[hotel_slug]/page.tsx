@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { infantsPayTouristTax } from "@openbookings/pricing";
 import { getHotelPage } from "@/lib/hotel-page-data";
 import { withAllInPrices, withCancellationTerms } from "@/lib/listing-prices";
 import { getPropertyReviews } from "@/lib/property-reviews";
@@ -44,8 +45,9 @@ export default async function HotelPage({
   const reviews = await getPropertyReviews(hotel.id);
   // All-in per night, tourist tax included, priced for today.
   // Non-refundable rates that are not at least 10% cheaper are left out.
+  const today = new Date().toISOString().slice(0, 10);
   const rooms = withCancellationTerms(
-    withAllInPrices(page.rooms, page.touristTaxRules ?? [], new Date().toISOString().slice(0, 10)),
+    withAllInPrices(page.rooms, page.touristTaxRules ?? [], today),
     hotel.cancellation_tier ?? "standard",
   );
 
@@ -88,6 +90,7 @@ export default async function HotelPage({
       <PoliciesSection
         hotel={hotel}
         hasNonRefundable={rooms.some((room) => room.rate_plans.some((plan) => !plan.is_refundable))}
+        infantsPayTouristTax={infantsPayTouristTax(page.touristTaxRules ?? [], today)}
         extras={{
           cots: rooms.some((room) => (room.cots_max ?? 0) > 0),
           extraBeds: rooms.some((room) => (room.extra_beds_max ?? 0) > 0),

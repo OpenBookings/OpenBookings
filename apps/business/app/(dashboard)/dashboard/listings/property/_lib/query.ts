@@ -133,7 +133,8 @@ export async function loadEditorData(
         FROM property_amenities pa WHERE pa.property_id = p.id) AS amenity_ids,
        (SELECT COALESCE(json_agg(json_build_object(
           'id', t.id, 'effectiveFrom', t.effective_from::text, 'charges', t.charges,
-          'childrenExempt', t.children_exempt, 'maxNights', t.max_nights
+          'childrenExempt', t.children_exempt, 'infantsTaxed', t.infants_taxed,
+          'maxNights', t.max_nights
         ) ORDER BY t.effective_from), '[]'::json)
         FROM tourist_tax_rules t WHERE t.property_id = p.id) AS tourist_tax_rules
      FROM properties p

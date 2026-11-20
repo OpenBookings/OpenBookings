@@ -29,6 +29,7 @@ type ReservationRow = {
   total_nights: number;
   adults: number;
   children: number;
+  infants: number;
   is_refundable: boolean;
   cancellation_tier: PropertyCancellationTier;
   timezone: string;
@@ -67,7 +68,7 @@ export async function confirmBookingPolicy(
 ): Promise<void> {
   const { rows } = await db.query(
     `SELECT res.id AS reservation_id, b.check_in_date::text AS check_in_date,
-            res.price_per_night, res.total_nights, res.adults, res.children,
+            res.price_per_night, res.total_nights, res.adults, res.children, res.infants,
             rp.is_refundable, p.cancellation_tier, p.timezone,
             to_char(p.check_in_time, 'HH24:MI') AS check_in_time,
             COALESCE((
@@ -75,6 +76,7 @@ export async function confirmBookingPolicy(
                 'effectiveFrom', t.effective_from::text,
                 'charges', t.charges,
                 'childrenExempt', t.children_exempt,
+                'infantsTaxed', t.infants_taxed,
                 'maxNights', t.max_nights
               ) ORDER BY t.effective_from)
               FROM tourist_tax_rules t WHERE t.property_id = p.id
@@ -107,6 +109,7 @@ export async function confirmBookingPolicy(
       touristTaxRules: row.tourist_tax_rules,
       adults: row.adults,
       children: row.children,
+      infants: row.infants,
     });
     const charged = input.touristTax?.[row.reservation_id];
     const nights = charged === undefined ? ruled : fitTouristTax(ruled, charged);

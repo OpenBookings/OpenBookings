@@ -42,6 +42,8 @@ export interface ExampleInput {
   pricePerNight: number;
   adults: number;
   children: number;
+  /** Under 2. Pay only where the rule says so. */
+  infants?: number;
   rooms: number;
 }
 
@@ -74,6 +76,7 @@ export function exampleStay(input: ExampleInput): ExampleResult {
     nights: Array.from({ length: nights }, (_, i) => ({ date: addDays(input.arrival, i), price: nightPrice })),
     adults: whole(input.adults),
     children: whole(input.children),
+    infants: whole(input.infants ?? 0),
     rooms,
   });
 

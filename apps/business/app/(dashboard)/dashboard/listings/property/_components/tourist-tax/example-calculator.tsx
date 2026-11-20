@@ -34,6 +34,7 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
   const [price, setPrice] = React.useState("120");
   const [adults, setAdults] = React.useState("2");
   const [children, setChildren] = React.useState("0");
+  const [infants, setInfants] = React.useState("0");
   const [rooms, setRooms] = React.useState("1");
 
   const result = exampleStay({
@@ -44,6 +45,7 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
     pricePerNight: Number(price),
     adults: Number(adults),
     children: Number(children),
+    infants: Number(infants),
     rooms: Number(rooms),
   });
 
@@ -91,9 +93,10 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
           step: "0.01",
           inputMode: "decimal",
         })}
-        {field("adults", "Adults", adults, setAdults, "col-span-2", { min: 1, max: 20 })}
-        {field("children", "Children", children, setChildren, "col-span-2", { min: 0, max: 20 })}
-        {field("rooms", "Rooms", rooms, setRooms, "col-span-2", { min: 1, max: 20 })}
+        {field("adults", "Adults", adults, setAdults, "col-span-3", { min: 1, max: 20 })}
+        {field("children", "Children (2–12)", children, setChildren, "col-span-3", { min: 0, max: 20 })}
+        {field("infants", "Infants (under 2)", infants, setInfants, "col-span-3", { min: 0, max: 20 })}
+        {field("rooms", "Rooms", rooms, setRooms, "col-span-3", { min: 1, max: 20 })}
       </div>
 
       <Separator />

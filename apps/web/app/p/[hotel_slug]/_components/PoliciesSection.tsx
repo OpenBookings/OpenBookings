@@ -9,11 +9,14 @@ import { BusinessDetailsButton } from "./BusinessDetailsButton";
 export function PoliciesSection({
   hotel,
   hasNonRefundable,
+  infantsPayTouristTax,
   extras,
 }: {
   hotel: HotelPageData;
   /** Some rates on the page are Non-refundable. */
   hasNonRefundable: boolean;
+  /** A tourist tax rule here, in force or still to start, counts infants per person. */
+  infantsPayTouristTax: boolean;
   /** Whether any room offers cots, or extra beds. Each room sets its own. */
   extras: { cots: boolean; extraBeds: boolean };
 }) {
@@ -65,7 +68,11 @@ export function PoliciesSection({
       ? [
           {
             Icon: Info,
-            text: `Adults are ${AGE_RANGES.adults}, children ${AGE_RANGES.children}, infants ${AGE_RANGES.infants}. Infants stay free and don't take a place in the room.`,
+            text: `Adults are ${AGE_RANGES.adults}, children ${AGE_RANGES.children}, infants ${AGE_RANGES.infants}. ${
+              infantsPayTouristTax
+                ? "Infants don't take a place in the room and stay free, apart from tourist tax."
+                : "Infants stay free and don't take a place in the room."
+            }`,
           },
         ]
       : []),

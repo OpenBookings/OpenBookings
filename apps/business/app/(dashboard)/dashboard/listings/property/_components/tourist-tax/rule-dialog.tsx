@@ -98,6 +98,7 @@ export function RuleDialog({
   const [effectiveFrom, setEffectiveFrom] = React.useState(today);
   const [charges, setCharges] = React.useState<ChargeDraft[]>(() => [newCharge()]);
   const [childrenExempt, setChildrenExempt] = React.useState(false);
+  const [infantsTaxed, setInfantsTaxed] = React.useState(false);
   const [maxNights, setMaxNights] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
@@ -106,6 +107,7 @@ export function RuleDialog({
     setEffectiveFrom(today);
     setCharges([newCharge()]);
     setChildrenExempt(false);
+    setInfantsTaxed(false);
     setMaxNights("");
     setError(null);
   }
@@ -117,6 +119,8 @@ export function RuleDialog({
     effectiveFrom,
     charges: charges.map(toCharge),
     childrenExempt,
+    // Children exempt means infants are too.
+    infantsTaxed: infantsTaxed && !childrenExempt,
     maxNights: num(maxNights),
   };
   const parsed = touristTaxRuleSchema.safeParse(draft);
@@ -127,6 +131,7 @@ export function RuleDialog({
     effectiveFrom,
     charges: draft.charges.filter((c) => Number.isFinite(c.amount) && c.amount > 0),
     childrenExempt,
+    infantsTaxed: draft.infantsTaxed,
     maxNights: draft.maxNights && draft.maxNights >= 1 ? Math.floor(draft.maxNights) : null,
   };
 
@@ -156,6 +161,7 @@ export function RuleDialog({
       posthog.capture("tourist_tax_rule_added", {
         charges: parsed.data.charges.map((c) => c.kind),
         children_exempt: parsed.data.childrenExempt,
+        infants_taxed: parsed.data.infantsTaxed,
       });
       onOpenChange(false);
       reset();
@@ -240,6 +246,23 @@ export function RuleDialog({
               <div className="flex flex-col gap-1">
                 <FieldLabel htmlFor="tt-children">Children don&apos;t pay</FieldLabel>
                 <FieldDescription>Per-person charges count adults only.</FieldDescription>
+              </div>
+            </Field>
+
+            <Field orientation="horizontal" data-disabled={childrenExempt || undefined}>
+              <Switch
+                id="tt-infants"
+                checked={infantsTaxed && !childrenExempt}
+                onCheckedChange={setInfantsTaxed}
+                disabled={pending || childrenExempt}
+              />
+              <div className="flex flex-col gap-1">
+                <FieldLabel htmlFor="tt-infants">Infants (under 2) pay tourist tax</FieldLabel>
+                <FieldDescription>
+                  {childrenExempt
+                    ? "Children don't pay, so infants don't either."
+                    : "Off: per-person charges leave infants out. Turn on if your town taxes them too."}
+                </FieldDescription>
               </div>
             </Field>
 

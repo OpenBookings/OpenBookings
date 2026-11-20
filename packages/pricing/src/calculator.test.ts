@@ -293,15 +293,34 @@ describe("occupancy & extras", () => {
     expect(resolveRoom(room(), { ...stay(2), infants: 2 }, "2026-06-01").room_price).toBe(100);
   });
 
-  test("tourist tax counts infants with the children", () => {
-    const perPerson = (childrenExempt: boolean): TouristTaxRule => ({
+  test("tourist tax counts infants only where the host's rule says they pay", () => {
+    const perPerson = (childrenExempt: boolean, infantsTaxed?: boolean): TouristTaxRule => ({
       effectiveFrom: "2026-01-01",
       charges: [{ kind: "fixed", amount: 2, perPerson: true, perNight: true, perRoom: false }],
       childrenExempt,
+      infantsTaxed,
       maxNights: null,
     });
-    expect(resolveRoom(room({ tourist_tax_rules: [perPerson(false)] }), { ...stay(2), infants: 1 }, "2026-06-01").tourist_tax.total).toBe(6);
-    expect(resolveRoom(room({ tourist_tax_rules: [perPerson(true)] }), { ...stay(2), infants: 1 }, "2026-06-01").tourist_tax.total).toBe(4);
+    const tax = (rule: TouristTaxRule) =>
+      resolveRoom(room({ tourist_tax_rules: [rule] }), { ...stay(2), infants: 1 }, "2026-06-01").tourist_tax.total;
+    // By default infants don't pay.
+    expect(tax(perPerson(false))).toBe(4);
+    expect(tax(perPerson(false, false))).toBe(4);
+    // The host says infants pay.
+    expect(tax(perPerson(false, true))).toBe(6);
+    // Children exempt means infants are exempt too.
+    expect(tax(perPerson(true, true))).toBe(4);
+  });
+
+  test("an infant never counts as a child for tourist tax", () => {
+    const rule: TouristTaxRule = {
+      effectiveFrom: "2026-01-01",
+      charges: [{ kind: "fixed", amount: 2, perPerson: true, perNight: true, perRoom: false }],
+      childrenExempt: false,
+      maxNights: null,
+    };
+    const r = resolveRoom(room({ tourist_tax_rules: [rule] }), { ...stay(2, 1), infants: 2 }, "2026-06-01");
+    expect(r.tourist_tax.total).toBe(6);
   });
 
   test("discounts never touch the extras", () => {

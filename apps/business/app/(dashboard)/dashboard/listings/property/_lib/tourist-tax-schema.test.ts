@@ -18,6 +18,12 @@ const errorsOf = (input: unknown) => {
 };
 
 describe("touristTaxRuleSchema", () => {
+  test("infants don't pay unless the host says so", () => {
+    const parse = (input: unknown) => touristTaxRuleSchema.parse(input);
+    expect(parse(valid).infantsTaxed).toBe(false);
+    expect(parse({ ...valid, infantsTaxed: true }).infantsTaxed).toBe(true);
+  });
+
   test("accepts a combined rule", () => {
     expect(touristTaxRuleSchema.safeParse(valid).success).toBe(true);
   });

@@ -352,6 +352,8 @@ export function reservationPolicy(i: {
   touristTaxRules: TouristTaxRule[];
   adults: number;
   children: number;
+  /** Under 2: taxed only where the tourist tax rule says so. */
+  infants?: number;
 }): { snapshot: PolicySnapshot; nights: NightValue[] } {
   const snapshot = buildPolicySnapshot({
     tier: snapshotTier(i.propertyTier, i.isRefundable),
@@ -364,6 +366,7 @@ export function reservationPolicy(i: {
     nights: i.nightPrices,
     adults: i.adults,
     children: i.children,
+    infants: i.infants ?? 0,
     // A reservation is one room.
     rooms: 1,
   });
