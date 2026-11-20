@@ -37,7 +37,7 @@ describe("role grants", () => {
   });
 
   test("only owner and general manager may request a goodwill refund", () => {
-    expect(rolesWith({ booking: ["request-refund"] })).toEqual(["owner", "admin"]);
+    expect(rolesWith({ booking: ["request-refund"] })).toEqual(["owner", "admin", "manager"]);
   });
 
   test("no host role may issue a refund at its own discretion", () => {
@@ -157,10 +157,13 @@ describe("userCan", () => {
     expect(await userCan(session, "p1", { booking: ["request-refund"] }, deps)).toBe(false);
   });
 
-  test("a manager cannot request a goodwill refund", async () => {
-    const deps = { queryOne: row({ legacy_owner: false, role: "manager", has_access: true }) };
-    expect(await userCan(session, "p1", { booking: ["cancel"] }, deps)).toBe(true);
-    expect(await userCan(session, "p1", { booking: ["request-refund"] }, deps)).toBe(false);
+  test("a manager can request a goodwill refund; reservations staff cannot", async () => {
+    const manager = { queryOne: row({ legacy_owner: false, role: "manager", has_access: true }) };
+    expect(await userCan(session, "p1", { booking: ["cancel"] }, manager)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["request-refund"] }, manager)).toBe(true);
+    const reservations = { queryOne: row({ legacy_owner: false, role: "reservations", has_access: true }) };
+    expect(await userCan(session, "p1", { booking: ["cancel"] }, reservations)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["request-refund"] }, reservations)).toBe(false);
   });
 
   test("a legacy pre-org owner has every grant", async () => {

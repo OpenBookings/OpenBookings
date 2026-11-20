@@ -36,7 +36,7 @@ export const ROLE_INFO: Record<HostRole, RoleInfo> = {
     role: "manager",
     label: "Manager",
     summary:
-      "Runs one or more properties: their listings, rates and bookings. No goodwill refund requests, no team or payouts.",
+      "Runs one or more properties: their listings, rates and bookings, including goodwill refund requests. No team or payouts.",
     scope: "Only the properties you choose",
   },
   reservations: {

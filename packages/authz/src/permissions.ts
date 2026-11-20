@@ -86,7 +86,7 @@ export const roles = {
   manager: ac.newRole({
     property: ["update", "publish"],
     rate: ["read", "update"],
-    booking: ["read", "operate", "cancel"],
+    booking: ["read", "operate", "cancel", "request-refund"],
   }),
   reservations: ac.newRole({
     rate: ["read"],

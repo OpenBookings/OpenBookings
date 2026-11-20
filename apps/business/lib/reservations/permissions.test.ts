@@ -10,12 +10,13 @@ describe("actionsForViewer", () => {
     expect(actionsForViewer(ALL, { role: "admin", hasPropertyAccess: false })).toEqual(ALL);
   });
 
-  test("a manager can cancel but not request goodwill refunds", () => {
+  test("a manager can cancel and request goodwill refunds", () => {
     expect(actionsForViewer(ALL, { role: "manager", hasPropertyAccess: true })).toEqual([
       "cancel",
       "mark_checked_in",
       "mark_no_show",
       "record_early_departure",
+      "goodwill_refund",
     ]);
   });
 

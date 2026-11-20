@@ -11,8 +11,8 @@ import type { BookingAction } from "@openbookings/pricing";
  * - Cancelling is `cancel`: the refund again follows the policy.
  * - A goodwill refund is never issued by a host (owner decision
  *   2026-11-20). For hosts, `goodwill_refund` in the list only means they
- *   may *request* one through support (`request-refund`, owners and general
- *   managers); OpenBookings staff issue it from the admin app. No host server
+ *   may *request* one through support (`request-refund`: owners, general
+ *   managers and managers); OpenBookings staff issue it from the admin app. No host server
  *   action issues a goodwill refund.
  */
 export const ACTION_PERMISSION: Record<BookingAction, Permission> = {
