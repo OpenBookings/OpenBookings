@@ -22,6 +22,11 @@ export type LedgerDeps = {
   chargeInfo(chargeId: string, accountId: string): Promise<ChargeInfo>;
   /** Refunds the charge in full, application fee included. Same charge, same refund: idempotent on Stripe. */
   returnPayment(chargeId: string, accountId: string, reason: "unexplained"): Promise<{ refundId: string }>;
+  /**
+   * Hands back to the host whatever is left of an application fee. Nothing
+   * left, nothing moves (`refundId` null). Idempotent on Stripe.
+   */
+  returnFee(feeId: string): Promise<{ refundId: string | null }>;
   audit(entry: { action: "payment.unexplained-returned"; stripeAccountId: string; dedupeKey: string; detail: object }): Promise<void>;
   report(error: unknown, context?: object): void;
 };

@@ -106,6 +106,30 @@ export async function refundCommissionForCharge(
 }
 
 /**
+ * Hands back to the host whatever is left of an application fee, for a
+ * payment that never became a booking and has gone back to the guest in full,
+ * whoever refunded it (OpenBookings, or the host in their own Stripe
+ * Dashboard). If the booking did not happen, OpenBookings does not earn. Only
+ * the commission ledger knows a payment never became a booking, so its
+ * monthly reconciliation calls this; nothing here checks it.
+ *
+ * Safe to repeat: nothing is left, nothing moves. The idempotency key names
+ * the fee's total, as `refundCommissionForCharge` does for a refund that
+ * completes the fee, so the two never both pay the same remainder.
+ */
+export async function returnRestOfCommission(feeId: string): Promise<{ refundId: string | null; amount: number }> {
+  const fee = await stripe.applicationFees.retrieve(feeId);
+  const rest = fee.amount - fee.amount_refunded;
+  if (rest <= 0) return { refundId: null, amount: 0 };
+  const created = await stripe.applicationFees.createRefund(
+    fee.id,
+    { amount: rest },
+    { idempotencyKey: `commission-refund:${fee.id}:${fee.amount}` },
+  );
+  return { refundId: created.id, amount: created.amount };
+}
+
+/**
  * The refunds OpenBookings did not make. Failed and canceled ones moved no
  * money and are left out; pending ones are kept, as they normally go through.
  */

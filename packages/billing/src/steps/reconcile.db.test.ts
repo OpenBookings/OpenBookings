@@ -19,6 +19,7 @@ const NEXT_MONTH = Math.floor(PERIOD.to.getTime() / 1000) + 60; // 1 November, j
 
 type Calls = {
   returnPayment: [string, string, string][];
+  returnFee: string[];
   audit: Parameters<LedgerDeps["audit"]>[0][];
   report: { error: unknown; context?: object }[];
   listed: unknown[];
@@ -42,6 +43,8 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
   let stripeRefunds: Map<string, FeeRefundLike>;
   /** What `returnPayment` does on Stripe: by default refunds the fee in full on 1 November. */
   let onReturn: (chargeId: string) => void;
+  /** Runs before `returnFee` refunds the rest of the fee on Stripe; throw to refuse. */
+  let onReturnFee: (feeId: string) => void;
   let calls: Calls;
 
   const bookedCharge = (): ChargeInfo => ({ paymentIntentId: pi, metadata: {}, amount: 25_000, amountRefunded: 0 });
@@ -55,6 +58,14 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
       const c = charges.get(chargeId);
       if (c) charges.set(chargeId, { ...c, amountRefunded: c.amount });
       return { refundId: `re_${chargeId}` };
+    },
+    returnFee: async (feeId) => {
+      calls.returnFee.push(feeId);
+      onReturnFee(feeId);
+      const f = stripeFees.get(feeId)!;
+      const refunded = [...stripeRefunds.values()].filter((r) => r.fee === feeId).reduce((t, r) => t + r.amount, 0);
+      if (refunded >= f.amount) return { refundId: null };
+      return { refundId: stripeRefund(f, f.amount - refunded, NEXT_MONTH, false).id };
     },
     audit: async (entry) => {
       calls.audit.push(entry);
@@ -188,7 +199,8 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     listed = [];
     stripeFees = new Map();
     stripeRefunds = new Map();
-    calls = { returnPayment: [], audit: [], report: [], listed: [] };
+    calls = { returnPayment: [], returnFee: [], audit: [], report: [], listed: [] };
+    onReturnFee = () => {};
     onReturn = (chargeId) => {
       const f = [...stripeFees.values()].find((x) => x.charge === chargeId)!;
       stripeRefund(f, f.amount, NEXT_MONTH, false);
@@ -407,15 +419,96 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
     expect(calls.report.some((c) => (c.error as Error).message === "Stripe said no")).toBe(true);
   });
 
-  test("a returned fee whose refund leaves the fee with us blocks the run", async () => {
+  test("a returned fee whose payment refund leaves the fee with us gets the rest of the fee back", async () => {
     const f = await oversoldFee();
     await record(f);
     onReturn = () => {}; // the charge is refunded, the application fee is not
 
     const result = await reconcile(PERIOD, deps());
 
+    expect(result.status).toBe("succeeded");
+    expect(calls.returnFee).toEqual([f.id]);
+    expect(result.notYetReturned).toEqual([]);
+  });
+
+  /** The host refunded `amount` of the payment in their own Stripe Dashboard: no part of the fee came back. */
+  const refundedInStripe = (f: FeeLike, amount: number) => {
+    const c = charges.get(f.charge)!;
+    charges.set(f.charge, { ...c, amountRefunded: amount });
+  };
+
+  test("host refunds EUR 20 in Stripe, then we return the rest of the payment: the whole fee goes back", async () => {
+    const f = await oversoldFee();
+    await record(f);
+    refundedInStripe(f, 2_000);
+    // Returning the remaining EUR 230 hands back the fee in proportion: 1080 × 230/250.
+    onReturn = () => void stripeRefund(f, 993, NEXT_MONTH, false);
+
+    const result = await reconcile(PERIOD, deps());
+
+    expect(result.status).toBe("succeeded");
+    expect(calls.returnPayment).toEqual([[f.charge, account, "unexplained"]]);
+    expect(calls.returnFee).toEqual([f.id]);
+    expect(result.notYetReturned).toEqual([]);
+    expect((await rows()).map((x) => x.gross)).toEqual(["1080", "-993", "-87"]);
+  });
+
+  test("host refunds the whole payment in Stripe: the whole fee goes back, and the payment is not refunded again", async () => {
+    const f = await oversoldFee();
+    await record(f);
+    refundedInStripe(f, 25_000);
+
+    const result = await reconcile(PERIOD, deps());
+
+    expect(result.status).toBe("succeeded");
+    expect(calls.returnPayment).toEqual([]);
+    expect(calls.returnFee).toEqual([f.id]);
+    expect(result.returned).toEqual([]);
+    expect(await rows()).toEqual([
+      { kind: "fee", fee: f.id, refund: null, gross: "1080", disposition: "returned" },
+      { kind: "fee_refund", fee: f.id, refund: expect.stringMatching(/^fr_/), gross: "-1080", disposition: "returned" },
+    ]);
+    expect(calls.report.some((c) => /rest of the fee went back/.test((c.error as Error).message))).toBe(true);
+  });
+
+  test("the rest of a part-returned fee goes back too", async () => {
+    const f = await oversoldFee();
+    await record(f);
+    refundedInStripe(f, 25_000);
+    await recordRefund(stripeRefund(f, 400, CREATED + 3600, true));
+
+    const result = await reconcile(PERIOD, deps());
+
+    expect(result.status).toBe("succeeded");
+    expect((await rows()).map((x) => x.gross)).toEqual(["1080", "-400", "-680"]);
+  });
+
+  test("a fully refunded payment whose fee cannot be returned blocks the run", async () => {
+    const f = await oversoldFee();
+    await record(f);
+    refundedInStripe(f, 25_000);
+    onReturnFee = () => {
+      throw new Error("Stripe said no");
+    };
+
+    const result = await reconcile(PERIOD, deps());
+
     expect(result.status).toBe("blocked");
     expect(result.notYetReturned).toEqual([f.id]);
+    expect(calls.report.some((c) => (c.error as Error).message === "Stripe said no")).toBe(true);
+  });
+
+  test("a dry run counts the rest of the fee as returned and moves nothing", async () => {
+    const f = await oversoldFee();
+    await record(f);
+    refundedInStripe(f, 25_000);
+
+    const result = await reconcile(PERIOD, deps({ dryRun: true }));
+
+    expect(result.status).toBe("succeeded");
+    expect(result.notYetReturned).toEqual([]);
+    expect(calls.returnFee).toEqual([]);
+    expect((await rows()).map((x) => x.gross)).toEqual(["1080"]);
   });
 
   test("dry run backfills and returns nothing", async () => {
@@ -591,6 +684,9 @@ describeCommitting("reconciliation transactions on a real pool", () => {
       returnPayment: async () => {
         throw new Error("unexpected returnPayment");
       },
+      returnFee: async () => {
+        throw new Error("unexpected returnFee");
+      },
       audit: async () => {},
       report: () => {},
     };
@@ -647,6 +743,10 @@ describeCommitting("reconciliation transactions on a real pool", () => {
         returnPayment: async (...args) => {
           moved.push(["returnPayment", ...args]);
           return { refundId: "re_real" };
+        },
+        returnFee: async (feeId) => {
+          moved.push(["returnFee", feeId]);
+          return { refundId: "fr_real" };
         },
         audit: async (entry) => void moved.push(["audit", entry]),
         report: (error) => void moved.push(["report", error]),

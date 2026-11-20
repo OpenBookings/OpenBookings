@@ -16,6 +16,7 @@ export { DEFAULT_COMMISSION_LABEL, DEFAULT_COMMISSION_RATE, formatCommissionRate
 export { ensurePaymentMethodDomain, type PaymentMethodDomainResult } from './payments/payment-domain';
 export {
   refundCommissionForCharge,
+  returnRestOfCommission,
   refundsOutsideOpenBookings,
   type CommissionRefund,
   type CommissionReturn,
