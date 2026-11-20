@@ -1,3 +1,4 @@
+import { tomtomSearchUrl, type TomtomResult, type TomtomSearchParams } from "@openbookings/maps";
 import { COUNTRIES } from "./countries";
 
 /**
@@ -6,12 +7,11 @@ import { COUNTRIES } from "./countries";
  * Two jobs, two entry points:
  *
  * - `searchProperty`: the host types their property's name ("Terme di
- *   Saturnia", "Hotel Okura Amsterdam") and picks it. MapTiler's points of
- *   interest carry OpenStreetMap's address tags (`addr:street`,
- *   `addr:postcode`, …), so one pick fills the address *and* places the pin on
- *   the building rather than on the street. A named place without a street —
- *   a rural estate — comes back with that line missing, and the editor opens
- *   the address lines for the host to complete.
+ *   Saturnia", "Hotel Okura Amsterdam") and picks it. TomTom's points of
+ *   interest carry a structured address, so one pick fills the address *and*
+ *   places the pin on the building rather than on the street. A named place
+ *   without a street — a rural estate — comes back with that line missing, and
+ *   the editor opens the address lines for the host to complete.
  *
  * - `locateTypedAddress`: the host edited the address lines by hand. The pin
  *   follows the address, so the typed address is placed — exactly where it can
@@ -19,8 +19,13 @@ import { COUNTRIES } from "./countries";
  *   result is about what was typed. A Dutch postcode + number goes to PDOK (the
  *   government's BAG register, exact for every Dutch address) through our own
  *   /api/address-lookup/nl, so the host's browser never talks to a vendor the
- *   privacy policy does not list. Everything else goes to MapTiler, already
+ *   privacy policy does not list. Everything else goes to TomTom, already
  *   our map vendor.
+ *
+ * TomTom's terms (11.4, 11.6) forbid storing its results. Nothing here is
+ * saved: a result only fills the form, and what is saved is what the host
+ * confirms there. Never persist TomTom ids, labels or raw responses, and never
+ * cache results on a server.
  */
 
 export interface AddressFields {
@@ -135,65 +140,55 @@ async function lookupDutchAddress(postcode: string, houseNumber: string, signal:
   return body.candidates;
 }
 
-// ── MapTiler ───────────────────────────────────────────────────────────────
+// ── TomTom ─────────────────────────────────────────────────────────────────
 
-export interface MaptilerFeature {
-  id?: string;
-  /** Full display name, e.g. "Hotel Okura Amsterdam, Ferdinand Bolstraat 333, …". */
-  place_name?: string;
-  /** The feature's own name: a street for an address, a business for a POI. */
-  text?: string;
-  /** House number, when the feature is a numbered address. */
-  address?: string;
-  center?: [number, number];
-  place_type?: string[];
-  properties?: {
-    country_code?: string;
-    /** OpenStreetMap tags, including `addr:*` on most POIs. */
-    feature_tags?: Record<string, string>;
-  };
-  context?: { id: string; text: string }[];
+/** Every country a property can be in, as TomTom's comma-separated filter. */
+const SEARCH_COUNTRIES = COUNTRIES.map((c) => c.code.toUpperCase()).join(",");
+
+async function search(
+  query: string,
+  key: string,
+  params: TomtomSearchParams,
+  signal: AbortSignal,
+): Promise<TomtomResult[]> {
+  const url = tomtomSearchUrl(query, key, params);
+  if (!url) throw new Error("No TomTom key configured");
+  const body = await getJson<{ results?: TomtomResult[] }>(url, signal);
+  return body.results ?? [];
 }
-
-function maptilerUrl(query: string, key: string, params: Record<string, string>): string {
-  const search = new URLSearchParams({ key, ...params });
-  return `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?${search}`;
-}
-
-function contextText(f: MaptilerFeature, ...prefixes: string[]): string | undefined {
-  for (const p of prefixes) {
-    const hit = f.context?.find((c) => c.id.startsWith(p))?.text;
-    if (hit) return hit;
-  }
-  return undefined;
-}
-
-/** Every country a property can be in, as MapTiler's comma-separated filter. */
-const SEARCH_COUNTRIES = COUNTRIES.map((c) => c.code.toLowerCase()).join(",");
 
 /**
- * A search result as an address. OpenStreetMap's own `addr:*` tags win: the
- * geocoder's context names the *nearest* street, and for the Adlon that is
- * Pariser Platz while its address is Unter den Linden 77. For a city, the
- * municipality beats the context's `place`, which is often a district ("Zuid").
+ * A result's postcode. In NL `postalCode` holds only the digits ("1072"), so
+ * the full code comes from `extendedPostalCode`, which for a street spanning
+ * several postcodes is a list: take the first.
  */
-export function propertyCandidate(f: MaptilerFeature): AddressCandidate | null {
-  if (!f.text || !f.center) return null;
-  const tags = f.properties?.feature_tags ?? {};
-  const country = (f.properties?.country_code ?? tags["addr:country"] ?? "").toUpperCase();
-  if (!/^[A-Z]{2}$/.test(country)) return null;
+function resultPostcode(r: TomtomResult): string {
+  return r.address.extendedPostalCode?.split(",")[0]?.trim() || r.address.postalCode || "";
+}
 
-  const isAddress = f.place_type?.includes("address");
-  const street = tags["addr:street"] ?? (isAddress ? f.text : undefined);
-  const number = tags["addr:housenumber"] ?? (isAddress ? f.address : undefined);
-  const addressLine1 = [street, street ? number : undefined].filter(Boolean).join(" ");
+/** "The Leading Hotels of the World Hotel Okura Amsterdam" → "Hotel Okura Amsterdam". */
+function poiName(r: TomtomResult): string | undefined {
+  const name = r.poi?.name?.trim();
+  const brand = r.poi?.brands?.[0]?.name;
+  if (name && brand && name.startsWith(`${brand} `)) return name.slice(brand.length + 1).trim() || name;
+  return name || undefined;
+}
 
-  const rawPostcode = tags["addr:postcode"] ?? contextText(f, "postal_code") ?? "";
+/** A search result as an address the host can confirm. */
+export function propertyCandidate(r: TomtomResult): AddressCandidate | null {
+  const a = r.address;
+  const country = (a.countryCode ?? "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country) || !r.position) return null;
+
+  const isPoi = r.type === "POI";
+  const name = (isPoi ? poiName(r) : undefined) ?? a.streetName ?? a.freeformAddress;
+  if (!name) return null;
+
+  const street = r.type === "Geography" ? undefined : a.streetName;
+  const addressLine1 = [street, street ? a.streetNumber : undefined].filter(Boolean).join(" ");
+  const rawPostcode = resultPostcode(r);
   const postalCode = rawPostcode ? formatPostcode(rawPostcode, country) : "";
-  const city =
-    tags["addr:city"] ??
-    contextText(f, "municipality", "municipal_district", "locality", "place") ??
-    (f.place_type?.includes("place") ? f.text : "");
+  const city = a.localName ?? a.municipality ?? "";
 
   const missing = (
     [
@@ -205,35 +200,42 @@ export function propertyCandidate(f: MaptilerFeature): AddressCandidate | null {
     .filter(([, v]) => !v)
     .map(([k]) => k);
 
+  const label = isPoi && a.freeformAddress ? `${name}, ${a.freeformAddress}` : (a.freeformAddress ?? name);
   return {
-    id: f.id ?? `${f.text}-${f.center.join(",")}`,
-    name: f.text,
-    label: f.place_name ?? f.text,
+    id: r.id ?? `${label}-${r.position.lon},${r.position.lat}`,
+    name,
+    label,
     addressLine1,
     postalCode,
     city,
     country,
-    lon: f.center[0],
-    lat: f.center[1],
+    lon: r.position.lon,
+    lat: r.position.lat,
     missing,
   };
 }
 
-/** Property or place name → candidates anywhere a property can be. */
-export async function searchProperty(query: string, key: string, signal: AbortSignal): Promise<AddressCandidate[]> {
-  if (!key) throw new Error("No MapTiler key configured");
-  const body = await getJson<{ features?: MaptilerFeature[] }>(
-    maptilerUrl(query.trim(), key, { country: SEARCH_COUNTRIES, types: "poi,address,place", limit: "8" }),
-    signal,
-  );
+function candidates(results: TomtomResult[]): AddressCandidate[] {
   const seen = new Set<string>();
-  return (body.features ?? [])
+  return results
     .map(propertyCandidate)
     .filter((c): c is AddressCandidate => {
       if (!c || seen.has(c.label.toLowerCase())) return false;
       seen.add(c.label.toLowerCase());
       return true;
     });
+}
+
+/** Property or place name → candidates anywhere a property can be. */
+export async function searchProperty(query: string, key: string, signal: AbortSignal): Promise<AddressCandidate[]> {
+  const results = await search(query.trim(), key, { idxSet: "POI,PAD,Addr,Geo", countrySet: SEARCH_COUNTRIES, limit: 8 }, signal);
+  return candidates(results);
+}
+
+/** Addresses only (no hotels or places), for the onboarding autocomplete. */
+export async function searchAddresses(query: string, key: string, signal: AbortSignal): Promise<AddressCandidate[]> {
+  const results = await search(query.trim(), key, { idxSet: "PAD,Addr", countrySet: SEARCH_COUNTRIES, limit: 5 }, signal);
+  return candidates(results);
 }
 
 // ── Typed address → pin ────────────────────────────────────────────────────
@@ -245,8 +247,8 @@ export async function searchProperty(query: string, key: string, signal: AbortSi
  */
 const NEAR_POSTCODE_KM = 15;
 
-/** Feature kinds that can be a property's location. Rivers and hills cannot. */
-const LOCATABLE_TYPES = "address,poi,place,locality,neighbourhood,road";
+/** Areas too large to be a property's location. */
+const REGION_ENTITIES = new Set(["Country", "CountrySubdivision", "CountrySecondarySubdivision"]);
 
 export function distanceKm([lon1, lat1]: [number, number], [lon2, lat2]: [number, number]): number {
   const rad = Math.PI / 180;
@@ -258,21 +260,22 @@ export function distanceKm([lon1, lat1]: [number, number], [lon2, lat2]: [number
 }
 
 /**
- * Keep results that belong to this postcode: inside it by their own context,
+ * Keep results that belong to this postcode: inside it by their own address,
  * or near its centre when they carry no postcode at all. Without a postcode
  * centre, the country filter on the request is all there is.
  */
 export function nearPostcode(
-  features: MaptilerFeature[],
+  results: TomtomResult[],
   postcode: string,
   centre: [number, number] | null,
-): MaptilerFeature[] {
+): TomtomResult[] {
   const want = normalizePostcode(postcode);
-  return features.filter((f) => {
-    if (!f.center || f.place_type?.includes("major_landform")) return false;
-    const pc = contextText(f, "postal_code");
-    if (want && pc) return normalizePostcode(pc) === want || (!!centre && distanceKm(centre, f.center) <= NEAR_POSTCODE_KM);
-    return !centre || distanceKm(centre, f.center) <= NEAR_POSTCODE_KM;
+  return results.filter((r) => {
+    if (!r.position || (r.type === "Geography" && REGION_ENTITIES.has(r.entityType ?? ""))) return false;
+    const at: [number, number] = [r.position.lon, r.position.lat];
+    const pc = resultPostcode(r);
+    if (want && pc) return normalizePostcode(pc) === want || (!!centre && distanceKm(centre, at) <= NEAR_POSTCODE_KM);
+    return !centre || distanceKm(centre, at) <= NEAR_POSTCODE_KM;
   });
 }
 
@@ -283,11 +286,8 @@ async function postcodeCentre(
   signal: AbortSignal,
 ): Promise<[number, number] | null> {
   if (!postcode.trim()) return null;
-  const body = await getJson<{ features?: MaptilerFeature[] }>(
-    maptilerUrl(postcode.trim(), key, { country: country.toLowerCase(), types: "postal_code", limit: "1" }),
-    signal,
-  );
-  return body.features?.[0]?.center ?? null;
+  const [hit] = await search(postcode.trim(), key, { idxSet: "Geo,EPP", countrySet: country.toUpperCase(), limit: 1 }, signal);
+  return hit?.position ? [hit.position.lon, hit.position.lat] : null;
 }
 
 /**
@@ -311,6 +311,16 @@ function nameWords(text: string): string[] {
     .replace(/ß/g, "ss")
     .split(/[^a-z]+/)
     .filter((w) => w.length >= 4 && !GENERIC_WORDS.has(w));
+}
+
+/**
+ * Whether the house number found is the one typed. Only the leading number
+ * counts: TomTom writes "1870/16" and "2/B" where the host typed "1870" or "2b".
+ */
+export function isExactNumber(found: string | undefined, typed: string): boolean {
+  const lead = (v: string) => /^\s*(\d+)/.exec(v)?.[1];
+  const f = found ? lead(found) : undefined;
+  return !!f && f === lead(typed);
 }
 
 /** Whether a result's name shares a distinctive word with what the host typed. */
@@ -351,36 +361,41 @@ export async function locateTypedAddress(
     if (hit) return { lon: hit.lon, lat: hit.lat, label: hit.label, precision: "exact" };
   }
 
-  if (!key) throw new Error("No MapTiler key configured");
+  if (!key) throw new Error("No TomTom key configured");
   const query = [input.addressLine1, input.city].map((p) => p.trim()).filter(Boolean).join(", ");
   if (!input.addressLine1.trim()) return null;
 
-  const centre = await postcodeCentre(input.postalCode, input.country, key, signal);
-  const params: Record<string, string> = {
-    country: input.country.toLowerCase(),
-    types: LOCATABLE_TYPES,
-    limit: "5",
-  };
-  if (centre) params.proximity = `${centre[0]},${centre[1]}`;
-  const body = await getJson<{ features?: MaptilerFeature[] }>(maptilerUrl(query, key, params), signal);
+  const country = input.country.toUpperCase();
+  const centre = await postcodeCentre(input.postalCode, country, key, signal);
+  const results = await search(
+    query,
+    key,
+    {
+      idxSet: "PAD,Addr,Str,Geo,POI",
+      countrySet: country,
+      limit: 5,
+      ...(centre ? { lon: centre[0], lat: centre[1] } : {}),
+    },
+    signal,
+  );
 
-  const near = nearPostcode(body.features ?? [], input.postalCode, centre).filter((f) => {
+  const near = nearPostcode(results, input.postalCode, centre).filter((r) => {
     // Without a postcode to anchor to, the typed city has to match instead.
     if (centre) return true;
-    const city = contextText(f, "place", "locality", "municipality", "municipal_district") ?? f.text ?? "";
+    const city = r.address.localName ?? r.address.municipality ?? "";
     return input.city.trim() !== "" && city.toLowerCase().includes(input.city.trim().toLowerCase());
   });
   // The match has to be about what the host typed, not just the town: for an
-  // unknown street the geocoder falls back to the city, and a pin in the
+  // unknown street the search falls back to the town, and a pin in the
   // middle of Saturnia is not "Località Follonata".
-  const f = near.find((x) => sharesName(input.addressLine1, x.text ?? ""));
-  if (!f?.center) return null;
+  const r = near.find((x) => sharesName(input.addressLine1, [x.poi?.name, x.address.streetName].filter(Boolean).join(" ")));
+  if (!r?.position) return null;
 
-  const exact = !!parsed && !!f.address && parseHouseNumber(f.address)?.number === parsed.number;
+  const exact = !!parsed && (r.type === "Point Address" || r.type === "POI") && isExactNumber(r.address.streetNumber, parsed.number);
   return {
-    lon: f.center[0],
-    lat: f.center[1],
-    label: f.place_name ?? f.text ?? query,
+    lon: r.position.lon,
+    lat: r.position.lat,
+    label: r.address.freeformAddress ?? query,
     precision: exact ? "exact" : "approximate",
   };
 }

@@ -2,15 +2,17 @@ import { describe, expect, test } from "bun:test";
 import {
   distanceKm,
   formatPostcode,
+  isExactNumber,
   nearPostcode,
   normalizePostcode,
   parseHouseNumber,
   parsePdokDocs,
   propertyCandidate,
+  searchProperty,
   sharesName,
   trailingHouseNumber,
-  type MaptilerFeature,
 } from "./address-lookup";
+import type { TomtomResult } from "@openbookings/maps";
 
 describe("postcodes", () => {
   test("normalise without spaces or case", () => {
@@ -75,94 +77,98 @@ describe("parsePdokDocs", () => {
 });
 
 describe("propertyCandidate", () => {
-  test("fills the address from the POI's own address tags", () => {
-    const okura: MaptilerFeature = {
-      id: "poi.1",
-      text: "Hotel Okura Amsterdam",
-      place_name: "Hotel Okura Amsterdam, Ferdinand Bolstraat 333, 1072 LH Amsterdam, Nederland",
-      center: [4.893, 52.35],
-      place_type: ["poi"],
-      properties: {
-        country_code: "nl",
-        feature_tags: {
-          "addr:street": "Ferdinand Bolstraat",
-          "addr:housenumber": "333",
-          "addr:postcode": "1072LH",
-          "addr:city": "Amsterdam",
-        },
-      },
-      context: [
-        { id: "address.1", text: "Ferdinand Bolstraat" },
-        { id: "place.1", text: "Zuid" },
-        { id: "municipality.1", text: "Amsterdam" },
-      ],
-    };
+  const okura: TomtomResult = {
+    type: "POI",
+    id: "x1",
+    poi: {
+      name: "The Leading Hotels of the World Hotel Okura Amsterdam",
+      brands: [{ name: "The Leading Hotels of the World" }],
+    },
+    address: {
+      streetName: "Ferdinand Bolstraat",
+      streetNumber: "333",
+      postalCode: "1072",
+      extendedPostalCode: "1072 LH",
+      municipality: "Amsterdam",
+      localName: "Amsterdam",
+      countryCode: "NL",
+      freeformAddress: "Ferdinand Bolstraat 333, 1072 LH Amsterdam",
+    },
+    position: { lat: 52.3486, lon: 4.893 },
+  };
+
+  test("fills the address from a hotel result, brand prefix dropped, full Dutch postcode", () => {
     expect(propertyCandidate(okura)).toMatchObject({
       name: "Hotel Okura Amsterdam",
+      label: "Hotel Okura Amsterdam, Ferdinand Bolstraat 333, 1072 LH Amsterdam",
       addressLine1: "Ferdinand Bolstraat 333",
       postalCode: "1072 LH",
       city: "Amsterdam",
       country: "NL",
+      lon: 4.893,
+      lat: 52.3486,
       missing: [],
     });
   });
 
-  test("prefers the tagged street over the nearest one in the context", () => {
-    const adlon: MaptilerFeature = {
-      text: "Adlon Kempinski",
-      center: [13.38, 52.516],
-      place_type: ["poi"],
-      properties: {
-        country_code: "de",
-        feature_tags: { "addr:street": "Unter den Linden", "addr:housenumber": "77", "addr:postcode": "10117", "addr:city": "Berlin" },
-      },
-      context: [{ id: "address.1", text: "Pariser Platz" }],
-    };
-    expect(propertyCandidate(adlon)?.addressLine1).toBe("Unter den Linden 77");
+  test("keeps a name that is only the brand", () => {
+    expect(propertyCandidate({ ...okura, poi: { name: "Hilton", brands: [{ name: "Hilton" }] } })?.name).toBe("Hilton");
   });
 
-  test("reports the street as missing for a named place without one", () => {
-    const saturnia: MaptilerFeature = {
-      text: "Terme Di Saturnia Spa & Golf",
-      center: [11.517, 42.6595],
-      place_type: ["poi"],
-      properties: { country_code: "it", feature_tags: { "addr:postcode": "58014", "addr:city": "Saturnia" } },
-      context: [
-        { id: "postal_code.1", text: "58014" },
-        { id: "municipality.1", text: "Manciano" },
-      ],
+  test("takes the first postcode from a list", () => {
+    expect(
+      propertyCandidate({ ...okura, address: { ...okura.address, extendedPostalCode: "1072 LH, 1072 LJ" } })?.postalCode,
+    ).toBe("1072 LH");
+  });
+
+  test("reports the street as missing when a place has none", () => {
+    const saturnia: TomtomResult = {
+      type: "POI",
+      poi: { name: "Terme di Saturnia" },
+      address: { postalCode: "58014", municipality: "Manciano", localName: "Manciano", countryCode: "IT", freeformAddress: "58014 Manciano" },
+      position: { lat: 42.6578, lon: 11.5165 },
     };
     expect(propertyCandidate(saturnia)).toMatchObject({
       addressLine1: "",
       postalCode: "58014",
-      city: "Saturnia",
+      city: "Manciano",
       country: "IT",
       missing: ["addressLine1"],
     });
   });
 
-  test("uses a street result's own name and number", () => {
-    const street: MaptilerFeature = {
-      text: "Via delle Terme",
-      center: [11.51, 42.655],
-      place_type: ["address"],
-      properties: { country_code: "it" },
-      context: [
-        { id: "postal_code.1", text: "58014" },
-        { id: "place.1", text: "Saturnia" },
-        { id: "municipality.1", text: "Manciano" },
-      ],
+  test("an address-only result is named by its street and keeps the ISO country", () => {
+    const pa: TomtomResult = {
+      type: "Point Address",
+      address: {
+        streetName: "Unter den Linden",
+        streetNumber: "77",
+        postalCode: "10117",
+        municipality: "Berlin",
+        localName: "Berlin",
+        countryCode: "DE",
+        freeformAddress: "Unter den Linden 77, 10117 Berlin",
+      },
+      position: { lat: 52.516133, lon: 13.380149 },
     };
-    expect(propertyCandidate(street)).toMatchObject({
-      addressLine1: "Via delle Terme",
-      postalCode: "58014",
-      city: "Manciano",
+    expect(propertyCandidate(pa)).toMatchObject({
+      name: "Unter den Linden",
+      label: "Unter den Linden 77, 10117 Berlin",
+      addressLine1: "Unter den Linden 77",
+      country: "DE",
       missing: [],
     });
   });
 
-  test("drops a result without a country", () => {
-    expect(propertyCandidate({ text: "Somewhere", center: [0, 0] })).toBeNull();
+  test("drops a result without a country or position", () => {
+    expect(propertyCandidate({ type: "POI", address: {}, position: { lat: 0, lon: 0 } })).toBeNull();
+    expect(propertyCandidate({ ...okura, position: undefined })).toBeNull();
+  });
+});
+
+describe("searchProperty", () => {
+  test("refuses to run without a key", async () => {
+    await expect(searchProperty("Okura", "", new AbortController().signal)).rejects.toThrow("No TomTom key configured");
   });
 });
 
@@ -183,17 +189,25 @@ describe("placing a typed address", () => {
     expect(distanceKm(SATURNIA_POSTCODE, [11.517, 42.6595])).toBeLessThan(6);
   });
 
-  test("nearPostcode keeps nearby results and drops far ones and landforms", () => {
+  test("isExactNumber compares the leading number only", () => {
+    expect(isExactNumber("1870/16", "1870")).toBe(true);
+    expect(isExactNumber("2/B", "2b")).toBe(true);
+    expect(isExactNumber("77", "7")).toBe(false);
+    expect(isExactNumber(undefined, "7")).toBe(false);
+  });
+
+  test("nearPostcode keeps nearby results and drops far ones and whole regions", () => {
+    const at = (lon: number, lat: number) => ({ lat, lon });
     const kept = nearPostcode(
       [
-        { text: "Terme di Saturnia", center: [11.517, 42.6595], place_type: ["poi"] },
-        { text: "Località Monte", center: [14.5, 41.54], place_type: ["address"] },
-        { text: "Fosso", center: [11.52, 42.62], place_type: ["major_landform"] },
-        { text: "Via delle Terme", center: [11.51, 42.655], context: [{ id: "postal_code.1", text: "58014" }] },
+        { type: "POI", poi: { name: "Terme di Saturnia" }, address: { postalCode: "58014" }, position: at(11.5165, 42.6578) },
+        { type: "Street", address: { streetName: "Via Saturnia" }, position: at(13.7049, 41.2863) },
+        { type: "Geography", entityType: "CountrySubdivision", address: {}, position: at(11.5, 42.62) },
+        { type: "Street", address: { streetName: "Via Italia in Saturnia" }, position: at(11.5077, 42.6667) },
       ],
       "58014",
-      SATURNIA_POSTCODE,
+      [11.493, 42.5721],
     );
-    expect(kept.map((f) => f.text)).toEqual(["Terme di Saturnia", "Via delle Terme"]);
+    expect(kept.map((r) => r.poi?.name ?? r.address.streetName)).toEqual(["Terme di Saturnia", "Via Italia in Saturnia"]);
   });
 });
