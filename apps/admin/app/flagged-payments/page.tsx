@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getPool } from "@openbookings/db";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { readPool } from "@/lib/db";
 import { bookingRef, loadFlaggedPayments, type FlaggedPayment, type FlagKind } from "@/lib/flagged-payments";
 import { requireSuperAdmin } from "@/lib/super-admin";
 import { ResolveForm } from "./resolve-form";
@@ -49,7 +49,7 @@ const when = (d: Date) =>
  */
 export default async function FlaggedPaymentsPage() {
   requireSuperAdmin();
-  const flags = await loadFlaggedPayments(getPool());
+  const flags = await loadFlaggedPayments(readPool());
   const open = flags.filter((f) => !f.resolvedAt).length;
 
   return (

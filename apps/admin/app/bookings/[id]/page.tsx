@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPool } from "@openbookings/db";
 import { CopyId } from "./copy-id";
 import { ForcedPanel } from "./forced-panel";
 import { RealActionsPanel } from "./real-actions-panel";
@@ -8,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { refundedSplit } from "@openbookings/db";
 import { loadAdminBooking } from "@/lib/booking";
+import { readPool } from "@/lib/db";
 import { buildTimeline } from "@/lib/timeline";
 import { allowedFor } from "@/lib/real-actions";
 import { requireSuperAdmin } from "@/lib/super-admin";
@@ -35,7 +35,7 @@ function Section({ id, title, children }: { id?: string; title: string; children
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   requireSuperAdmin();
   const { id } = await params;
-  const data = await loadAdminBooking(getPool(), id);
+  const data = await loadAdminBooking(readPool(), id);
   if (!data) notFound();
 
   const { booking, guest, property, rooms, transactions, refunds, messages, tickets } = data;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { adminDbLabel } from "@/lib/db";
 import { databaseHost, isStripeTestMode, requireSuperAdmin } from "@/lib/super-admin";
 import "./globals.css";
 
@@ -11,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="font-sans antialiased">
         <div className="bg-red-600 px-4 py-1 text-center text-sm font-medium text-white">
-          {`Super admin — dev only — connected to ${databaseHost(process.env.DATABASE_URL)} — ${
+          {`Super admin — dev only — connected to ${adminDbLabel(databaseHost)} — ${
             isStripeTestMode() ? "Stripe: test mode" : "Stripe: NOT test mode — real actions disabled"
           }`}
         </div>

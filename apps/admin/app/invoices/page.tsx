@@ -1,5 +1,5 @@
-import { getPool } from "@openbookings/db";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { readPool } from "@/lib/db";
 import { previousMonth } from "@/lib/invoice-job-args";
 import { databaseHost, requireSuperAdmin } from "@/lib/super-admin";
 import { RunForm } from "./run-form";
@@ -13,7 +13,7 @@ const euro = (cents: string) =>
 /** Runs the monthly invoice job by hand, against this app's database and Stripe test key. Dev only. */
 export default async function InvoicesPage() {
   requireSuperAdmin();
-  const db = getPool();
+  const db = readPool();
   const ready = (await db.query(`SELECT to_regclass('public.invoice_runs') IS NOT NULL AS ok`)).rows[0]?.ok === true;
 
   const [runs, invoices] = ready

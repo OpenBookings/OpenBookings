@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { withTransaction } from "@openbookings/db";
 import {
   forceCancelRooms,
   forceClearMarkers,
@@ -11,11 +10,12 @@ import {
   forceUncancelRooms,
   type ForcedResult,
 } from "./forced-edits";
+import { withWriteTransaction } from "./db";
 import { requireSuperAdmin } from "./super-admin";
 
 async function run(bookingId: string, fn: (tx: import("pg").PoolClient) => Promise<ForcedResult>) {
   requireSuperAdmin();
-  const result = await withTransaction(fn);
+  const result = await withWriteTransaction(fn);
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }
