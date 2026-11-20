@@ -27,7 +27,7 @@ import { createPortal } from "react-dom";
 import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { DEFAULT_MAP_STYLE, resolveMapStyles } from "@openbookings/maps";
+import { DEFAULT_MAP_STYLES, resolveMapStyles } from "@openbookings/maps";
 
 /**
  * MapLibre v6 works out its worker URL at runtime from `import.meta.url`, which
@@ -142,7 +142,7 @@ type MapProps = {
    * Pass your theme value here.
    */
   theme?: Theme;
-  /** Custom map styles for light and dark themes. Overrides the default MapTiler style. */
+  /** Custom map styles for light and dark themes. Overrides the default TomTom styles. */
   styles?: {
     light?: MapStyleOption;
     dark?: MapStyleOption;
@@ -164,7 +164,7 @@ type MapProps = {
   loading?: boolean;
   /**
    * `attributionControl` is deliberately not accepted. The tile providers
-   * require their credit to be shown — MapTiler's terms and OpenStreetMap's
+   * require their credit to be shown — TomTom's terms and OpenStreetMap's
    * ODbL — so it is a licence obligation rather than a presentation choice,
    * and the Map always renders it. Use `compact` styling if space is tight.
    */
@@ -235,10 +235,10 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     onViewportChangeRef.current = onViewportChange;
   });
 
-  // MapTiler is the only tile vendor. With no style for either theme there
+  // TomTom is the only tile vendor. With no style for either theme there
   // is nothing to render, and falling back to another provider is not allowed.
   const mapStyles = useMemo(
-    () => resolveMapStyles<StyleSpecification>(styles, DEFAULT_MAP_STYLE),
+    () => resolveMapStyles<StyleSpecification>(styles, DEFAULT_MAP_STYLES),
     [styles],
   );
   const hasStyle = mapStyles !== null;
