@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { DEFAULT_COMMISSION_LABEL } from "@openbookings/stripe/commission-rate";
 
 type AnswerPart = string | { text: string; href: string };
 
 const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
-    question: "Is the 4.5% on top of Stripe's fees?",
+    question: `Is the ${DEFAULT_COMMISSION_LABEL} on top of Stripe's fees?`,
     answer: [
       "Yes. ", { text: "Stripe's payment processing", href: "https://stripe.com/en-nl/pricing"}, " is passed through at cost, we add no markup to it. Your total platform cost is typically around 6% of booking revenue, and you can see both lines separately on every payout.",
     ],
@@ -12,7 +13,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "How can it be so much cheaper than Booking.com or Expedia?",
     answer: [
-      "Because the rate is cost-based, not demand-based. 4.5% covers servers, support, payment infrastructure, and development. The large platforms charge 15–20% partly to fund advertising, including bidding on your own hotel's name. We don't do that, so we don't need to charge for it.",
+      `Because the rate is cost-based, not demand-based. ${DEFAULT_COMMISSION_LABEL} covers servers, support, payment infrastructure, and development. The large platforms charge 15–20% partly to fund advertising, including bidding on your own hotel's name. We don't do that, so we don't need to charge for it.`,
     ],
   },
   {

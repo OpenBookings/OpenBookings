@@ -1,3 +1,19 @@
+import { DEFAULT_COMMISSION_LABEL, DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
+
+// The worked example: 3 nights at €120. Stripe's standard EEA card price.
+const NIGHTS = 3;
+const NIGHTLY_EUR = 120;
+const STRIPE_PERCENT = 0.015;
+const STRIPE_FIXED_CENTS = 25;
+
+const guestPaysCents = NIGHTS * NIGHTLY_EUR * 100;
+const stripeFeeCents = Math.round(guestPaysCents * STRIPE_PERCENT) + STRIPE_FIXED_CENTS;
+const commissionCents = Math.round(guestPaysCents * DEFAULT_COMMISSION_RATE);
+const youReceiveCents = guestPaysCents - stripeFeeCents - commissionCents;
+
+const eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const money = (cents: number) => eur.format(cents / 100);
+
 const absentFees = [
   { label: "Pay-to-rank placement", note: "Search order is never for sale" },
   { label: "Featured-listing upsells", note: "No visibility you have to buy back" },
@@ -15,19 +31,19 @@ export function Mechanism() {
               The Concept
             </div>
             <h2 className="mb-8 font-(family-name:--font-cormorant) text-[44px] leading-[1.04] font-bold tracking-[-1px] text-white sm:text-[62px] sm:tracking-[-1.5px]">
-              4.5%. That&apos;s the
+              {DEFAULT_COMMISSION_LABEL}. That&apos;s the
               <br />
               whole model.
             </h2>
             <div className="max-w-[52ch] space-y-6 text-[15px] leading-[1.8] text-white/46">
               <p>
                 Every booking costs you exactly two things: Stripe&apos;s payment processing fee, passed
-                through at cost, and our <span className="text-white">4.5% commission</span>. There is no
+                through at cost, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. There is no
                 third line. No commission tiers to climb, no visibility programs, no fees invented on the
                 guest&apos;s side of the receipt.
               </p>
               <p>
-                <span className="text-white">Why so low?</span>{" "}Because 4.5% is what it actually costs to
+                <span className="text-white">Why so low?</span>{" "}Because {DEFAULT_COMMISSION_LABEL} is what it actually costs to
                 run this; servers, support, infrastructure, development. No padding for a growth budget.
                 Bigger commissions often fund bids on your own hotel&apos;s name in search engines, so you&apos;d be
                 renting back a guest who was already looking for you. We skip that entirely.
@@ -47,32 +63,34 @@ export function Mechanism() {
                 <span className="text-[11px] font-medium tracking-[0.15em] text-white/28 uppercase">
                   Anatomy of a booking
                 </span>
-                <span className="text-[11px] text-white/25">3 nights · €120/night</span>
+                <span className="text-[11px] text-white/25">
+                  {NIGHTS} nights · €{NIGHTLY_EUR}/night
+                </span>
               </div>
 
               <div className="space-y-4 text-[14px]">
                 <div className="flex items-baseline justify-between">
                   <span className="text-white/60">Guest pays</span>
-                  <span className="font-medium tracking-[-0.01em] text-white">€360.00</span>
+                  <span className="font-medium tracking-[-0.01em] text-white">{money(guestPaysCents)}</span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-white/40">
                     Stripe processing <span className="text-white/22">· 1.5% + €0.25, at cost</span>
                   </span>
-                  <span className="text-white/40">−€5.65</span>
+                  <span className="text-white/40">−{money(stripeFeeCents)}</span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-white/40">
-                    OpenBookings <span className="text-white/22">· 4.5%</span>
+                    OpenBookings <span className="text-white/22">· {DEFAULT_COMMISSION_LABEL}</span>
                   </span>
-                  <span className="text-white/40">−€16.20</span>
+                  <span className="text-white/40">−{money(commissionCents)}</span>
                 </div>
               </div>
 
               <div className="mt-5 flex items-baseline justify-between border-t border-white/8 pt-5">
                 <span className="text-[14px] font-medium text-white">You receive</span>
                 <span className="font-(family-name:--font-cormorant) text-[30px] font-bold tracking-[-0.5px] text-spectrum-mint">
-                  €338.15
+                  {money(youReceiveCents)}
                 </span>
               </div>
 

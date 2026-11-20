@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { animate } from "framer-motion";
+import { DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
 
-const OB_RATE = 0.045;
+const OB_RATE = DEFAULT_COMMISSION_RATE;
 const STRIPE_RATE = 0.015;
 const STRIPE_FIXED = 0.25;
 

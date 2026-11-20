@@ -1,4 +1,5 @@
 import type { IsoDate } from "../types";
+import { DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
 
 export interface DemoRoomType {
   id: string;
@@ -37,7 +38,7 @@ export const ZEEBURG: DemoHotel = {
   demand: 0.62,
   // Dutch VAT on accommodation since 1 January 2026.
   vatRate: 0.21,
-  commissionRate: 0.045,
+  commissionRate: DEFAULT_COMMISSION_RATE,
   roomTypes: [
     { id: "zb-standard", name: "Standard Double", units: 6 },
     { id: "zb-canal", name: "Canal View Double", units: 4 },

@@ -12,6 +12,7 @@ export {
   type BookingCheckoutLine,
 } from './payments/checkout';
 export { applicationFeeCents, bookingSplitCents, commissionRefundDue } from './payments/fees';
+export { DEFAULT_COMMISSION_LABEL, DEFAULT_COMMISSION_RATE, formatCommissionRate } from './payments/commission-rate';
 export { ensurePaymentMethodDomain, type PaymentMethodDomainResult } from './payments/payment-domain';
 export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
 export {
