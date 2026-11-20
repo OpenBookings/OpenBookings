@@ -1,8 +1,34 @@
 import Image from "next/image";
 import { CookieSettingsButton } from "@/components/CookieSettingsButton";
 
-const productLinks = ["Features", "Pricing", "Documentation", "Security"];
-const companyLinks = ["About", "Blog", "Privacy", "Terms"];
+type FooterLink = { label: string; href: string };
+
+const productLinks: FooterLink[] = [
+  { label: "Pricing", href: "/#mechanism" },
+  { label: "Documentation", href: "https://docs.openbookings.co" },
+  { label: "Source code", href: "https://github.com/OpenBookings/OpenBookings" },
+];
+const companyLinks: FooterLink[] = [
+  { label: "About", href: "/#why" },
+  { label: "Contact", href: "mailto:support@openbookings.co" },
+  { label: "Host Agreement", href: "/legal/host-agreement" },
+  { label: "Privacy", href: "https://openbookings.co/legal/en/privacy" },
+  { label: "Terms", href: "https://openbookings.co/legal/en/terms" },
+];
+
+function FooterAnchor({ link }: { link: FooterLink }) {
+  const external = link.href.startsWith("http");
+  return (
+    <a
+      href={link.href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      className="text-[14px] text-white/48 hover:text-white/70 transition-colors"
+    >
+      {link.label}
+    </a>
+  );
+}
 
 export function Footer({ embedded = false }: { embedded?: boolean }) {
   return (
@@ -27,20 +53,16 @@ export function Footer({ embedded = false }: { embedded?: boolean }) {
             <div>
               <div className="mb-4 text-[11px] font-medium tracking-widest text-white/28 uppercase">Product</div>
               <div className="flex flex-col gap-3">
-                {productLinks.map((label) => (
-                  <a key={label} href="#" className="text-[14px] text-white/48 hover:text-white/70 transition-colors">
-                    {label}
-                  </a>
+                {productLinks.map((link) => (
+                  <FooterAnchor key={link.label} link={link} />
                 ))}
               </div>
             </div>
             <div>
               <div className="mb-4 text-[11px] font-medium tracking-widest text-white/28 uppercase">Company</div>
               <div className="flex flex-col gap-3">
-                {companyLinks.map((label) => (
-                  <a key={label} href="#" className="text-[14px] text-white/48 hover:text-white/70 transition-colors">
-                    {label}
-                  </a>
+                {companyLinks.map((link) => (
+                  <FooterAnchor key={link.label} link={link} />
                 ))}
               </div>
             </div>

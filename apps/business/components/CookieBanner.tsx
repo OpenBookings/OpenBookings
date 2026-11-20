@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import Link from 'next/link'
 import { useCookieConsent } from '@openbookings/analytics/client'
 
 // Browser-only, so it is false on the server. That doubles as the hydration
@@ -28,9 +27,14 @@ export function CookieBanner() {
       <p className="text-sm text-neutral-300">
         We use analytics cookies and session recording to understand how you use
         our service and improve it. You can decline and nothing will be set.{' '}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-white">
+        <a
+          href="https://openbookings.co/legal/en/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-white"
+        >
           Learn more
-        </Link>
+        </a>
       </p>
       <div className="mt-3 flex gap-2">
         <button

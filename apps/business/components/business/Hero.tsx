@@ -165,12 +165,12 @@ export function Hero() {
             >
               List Your Property →
             </Link>
-            <Link
-              href="/login"
+            <a
+              href="mailto:support@openbookings.co?subject=A%20demo%20of%20OpenBookings"
               className="rounded-[10px] border border-white/13 px-7 py-[15px] text-[15px] text-white/48 hover:text-white/70 hover:border-white/20 transition-colors"
             >
               Book a Demo
-            </Link>
+            </a>
           </div>
         </div>
       </div>

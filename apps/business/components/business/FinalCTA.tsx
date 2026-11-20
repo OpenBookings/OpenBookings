@@ -32,12 +32,12 @@ export function FinalCTA() {
             >
               List Your Property →
             </Link>
-            <Link
-              href="/login"
+            <a
+              href="mailto:support@openbookings.co?subject=A%20question%20about%20OpenBookings"
               className="rounded-[10px] border border-white/13 px-7 py-[15px] text-[15px] text-white/48 transition-colors hover:border-white/20 hover:text-white/70"
             >
-              Book a Demo
-            </Link>
+              Talk to Us
+            </a>
           </div>
         </div>
 
