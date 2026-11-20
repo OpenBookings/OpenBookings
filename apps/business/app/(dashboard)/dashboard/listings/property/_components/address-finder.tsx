@@ -11,8 +11,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { searchProperty, type AddressCandidate, type AddressFields } from "../_lib/address-lookup";
 import { COUNTRIES, countryName } from "../_lib/countries";
+import { TOMTOM_API_KEY } from "@openbookings/maps";
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 const SEARCH_DEBOUNCE_MS = 400;
 
 export type AddressValue = AddressFields & { addressLine2: string };
@@ -106,7 +106,7 @@ export function AddressFinder({ initial, disabled, errors, onPick, onEdit, onMod
     const timer = setTimeout(async () => {
       setSearch({ status: "loading" });
       try {
-        const results = await searchProperty(queryText, MAPTILER_KEY, controller.signal);
+        const results = await searchProperty(queryText, TOMTOM_API_KEY, controller.signal);
         if (!controller.signal.aborted) setSearch({ status: "done", results });
       } catch (err) {
         if (controller.signal.aborted) return;

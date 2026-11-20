@@ -29,7 +29,7 @@ through the same shared packages, so the rules live in one place.
 
 ## Apps
 
-- **`apps/web`**: the guest site, built with Next.js. Search (PostGIS distance queries, MapTiler
+- **`apps/web`**: the guest site, built with Next.js. Search (PostGIS distance queries, TomTom
   maps), property pages, checkout, and the guest's account and bookings.
 - **`apps/business`**: the host dashboard, also Next.js. Onboarding, the property and room
   editors, the rates-and-availability grid, reservations, messages, reviews, team and payouts.
@@ -63,7 +63,7 @@ The packages hold the rules that must not differ between apps:
 | Cloudflare Turnstile | Bot protection on checkout | Only to take a payment |
 | Cloudflare R2 | Photos and invoice files | Only to upload photos |
 | Upstash Redis | Page cache | No |
-| MapTiler | Maps | No (maps stay empty) |
+| TomTom | Maps and address search | No (maps stay empty) |
 | Chatwoot + Mistral | Support chat | Only for the support bot |
 | Sentry, PostHog | Errors, analytics | No |
 

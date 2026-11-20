@@ -28,10 +28,10 @@ const ContentSecurityPolicy = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' https://*.openbookings.co https://eu-assets.i.posthog.com https://*.posthog.com https://connect-js.stripe.com https://js.stripe.com${DEV_SCRIPT_SRC};
   style-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com;
-  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://*.maptiler.com https://*.stripe.com https://api.dicebear.com${CHATWOOT_IMG};
+  img-src 'self' data: blob: https://*.openbookings.co https://*.google.com https://*.googleusercontent.com https://api.tomtom.com https://*.stripe.com https://api.dicebear.com${CHATWOOT_IMG};
   font-src 'self';
   media-src 'self';
-  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.maptiler.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev${CHATWOOT_CONNECT};
+  connect-src 'self' https://*.i.posthog.com https://*.openbookings.co https://*.posthog.com https://api.tomtom.com https://connect-js.stripe.com https://*.b6179511ad9c5bce324a9e76135c6bbc.eu.r2.cloudflarestorage.com wss://ob-durableobjects.w-vanderwal.workers.dev${CHATWOOT_CONNECT};
   worker-src 'self' blob:;
   frame-ancestors 'none';
   object-src 'none';

@@ -47,6 +47,7 @@ import { AddressFinder, type AddressValue, type FinderMode } from "../address-fi
 import { InfoTip } from "../info-tip";
 import { SectionForm } from "../../../_components/section-form";
 import type { SectionProps } from "./props";
+import { TOMTOM_API_KEY } from "@openbookings/maps";
 
 /** The lucide names offered for a nearby highlight, matching the listing page's vocabulary. */
 const HIGHLIGHT_ICONS = [
@@ -54,7 +55,6 @@ const HIGHLIGHT_ICONS = [
   "TreePine", "Train", "Plane", "Bus", "Car", "Bike", "MapPin",
 ] as const;
 
-const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_API_KEY ?? "";
 /** A typed address is placed once the host pauses, not per keystroke. */
 const LOCATE_DEBOUNCE_MS = 800;
 
@@ -297,7 +297,7 @@ function LocationFields({
     const timer = setTimeout(async () => {
       setLocate("locating");
       try {
-        const hit = await locateTypedAddress(address, MAPTILER_KEY, controller.signal);
+        const hit = await locateTypedAddress(address, TOMTOM_API_KEY, controller.signal);
         if (controller.signal.aborted) return;
         if (!hit) {
           setLat(null);

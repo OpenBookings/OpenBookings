@@ -85,7 +85,7 @@ I = invoice job, R = root scripts.
 | `CACHE_TTL_PROPERTY_PAGE_S`, `CACHE_TTL_PROPERTY_PAGE_MISS_S`, `CACHE_TTL_PROPERTY_REVIEWS_S`, `CACHE_MAX_AGE_PROPERTY_PAGE_S`, `CACHE_MAX_AGE_PROPERTY_REVIEWS_S` | W | no | Cache lifetimes, in seconds. |
 | `REVALIDATE_SECRET` | W, B | no | Shared secret the host dashboard uses to refresh a public property page. |
 | `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_PURGE_TOKEN` | B | no | Purge Cloudflare's cache for a property page after an edit. |
-| `NEXT_PUBLIC_MAPTILER_API_KEY` / `NEXT_PUBLIC_MAPTILER_STYLE_ID` | W, B | for maps | MapTiler key and style. Build-time. |
+| `NEXT_PUBLIC_TOMTOM_API_KEY` | W, B | for maps | TomTom key (Map Display and Search APIs). Build-time. Replaces `NEXT_PUBLIC_MAPTILER_API_KEY` / `NEXT_PUBLIC_MAPTILER_STYLE_ID`: when upgrading, set it, or maps stay empty and address search is off. |
 
 ## Messaging and jobs
 
