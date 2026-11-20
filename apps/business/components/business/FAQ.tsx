@@ -7,7 +7,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: `Is the ${DEFAULT_COMMISSION_LABEL} on top of Stripe's fees?`,
     answer: [
-      "Yes. ", { text: "Stripe's payment processing", href: "https://stripe.com/en-nl/pricing"}, " fee is charged by Stripe directly to your Stripe account, and we add nothing to it. Your total platform cost is typically around 6% of booking revenue, and you see both fees on every payment in your Stripe Dashboard.",
+      "Yes. ", { text: "Stripe's payment processing", href: "https://stripe.com/en-nl/pricing"}, ` fee is charged by Stripe directly to your Stripe account, and we add nothing to it. Your total platform cost is typically around 6% of booking revenue, and you see both fees on every payment in your Stripe Dashboard. Our ${DEFAULT_COMMISSION_LABEL} is counted on the room price including VAT, and already includes the VAT on our fee.`,
     ],
   },
   {

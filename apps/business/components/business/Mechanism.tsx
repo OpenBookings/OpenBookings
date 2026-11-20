@@ -38,8 +38,8 @@ export function Mechanism() {
             <div className="max-w-[52ch] space-y-6 text-[15px] leading-[1.8] text-white/46">
               <p>
                 Every booking carries two fees: Stripe&apos;s payment processing fee, which
-                Stripe charges directly to your Stripe account, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span>. No
-                commission tiers to climb, no visibility programs, no fees invented on the
+                Stripe charges directly to your Stripe account, and our <span className="text-white">{DEFAULT_COMMISSION_LABEL} commission</span> on the
+                room price including VAT, with the VAT on our fee already included. No commission tiers to climb, no visibility programs, no fees invented on the
                 guest&apos;s side of the receipt.
               </p>
               <p>
