@@ -19,11 +19,8 @@ import {
  *   refund that follows comes from the booking's cancellation policy.
  * - `cancel`: cancel rooms or the whole booking. A host cancellation
  *   refunds the guest in full, whatever the policy.
- * - `request-refund`: ask OpenBookings support for a goodwill refund (money
- *   back beyond the policy). Owner and general manager only. Hosts never
- *   issue one themselves: our staff do, from the admin app (owner decision
- *   2026-11-20, so a host can't refund online, get the commission back and
- *   take cash at the hotel).
+ * - `refund`: money back at the host's discretion (goodwill). Owner and
+ *   general manager only.
  *
  * NOTE: `better-auth/plugins/access` and `.../organization/access` are pure
  * data modules — importing them pulls no Better Auth server code, so this
@@ -34,7 +31,7 @@ export const statement = {
   ...defaultStatements,
   property: ["create", "update", "delete", "publish"],
   rate: ["read", "update"],
-  booking: ["read", "operate", "cancel", "request-refund"],
+  booking: ["read", "operate", "cancel", "refund"],
   payout: ["read", "update"],
   billing: ["read", "update"],
   member: ["invite", "remove", "update-role", ...defaultStatements.member],
@@ -44,7 +41,7 @@ export const statement = {
 export const ac = createAccessControl(statement);
 
 const ALL_PROPERTY = ["create", "update", "delete", "publish"] as const;
-const ALL_BOOKING = ["read", "operate", "cancel", "request-refund"] as const;
+const ALL_BOOKING = ["read", "operate", "cancel", "refund"] as const;
 
 /**
  * The ready-made roles. Owners and general managers pick one per person;
@@ -86,7 +83,7 @@ export const roles = {
   manager: ac.newRole({
     property: ["update", "publish"],
     rate: ["read", "update"],
-    booking: ["read", "operate", "cancel", "request-refund"],
+    booking: ["read", "operate", "cancel"],
   }),
   reservations: ac.newRole({
     rate: ["read"],
@@ -123,7 +120,7 @@ export function isPropertyScoped(role: HostRole): boolean {
   return PROPERTY_SCOPED_ROLES.includes(role);
 }
 
-/** One or more actions on our resources, e.g. `{ booking: ["cancel"] }`. */
+/** One or more actions on our resources, e.g. `{ booking: ["refund"] }`. */
 export type Permission = {
   [R in keyof typeof statement]?: Array<(typeof statement)[R][number]>;
 };

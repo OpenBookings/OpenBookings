@@ -236,7 +236,7 @@ export type RefundIssuedReason = "early_departure" | "goodwill" | "retry";
 
 const REFUND_INTRO: Record<RefundIssuedReason, (property: string) => string> = {
   early_departure: (p) => `${p} recorded that you left early, so you get back what your booking's terms allow for the nights you didn't stay.`,
-  goodwill: (p) => `${p} gave you a goodwill refund on your booking. OpenBookings sent it on their behalf.`,
+  goodwill: (p) => `${p} sent you a refund on your booking.`,
   retry: (p) => `We've sent the refund we owed you for your booking at ${p}.`,
 };
 

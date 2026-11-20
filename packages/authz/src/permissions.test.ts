@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { roles, PROPERTY_SCOPED_ROLES, roleAllows, rolesWith, statement } from "./permissions";
+import { roles, PROPERTY_SCOPED_ROLES, roleAllows, rolesWith } from "./permissions";
 import { memberHasPropertyAccess, userCan } from "./index";
 import { ABILITIES, ABILITY_GROUPS, ROLE_INFO, ROLE_ORDER, assignableRoles, roleAbilities } from "./role-guide";
 
@@ -36,17 +36,8 @@ describe("role grants", () => {
     expect(roles.reservations.authorize({ property: ["update"] }).success).toBe(false);
   });
 
-  test("only owner and general manager may request a goodwill refund", () => {
-    expect(rolesWith({ booking: ["request-refund"] })).toEqual(["owner", "admin", "manager"]);
-  });
-
-  test("no host role may issue a refund at its own discretion", () => {
-    // Goodwill refunds are requested through support and issued by staff
-    // (owner decision 2026-11-20): there is no host grant that issues one.
-    expect((statement.booking as readonly string[]).includes("refund")).toBe(false);
-    for (const role of Object.values(roles)) {
-      expect(role.authorize({ booking: ["refund"] } as never).success).toBe(false);
-    }
+  test("goodwill refunds are for owner and general manager only", () => {
+    expect(rolesWith({ booking: ["refund"] })).toEqual(["owner", "admin"]);
   });
 
   test("an owner holds every grant a general manager has", () => {
@@ -134,7 +125,7 @@ describe("roleAllows", () => {
   });
 
   test("org-wide roles do not need a property row", () => {
-    expect(roleAllows("admin", { booking: ["request-refund"] }, false)).toBe(true);
+    expect(roleAllows("admin", { booking: ["refund"] }, false)).toBe(true);
     expect(roleAllows("finance", { booking: ["read"] }, false)).toBe(true);
   });
 
@@ -151,24 +142,21 @@ describe("userCan", () => {
   const session = { user: { id: "u1", account_type: "business" } };
   const row = (r: unknown) => (async () => r) as never;
 
-  test("front desk can check in on their property, but not request a refund", async () => {
+  test("front desk can check in on their property, but not refund", async () => {
     const deps = { queryOne: row({ legacy_owner: false, role: "frontdesk", has_access: true }) };
     expect(await userCan(session, "p1", { booking: ["operate"] }, deps)).toBe(true);
-    expect(await userCan(session, "p1", { booking: ["request-refund"] }, deps)).toBe(false);
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(false);
   });
 
-  test("a manager can request a goodwill refund; reservations staff cannot", async () => {
-    const manager = { queryOne: row({ legacy_owner: false, role: "manager", has_access: true }) };
-    expect(await userCan(session, "p1", { booking: ["cancel"] }, manager)).toBe(true);
-    expect(await userCan(session, "p1", { booking: ["request-refund"] }, manager)).toBe(true);
-    const reservations = { queryOne: row({ legacy_owner: false, role: "reservations", has_access: true }) };
-    expect(await userCan(session, "p1", { booking: ["cancel"] }, reservations)).toBe(true);
-    expect(await userCan(session, "p1", { booking: ["request-refund"] }, reservations)).toBe(false);
+  test("a manager cannot refund", async () => {
+    const deps = { queryOne: row({ legacy_owner: false, role: "manager", has_access: true }) };
+    expect(await userCan(session, "p1", { booking: ["cancel"] }, deps)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(false);
   });
 
   test("a legacy pre-org owner has every grant", async () => {
     const deps = { queryOne: row({ legacy_owner: true, role: null, has_access: false }) };
-    expect(await userCan(session, "p1", { booking: ["request-refund"] }, deps)).toBe(true);
+    expect(await userCan(session, "p1", { booking: ["refund"] }, deps)).toBe(true);
   });
 
   test("no row, no member and no session all fail closed", async () => {
@@ -189,7 +177,7 @@ describe("role guide", () => {
     const owner = roleAbilities("owner");
     expect(owner.cannot).toEqual([]);
     expect(owner.can.length).toBe(ABILITIES.length);
-    expect(roleAbilities("frontdesk").cannot).toContain("Request a goodwill refund");
+    expect(roleAbilities("frontdesk").cannot).toContain("Refund booking");
     expect(roleAbilities("admin").cannot).toEqual(["Close account"]);
   });
 

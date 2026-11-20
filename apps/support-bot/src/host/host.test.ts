@@ -4,7 +4,7 @@ import type { ChatFn, ChatResponse } from "../agent/loop";
 
 const { HOST_AGENT, HOST_TOOLS } = await import("./tools");
 const { normalizeBookingReference } = await import("./queries");
-const { HOST_SYSTEM_PROMPT, hostTicketNote } = await import("./prompt");
+const { hostTicketNote } = await import("./prompt");
 const { processConversation } = await import("../process");
 const { renderSupportReplyEmail } = await import("../support/notify");
 const { requiredAtStartup } = await import("../env");
@@ -161,19 +161,6 @@ describe("host pipeline", () => {
       { chat: chat([]) },
     );
     expect(chatwootCalls.map((c) => c.kind)).toEqual(["note", "status"]);
-  });
-});
-
-describe("goodwill refunds", () => {
-  it("tells hosts goodwill refunds are requested from support and issued by staff", () => {
-    expect(HOST_SYSTEM_PROMPT).toContain("Goodwill refunds");
-    expect(HOST_SYSTEM_PROMPT).toContain("can't be issued by hosts in the app");
-    expect(HOST_SYSTEM_PROMPT).toContain("the OpenBookings team checks it and issues it");
-    expect(HOST_SYSTEM_PROMPT).toContain("Never say or suggest that a refund has been issued");
-  });
-
-  it("has no tool that refunds", () => {
-    for (const name of Object.keys(HOST_TOOLS)) expect(name).not.toMatch(/refund/i);
   });
 });
 

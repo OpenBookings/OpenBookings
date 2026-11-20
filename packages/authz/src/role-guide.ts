@@ -29,14 +29,14 @@ export const ROLE_INFO: Record<HostRole, RoleInfo> = {
     role: "admin",
     label: "General manager",
     summary:
-      "Runs the hotel day to day: bookings, refund requests, rates, listings and the team. If you run the hotel yourself as owner, you don't need this role too.",
+      "Runs the hotel day to day: bookings, refunds, rates, listings and the team. If you run the hotel yourself as owner, you don't need this role too.",
     scope: "All properties",
   },
   manager: {
     role: "manager",
     label: "Manager",
     summary:
-      "Runs one or more properties: their listings, rates and bookings, including goodwill refund requests. No team or payouts.",
+      "Runs one or more properties: their listings, rates and bookings. No refunds beyond the cancellation policy, no team or payouts.",
     scope: "Only the properties you choose",
   },
   reservations: {
@@ -100,12 +100,7 @@ export const ABILITIES: ReadonlyArray<{
     permission: { booking: ["operate"] },
   },
   { label: "Cancel booking", hint: "The guest gets a full refund", group: "Bookings", permission: { booking: ["cancel"] } },
-  {
-    label: "Request a goodwill refund",
-    hint: "Through support; OpenBookings issues it",
-    group: "Bookings",
-    permission: { booking: ["request-refund"] },
-  },
+  { label: "Refund booking", hint: "Any amount you choose", group: "Bookings", permission: { booking: ["refund"] } },
   { label: "View rates & availability", group: "Rates & property", permission: { rate: ["read"] } },
   { label: "Change rates & availability", group: "Rates & property", permission: { rate: ["update"] } },
   { label: "Edit property and rooms", group: "Rates & property", permission: { property: ["update"] } },

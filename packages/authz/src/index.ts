@@ -62,7 +62,7 @@ function sqlRoleList(names: readonly string[]): string {
  * ownership (owner_user_id) counts ONLY for pre-org rows (organization_id IS
  * NULL): once a property belongs to an org, a stale owner_user_id must never
  * grant anything — it is set at onboarding, and a removed or demoted founder
- * would otherwise keep full edit and cancel rights.
+ * would otherwise keep full edit, cancel and refund rights.
  *
  * Role lists come from the grants in permissions.ts, so adding a role or a
  * grant there is the whole change. Positive lists on both sides: an unknown
@@ -125,7 +125,7 @@ export function propertyReadAccessSql(userParam: string, testing: boolean = isTe
 /**
  * Whether the signed-in user may do `permission` on one property — the
  * check for anything narrower than "edit the property", such as checking a
- * guest in or cancelling a booking. One query for the member's role in
+ * guest in or giving a goodwill refund. One query for the member's role in
  * the property's org and their property_access row; the decision itself is
  * roleAllows, the same function the UI uses to hide buttons.
  *

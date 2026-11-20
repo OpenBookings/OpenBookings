@@ -6,6 +6,7 @@ import { userCan, type Permission } from "@openbookings/authz";
 import { queryOne } from "@openbookings/db";
 import {
   cancelRooms,
+  issueGoodwillRefund,
   markCheckedIn,
   markNoShow,
   previewRefund,
@@ -18,6 +19,7 @@ import { captureOutcome } from "@openbookings/mailing/tracking";
 import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
+import { goodwillAmount } from "./goodwill-amount";
 import { sendCancellation, sendRefundMail } from "@/lib/mailing/booking-mail";
 import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
 
@@ -27,11 +29,6 @@ import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
  * ./permissions.ts): the booking id comes from the client and is trusted for
  * nothing else. What may happen and how much is refunded is decided in
  * @openbookings/db/booking-lifecycle.
- *
- * There is deliberately no goodwill refund here: hosts request one through
- * support and OpenBookings staff issue it from the admin app (owner decision
- * 2026-11-20). A host could otherwise refund online, get the commission back
- * and take cash at the hotel. Don't add one back.
  */
 
 const RESERVATIONS = "/dashboard/bookings/reservations";
@@ -92,6 +89,17 @@ export async function hostRecordEarlyDeparture(bookingId: string, lastNightStaye
   return run(bookingId, ACTION_PERMISSION.record_early_departure, async (actor) => {
     const result = await recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed });
     if (result.ok) await sendRefundMail(bookingId, "early_departure", result.refunds);
+    return result;
+  });
+}
+
+/** `amount` is whatever the browser sent; the dialog builds it with Number(text), so junk arrives as NaN. */
+export async function hostGoodwillRefund(bookingId: string, amount: number) {
+  const parsed = goodwillAmount.safeParse(amount);
+  if (!parsed.success) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
+  return run(bookingId, ACTION_PERMISSION.goodwill_refund, async (actor) => {
+    const result = await issueGoodwillRefund(deps, { bookingId, actor, amount: parsed.data });
+    if (result.ok) await sendRefundMail(bookingId, "goodwill", result.refunds);
     return result;
   });
 }

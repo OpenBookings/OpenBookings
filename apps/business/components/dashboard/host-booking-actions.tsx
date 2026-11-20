@@ -16,21 +16,18 @@ import {
 import { Ban, HandCoins, LogIn, LogOut, RotateCw, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useOptionalSupport } from "@/components/support/support-provider";
 import {
   hostCancelRooms,
+  hostGoodwillRefund,
   hostMarkCheckedIn,
   hostMarkNoShow,
   hostPreviewEarlyDeparture,
   hostRecordEarlyDeparture,
   hostRetryRefunds,
 } from "@/lib/reservations/actions";
-import { goodwillRequestMailto, goodwillRequestText, parseProposedAmount } from "@/lib/reservations/goodwill-request";
 import type { HostReservation } from "@/lib/reservations/shape";
 
 const euros = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
@@ -41,6 +38,7 @@ const ERRORS: Record<string, string> = {
   already_cancelled: "Already cancelled.",
   not_found: "Booking not found.",
   nothing_to_refund: "There is nothing left to refund on this booking.",
+  invalid_amount: "Enter an amount greater than zero.",
   refund_in_progress: "A refund for this booking is still being processed. Try again in a few minutes.",
 };
 const REFUND_FAILED =
@@ -79,8 +77,7 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
   }
 
   const canRetry = reservation.refundIssue && reservation.canRetryRefunds;
-  // Hosts only ask for a goodwill refund; OpenBookings staff issue it.
-  const canRequestGoodwill = can("goodwill_refund") && reservation.totalAmount > reservation.refundedAmount;
+  const canGoodwill = can("goodwill_refund") && reservation.totalAmount > reservation.refundedAmount;
   // The one thing due now leads: checking the guest in, else a refund that
   // didn't go through. The rest are outline icons; Cancel sits apart.
   const primary = can("mark_checked_in") ? "check_in" : canRetry ? "retry" : null;
@@ -108,13 +105,8 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
   if (can("record_early_departure")) {
     actions.push({ key: "early", label: "Guest left early", icon: <LogOut />, onClick: () => setPending({ kind: "early_departure" }) });
   }
-  if (canRequestGoodwill) {
-    actions.push({
-      key: "goodwill",
-      label: "Request a goodwill refund",
-      icon: <HandCoins />,
-      onClick: () => setPending({ kind: "goodwill" }),
-    });
+  if (canGoodwill) {
+    actions.push({ key: "goodwill", label: "Refund booking", icon: <HandCoins />, onClick: () => setPending({ kind: "goodwill" }) });
   }
   // The primary one goes first.
   actions.sort((x, y) => Number(y.key === primary) - Number(x.key === primary));
@@ -162,9 +154,7 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
             {pending?.kind === "early_departure" && (
               <EarlyDeparture reservation={reservation} busy={busy} perform={perform} />
             )}
-            {pending?.kind === "goodwill" && (
-              <GoodwillRequest reservation={reservation} onDone={() => setPending(null)} />
-            )}
+            {pending?.kind === "goodwill" && <Goodwill reservation={reservation} busy={busy} perform={perform} />}
           </AlertDialogContent>
         </AlertDialog>
       </div>
@@ -350,79 +340,27 @@ function CancelRooms({ reservation, busy, perform }: { reservation: HostReservat
   );
 }
 
-/**
- * Asks OpenBookings for a goodwill refund. Hosts can't issue one themselves
- * (owner decision 2026-11-20); our staff do, from the admin app. With support
- * chat on this opens a new ticket, prefilled and linked to the booking; with
- * it off, an email to support with the same text.
- */
-function GoodwillRequest({ reservation, onDone }: { reservation: HostReservation; onDone: () => void }) {
-  const support = useOptionalSupport();
+function Goodwill({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
   const left = Math.round((reservation.totalAmount - reservation.refundedAmount) * 100) / 100;
-  const [amountText, setAmountText] = React.useState("");
-  const [reason, setReason] = React.useState("");
-  const amount = parseProposedAmount(amountText, left);
-  const valid = amount !== undefined && reason.trim().length > 0;
-  const request = { reference: reservation.reference, amount: amount ?? null, reason };
-
-  const openTicket = () => {
-    if (!support || !valid) return;
-    onDone();
-    support.openIntake({
-      category: "payments",
-      linked: { type: "booking", id: reservation.id, label: `Booking ${reservation.reference}`, detail: reservation.guestName },
-      locked: true,
-      message: goodwillRequestText(request),
-    });
-  };
-
+  const [amount, setAmount] = React.useState("");
+  const value = Number(amount.replace(",", "."));
+  const valid = Number.isFinite(value) && value > 0 && value <= left;
   return (
-    <>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Request a goodwill refund</AlertDialogTitle>
-        <AlertDialogDescription>
-          Goodwill refunds go through OpenBookings support. Tell us how much and why; we check it and refund the
-          guest on your behalf, from your Stripe balance. Up to {euros.format(left)} is left to refund.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <FieldGroup className="gap-4">
-        <Field>
-          <FieldLabel htmlFor="goodwill-amount">Amount you propose (optional)</FieldLabel>
-          <Input
-            id="goodwill-amount"
-            inputMode="decimal"
-            placeholder="Amount in €"
-            value={amountText}
-            aria-invalid={amount === undefined}
-            onChange={(e) => setAmountText(e.target.value)}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="goodwill-reason">Reason</FieldLabel>
-          <Textarea
-            id="goodwill-reason"
-            placeholder="What happened, and why the guest should get money back"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </Field>
-      </FieldGroup>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Keep as is</AlertDialogCancel>
-        {support ? (
-          <Button disabled={!valid} onClick={openTicket}>
-            Continue to support
-          </Button>
-        ) : valid ? (
-          <Button asChild>
-            <a href={goodwillRequestMailto(request)} onClick={onDone}>
-              Email support
-            </a>
-          </Button>
-        ) : (
-          <Button disabled>Email support</Button>
-        )}
-      </AlertDialogFooter>
-    </>
+    <Confirm
+      title="Refund booking"
+      body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${euros.format(left)} is left to refund.`}
+      action={valid ? `Refund ${euros.format(value)}` : "Refund"}
+      busy={busy}
+      disabled={!valid}
+      onConfirm={() => perform(() => hostGoodwillRefund(reservation.id, value), "Refund sent")}
+    >
+      <Input
+        inputMode="decimal"
+        placeholder="Amount in €"
+        aria-label="Refund amount in euros"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+      />
+    </Confirm>
   );
 }
