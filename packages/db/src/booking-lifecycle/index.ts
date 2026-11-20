@@ -183,7 +183,9 @@ export type BookingState = {
   /**
    * Refund rows on the whole booking so far, euros — failed and pending ones
    * included, until they are reconciled, so a cap never assumes money that
-   * may already have left.
+   * may already have left. Money the host refunded outside OpenBookings, or
+   * lost in a dispute, is in here too (0053): Stripe would refuse to refund it
+   * again.
    */
   refunded: number;
 };
@@ -686,7 +688,8 @@ export async function issueGoodwillRefund(
 }
 
 /**
- * Send refunds that failed, or whose outcome is unknown, again. Each is first
+ * Send refunds that failed, or whose outcome is unknown, again. Only
+ * OpenBookings' own: a row for money that left outside it is never sent. Each is first
  * looked up on Stripe (when `findRefund` is given), so one that did go through
  * is recorded rather than paid twice.
  *
@@ -708,7 +711,7 @@ export async function retryRefunds(
               accommodation_amount::float8 AS accommodation, idempotency_key AS key,
               status, created_at AS "createdAt"
        FROM refunds
-       WHERE booking_id = $1 AND status IN ('pending', 'failed')
+       WHERE booking_id = $1 AND status IN ('pending', 'failed') AND source = 'openbookings'
          AND (status = 'failed' OR COALESCE(last_attempt_at, created_at) <= $2::timestamptz - make_interval(secs => $3))
        ORDER BY created_at
        FOR UPDATE SKIP LOCKED`,
@@ -723,7 +726,7 @@ export async function retryRefunds(
       return { claimed, open: true };
     }
     const { rows: open } = await tx.query(
-      `SELECT 1 FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') LIMIT 1`,
+      `SELECT 1 FROM refunds WHERE booking_id = $1 AND status IN ('pending', 'failed') AND source = 'openbookings' LIMIT 1`,
       [i.bookingId],
     );
     return { claimed, open: open.length > 0 };
