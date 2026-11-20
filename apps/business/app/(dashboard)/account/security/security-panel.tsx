@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { describeDevice } from "@/lib/device";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import { useStepUp } from "@/components/security/step-up-dialog";
 import { rememberPasskey } from "@/lib/passkey-hint";
 import { isPasskeyPromptCancelled, passkeyErrorMessage } from "@/lib/passkey-errors";
@@ -227,15 +227,8 @@ export function SecurityPanel() {
       </header>
 
       {loading ? (
-        <Card className="gap-4 p-6">
-          <div className="flex items-center gap-5">
-            <Skeleton className="size-14 rounded-full" />
-            <div className="flex flex-1 flex-col gap-2">
-              <Skeleton className="h-5 w-64 max-w-full" />
-              <Skeleton className="h-4 w-80 max-w-full" />
-            </div>
-          </div>
-          <Skeleton className="h-[78px] w-full rounded-xl" />
+        <Card className="p-6">
+          <InlineLoader label="Loading your account protection" />
         </Card>
       ) : passkeysFailed || sessionsFailed ? null : (
         <ProtectionCard protection={protection} onAction={onTask} />

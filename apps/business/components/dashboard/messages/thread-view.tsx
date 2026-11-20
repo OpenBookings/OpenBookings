@@ -5,7 +5,7 @@ import { SendHorizonal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import {
   MessageScrollerProvider,
   MessageScroller,
@@ -80,11 +80,7 @@ export function ThreadView({
           <MessageScrollerViewport>
             <MessageScrollerContent className="justify-end p-4">
               {loading ? (
-                <div className="flex flex-col gap-4">
-                  <Skeleton className="h-10 w-2/3" />
-                  <Skeleton className="ml-auto h-10 w-1/2" />
-                  <Skeleton className="h-10 w-3/5" />
-                </div>
+                <InlineLoader label="Loading messages" />
               ) : messages.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   No messages yet. Say hello!

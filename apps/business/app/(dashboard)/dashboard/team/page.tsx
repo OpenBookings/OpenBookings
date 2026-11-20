@@ -1,3 +1,4 @@
+import { PageHold } from "@/components/dashboard/page-loaders";
 import { redirect } from "next/navigation";
 import { roleLabel } from "@openbookings/authz/role-guide";
 import { SiteHeader } from "@/components/dashboard/site-header";
@@ -53,10 +54,12 @@ export default async function TeamPage() {
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-6">
-            <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-10">
-              {body}
-              {scope?.canManage ? null : <RoleGuide currentRole={scope?.role} />}
-            </div>
+            <PageHold id="team">
+              <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-10">
+                {body}
+                {scope?.canManage ? null : <RoleGuide currentRole={scope?.role} />}
+              </div>
+            </PageHold>
           </div>
         </div>
       </div>

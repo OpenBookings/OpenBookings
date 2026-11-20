@@ -8,7 +8,7 @@ import {
   propertyRatesConfirmed,
   userCanConfirmRates,
 } from "@openbookings/authz";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { AriView } from "./_components/ari-view";
 import {
   addDays,
@@ -63,8 +63,10 @@ export default async function RatesAvailabilityPage({
     // pinned to the floor of the grid, and 24px of dead space under it reads
     // as the legend having come loose.
     <div className="-mb-4 flex min-h-0 flex-1 flex-col md:-mb-6">
-      <Suspense fallback={<GridSkeleton />}>
-        <AriContent searchParams={searchParams} />
+      <Suspense fallback={<PageLoading id="rates" />}>
+        <PageHold id="rates" fill>
+          <AriContent searchParams={searchParams} />
+        </PageHold>
       </Suspense>
     </div>
   );
@@ -159,15 +161,6 @@ function EmptyState() {
         Add room types and rate plans to your property, and they will show up
         here for you to manage.
       </p>
-    </div>
-  );
-}
-
-function GridSkeleton() {
-  return (
-    <div className="space-y-4 p-4 lg:p-6">
-      <Skeleton className="h-9 w-full max-w-2xl" />
-      <Skeleton className="h-[28rem] w-full" />
     </div>
   );
 }
