@@ -71,6 +71,12 @@ export const commandMenuGroups: CommandMenuGroup[] = [
       },
       {
         icon: "arrow-right",
+        label: "Go to Pricing rules",
+        keywords: ["discounts", "weekend", "last minute", "early booking"],
+        action: { type: "navigate", href: "/dashboard/listings/pricing-rules" },
+      },
+      {
+        icon: "arrow-right",
         label: "Go to Reservations",
         keywords: ["bookings"],
         action: { type: "navigate", href: "/dashboard/bookings/reservations" },
