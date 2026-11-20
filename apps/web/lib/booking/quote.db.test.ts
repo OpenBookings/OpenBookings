@@ -379,6 +379,8 @@ describeWithDb("stay quote against Postgres", () => {
       roomName: "Double",
       ratePlanName: "Room only",
       isRefundable: true,
+      // Kept so the booking is confirmed under the tier the guest was shown.
+      cancellationTier: "flex",
     });
 
     process.env.STRIPE_APPLICATION_FEE_ENABLED = "false";

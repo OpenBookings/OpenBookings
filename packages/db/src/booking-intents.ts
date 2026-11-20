@@ -1,4 +1,4 @@
-import type { ExtraGuestLine, PayAtPropertyLine, TouristTaxLine, VatSplit } from "@openbookings/pricing";
+import type { ExtraGuestLine, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine, VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import { recordBookingEvent } from "./booking-events";
 import type { VatTreatment } from "./billing-types";
@@ -64,6 +64,12 @@ export type IntentSnapshot = {
     roomName: string;
     ratePlanName: string;
     isRefundable: boolean;
+    /**
+     * The property's tier when the rooms were held: with `isRefundable`, the
+     * terms the guest was shown, and the ones the booking is confirmed under.
+     * Absent on intents made before it was kept.
+     */
+    cancellationTier?: PropertyCancellationTier;
     freeCancellationUntil: string | null;
   }[];
 };
@@ -632,6 +638,7 @@ export async function convertIntentToBooking(
 
     const nightPrices: Record<string, { date: string; price: number }[]> = {};
     const touristTax: Record<string, number> = {};
+    const policy: Record<string, { tier?: PropertyCancellationTier; isRefundable?: boolean }> = {};
     for (const r of intent.rooms) {
       const { rows: reservationRows } = await tx.query(
         `INSERT INTO reservations
@@ -661,10 +668,14 @@ export async function convertIntentToBooking(
       const reservationId = (reservationRows[0] as { id: string }).id;
       nightPrices[reservationId] = r.nights;
       touristTax[reservationId] = r.touristTax;
+      // Same room and rate, same terms: which of two identical rooms it was does not matter.
+      const shown = intent.snapshot.rooms?.find((s) => s.roomId === r.roomId && s.ratePlanId === r.ratePlanId);
+      if (shown) policy[reservationId] = { tier: shown.cancellationTier, isRefundable: shown.isRefundable };
     }
 
     // The tax the guest was charged, not what the rules say now: they may have changed before a late payment.
-    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices, touristTax });
+    // Likewise the cancellation terms the guest was shown, not the ones the host has set since.
+    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices, touristTax, policy });
     await recordBookingEvent(tx, {
       bookingId,
       kind: "confirmed",

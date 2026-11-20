@@ -600,6 +600,8 @@ export async function priceSelection(
         roomName: room.name,
         ratePlanName: plan.row.rate_plan_name,
         isRefundable: plan.row.is_refundable,
+        // Kept so the booking is confirmed under the terms shown, even if the host changes the tier mid-payment.
+        cancellationTier: property.cancellationTier,
         freeCancellationUntil: cancellationUntil(property, plan.row.is_refundable, i.checkIn, i.now),
       })),
     },
