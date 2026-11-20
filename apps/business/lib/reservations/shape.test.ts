@@ -110,3 +110,28 @@ describe("toGuestContact", () => {
     expect(toGuestContact({ guest_phone: null, guest_address: null })).toEqual({ phone: null, address: null });
   });
 });
+
+describe("refunds outside OpenBookings", () => {
+  test("each is a line of its own, with its split once explained, and counts as refunded", () => {
+    const r = toHostReservation(
+      row({
+        refunded: 150,
+        outside_refunds: [
+          { source: "stripe_dashboard", amount: 50, at: "2031-11-02T09:00:00+00:00", room_price: null, tourist_tax: null },
+          { source: "dispute", amount: 100, at: "2031-11-05T09:00:00+00:00", room_price: 94, tourist_tax: 6 },
+        ],
+      }),
+      NOW,
+    );
+    expect(r.outsideRefunds).toEqual([
+      { kind: "refund", amount: 50, at: "2031-11-02T09:00:00+00:00", split: null },
+      { kind: "dispute", amount: 100, at: "2031-11-05T09:00:00+00:00", split: { roomPrice: 94, touristTax: 6 } },
+    ]);
+    // What is left to refund comes off everything refunded, outside included.
+    expect(r.totalAmount - r.refundedAmount).toBe(262);
+  });
+
+  test("a booking without any has none", () => {
+    expect(toHostReservation(row(), NOW).outsideRefunds).toEqual([]);
+  });
+});

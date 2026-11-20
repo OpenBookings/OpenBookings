@@ -82,6 +82,18 @@ export type HostReservationRow = {
   refunded: number;
   /** Refund rows still pending or failed: money the guest is owed but hasn't had. */
   unsettled_refunds: number;
+  /**
+   * Refunds the host made in their own Stripe Dashboard and lost disputes
+   * (0053), also in `refunded`. `room_price` and `tourist_tax` are null until
+   * the host's split is entered.
+   */
+  outside_refunds?: {
+    source: "stripe_dashboard" | "dispute";
+    amount: number;
+    at: string;
+    room_price: number | null;
+    tourist_tax: number | null;
+  }[];
   rooms: {
     reservation_id: string;
     room_name: string;
@@ -105,6 +117,16 @@ type HostReservationRoom = {
   nights: string[];
 };
 
+/** Money that left outside OpenBookings: a refund in the host's own Stripe, or a lost dispute. */
+export type OutsideRefund = {
+  kind: "refund" | "dispute";
+  amount: number;
+  /** ISO instant: when Stripe made the refund, or the dispute was lost. */
+  at: string;
+  /** Null until the host has told OpenBookings what it was for. */
+  split: { roomPrice: number; touristTax: number } | null;
+};
+
 export type HostReservation = ReservationSummary & {
   /** "2 adults, 1 child, 1 infant". */
   partyLabel: string;
@@ -118,7 +140,10 @@ export type HostReservation = ReservationSummary & {
   checkOutTime: string | null;
   /** What applies right now, then the milestones (booked, deadlines, check-in, check-out). */
   timeline: HostTimeline;
+  /** Everything refunded so far, outside refunds included: what is left to refund is paid less this. */
   refundedAmount: number;
+  /** The part of `refundedAmount` that left outside OpenBookings, one line each. */
+  outsideRefunds: OutsideRefund[];
   refundIssue: boolean;
   departedEarlyOn: string | null;
   rooms: HostReservationRoom[];
@@ -208,6 +233,15 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     checkOutTime: row.check_out_time,
     timeline: buildHostTimeline(row, now),
     refundedAmount: Number(row.refunded),
+    outsideRefunds: (row.outside_refunds ?? []).map((r) => ({
+      kind: r.source === "dispute" ? "dispute" : "refund",
+      amount: Number(r.amount),
+      at: r.at,
+      split:
+        r.room_price === null || r.tourist_tax === null
+          ? null
+          : { roomPrice: Number(r.room_price), touristTax: Number(r.tourist_tax) },
+    })),
     refundIssue: Number(row.unsettled_refunds) > 0,
     departedEarlyOn: row.departed_early_on,
     rooms,
