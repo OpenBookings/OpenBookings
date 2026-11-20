@@ -7,7 +7,7 @@ import { getServerSession } from "@/lib/auth";
 import { billingAccess } from "@/lib/billing/scope";
 import { listInvoices, organizationReadiness, upcomingInvoice } from "@/lib/billing/queries";
 import { Card, CardContent } from "@/components/ui/card";
-import { FinanceBody } from "../_components/finance-loader";
+import { PageHold } from "@/components/dashboard/page-loaders";
 import { BillingDetailsForm, type VatStatus } from "./_components/billing-details-form";
 import { InvoiceList } from "./_components/invoice-list";
 import { ReadinessChecklist } from "./_components/readiness-checklist";
@@ -29,7 +29,7 @@ export default async function BillingPage() {
   const scope = await billingAccess(session, { billing: ["read"] });
   if (!scope) {
     return (
-      <FinanceBody page="billing">
+      <PageHold id="billing">
         <div className="px-4 lg:px-6">
           <Card>
             <CardContent className="text-sm text-muted-foreground">
@@ -37,7 +37,7 @@ export default async function BillingPage() {
             </CardContent>
           </Card>
         </div>
-      </FinanceBody>
+      </PageHold>
     );
   }
 
@@ -77,13 +77,13 @@ export default async function BillingPage() {
   };
 
   return (
-    <FinanceBody page="billing">
+    <PageHold id="billing">
       <div className="flex flex-col gap-4 px-4 md:gap-6 lg:px-6">
         <UpcomingInvoiceCard upcoming={upcoming} />
         <InvoiceList invoices={invoices} />
         <BillingDetailsForm values={values} countries={countries} vatStatus={vatStatus} canUpdate={canUpdate} />
         <ReadinessChecklist properties={properties} />
       </div>
-    </FinanceBody>
+    </PageHold>
   );
 }

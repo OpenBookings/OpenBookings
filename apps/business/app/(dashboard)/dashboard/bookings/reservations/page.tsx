@@ -1,3 +1,4 @@
+import { PageHold } from "@/components/dashboard/page-loaders";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ReservationsView } from "@/components/dashboard/reservations-view";
@@ -11,8 +12,10 @@ export default async function ReservationsPage() {
   const reservations = await loadHostReservations(session);
 
   return (
-    <Suspense>
-      <ReservationsView reservations={reservations} buckets={bucketReservations(reservations)} />
-    </Suspense>
+    <PageHold id="reservations" fill>
+      <Suspense>
+        <ReservationsView reservations={reservations} buckets={bucketReservations(reservations)} />
+      </Suspense>
+    </PageHold>
   );
 }

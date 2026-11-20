@@ -16,7 +16,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Skeleton } from "@/components/ui/skeleton";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import { formatMessageTimestamp } from "@/lib/format";
 import type { ChatAttachment, ChatMessage, TimelineItem } from "@/lib/support/chat";
 import { AI_COPY } from "@/lib/support/copy";
@@ -122,11 +122,7 @@ export function ChatMessages({
             aria-label="Conversation"
           >
             {loading ? (
-              <div className="flex flex-col gap-4" aria-hidden>
-                <Skeleton className="ml-auto h-10 w-2/3" />
-                <Skeleton className="h-14 w-3/4" />
-                <Skeleton className="ml-auto h-8 w-1/2" />
-              </div>
+              <InlineLoader label="Loading conversation" />
             ) : (
               items.map((item, index) => {
                 const isLast = index === items.length - 1;

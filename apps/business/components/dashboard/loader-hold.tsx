@@ -2,6 +2,7 @@
 
 import { type ReactNode, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { holdRemaining, loaderClock } from "@/lib/analytics/loader-timing";
+import { cn } from "@/lib/utils";
 import { LoaderStage, PageLoader } from "./page-loader";
 
 const subscribeNever = () => () => {};
@@ -60,6 +61,8 @@ interface LoaderHoldProps {
   page: string;
   label: string;
   lines: readonly string[];
+  /** Stretch to the bottom of the pane, for content that fills it. */
+  fill?: boolean;
   children: ReactNode;
 }
 
@@ -67,13 +70,14 @@ interface LoaderHoldProps {
  * Page content arriving from its loading.tsx: it waits under the loader until
  * the loader has been up for a full second, then fades in. Analytics has its
  * own version (AnalyticsBody) that also dims the figures on a period change.
+ * Most pages use it through PageHold (page-loaders.tsx).
  */
-export function LoaderHold({ page, label, lines, children }: LoaderHoldProps) {
+export function LoaderHold({ page, label, lines, fill = false, children }: LoaderHoldProps) {
   const from = useRouteHandover(page);
   return (
-    <div className="relative flex min-w-0 flex-col" aria-busy={from !== null}>
+    <div className={cn("relative flex min-w-0 flex-col", fill && "min-h-0 flex-1")} aria-busy={from !== null}>
       <div
-        className="ob-loader-dim flex min-w-0 flex-col gap-4 md:gap-6"
+        className={cn("ob-loader-dim flex min-w-0 flex-col", fill ? "min-h-0 flex-1" : "gap-4 md:gap-6")}
         data-hidden={from !== null ? "" : undefined}
         inert={from !== null}
       >

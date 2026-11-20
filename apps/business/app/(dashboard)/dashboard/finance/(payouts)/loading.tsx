@@ -1,5 +1,5 @@
-import { FinanceLoading } from "../_components/finance-loader";
+import { PageLoading } from "@/components/dashboard/page-loaders";
 
 export default function Loading() {
-  return <FinanceLoading page="payouts" />;
+  return <PageLoading id="payouts" />;
 }

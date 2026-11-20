@@ -1,6 +1,6 @@
-import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { PageLoading } from "@/components/dashboard/page-loaders";
 
-/** The layout already shows the header. */
+/** The loader for the listings page being opened. The layout shows the header. */
 export default function Loading() {
-  return <DashboardSkeleton withHeader={false} />;
+  return <PageLoading />;
 }

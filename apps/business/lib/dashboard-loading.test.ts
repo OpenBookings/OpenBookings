@@ -22,15 +22,31 @@ describe("dashboard loading states", () => {
     }
   });
 
-  test("every analytics and finance page has the logo loader, never a skeleton", async () => {
+  test("every analytics and finance page has its own logo loader", async () => {
     for (const section of ["analytics", "finance"]) {
       const root = `${DASHBOARD}/${section}`;
       for (const dir of await pageDirs(root)) {
         if (dir === "") continue; // analytics' index only redirects
         const loading = await readFile(path.join(root, dir, "loading.tsx"), "utf8");
-        expect(loading).not.toContain("Skeleton");
-        expect(loading).toMatch(/Analytics|Finance/);
+        expect(loading).toMatch(/AnalyticsLoading|PageLoading/);
       }
     }
+  });
+
+  // Decided 2026-11-20: no grey placeholder blocks anywhere in the business
+  // app. Pages show the logo loader, parts of a page the small InlineLoader.
+  test("nothing outside components/ui uses a skeleton or a pulsing placeholder", async () => {
+    const offenders: string[] = [];
+    for (const root of ["app", "components", "lib"]) {
+      const entries = await readdir(root, { recursive: true, withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || entry.name.includes(".test.")) continue;
+        const file = path.join(entry.parentPath, entry.name);
+        if (file.startsWith(path.join("components", "ui"))) continue;
+        const source = await readFile(file, "utf8");
+        if (source.includes("components/ui/skeleton") || /animate-pulse[^"]*\bbg-/.test(source)) offenders.push(file);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { PageHold } from "@/components/dashboard/page-loaders";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
 import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
@@ -47,5 +48,9 @@ export default async function MessagesPage() {
      ORDER BY t.updated_at DESC`,
   );
 
-  return <MessagesView threads={threads} currentUserId={session.user.id} />;
+  return (
+    <PageHold id="messages" fill>
+      <MessagesView threads={threads} currentUserId={session.user.id} />
+    </PageHold>
+  );
 }

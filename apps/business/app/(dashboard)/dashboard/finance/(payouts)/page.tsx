@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FinanceBody } from "../_components/finance-loader";
+import { PageHold } from "@/components/dashboard/page-loaders";
 
 type PayoutStatus =
   | { state: "hidden" }
@@ -60,7 +60,7 @@ export default async function FinancePage() {
   const payouts = await loadPayoutStatus(session.user.id);
 
   return (
-    <FinanceBody page="payouts">
+    <PageHold id="payouts">
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
@@ -115,6 +115,6 @@ export default async function FinancePage() {
         </Card>
       </div>
       <ComingSoon title="Finance" />
-    </FinanceBody>
+    </PageHold>
   );
 }

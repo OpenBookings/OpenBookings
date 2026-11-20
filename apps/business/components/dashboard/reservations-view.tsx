@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
 import { ReservationsList } from "@/components/dashboard/reservations-list";
 import { ReservationStatusBadge } from "@/components/dashboard/reservation-status";
 import { ReservationDetailBody } from "@/components/dashboard/reservation-detail-panel";
@@ -141,7 +141,7 @@ export function ReservationsView({
         >
           <DrawerHeader className="flex-row items-center justify-between gap-2 border-b">
             {loading ? (
-              <Skeleton className="h-5 w-32" />
+              <InlineLoader label="Loading reservation" size="sm" />
             ) : (
               <div className="flex items-center gap-2">
                 <DrawerTitle className="text-sm">
