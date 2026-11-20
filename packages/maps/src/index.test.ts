@@ -1,40 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { maptilerGeocodingUrl, maptilerStyleUrl, resolveMapStyles } from "./index";
+import { resolveMapStyles, tomtomSearchUrl, tomtomStyleUrl } from "./index";
 
-describe("maptilerStyleUrl", () => {
-  test("builds the MapTiler style URL from id and key", () => {
-    expect(maptilerStyleUrl("style-1", "key-1")).toBe(
-      "https://api.maptiler.com/maps/style-1/style.json?key=key-1",
+describe("tomtomStyleUrl", () => {
+  test("builds the Orbis style URL per theme", () => {
+    expect(tomtomStyleUrl("light", "key-1")).toBe(
+      "https://api.tomtom.com/maps/orbis/assets/styles/2.*/style?apiVersion=1&key=key-1&map=basic_street-light",
     );
+    expect(tomtomStyleUrl("dark", "key-1")).toEndWith("&map=basic_street-dark");
   });
 
-  test("returns null when the style id is missing", () => {
-    expect(maptilerStyleUrl(undefined, "key-1")).toBeNull();
+  test("returns null without a key; empty and whitespace count as missing", () => {
+    expect(tomtomStyleUrl("light", undefined)).toBeNull();
+    expect(tomtomStyleUrl("light", "")).toBeNull();
+    expect(tomtomStyleUrl("light", "   ")).toBeNull();
   });
 
-  test("returns null when the key is missing", () => {
-    expect(maptilerStyleUrl("style-1", undefined)).toBeNull();
-  });
-
-  test("treats empty and whitespace values as missing", () => {
-    expect(maptilerStyleUrl("", "key-1")).toBeNull();
-    expect(maptilerStyleUrl("style-1", "   ")).toBeNull();
-  });
-
-  test("encodes values so a stray character cannot break the URL", () => {
-    expect(maptilerStyleUrl("a/b", "k&x=1")).toBe(
-      "https://api.maptiler.com/maps/a%2Fb/style.json?key=k%26x%3D1",
-    );
+  test("encodes the key so a stray character cannot break the URL", () => {
+    expect(tomtomStyleUrl("light", "k&x=1")).toContain("key=k%26x%3D1&");
   });
 });
 
 describe("resolveMapStyles", () => {
-  test("uses the fallback for both themes when the caller passes nothing", () => {
-    expect(resolveMapStyles(undefined, "default")).toEqual({ light: "default", dark: "default" });
+  const fallback = { light: "L", dark: "D" };
+
+  test("uses the per-theme fallback when the caller passes nothing", () => {
+    expect(resolveMapStyles(undefined, fallback)).toEqual({ light: "L", dark: "D" });
   });
 
   test("a caller's style wins over the fallback, per theme", () => {
-    expect(resolveMapStyles({ light: "mine" }, "default")).toEqual({ light: "mine", dark: "default" });
+    expect(resolveMapStyles({ light: "mine" }, fallback)).toEqual({ light: "mine", dark: "D" });
   });
 
   test("is null when one theme has no style, so no map is built for half a configuration", () => {
@@ -47,7 +41,7 @@ describe("resolveMapStyles", () => {
 
   test("an empty string from a caller counts as missing, not as a style", () => {
     expect(resolveMapStyles({ light: "", dark: "mine" }, null)).toBeNull();
-    expect(resolveMapStyles({ light: "" }, "default")).toEqual({ light: "default", dark: "default" });
+    expect(resolveMapStyles({ light: "" }, fallback)).toEqual({ light: "L", dark: "D" });
   });
 
   test("passes style objects through untouched", () => {
@@ -56,15 +50,27 @@ describe("resolveMapStyles", () => {
   });
 });
 
-describe("maptilerGeocodingUrl", () => {
-  test("builds the address search URL", () => {
-    expect(maptilerGeocodingUrl("Dam 1", "key-1")).toBe(
-      "https://api.maptiler.com/geocoding/Dam%201.json?key=key-1&types=address&limit=5&language=en",
+describe("tomtomSearchUrl", () => {
+  test("builds a fuzzy search URL with the given filters", () => {
+    expect(tomtomSearchUrl("Dam 1", "key-1", { idxSet: "PAD,Addr", countrySet: "NL,BE", limit: 5 })).toBe(
+      "https://api.tomtom.com/search/2/search/Dam%201.json?key=key-1&idxSet=PAD%2CAddr&countrySet=NL%2CBE&limit=5",
+    );
+  });
+
+  test("adds a position bias when given", () => {
+    expect(
+      tomtomSearchUrl("x", "k", { idxSet: "POI", countrySet: "IT", limit: 5, lat: 42.5, lon: 11.4 }),
+    ).toEndWith("&lat=42.5&lon=11.4");
+  });
+
+  test("encodes the query, including a slash", () => {
+    expect(tomtomSearchUrl("a/b", "k", { idxSet: "POI", countrySet: "IT", limit: 1 })).toStartWith(
+      "https://api.tomtom.com/search/2/search/a%2Fb.json?",
     );
   });
 
   test("is null without a key, so no request is sent that can only fail", () => {
-    expect(maptilerGeocodingUrl("Dam 1", undefined)).toBeNull();
-    expect(maptilerGeocodingUrl("Dam 1", "  ")).toBeNull();
+    expect(tomtomSearchUrl("Dam 1", undefined, { idxSet: "PAD", countrySet: "NL", limit: 5 })).toBeNull();
+    expect(tomtomSearchUrl("Dam 1", " ", { idxSet: "PAD", countrySet: "NL", limit: 5 })).toBeNull();
   });
 });
