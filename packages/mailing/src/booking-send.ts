@@ -104,11 +104,16 @@ type BookingRow = {
   tourist_tax_cents: number;
   total_cents: number;
   commission_cents: number;
+  /** Owed at the hotel for cots and extra beds, never charged online; cents. */
+  pay_at_property_cents: number;
   rooms: {
     name: string;
     rate_plan: string;
     adults: number;
     children: number;
+    infants: number;
+    cots: number;
+    extra_beds: number;
     /** False only for a non-refundable rate: the room price never comes back. */
     refundable: boolean;
     free_until: string | null;
@@ -126,9 +131,13 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
             u.email AS "guestEmail", COALESCE(u.name, u.email) AS "guestName",
             b.rooms_total_cents::float8 AS rooms_total_cents, b.tourist_tax_cents::float8 AS tourist_tax_cents,
             b.total_cents::float8 AS total_cents, b.commission_cents::float8 AS commission_cents,
+            -- pay_at_property_amount is euros (numeric 10,2); the mail works in cents.
+            (SELECT ROUND(COALESCE(SUM(r.pay_at_property_amount), 0) * 100)::float8
+               FROM reservations r WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS pay_at_property_cents,
             COALESCE((
               SELECT json_agg(json_build_object(
                 'name', rm.name, 'rate_plan', rp.name, 'adults', r.adults, 'children', r.children,
+                'infants', r.infants, 'cots', r.cots, 'extra_beds', r.extra_beds,
                 -- The tier the room was booked under; the rate's flag for one not snapshotted yet.
                 'refundable', COALESCE(r.cancellation_tier::text <> 'non_refundable', rp.is_refundable),
                 -- A deadline that has passed is no longer a free-cancellation promise.
@@ -152,10 +161,15 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
   return rows[0] ?? null;
 }
 
-const guestsText = (adults: number, children: number) => {
-  const n = adults + children;
-  return `${n} ${n === 1 ? "guest" : "guests"}`;
-};
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "2 guests", or "2 guests, 1 infant": infants (under 2) take no place, so they are not guests. */
+const guestsText = (adults: number, children: number, infants = 0) =>
+  [plural(adults + children, "guest", "guests"), infants > 0 && plural(infants, "infant", "infants")].filter(Boolean).join(", ");
+
+/** "1 cot", "1 cot, 2 extra beds", or null when the room has neither. */
+const extrasText = (cots = 0, extraBeds = 0) =>
+  [cots > 0 && plural(cots, "cot", "cots"), extraBeds > 0 && plural(extraBeds, "extra bed", "extra beds")].filter(Boolean).join(", ") || null;
 
 /**
  * "Thu 11 Mar 2027, 15:00 (property's local time)" from "2027-03-11 15:00".
@@ -171,7 +185,8 @@ const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
   rooms.map((r) => ({
     name: r.name,
     ratePlan: r.rate_plan,
-    guests: guestsText(r.adults, r.children),
+    guests: guestsText(r.adults, r.children, r.infants),
+    extras: extrasText(r.cots, r.extra_beds),
     refundable: r.refundable !== false,
     freeCancellationUntil: deadline(r.free_until),
     nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
@@ -191,7 +206,12 @@ export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {
     checkIn: b.check_in_date,
     checkOut: b.check_out_date,
     rooms: mailRooms(b.rooms),
-    money: { roomsCents: b.rooms_total_cents, touristTaxCents: b.tourist_tax_cents, totalCents: b.total_cents },
+    money: {
+      roomsCents: b.rooms_total_cents,
+      touristTaxCents: b.tourist_tax_cents,
+      totalCents: b.total_cents,
+      payAtPropertyCents: Number(b.pay_at_property_cents) || 0,
+    },
     reference: bookingReference(bookingId),
   };
   const seller = { legalName: b.legal_name, vatNumber: b.vat_number };

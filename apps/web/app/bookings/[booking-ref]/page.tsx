@@ -182,7 +182,9 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
                         {room.roomName}
                       </p>
                       <p className="text-[13px] text-white/45">
-                        {room.cancelledAt ? `Cancelled ${fmtDay(room.cancelledAt)}` : `${room.tierLabel} rate`}
+                        {room.cancelledAt
+                          ? `Cancelled ${fmtDay(room.cancelledAt)}`
+                          : [`${room.tierLabel} rate`, room.extras].filter(Boolean).join(' · ')}
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -209,6 +211,12 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
                   <dt className="text-white/55">Paid</dt>
                   <dd className="font-medium tabular-nums">{euros.format(booking.totalPaid)}</dd>
                 </div>
+                {booking.payAtProperty > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-white/55">To pay at the hotel (cots and extra beds)</dt>
+                    <dd className="tabular-nums">{euros.format(booking.payAtProperty)}</dd>
+                  </div>
+                ) : null}
                 {booking.refunded > 0 ? (
                   <div className="flex justify-between gap-4">
                     <dt className="text-white/55">Refunded · back on your card within 5–10 days</dt>

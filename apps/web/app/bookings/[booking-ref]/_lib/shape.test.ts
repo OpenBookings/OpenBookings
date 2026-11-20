@@ -47,6 +47,24 @@ describe("toGuestBooking", () => {
     expect(b.totalPaid).toBe(752);
   });
 
+  test("cots, extra beds and infants show on the room, and what is owed at the hotel on the booking", () => {
+    const b = toGuestBooking(
+      row({
+        rooms: [
+          room("r1", { cots: 1, extra_beds: 1, infants: 1, pay_at_property_amount: "37.50" }),
+          room("r2", { cots: 1, pay_at_property_amount: 15, cancelled_at: "2031-10-20T10:00:00+00:00" }),
+        ],
+      }),
+      NOW,
+    );
+    expect(b.rooms[0]).toMatchObject({ extras: "1 cot · 1 extra bed · 1 infant", payAtProperty: 37.5 });
+    // The cancelled room's cot is no longer owed; nothing at the hotel is in what was paid.
+    expect(b.payAtProperty).toBe(37.5);
+    expect(b.totalPaid).toBe(752);
+    expect(toGuestBooking(row(), NOW)).toMatchObject({ payAtProperty: 0 });
+    expect(toGuestBooking(row(), NOW).rooms[0].extras).toBeNull();
+  });
+
   test("past the deadline, cancelling keeps the room price", () => {
     const b = toGuestBooking(row(), new Date("2031-11-09T15:00:00Z"));
     expect(b.cancelHint).toBe("The room price isn't refunded. Tourist tax is.");

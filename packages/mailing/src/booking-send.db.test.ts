@@ -122,6 +122,19 @@ describeWithDb("booking emails against Postgres", () => {
     expect(sent.find((m) => m.to === guestEmail)!.html).toContain("non-refundable");
   });
 
+  test("cots, extra beds and infants are in both mails, with what is left to pay at the hotel", async () => {
+    await db.query(
+      `UPDATE reservations SET cots = 1, extra_beds = 1, infants = 1, pay_at_property_amount = 37.50 WHERE id = $1`,
+      [reservationIds[0]],
+    );
+    await sendBookingConfirmed(bookingId, deps());
+    for (const mail of sent) {
+      expect(mail.html).toContain("1 infant, 1 cot, 1 extra bed");
+      expect(mail.html).toContain("To pay at the hotel (cots and extra beds)");
+      expect(mail.html).toContain("€37.50");
+    }
+  });
+
   test("in testing mode a demo hotel's host mail goes to the guest", async () => {
     await db.query(`UPDATE properties SET is_demo = true WHERE id = $1`, [propertyId]);
     await sendBookingConfirmed(bookingId, deps({ testing: true }));

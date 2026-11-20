@@ -11,6 +11,8 @@ export type MailRoom = {
   name: string;
   ratePlan: string;
   guests: string;
+  /** "1 cot, 1 extra bed", paid at the hotel; null when the room has neither. */
+  extras?: string | null;
   /** False for a non-refundable rate. */
   refundable: boolean;
   /** Null once the free-cancellation deadline has passed (or for a non-refundable rate). */
@@ -19,8 +21,14 @@ export type MailRoom = {
   touristTaxLines: { label: string; amount: number }[];
 };
 
-/** What the guest paid, in cents, as the booking stores it. */
-export type MailMoney = { roomsCents: number; touristTaxCents: number; totalCents: number };
+/**
+ * What the guest paid, in cents, as the booking stores it. `payAtPropertyCents`
+ * is what they still owe the hotel for cots and extra beds: priced at
+ * booking, paid at the hotel, never part of `totalCents`.
+ */
+export type MailMoney = { roomsCents: number; touristTaxCents: number; totalCents: number; payAtPropertyCents?: number };
+
+const PAY_AT_PROPERTY_LABEL = "To pay at the hotel (cots and extra beds)";
 
 /** The host's legal details, when they filled them in. The hotel is the seller of the stay. */
 export type MailSeller = { legalName: string | null; vatNumber: string | null };
@@ -88,7 +96,7 @@ function roomRows(rooms: MailRoom[]): Row[] {
         : "free cancellation period has passed";
     return [
       { label: escapeHtml(r.name), kind: "room" as const },
-      { label: escapeHtml(`${r.ratePlan}, ${r.guests}, ${cancel}`), kind: "note" as const },
+      { label: escapeHtml([r.ratePlan, r.guests, r.extras, cancel].filter(Boolean).join(", ")), kind: "note" as const },
       ...nightRuns(r.nights).map((n) => ({ label: escapeHtml(n.label), amount: euro(n.amountCents) })),
       ...r.touristTaxLines
         .filter((t) => t.amount > 0)
@@ -101,6 +109,7 @@ function totalRows(m: MailMoney): Row[] {
   const rows: Row[] = [{ label: "Rooms, incl. VAT", amount: euro(m.roomsCents), kind: "first-total" }];
   if (m.touristTaxCents > 0) rows.push({ label: "Tourist tax", amount: euro(m.touristTaxCents) });
   rows.push({ label: "Total paid", amount: euro(m.totalCents), kind: "grand" });
+  if ((m.payAtPropertyCents ?? 0) > 0) rows.push({ label: PAY_AT_PROPERTY_LABEL, amount: euro(m.payAtPropertyCents ?? 0) });
   return rows;
 }
 
@@ -131,7 +140,9 @@ export function guestBookingConfirmed(i: {
     details: table([...roomRows(i.rooms), ...totalRows(i.money)]),
     ctaUrl: i.bookingUrl,
     ctaLabel: "View your booking",
-    footnote: `Prices include VAT.${i.money.touristTaxCents > 0 ? " Tourist tax is collected for the local council." : ""} ${FOOTNOTE}`,
+    footnote: `Prices include VAT.${i.money.touristTaxCents > 0 ? " Tourist tax is collected for the local council." : ""}${
+      (i.money.payAtPropertyCents ?? 0) > 0 ? " Cots and extra beds are paid at the hotel, not online." : ""
+    } ${FOOTNOTE}`,
   });
 }
 
@@ -173,7 +184,9 @@ export function hostNewBooking(i: {
     details: table([...roomRows(i.rooms), ...totalRows(i.money), ...payout]),
     ctaUrl: i.reservationsUrl,
     ctaLabel: "Open reservations",
-    footnote: `What you receive is before Stripe's processing fees. ${FOOTNOTE}`,
+    footnote: `What you receive is before Stripe's processing fees.${
+      (i.money.payAtPropertyCents ?? 0) > 0 ? " Cots and extra beds are not in it: the guest pays those at the hotel." : ""
+    } ${FOOTNOTE}`,
   });
 }
 

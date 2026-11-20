@@ -182,3 +182,25 @@ test("a refundable room booked inside its window is not called non-refundable", 
   expect(late.html).toContain("free cancellation period has passed");
   expect(late.html).not.toContain("non-refundable");
 });
+
+test("cots and extra beds show on the room and as what is left to pay at the hotel", () => {
+  const withExtras = { ...money, payAtPropertyCents: 2500 };
+  const extrasRooms = [{ ...rooms[0], guests: "2 guests, 1 infant", extras: "1 cot, 1 extra bed" }];
+  const guest = guestBookingConfirmed({ propertyName: "Hotel", ...stay, rooms: extrasRooms, money: withExtras, seller, reference: "AB12CD34", bookingUrl: "https://web.test/b" });
+  const host = hostNewBooking({ propertyName: "Hotel", guestName: "G", ...stay, rooms: extrasRooms, money: withExtras, commissionCents: 1350, reference: "AB12CD34", reservationsUrl: "https://biz.test/r" });
+  for (const mail of [guest, host]) {
+    expect(mail.html).toContain("2 guests, 1 infant, 1 cot, 1 extra bed");
+    expect(mail.html).toContain("To pay at the hotel (cots and extra beds)");
+    expect(mail.html).toContain("€25.00");
+    // Below what was paid online, never added to it.
+    expect(mail.html.indexOf("To pay at the hotel")).toBeGreaterThan(mail.html.indexOf("Total paid"));
+    expect(mail.html).toContain("€312.00");
+  }
+  // The host still receives the online payment less commission: €312 − €13.50.
+  expect(host.html).toContain("€298.50");
+});
+
+test("no pay-at-hotel row without cots or extra beds", () => {
+  expect(mails.confirmed.html).not.toContain("To pay at the hotel");
+  expect(mails.hostNew.html).not.toContain("To pay at the hotel");
+});
