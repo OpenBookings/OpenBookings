@@ -135,6 +135,7 @@ export function TouristTaxSection({ data }: SectionProps) {
         today={today}
         waitingFrom={groups.upcoming[0]?.effectiveFrom ?? null}
         commissionRate={commissionRate}
+        country={property.country}
         open={adding}
         onOpenChange={setAdding}
       />

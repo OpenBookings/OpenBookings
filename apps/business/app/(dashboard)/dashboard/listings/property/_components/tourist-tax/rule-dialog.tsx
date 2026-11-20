@@ -4,7 +4,7 @@ import * as React from "react";
 import { AlertCircleIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import posthog from "posthog-js";
 import { toast } from "sonner";
-import { describeCharge, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
+import { describeCharge, vatRatesFor, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,6 +83,8 @@ interface RuleDialogProps {
    */
   waitingFrom: string | null;
   commissionRate: number;
+  /** The property's country, for the accommodation VAT rate the VAT field starts from. */
+  country: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -92,6 +94,7 @@ export function RuleDialog({
   today,
   waitingFrom,
   commissionRate,
+  country,
   open,
   onOpenChange,
 }: RuleDialogProps) {
@@ -218,6 +221,7 @@ export function RuleDialog({
                   key={c.key}
                   index={i}
                   charge={c}
+                  defaultVat={vatRatesFor(country, "hotel", effectiveFrom)?.accommodation ?? null}
                   disabled={pending}
                   onChange={(patch) => update(c.key, patch)}
                   onRemove={() => setCharges((cs) => cs.filter((x) => x.key !== c.key))}
@@ -320,12 +324,14 @@ export function RuleDialog({
 interface ChargeEditorProps {
   index: number;
   charge: ChargeDraft;
+  /** Accommodation VAT in the property's country on the rule's start date, if known. */
+  defaultVat: number | null;
   disabled: boolean;
   onChange: (patch: Partial<ChargeDraft>) => void;
   onRemove: () => void;
 }
 
-function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEditorProps) {
+function ChargeEditor({ index, charge, defaultVat, disabled, onChange, onRemove }: ChargeEditorProps) {
   const id = `tt-charge-${charge.key}`;
   const amount = num(charge.amount);
   const summary =
@@ -412,7 +418,12 @@ function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEdi
             <Checkbox
               id={`${id}-vat`}
               checked={charge.vatOff}
-              onCheckedChange={(v) => onChange({ vatOff: v === true })}
+              onCheckedChange={(v) => {
+                const on = v === true;
+                // Start from the country's accommodation VAT; the host can still change it.
+                const prefill = on && charge.vat === "" && defaultVat !== null ? String(defaultVat) : charge.vat;
+                onChange({ vatOff: on, vat: prefill });
+              }}
               disabled={disabled}
             />
             <Label htmlFor={`${id}-vat`} className="font-normal">
@@ -425,7 +436,7 @@ function ChargeEditor({ index, charge, disabled, onChange, onRemove }: ChargeEdi
                   min={0}
                   step="0.1"
                   inputMode="decimal"
-                  placeholder="9"
+                  placeholder={defaultVat !== null ? String(defaultVat) : undefined}
                   value={charge.vat}
                   onChange={(e) => onChange({ vat: e.target.value })}
                   disabled={disabled}
