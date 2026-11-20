@@ -78,13 +78,20 @@ export function describePolicy(s: PolicySnapshot, timeZone: string, now: Date): 
 }
 
 export type PolicyStep = {
-  kind: "free" | "after" | "no_show" | "non_refundable";
+  kind: "free" | "after" | "early_departure" | "no_show" | "non_refundable";
   title: string;
   detail: string;
   /** `free` steps only: the deadline as an ISO instant, to compare across rooms. */
   until?: string;
   /** `free` steps only: the deadline as the title words it, e.g. "Thu 10 Dec, 14:00". */
   deadlineLabel?: string;
+};
+
+/** Annex B B.5.2, the same for every tier. */
+const EARLY_DEPARTURE_STEP: PolicyStep = {
+  kind: "early_departure",
+  title: "If you leave early",
+  detail: "The next 7 nights are charged and any nights after that are refunded.",
 };
 
 const NO_SHOW_STEP: PolicyStep = {
@@ -105,6 +112,7 @@ export function describePolicySteps(s: PolicySnapshot, timeZone: string, now: Da
         title: "Non-refundable",
         detail: "The room isn't refunded if you cancel. Tourist tax for nights you don't stay is.",
       },
+      EARLY_DEPARTURE_STEP,
       NO_SHOW_STEP,
     ];
   }
@@ -125,6 +133,6 @@ export function describePolicySteps(s: PolicySnapshot, timeZone: string, now: Da
     title: "After that",
     detail: "The room isn't refunded. Tourist tax for nights you don't stay is.",
   });
-  steps.push(NO_SHOW_STEP);
+  steps.push(EARLY_DEPARTURE_STEP, NO_SHOW_STEP);
   return steps;
 }

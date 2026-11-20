@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { buildPolicySnapshot, type CancellationTier } from "./cancellation";
-import { describePolicy, describePolicySteps, formatDeadline, TIER_LABELS, TIER_SUMMARIES } from "./cancellation-copy";
+import {
+  describePolicy,
+  describePolicySteps,
+  formatDeadline,
+  type PolicyStep,
+  TIER_LABELS,
+  TIER_SUMMARIES,
+} from "./cancellation-copy";
 
 const TZ = "Europe/Amsterdam";
 const snapshot = (tier: CancellationTier) =>
@@ -80,7 +87,13 @@ describe("describePolicy", () => {
 describe("describePolicySteps", () => {
   const steps = (tier: CancellationTier, now: Date) => describePolicySteps(snapshot(tier), TZ, now);
 
-  test("flex before the deadline: free, after that, no-show", () => {
+  const earlyStep: PolicyStep = {
+    kind: "early_departure",
+    title: "If you leave early",
+    detail: "The next 7 nights are charged and any nights after that are refunded.",
+  };
+
+  test("flex before the deadline: free, after that, leaving early, no-show", () => {
     expect(steps("flex", EARLY)).toEqual([
       {
         kind: "free",
@@ -94,22 +107,31 @@ describe("describePolicySteps", () => {
         title: "After that",
         detail: "The room isn't refunded. Tourist tax for nights you don't stay is.",
       },
+      earlyStep,
       { kind: "no_show", title: "If you don't show up", detail: "The hotel keeps the full amount." },
     ]);
   });
 
   test("flex after the deadline drops the free step", () => {
     const kinds = steps("flex", new Date("2026-11-09T20:00:00Z")).map((s) => s.kind);
-    expect(kinds).toEqual(["after", "no_show"]);
+    expect(kinds).toEqual(["after", "early_departure", "no_show"]);
   });
 
-  test("non-refundable: non-refundable and no-show", () => {
+  test("every step kind appears once, so it can key a list", () => {
+    for (const tier of ["flex", "standard", "non_refundable"] as const) {
+      const kinds = steps(tier, EARLY).map((s) => s.kind);
+      expect(new Set(kinds).size).toBe(kinds.length);
+    }
+  });
+
+  test("non-refundable: non-refundable, leaving early and no-show", () => {
     expect(steps("non_refundable", EARLY)).toEqual([
       {
         kind: "non_refundable",
         title: "Non-refundable",
         detail: "The room isn't refunded if you cancel. Tourist tax for nights you don't stay is.",
       },
+      earlyStep,
       { kind: "no_show", title: "If you don't show up", detail: "The hotel keeps the full amount." },
     ]);
   });
