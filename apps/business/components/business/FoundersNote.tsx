@@ -41,7 +41,7 @@ export function FoundersNote() {
               </p>
               <p>
                 OpenBookings is built and run by one person today, that&apos;s a current stage, not a promise.
-                What isn&apos;t dependent on any one person is the commission itself: it&apos;s written into the code, publicly versioned, and changeable only with 30 days&apos; notice.
+                What isn&apos;t dependent on any one person is the commission itself: it&apos;s set out in the Host Agreement, applied by our public code, and changeable only with 30 days&apos; notice by email.
               </p>
               <p>
               You&apos;re not trusting a founder. You&apos;re trusting a business model you can read.
