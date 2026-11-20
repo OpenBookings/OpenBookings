@@ -14,7 +14,14 @@ export {
 export { applicationFeeCents, bookingSplitCents, commissionRefundDue } from './payments/fees';
 export { DEFAULT_COMMISSION_LABEL, DEFAULT_COMMISSION_RATE, formatCommissionRate } from './payments/commission-rate';
 export { ensurePaymentMethodDomain, type PaymentMethodDomainResult } from './payments/payment-domain';
-export { refundCommissionForCharge, type CommissionRefund } from './payments/commission-refund';
+export {
+  refundCommissionForCharge,
+  refundsOutsideOpenBookings,
+  type CommissionRefund,
+  type CommissionReturn,
+  type OutsideRefund,
+} from './payments/commission-refund';
+export { madeByOpenBookings } from './payments/refund-origin';
 export {
   constructWebhookEvent,
   handleWebhookRequest,
@@ -23,9 +30,11 @@ export {
 } from './webhooks';
 export {
   handleStripeEvent,
+  PAYMENT_FLAG_ACTIONS,
   readPaidCheckout,
   type ApplicationFeePayload,
   type ApplicationFeeRefundPayload,
+  type OutsideRefundPayload,
   type PaidCheckout,
   type StripeAuditEntry,
   type StripeEventDeps,
