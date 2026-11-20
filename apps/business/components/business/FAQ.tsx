@@ -43,7 +43,7 @@ const faqs: { question: string; answer: AnswerPart[] }[] = [
   {
     question: "Am I locked in?",
     answer: [
-      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours. You can download your analytics and invoices at any time, and when you leave we send you a copy of your property details and booking history on request. Guest personal data can't be bulk exported, in line with GDPR and the Host Agreement.",
+      "No fixed term, we see this as an ongoing partnership rather than a set-term contract. Should your circumstances change, simply provide 30 days' notice so any existing bookings can be honoured smoothly. Your property and business data remain yours. You can download your analytics and invoices at any time.",
     ],
   },
 ];
