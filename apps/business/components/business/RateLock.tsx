@@ -48,7 +48,7 @@ const clauses = [
   },
   {
     term: "Staying up-to-date",
-    detail: "The new rate appears directly in your inbox, or in the notification center on the dashboard.",
+    detail: "We email every host about a new rate before it takes effect.",
   },
   {
     term: "Never retroactive",
