@@ -69,9 +69,10 @@ describe("Host Agreement 1.4 states what the code does", () => {
     expect(body).toMatch(/80% of the Accommodation Price back, OpenBookings returns 80% of its Commission/);
   });
 
-  test("refunds outside OpenBookings and lost disputes count against the whole payment", () => {
+  test("refunds made in Stripe return no commission; lost disputes count against the whole payment", () => {
+    expect(body).toContain("directly in its own Stripe Dashboard (Section 5.1), return no Commission");
     expect(body).toContain(
-      "OpenBookings returns its Commission in the same proportion as the amount refunded or lost bears to the full amount the Guest paid",
+      "OpenBookings returns its Commission in the same proportion as the amount lost bears to the full amount the Guest paid",
     );
     expect(body).toContain("The Host remains responsible for the Tourist Tax on such refunds");
     expect(body).toContain("OpenBookings never holds it");
