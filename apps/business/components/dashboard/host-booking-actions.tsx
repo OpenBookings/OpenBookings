@@ -382,7 +382,7 @@ function GoodwillRequest({ reservation, onDone }: { reservation: HostReservation
         <AlertDialogTitle>Request a goodwill refund</AlertDialogTitle>
         <AlertDialogDescription>
           Goodwill refunds go through OpenBookings support. Tell us how much and why; we check it and refund the
-          guest from your Stripe balance. Up to {euros.format(left)} is left to refund.
+          guest on your behalf, from your Stripe balance. Up to {euros.format(left)} is left to refund.
         </AlertDialogDescription>
       </AlertDialogHeader>
       <FieldGroup className="gap-4">
