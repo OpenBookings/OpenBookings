@@ -33,7 +33,7 @@ function fake(account: string | null) {
 describe("payout status", () => {
   test("reads the current organization's Stripe account, then the current hotel's own", async () => {
     const { deps, seen } = fake("acct_1");
-    expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "ok", payoutsEnabled: true, requirementsDue: 1 });
+    expect(await loadPayoutStatus(current("owner"), { userId: "u1" }, deps)).toEqual({ state: "ok", payoutsEnabled: true, requirementsDue: 1 });
     expect(seen).toHaveLength(1);
     expect(seen[0].values).toEqual([ORG, PROPERTY]);
     expect(seen[0].sql).toContain("org_profile");
@@ -57,25 +57,25 @@ describe("payout status", () => {
         return { payouts_enabled: true };
       },
     };
-    expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "none" });
+    expect(await loadPayoutStatus(current("owner"), { userId: "u1" }, deps)).toEqual({ state: "none" });
     expect(stripe).toBe(0);
   });
 
   test("is hidden from a role that may not read payouts, without asking the database or Stripe", async () => {
     const { deps, seen, stripeCalls } = fake("acct_1");
-    expect(await loadPayoutStatus(current("frontdesk", true), "u1", deps)).toEqual({ state: "hidden" });
+    expect(await loadPayoutStatus(current("frontdesk", true), { userId: "u1" }, deps)).toEqual({ state: "hidden" });
     expect(seen).toEqual([]);
     expect(stripeCalls()).toBe(0);
   });
 
   test("no connected account is none", async () => {
     const { deps } = fake(null);
-    expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "none" });
+    expect(await loadPayoutStatus(current("owner"), { userId: "u1" }, deps)).toEqual({ state: "none" });
   });
 
   test("without a current hotel only the user's own onboarding counts", async () => {
     const { deps, seen } = fake("acct_own");
-    expect((await loadPayoutStatus(null, "u1", deps)).state).toBe("ok");
+    expect((await loadPayoutStatus(null, { userId: "u1" }, deps)).state).toBe("ok");
     expect(seen[0].values).toEqual(["u1"]);
     expect(seen[0].sql).not.toContain("org_profile");
   });
@@ -85,6 +85,39 @@ describe("payout status", () => {
     deps.retrieveAccount = async () => {
       throw new Error("down");
     };
-    expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "unavailable" });
+    expect(await loadPayoutStatus(current("owner"), { userId: "u1" }, deps)).toEqual({ state: "unavailable" });
+  });
+
+  test("with no current hotel, a role in the session's org that may not read payouts sees it is not theirs", async () => {
+    // Front desk not yet assigned to a hotel: no current hotel, still a member of the org.
+    const seen: { sql: string; values: unknown[] }[] = [];
+    let stripe = 0;
+    const deps: PayoutDeps = {
+      queryOne: async <T,>(sql: string, values: unknown[] = []) => {
+        seen.push({ sql, values });
+        return (sql.includes(`FROM "member"`) ? { role: "frontdesk" } : { stripe_account_id: null }) as T;
+      },
+      retrieveAccount: async () => {
+        stripe += 1;
+        return {};
+      },
+    };
+    expect(await loadPayoutStatus(null, { userId: "u1", orgId: ORG }, deps)).toEqual({ state: "hidden" });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].values).toEqual(["u1", ORG]);
+    expect(stripe).toBe(0);
+  });
+
+  test("with no current hotel, an owner of the session's org still sees their own onboarding account", async () => {
+    const seen: string[] = [];
+    const deps: PayoutDeps = {
+      queryOne: async <T,>(sql: string) => {
+        seen.push(sql);
+        return (sql.includes(`FROM "member"`) ? { role: "owner" } : { stripe_account_id: "acct_own" }) as T;
+      },
+      retrieveAccount: async () => ({ payouts_enabled: true }),
+    };
+    expect((await loadPayoutStatus(null, { userId: "u1", orgId: ORG }, deps)).state).toBe("ok");
+    expect(seen.some((sql) => sql.includes("host_onboarding"))).toBe(true);
   });
 });

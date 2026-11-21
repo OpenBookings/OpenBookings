@@ -4,6 +4,7 @@ import { getServerSession } from "@/lib/auth";
 import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { pageAccess } from "@/lib/page-access";
 import { loadPayoutStatus } from "@/lib/finance/payout-status";
+import { activeOrgId } from "@/lib/active-org";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
 import {
   Card,
@@ -26,7 +27,9 @@ export default async function FinancePage() {
       </PageHold>
     );
   }
-  const payouts = await loadPayoutStatus(access.current, session.user.id);
+  // With no current hotel, the role that decides is the one in the session's org.
+  const orgId = access.current ? null : await activeOrgId(session);
+  const payouts = await loadPayoutStatus(access.current, { userId: session.user.id, orgId });
 
   return (
     <PageHold id="payouts">

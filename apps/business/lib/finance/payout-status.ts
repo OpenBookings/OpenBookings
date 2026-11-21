@@ -34,15 +34,26 @@ const defaultDeps: PayoutDeps = {
  * onboarded, and showing it on another org's hotel would mix two orgs on one
  * screen. Without a current hotel the user's own onboarding account is the
  * only source. A role that may not read payouts sees that they are not
- * theirs to view, and Stripe is not asked.
+ * theirs to view, and Stripe is not asked: the current hotel's role, or,
+ * with no current hotel, the role in `viewer.orgId` (the org the console
+ * resolved for the session; a member with no hotel yet, such as front desk
+ * not yet assigned, is still in an org).
  */
 export async function loadPayoutStatus(
   current: CurrentProperty | null,
-  userId: string,
+  viewer: { userId: string; orgId?: string | null },
   deps: PayoutDeps = defaultDeps,
 ): Promise<PayoutStatus> {
   if (current && !roleAllows(current.role, { payout: ["read"] }, current.hasPropertyAccess)) {
     return { state: "hidden" };
+  }
+  if (!current && viewer.orgId) {
+    const member = await deps.queryOne<{ role: string | null }>(
+      `SELECT string_agg(role, ',') AS role FROM "member" WHERE "userId" = $1 AND "organizationId" = $2`,
+      [viewer.userId, viewer.orgId],
+    );
+    // Payouts are org-level: no hotel assignment needed, only the role.
+    if (member?.role && !roleAllows(member.role, { payout: ["read"] }, true)) return { state: "hidden" };
   }
 
   const row = current
@@ -56,7 +67,7 @@ export async function loadPayoutStatus(
       )
     : await deps.queryOne<{ stripe_account_id: string | null }>(
         `SELECT step_data->>'stripe_account_id' AS stripe_account_id FROM host_onboarding WHERE user_id = $1`,
-        [userId],
+        [viewer.userId],
       );
   if (!row?.stripe_account_id) return { state: "none" };
 
