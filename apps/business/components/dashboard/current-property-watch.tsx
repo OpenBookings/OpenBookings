@@ -44,13 +44,7 @@ export function StaleHotelNotice({ hotelName, onReload }: { hotelName: string; o
  * Tells a tab left open on hotel A that the session now points at hotel B.
  * Checks only when the tab regains focus or becomes visible, never on a timer.
  */
-export function CurrentPropertyWatch({
-  renderedPropertyId,
-  hotelName: _hotelName,
-}: {
-  renderedPropertyId: string | null;
-  hotelName: string;
-}) {
+export function CurrentPropertyWatch({ renderedPropertyId }: { renderedPropertyId: string | null }) {
   const [switched, setSwitched] = useState<string | null>(null);
 
   useEffect(() => {

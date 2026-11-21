@@ -30,7 +30,6 @@ await mockModules(import.meta.dir, {
 });
 
 const LISTINGS = "../app/(dashboard)/dashboard/listings";
-const { loadPropertyBrand } = await import("./property-brand");
 const { loadEditorData } = await import(`${LISTINGS}/property/_lib/query`);
 const { loadRoomsIndex, loadRoomEditor } = await import(`${LISTINGS}/rooms/_lib/query`);
 const { loadPricingRules, loadRuleGroup } = await import(`${LISTINGS}/pricing-rules/_lib/query`);
@@ -58,20 +57,6 @@ function expectPinned() {
 beforeEach(() => {
   calls = [];
   answer = () => undefined;
-});
-
-describe("the sidebar brand", () => {
-  test("is the current hotel's", async () => {
-    answer = () => ({ name: "Hotel Zeezicht", logo_url: null });
-    expect(await loadPropertyBrand(session, PROP)).toEqual({ name: "Hotel Zeezicht", logoUrl: null });
-    expectPinned();
-    expect(calls[0].sql).not.toContain("ORDER BY p.name");
-  });
-
-  test("is absent without a current hotel", async () => {
-    expect(await loadPropertyBrand(session, null)).toBeNull();
-    expect(calls).toEqual([]);
-  });
 });
 
 describe("the property editor", () => {

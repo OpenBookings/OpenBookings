@@ -12,6 +12,8 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import type { SwitchableProperty } from "@openbookings/authz";
+import type { AccessLevel, NavKey } from "@openbookings/authz/nav-access";
 import type * as React from "react";
 import { useState } from "react";
 
@@ -22,7 +24,7 @@ import {
 } from "@/components/dashboard/sidebar-08/nav-secondary";
 import { NavUser } from "@/components/dashboard/sidebar-08/nav-user";
 import { NotificationsDialog } from "@/components/dashboard/sidebar-08/notifications-dialog";
-import { SidebarBrand } from "@/components/dashboard/sidebar-08/sidebar-brand";
+import { PropertySwitcher } from "@/components/dashboard/sidebar-08/property-switcher";
 import {
   type AttentionKey,
   useNavAttention,
@@ -30,7 +32,6 @@ import {
 import { WhatsNewDialog } from "@/components/dashboard/sidebar-08/whats-new-dialog";
 import { useOptionalSupport } from "@/components/support/support-provider";
 import { PAGE_IDS, PAGES } from "@/lib/analytics/pages";
-import type { PropertyBrand } from "@/lib/property-brand";
 import {
   Sidebar,
   SidebarContent,
@@ -47,30 +48,31 @@ const navMain: NavItem[] = [
     title: "Overview",
     url: "/dashboard",
     icon: LayoutDashboard,
+    navKey: "overview",
   },
   {
     title: "Bookings",
     url: "#",
     icon: CalendarDays,
     items: [
-      { title: "Reservations", url: "/dashboard/bookings/reservations" },
-      { title: "Messages", url: "/dashboard/bookings/messages" },
-      { title: "Reviews", url: "/dashboard/bookings/reviews" },
+      { title: "Reservations", url: "/dashboard/bookings/reservations", navKey: "reservations" },
+      { title: "Messages", url: "/dashboard/bookings/messages", navKey: "messages" },
+      { title: "Reviews", url: "/dashboard/bookings/reviews", navKey: "reviews" },
     ],
   },
   {
     title: "Analytics",
     url: "#",
     icon: TrendingUp,
-    items: PAGE_IDS.map((id) => ({ title: PAGES[id].title, url: PAGES[id].path })),
+    items: PAGE_IDS.map((id) => ({ title: PAGES[id].title, url: PAGES[id].path, navKey: "analytics" })),
   },
   {
     title: "Finance",
     url: "#",
     icon: HandCoins,
     items: [
-      { title: "Payouts", url: "/dashboard/finance" },
-      { title: "Billing", url: "/dashboard/finance/billing" },
+      { title: "Payouts", url: "/dashboard/finance", navKey: "payouts" },
+      { title: "Billing", url: "/dashboard/finance/billing", navKey: "billing" },
     ],
   },
   {
@@ -78,16 +80,17 @@ const navMain: NavItem[] = [
     url: "#",
     icon: PencilSparkles,
     items: [
-      { title: "R&A", url: "/dashboard/listings/rates-availability" },
-      { title: "Pricing rules", url: "/dashboard/listings/pricing-rules" },
-      { title: "Property", url: "/dashboard/listings/property" },
-      { title: "Rooms", url: "/dashboard/listings/rooms" },
+      { title: "R&A", url: "/dashboard/listings/rates-availability", navKey: "rates" },
+      { title: "Pricing rules", url: "/dashboard/listings/pricing-rules", navKey: "pricingRules" },
+      { title: "Property", url: "/dashboard/listings/property", navKey: "property" },
+      { title: "Rooms", url: "/dashboard/listings/rooms", navKey: "rooms" },
     ],
   },
   {
     title: "Team",
     url: "/dashboard/team",
     icon: Users,
+    navKey: "team",
   },
 ];
 
@@ -100,10 +103,20 @@ function withCounts(items: NavItem[], reviewsWaiting: number): NavItem[] {
 }
 
 export function DashboardSidebar({
-  brand,
+  properties,
+  current,
+  access,
   reviewsWaiting = 0,
   ...props
-}: React.ComponentProps<typeof Sidebar> & { brand?: PropertyBrand | null; reviewsWaiting?: number }) {
+}: React.ComponentProps<typeof Sidebar> & {
+  /** Every hotel the user can switch to (lib/current-property.ts). */
+  properties: SwitchableProperty[];
+  /** The hotel on screen, or null when the user has none yet. */
+  current: SwitchableProperty | null;
+  /** What the role at the current hotel may open (lib/page-access.ts). */
+  access: Record<NavKey, AccessLevel>;
+  reviewsWaiting?: number;
+}) {
   const { counts, markSeen } = useNavAttention();
   const support = useOptionalSupport();
   const { setOpenMobile } = useSidebar();
@@ -157,13 +170,17 @@ export function DashboardSidebar({
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem className="flex items-center gap-1">
-              <SidebarBrand brand={brand} />
+              <PropertySwitcher properties={properties} current={current} />
               <SidebarTrigger className="shrink-0 group-data-[collapsible=icon]:mx-auto" />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <NavMain items={withCounts(navMain, reviewsWaiting)} />
+          <NavMain
+            items={withCounts(navMain, reviewsWaiting)}
+            access={access}
+            hotelName={current?.propertyName ?? null}
+          />
           <NavSecondary items={navSecondary} className="mt-auto" />
         </SidebarContent>
         <SidebarFooter>

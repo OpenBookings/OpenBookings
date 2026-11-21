@@ -1,5 +1,6 @@
 "use client";
 
+import type { AccessLevel, NavKey } from "@openbookings/authz/nav-access";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -24,20 +25,42 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type NavItem = {
   title: string;
   url: string;
   icon: LucideIcon;
+  /** The page's row in the access table; greyed out when the role can't open it. */
+  navKey?: NavKey;
   items?: {
     title: string;
     url: string;
+    navKey?: NavKey;
     /** A count beside the link, e.g. reviews waiting for a reply. Hidden at 0. */
     badge?: number;
   }[];
 };
 
 const ANALYTICS_ROOT = "/dashboard/analytics/";
+
+export function cantOpenReason(hotelName: string, page: string): string {
+  return `Your role at ${hotelName} can't open ${page}.`;
+}
+
+/**
+ * A greyed-out item: muted, but still hoverable and focusable so its tooltip
+ * can say why. The sidebar buttons switch pointer events off for
+ * aria-disabled; that is turned back on here, and the hover fill off. It has
+ * no href, so a click or Enter goes nowhere; a bookmark to the page still
+ * gets the page's no-access state.
+ */
+const GREYED =
+  "cursor-default aria-disabled:pointer-events-auto hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground";
+
+function GreyedLink(props: React.ComponentProps<"a">) {
+  return <a role="link" aria-disabled="true" tabIndex={0} {...props} />;
+}
 
 /**
  * Between two analytics pages the period, comparison and demo flag come along.
@@ -54,8 +77,20 @@ function CarriedLink({ href, ...props }: Omit<React.ComponentProps<typeof Link>,
   return <Link href={`${href}${carried}`} {...props} />;
 }
 
-export function NavMain({ items }: { items: NavItem[] }) {
+export function NavMain({
+  items,
+  access,
+  hotelName,
+}: {
+  items: NavItem[];
+  /** What the role at the current hotel may open (lib/page-access.ts). */
+  access: Record<NavKey, AccessLevel>;
+  /** The current hotel, for the greyed-out tooltip. */
+  hotelName: string | null;
+}) {
   const { state, setOpen } = useSidebar();
+  const isGreyed = (key: NavKey | undefined) => key !== undefined && access[key] === "none";
+  const reason = (page: string) => cantOpenReason(hotelName ?? "this hotel", page);
   const isCollapsed = state === "collapsed";
   const pathname = usePathname();
 
@@ -96,6 +131,25 @@ export function NavMain({ items }: { items: NavItem[] }) {
         {items.map((item) => {
           const hasSubItems = !!item.items?.length;
           const isOpen = !isCollapsed && openGroup === item.title;
+
+          if (!hasSubItems && isGreyed(item.navKey)) {
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  // Shown expanded too, not only on the icon rail.
+                  tooltip={{ children: reason(item.title), hidden: false }}
+                  isActive={isItemActive(item)}
+                  className={GREYED}
+                >
+                  <GreyedLink>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </GreyedLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          }
 
           if (!hasSubItems) {
             return (
@@ -142,23 +196,38 @@ export function NavMain({ items }: { items: NavItem[] }) {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SidebarMenuSub>
-                    {item.items?.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={subItem.url === activeLink}
-                        >
-                          <CarriedLink href={subItem.url} prefetch={!subItem.url.startsWith(ANALYTICS_ROOT)}>
-                            <span>{subItem.title}</span>
-                            {subItem.badge ? (
-                              <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] leading-[18px] font-medium text-primary-foreground tabular-nums">
-                                {subItem.badge}
-                              </span>
-                            ) : null}
-                          </CarriedLink>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
+                    {item.items?.map((subItem) =>
+                      isGreyed(subItem.navKey) ? (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuSubButton asChild isActive={subItem.url === activeLink} className={GREYED}>
+                                <GreyedLink>
+                                  <span>{subItem.title}</span>
+                                </GreyedLink>
+                              </SidebarMenuSubButton>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">{reason(subItem.title)}</TooltipContent>
+                          </Tooltip>
+                        </SidebarMenuSubItem>
+                      ) : (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={subItem.url === activeLink}
+                          >
+                            <CarriedLink href={subItem.url} prefetch={!subItem.url.startsWith(ANALYTICS_ROOT)}>
+                              <span>{subItem.title}</span>
+                              {subItem.badge ? (
+                                <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] leading-[18px] font-medium text-primary-foreground tabular-nums">
+                                  {subItem.badge}
+                                </span>
+                              ) : null}
+                            </CarriedLink>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ),
+                    )}
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>

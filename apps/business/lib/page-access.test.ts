@@ -6,7 +6,7 @@ import { mockModules } from "@/lib/mock-modules";
 
 await mockModules(import.meta.dir, { "@/lib/auth": () => ({ getServerSession: async () => null }) }, ["@/lib/auth"]);
 
-const { accessLevel, listSentence, loadOrgAdmins, noAccessProps } = await import("./page-access");
+const { accessLevel, accessLevels, listSentence, loadOrgAdmins, noAccessProps } = await import("./page-access");
 const { noAccessCopy } = await import("@/components/dashboard/no-access");
 
 const hotel = (role: string, hasPropertyAccess = true): CurrentProperty => ({
@@ -30,6 +30,16 @@ describe("accessLevel", () => {
   test("no current hotel: pages keep their own empty states", () => {
     expect(accessLevel(null, "property")).toBe("edit");
     expect(accessLevel(null, "payouts")).toBe("edit");
+  });
+});
+
+describe("accessLevels", () => {
+  test("every page at the current hotel, for the sidebar", () => {
+    expect(accessLevels(hotel("frontdesk"))).toEqual(navAccess("frontdesk", true));
+  });
+
+  test("no current hotel: nothing is greyed out", () => {
+    expect(Object.values(accessLevels(null)).every((level) => level === "edit")).toBe(true);
   });
 });
 

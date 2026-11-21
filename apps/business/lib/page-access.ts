@@ -1,5 +1,5 @@
 import type { CurrentProperty } from "@openbookings/authz";
-import { navAccess, rolesForView, type AccessLevel, type NavKey } from "@openbookings/authz/nav-access";
+import { NAV_KEYS, navAccess, rolesForView, type AccessLevel, type NavKey } from "@openbookings/authz/nav-access";
 import { roleLabel } from "@openbookings/authz/role-guide";
 import { listSentence, type NoAccessProps } from "@/components/dashboard/no-access";
 import { getCurrentProperty } from "@/lib/current-property";
@@ -36,6 +36,11 @@ export const PAGE_NAMES: Record<NavKey, string> = {
 export function accessLevel(current: CurrentProperty | null, key: NavKey): AccessLevel {
   if (!current) return "edit";
   return navAccess(current.role, current.hasPropertyAccess)[key];
+}
+
+/** Every page's level at `current`, for the sidebar. */
+export function accessLevels(current: CurrentProperty | null): Record<NavKey, AccessLevel> {
+  return Object.fromEntries(NAV_KEYS.map((key) => [key, accessLevel(current, key)])) as Record<NavKey, AccessLevel>;
 }
 
 /** "none" always comes with the hotel it is about. */
