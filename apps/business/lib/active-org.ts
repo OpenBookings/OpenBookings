@@ -1,11 +1,18 @@
 import { query } from "@openbookings/db";
 import { DEMO_ORG_ID, isTestingMode } from "@openbookings/demo";
+import { currentPropertyFor } from "@/lib/current-property";
 
-type Deps = { query?: <T>(text: string, values?: unknown[]) => Promise<T[]>; testing?: boolean };
+type Deps = {
+  query?: <T>(text: string, values?: unknown[]) => Promise<T[]>;
+  queryOne?: <T>(text: string, values?: unknown[]) => Promise<T | null>;
+  testing?: boolean;
+};
 
 /**
- * The org a dashboard request is about: the session's active org (the org
- * plugin's `activeOrganizationId`), or — for a session minted before the user
+ * The org a dashboard request is about: the current hotel's org (see
+ * current-property.ts), or, for a user with no reachable hotel yet (org created,
+ * property not promoted; front desk not yet assigned), the session's active org
+ * (the org plugin's `activeOrganizationId`), or — for a session minted before the user
  * had an org — their only membership. The demo organisation (testing mode)
  * never counts against "only": a host with one real organisation gets that
  * one, and a host with nothing else gets the demo one. Never taken from client input. Callers
@@ -17,6 +24,10 @@ export async function activeOrgId(session: {
   session: Record<string, unknown>;
 }, deps: Deps = {}): Promise<string | null> {
   const testing = deps.testing ?? isTestingMode();
+  // A caller that fakes only `query` gets a matching single-row reader.
+  const queryOne = deps.queryOne ?? (deps.query ? async <T,>(text: string, values?: unknown[]) => (await deps.query!<T>(text, values))[0] ?? null : undefined);
+  const current = await currentPropertyFor(session as Parameters<typeof currentPropertyFor>[0], { query: deps.query, queryOne, testing: deps.testing });
+  if (current) return current.organizationId;
   const active = session.session.activeOrganizationId;
   if (typeof active === "string" && active && (testing || active !== DEMO_ORG_ID)) return active;
   const rows = await (deps.query ?? query)<{ id: string }>(
