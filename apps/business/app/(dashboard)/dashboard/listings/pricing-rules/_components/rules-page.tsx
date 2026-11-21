@@ -59,7 +59,6 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
   const newHref = (section: RuleSection) => {
     const next = new URLSearchParams({ section });
     if (filterPlan) next.set("plan", filterPlan.id);
-    if (params.get("property")) next.set("property", params.get("property")!);
     return `${PRICING_RULES_PATH}/new?${next.toString()}`;
   };
 

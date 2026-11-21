@@ -53,7 +53,7 @@ import type { RoomSectionProps } from "./props";
  * `?rate=new`, which makes it linkable and lets it survive a refresh.
  */
 export function RatesSection({ data }: RoomSectionProps) {
-  const { room, rates, property } = data;
+  const { room, rates } = data;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

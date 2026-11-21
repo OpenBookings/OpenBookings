@@ -8,7 +8,9 @@
  * support ticket and second member. The current hotel comes from the session
  * row (currentPropertyFor), exactly as the pages get it, and the session's
  * cookie-side `activeOrganizationId` is deliberately left on the *other* org,
- * as it can be for up to a minute after a switch.
+ * as it can be for up to a minute after a switch. A last case adds a sibling
+ * hotel X2 to org X (U assigned to both): the hotel screens on X1 show nothing
+ * of X2 and the other way round.
  *
  * @openbookings/db's query/queryOne are pointed at this test's transaction,
  * so the real getPropertyScopedDb / getOrgScopedDb run the real SQL; each
@@ -55,9 +57,8 @@ const { supportScope, listTickets, searchLinkables, defaultPropertyId } = await 
 
 const CHECK_IN = "2031-03-10";
 
-/** Everything seeded for one org and its one hotel: every id a screen could leak. */
-type Side = {
-  orgId: string;
+/** Everything seeded for one hotel: every id a hotel screen could leak. */
+type Hotel = {
   propertyId: string;
   roomId: string;
   ratePlanId: string;
@@ -65,10 +66,17 @@ type Side = {
   reviewId: string;
   threadId: string;
   ruleGroupId: string;
+  hotelName: string;
+};
+
+/** Everything seeded for one org and its one hotel: every id a screen could leak. */
+type Side = Hotel & {
+  orgId: string;
   invoiceNumber: string;
   ticketId: string;
   colleagueMemberId: string;
-  hotelName: string;
+  /** U's member row in this org. */
+  uMemberId: string;
 };
 
 describeWithDb("one hotel at a time, through the console's loaders", () => {
@@ -113,15 +121,11 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
     return id;
   }
 
-  /** One org with one hotel and one of everything, U a `role` member assigned to the hotel. */
-  async function side(orgName: string, hotelName: string, role: string): Promise<Side> {
-    const orgId = `test-iso-org-${crypto.randomUUID()}`;
-    await db.query(`INSERT INTO organization (id, name, slug, "createdAt") VALUES ($1, $2, $1, now())`, [orgId, orgName]);
+  /** One hotel of `orgId` with its booking, review, guest thread and pricing rule; U's member row is assigned to it. */
+  async function hotelIn(orgId: string, uMemberId: string, hotelName: string): Promise<Hotel> {
     const ids = await seedProperty(db);
     await db.query(`UPDATE properties SET organization_id = $2, name = $3 WHERE id = $1`, [ids.propertyId, orgId, hotelName]);
-    await member(orgId, u, role, [ids.propertyId]);
-    const colleague = await user(`${orgName} Owner`);
-    const colleagueMemberId = await member(orgId, colleague, "owner", []);
+    await db.query(`INSERT INTO property_access (member_id, property_id) VALUES ($1, $2)`, [uMemberId, ids.propertyId]);
 
     const guest = await seedGuest(db);
     const { bookingId } = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2, userId: guest });
@@ -138,7 +142,7 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
         [bookingId, ids.propertyId, guest],
       )
     ).id;
-    // Threads are stamped for U at both hotels: only the hotel scope keeps them apart.
+    // Threads are stamped for U at every hotel: only the hotel scope keeps them apart.
     const threadId = (
       await one(
         `INSERT INTO message_threads (booking_id, property_id, host_id, guest_id, status)
@@ -157,6 +161,17 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
         [ids.ratePlanId],
       )
     ).id;
+    return { ...ids, bookingId, reviewId, threadId, ruleGroupId, hotelName };
+  }
+
+  /** One org with one hotel and one of everything, U a `role` member assigned to the hotel. */
+  async function side(orgName: string, hotelName: string, role: string): Promise<Side> {
+    const orgId = `test-iso-org-${crypto.randomUUID()}`;
+    await db.query(`INSERT INTO organization (id, name, slug, "createdAt") VALUES ($1, $2, $1, now())`, [orgId, orgName]);
+    const uMemberId = await member(orgId, u, role, []);
+    const hotel = await hotelIn(orgId, uMemberId, hotelName);
+    const colleague = await user(`${orgName} Owner`);
+    const colleagueMemberId = await member(orgId, colleague, "owner", []);
 
     seq += 1;
     // OB-2099: never a real series (see billing/queries.db.test.ts).
@@ -173,22 +188,11 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
         `INSERT INTO support_tickets (organization_id, property_id, opened_by_user_id, chatwoot_conversation_id,
                                       category, title, status)
          VALUES ($1, $2, $3, $4, 'other', $5, 'open') RETURNING id`,
-        [orgId, ids.propertyId, u, 990_000_000 + seq, `Question about ${hotelName}`],
+        [orgId, hotel.propertyId, u, 990_000_000 + seq, `Question about ${hotelName}`],
       )
     ).id;
 
-    return {
-      orgId,
-      ...ids,
-      bookingId,
-      reviewId,
-      threadId,
-      ruleGroupId,
-      invoiceNumber,
-      ticketId,
-      colleagueMemberId,
-      hotelName,
-    };
+    return { ...hotel, orgId, invoiceNumber, ticketId, colleagueMemberId, uMemberId };
   }
 
   beforeEach(async () => {
@@ -211,30 +215,72 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
     session: { id: sessionId, activeOrganizationId: cookieOrg },
   });
 
-  /** Every id and name of `theirs` that could appear on a screen. */
-  const leakables = (s: Side) => [
-    s.orgId,
-    s.propertyId,
-    s.roomId,
-    s.ratePlanId,
-    s.bookingId,
-    s.reviewId,
-    s.threadId,
-    s.ruleGroupId,
-    s.invoiceNumber,
-    s.ticketId,
-    s.colleagueMemberId,
-    s.hotelName,
+  /** Every id and name of hotel `h` that could appear on a hotel screen. */
+  const hotelLeakables = (h: Hotel) => [
+    h.propertyId,
+    h.roomId,
+    h.ratePlanId,
+    h.bookingId,
+    h.reviewId,
+    h.threadId,
+    h.ruleGroupId,
+    h.hotelName,
   ];
+
+  /** Every id and name of `theirs` that could appear on a screen. */
+  const leakables = (s: Side) => [s.orgId, ...hotelLeakables(s), s.invoiceNumber, s.ticketId, s.colleagueMemberId];
 
   /** Everything a loader returned, as text (the editor carries bigint cents). */
   const text = (value: unknown) => JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v)) ?? "";
 
-  function expectNone(label: string, value: unknown, theirs: Side) {
+  function expectNone(label: string, value: unknown, theirIds: string[]) {
     const all = text(value);
-    for (const id of leakables(theirs)) {
-      if (all.includes(id)) throw new Error(`${label} shows ${id} of the other org`);
+    for (const id of theirIds) {
+      if (all.includes(id)) throw new Error(`${label} shows ${id} of the other hotel`);
     }
+  }
+
+  type ConsoleSession = ReturnType<typeof session>;
+
+  /**
+   * Load every hotel screen on hotel `pid` and check it shows `mine` and none
+   * of `theirIds` (with `theirs`'s room and rule not loadable by id).
+   */
+  async function expectHotelScreens(s: ConsoleSession, pid: string, mine: Hotel, theirs: Hotel, theirIds: string[]) {
+
+    const reservations = await loadHostReservations(s, pid);
+    expect(reservations.map((r) => r.id)).toEqual([mine.bookingId]);
+    expectNone("reservations", reservations, theirIds);
+
+    const reviews = await loadHostReviews(s, pid);
+    expect(reviews.map((r) => r.id)).toEqual([mine.reviewId]);
+    expectNone("reviews", reviews, theirIds);
+
+    const threads = await loadThreads(s, pid);
+    expect(threads.map((t) => t.id)).toEqual([mine.threadId]);
+    expectNone("messages", threads, theirIds);
+
+    const editor = await loadEditorData(s, pid);
+    expect(editor?.property.id).toBe(mine.propertyId);
+    expectNone("property editor", editor, theirIds);
+
+    const rooms = await loadRoomsIndex(s, pid);
+    expect(rooms?.property.id).toBe(mine.propertyId);
+    expect(text(rooms)).toContain(mine.roomId);
+    expectNone("rooms", rooms, theirIds);
+    expect(await loadRoomEditor(s, pid, mine.roomId)).not.toBeNull();
+    expect(await loadRoomEditor(s, pid, theirs.roomId)).toBeNull();
+
+    const ari = await loadAriGrid(s, pid, { start: "2031-03-08", end: "2031-03-14" });
+    expect(ari?.propertyId).toBe(mine.propertyId);
+    expect(text(ari)).toContain(mine.ratePlanId);
+    expectNone("rates & availability", ari, theirIds);
+
+    const rules = await loadPricingRules(s, pid);
+    expect(rules?.rules.map((r) => r.id)).toEqual([mine.ruleGroupId]);
+    expectNone("pricing rules", rules, theirIds);
+    expect(await loadRuleGroup(s, pid, mine.ruleGroupId)).not.toBeNull();
+    expect(await loadRuleGroup(s, pid, theirs.ruleGroupId)).toBeNull();
   }
 
   /** Load every screen on the current hotel and check it shows `mine` and nothing of `theirs`. */
@@ -242,66 +288,33 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
     const s = session(theirs.orgId);
     const current = await currentPropertyFor(s);
     expect(current).toMatchObject({ propertyId: mine.propertyId, organizationId: mine.orgId });
-    const pid = current!.propertyId;
-
-    const reservations = await loadHostReservations(s, pid);
-    expect(reservations.map((r) => r.id)).toEqual([mine.bookingId]);
-    expectNone("reservations", reservations, theirs);
-
-    const reviews = await loadHostReviews(s, pid);
-    expect(reviews.map((r) => r.id)).toEqual([mine.reviewId]);
-    expectNone("reviews", reviews, theirs);
-
-    const threads = await loadThreads(s, pid);
-    expect(threads.map((t) => t.id)).toEqual([mine.threadId]);
-    expectNone("messages", threads, theirs);
-
-    const editor = await loadEditorData(s, pid);
-    expect(editor?.property.id).toBe(mine.propertyId);
-    expectNone("property editor", editor, theirs);
-
-    const rooms = await loadRoomsIndex(s, pid);
-    expect(rooms?.property.id).toBe(mine.propertyId);
-    expect(text(rooms)).toContain(mine.roomId);
-    expectNone("rooms", rooms, theirs);
-    expect(await loadRoomEditor(s, pid, mine.roomId)).not.toBeNull();
-    expect(await loadRoomEditor(s, pid, theirs.roomId)).toBeNull();
-
-    const ari = await loadAriGrid(s, pid, { start: "2031-03-08", end: "2031-03-14" });
-    expect(ari?.propertyId).toBe(mine.propertyId);
-    expect(text(ari)).toContain(mine.ratePlanId);
-    expectNone("rates & availability", ari, theirs);
-
-    const rules = await loadPricingRules(s, pid);
-    expect(rules?.rules.map((r) => r.id)).toEqual([mine.ruleGroupId]);
-    expectNone("pricing rules", rules, theirs);
-    expect(await loadRuleGroup(s, pid, mine.ruleGroupId)).not.toBeNull();
-    expect(await loadRuleGroup(s, pid, theirs.ruleGroupId)).toBeNull();
+    const theirIds = leakables(theirs);
+    await expectHotelScreens(s, current!.propertyId, mine, theirs, theirIds);
 
     // Membership only (null permission): neither role here holds billing.
     const billing = await billingAccess(s, null, { testing: false });
     expect(billing?.organizationId).toBe(mine.orgId);
     const invoices = await listInvoices(billing!);
     expect(invoices.map((i) => i.number)).toEqual([mine.invoiceNumber]);
-    expectNone("billing", invoices, theirs);
+    expectNone("billing", invoices, theirIds);
 
     const team = await teamScope(s);
     expect(team?.orgId).toBe(mine.orgId);
     const roster = await loadTeam(team!);
     expect(roster.members.map((m) => m.memberId)).toContain(mine.colleagueMemberId);
     expect(roster.properties.map((p) => p.id)).toEqual([mine.propertyId]);
-    expectNone("team", roster, theirs);
+    expectNone("team", roster, theirIds);
 
     const support = await supportScope(s);
     expect(support?.orgId).toBe(mine.orgId);
     const tickets = await listTickets(support!, { tab: "all", page: 1 });
     expect(tickets.tickets.map((t) => t.id)).toEqual([mine.ticketId]);
-    expectNone("support tickets", tickets, theirs);
+    expectNone("support tickets", tickets, theirIds);
     const listings = await searchLinkables(support!, "listing", "");
     expect(listings.map((l) => l.id)).toEqual([mine.propertyId]);
     const bookings = await searchLinkables(support!, "booking", "");
     expect(bookings.map((b) => b.id)).toEqual([mine.bookingId]);
-    expectNone("support pickers", [listings, bookings], theirs);
+    expectNone("support pickers", [listings, bookings], theirIds);
     expect(await defaultPropertyId(support!)).toBe(mine.propertyId);
   }
 
@@ -324,5 +337,24 @@ describeWithDb("one hotel at a time, through the console's loaders", () => {
     const row = (await db.query(`SELECT "activePropertyId", "activeOrganizationId" FROM "session" WHERE id = $1`, [sessionId]))
       .rows[0];
     expect(row).toEqual({ activePropertyId: x.propertyId, activeOrganizationId: x.orgId });
+  });
+
+  test("two hotels in one org: on X1 nothing of X2, switched to X2 nothing of X1", async () => {
+    const x2 = await hotelIn(x.orgId, x.uMemberId, "Hotel Xylophone");
+    const ptr = { userId: u, sessionId };
+    const s = session(x.orgId);
+    for (const [mine, theirs] of [
+      [x, x2],
+      [x2, x],
+    ] as const) {
+      expect((await setCurrentProperty(ptr, mine.propertyId))?.propertyId).toBe(mine.propertyId);
+      const current = await currentPropertyFor(s);
+      expect(current).toMatchObject({ propertyId: mine.propertyId, organizationId: x.orgId });
+      await expectHotelScreens(s, current!.propertyId, mine, theirs, hotelLeakables(theirs));
+
+      const support = await supportScope(s);
+      expect(support?.currentPropertyId).toBe(mine.propertyId);
+      expect(await defaultPropertyId(support!)).toBe(mine.propertyId);
+    }
   });
 });

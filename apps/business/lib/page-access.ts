@@ -52,8 +52,7 @@ export type PageAccess =
 export async function pageAccess(key: NavKey): Promise<PageAccess> {
   const current = await getCurrentProperty();
   if (!current) return { level: "edit", current: null };
-  const level = accessLevel(current, key);
-  return level === "none" ? { level, current } : { level, current };
+  return { level: accessLevel(current, key), current };
 }
 
 type Query = <T>(sql: string, values?: unknown[]) => Promise<T[]>;
