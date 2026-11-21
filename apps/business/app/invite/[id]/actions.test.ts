@@ -21,6 +21,7 @@ await mockModules(import.meta.dir, {
       captured.push(args);
     },
   }),
+  "@/lib/current-property": () => ({ currentPropertyFor: async () => ({ propertyId: "pPrev" }) }),
   "@openbookings/authz": () => ({
     listSwitchableProperties: async () => hotels,
     setCurrentProperty: async (...args: unknown[]) => {
@@ -62,10 +63,10 @@ describe("acceptInvite current hotel", () => {
     expect(switched).toEqual([[{ userId: "u1", sessionId: "s1" }, "pB1"]]);
   });
 
-  it("leaves the current hotel alone when the member cannot read a hotel in that org yet", async () => {
+  it("re-applies the previous hotel when the member cannot read a hotel in that org yet", async () => {
     hotels = [{ propertyId: "pA", organizationId: "orgA" }];
     await expect(acceptInvite("inv-1")).rejects.toBeInstanceOf(Redirect);
-    expect(switched).toEqual([]);
+    expect(switched).toEqual([[{ userId: "u1", sessionId: "s1" }, "pPrev"]]);
   });
 });
 

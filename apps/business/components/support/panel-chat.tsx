@@ -40,6 +40,7 @@ function ContextStrip({ ticket }: { ticket: TicketDetail }) {
               ? `/dashboard/bookings/reservations?id=${encodeURIComponent(linked.id)}`
               : `/dashboard/listings/property?property=${encodeURIComponent(linked.id)}`
           }
+          prefetch={false}
           className="min-w-0 hover:underline"
         >
           {linked.type === "booking" ? <BookingRef bookingId={linked.id} stacked /> : <span className="font-medium">{linked.label}</span>}

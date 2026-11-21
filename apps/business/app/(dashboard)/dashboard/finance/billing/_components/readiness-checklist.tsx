@@ -45,7 +45,7 @@ export function ReadinessChecklist({ properties }: { properties: PropertyCheckli
                 {p.missing.map((m) => (
                   <li key={m.item} className="flex items-center gap-2">
                     <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <Link href={fixLink(m.item, p.propertyId)} className="underline underline-offset-2">
+                    <Link href={fixLink(m.item, p.propertyId)} prefetch={false} className="underline underline-offset-2">
                       {m.text}
                     </Link>
                   </li>

@@ -83,7 +83,7 @@ export async function proxy(request: NextRequest) {
     // read it), then drop the param. A refused id changes nothing.
     const sessionId = session.session.id;
     if (typeof sessionId === "string" && sessionId) {
-      const clean = await propertyLinkRedirect(request.nextUrl, { userId: session.user.id, sessionId });
+      const clean = await propertyLinkRedirect(request.nextUrl, { userId: session.user.id, sessionId }, {}, request.headers);
       if (clean) return NextResponse.redirect(clean);
     }
   }

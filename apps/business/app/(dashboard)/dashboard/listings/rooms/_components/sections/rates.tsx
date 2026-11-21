@@ -66,7 +66,7 @@ export function RatesSection({ data }: RoomSectionProps) {
   // room's, made up) opens nothing rather than an empty form.
   const sheetOpen = rateParam === "new" || sheetRate !== null;
 
-  const pricingHref = `/dashboard/listings/rates-availability?property=${property.id}`;
+  const pricingHref = `/dashboard/listings/rates-availability`;
 
   function setRateParam(value: string | null) {
     const params = new URLSearchParams(searchParams.toString());

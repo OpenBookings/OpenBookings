@@ -28,6 +28,16 @@ describe("propertyLinkRedirect", () => {
     expect(out!.pathname + out!.search).toBe("/dashboard/team");
   });
 
+  it("a prefetch does not switch", async () => {
+    const never = (async () => {
+      throw new Error("called");
+    }) as never;
+    const url = new URL("http://h/dashboard/team?property=p2");
+    for (const h of <Record<string, string>[]>[{ "next-router-prefetch": "1" }, { purpose: "prefetch" }, { "sec-purpose": "prefetch;prerender" }]) {
+      expect(await propertyLinkRedirect(url, ptr, { setCurrentProperty: never }, new Headers(h))).toBeNull();
+    }
+  });
+
   it("does nothing outside /dashboard or without the param", async () => {
     const never = (async () => {
       throw new Error("called");
