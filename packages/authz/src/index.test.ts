@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
+  CURRENT_PROPERTY_SQL,
+  currentPropertySql,
+  getPropertyScopedDb,
   PROPERTY_EDIT_ACCESS_SQL,
   propertyReadAccessSql,
   getHostScopedDb,
@@ -282,11 +285,98 @@ describe("demo organisation in testing mode", () => {
   test("userCan binds the testing decision as the third parameter", async () => {
     for (const testing of [true, false]) {
       let values: unknown[] = [];
-      await userCan(session, "p1", "property:update" as never, {
+      await userCan(session, "p1", { property: ["update"] }, {
         testing,
         queryOne: async (_sql: string, v?: unknown[]) => ((values = v ?? []), null) as never,
       });
       expect(values).toEqual(["p1", "u1", testing]);
     }
+  });
+});
+
+describe("getPropertyScopedDb", () => {
+  test("binds user then property, then the caller's values", async () => {
+    const calls: unknown[][] = [];
+    mock.module("@openbookings/db", () => ({
+      query: async (_t: string, v: unknown[]) => (calls.push(v), []),
+      queryOne: async (_t: string, v: unknown[]) => (calls.push(v), null),
+    }));
+    const fresh = getPropertyScopedDb;
+    const db = fresh(sessionFor("host-a"), "prop-1");
+    expect(db.ownerUserId).toBe("host-a");
+    expect(db.propertyId).toBe("prop-1");
+    await db.query("SELECT 1", ["x"]);
+    await db.queryOne("SELECT 1");
+    expect(calls).toEqual([["host-a", "prop-1", "x"], ["host-a", "prop-1"]]);
+  });
+
+  test("throws on missing session, non-business session and empty property", () => {
+    expect(() => getPropertyScopedDb(null, "prop-1")).toThrow();
+    expect(() => getPropertyScopedDb(sessionFor("g", "private"), "prop-1")).toThrow(/business/);
+    expect(() => getPropertyScopedDb(sessionFor("host-a"), "")).toThrow();
+  });
+
+  test("CURRENT_PROPERTY_SQL pins $2 and checks read access for $1", () => {
+    expect(CURRENT_PROPERTY_SQL).toBe(currentPropertySql());
+    expect(CURRENT_PROPERTY_SQL.startsWith("p.id = $2::uuid AND ")).toBe(true);
+    expect(CURRENT_PROPERTY_SQL).toContain(propertyReadAccessSql("$1"));
+  });
+});
+
+describe("currentPropertyId guard", () => {
+  const CURRENT = "11111111-1111-4111-8111-111111111111";
+  const OTHER = "22222222-2222-4222-8222-222222222222";
+  const capture = () => {
+    const seen: { sql: string; values: unknown[] }[] = [];
+    const queryOne = async (sql: string, values: unknown[] = []) => {
+      seen.push({ sql, values });
+      // The fake DB resolves to CURRENT only; a guard on another id matches nothing.
+      const guarded = values.find((v, i) => i >= 2 && typeof v === "string" && v.includes("-"));
+      return (guarded && guarded !== CURRENT ? null : { ok: true, legacy_owner: true, role: null, has_access: false }) as never;
+    };
+    return { seen, queryOne };
+  };
+
+  test("userCan is false when the property is not the current one", async () => {
+    const { seen, queryOne } = capture();
+    expect(await userCan(sessionFor("u1"), CURRENT, { property: ["update"] }, { queryOne, currentPropertyId: OTHER })).toBe(false);
+    expect(seen[0].sql).toContain("AND p.id = $4::uuid");
+    expect(seen[0].values).toEqual([CURRENT, "u1", expect.any(Boolean), OTHER]);
+    expect(await userCan(sessionFor("u1"), CURRENT, { property: ["update"] }, { queryOne, currentPropertyId: CURRENT })).toBe(true);
+  });
+
+  test("userOwnsRoom is false when the room's property is not the current one", async () => {
+    const { seen, queryOne } = capture();
+    expect(await userOwnsRoom(sessionFor("u1"), "room-1", { queryOne, currentPropertyId: OTHER })).toBe(false);
+    expect(seen[0].sql).toContain("AND p.id = $3::uuid");
+    expect(seen[0].values).toEqual(["room-1", "u1", OTHER]);
+    expect(await userOwnsRoom(sessionFor("u1"), "room-1", { queryOne, currentPropertyId: CURRENT })).toBe(true);
+  });
+
+  test("userOwnsProperty and userOwnsRatePlan add the same guard", async () => {
+    const { seen, queryOne } = capture();
+    expect(await userOwnsProperty(sessionFor("u1"), CURRENT, { queryOne, currentPropertyId: OTHER })).toBe(false);
+    expect(await userOwnsRatePlan(sessionFor("u1"), "plan-1", { queryOne, currentPropertyId: OTHER })).toBe(false);
+    for (const s of seen) expect(s.sql).toContain("AND p.id = $3::uuid");
+  });
+
+  test("absent currentPropertyId leaves the SQL and params as they were", async () => {
+    const { seen, queryOne } = capture();
+    await userOwnsRoom(sessionFor("u1"), "room-1", { queryOne });
+    await userCan(sessionFor("u1"), "p1", { property: ["update"] }, { queryOne, testing: true });
+    expect(seen[0].sql).not.toContain("::uuid");
+    expect(seen[0].values).toEqual(["room-1", "u1"]);
+    expect(seen[1].values).toEqual(["p1", "u1", true]);
+  });
+
+  test("a non-UUID currentPropertyId fails closed without querying or throwing", async () => {
+    const { seen, queryOne } = capture();
+    for (const bad of ["not-a-uuid", "", "1; DROP TABLE properties"]) {
+      expect(await userOwnsProperty(sessionFor("u1"), CURRENT, { queryOne, currentPropertyId: bad })).toBe(false);
+      expect(await userOwnsRoom(sessionFor("u1"), "r", { queryOne, currentPropertyId: bad })).toBe(false);
+      expect(await userOwnsRatePlan(sessionFor("u1"), "rp", { queryOne, currentPropertyId: bad })).toBe(false);
+      expect(await userCan(sessionFor("u1"), CURRENT, { property: ["update"] }, { queryOne, currentPropertyId: bad })).toBe(false);
+    }
+    expect(seen.length).toBe(0);
   });
 });
