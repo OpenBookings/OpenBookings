@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 
 type EditAccess = { canEdit: boolean; reason: string | null };
 
+// Default "can edit" on purpose: this layer is cosmetic (server actions enforce), and
+// surfaces outside a provider, such as onboarding's reuse of SectionForm, must stay editable.
 const EditAccessContext = React.createContext<EditAccess>({ canEdit: true, reason: null });
 
 export function viewOnlyReason(hotelName: string): string {
@@ -73,7 +75,9 @@ export function ViewOnlyHint({
 
 /**
  * Disables every native control inside (inputs, selects, and the buttons
- * Radix controls are built from) without touching layout.
+ * Radix controls are built from) without touching layout. Read-only help
+ * inside one must not be a <button> (see InfoTip). A parent's space-y does
+ * not reach through display:contents; pass it as className.
  */
 export function EditFieldset({ children, className }: { children: React.ReactNode; className?: string }) {
   const { canEdit } = useEditAccess();
