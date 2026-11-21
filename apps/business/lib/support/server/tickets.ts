@@ -1,5 +1,6 @@
 import { getOrgScopedDb, propertyReadAccessSql } from "@openbookings/authz";
 import { activeOrgId } from "@/lib/active-org";
+import { currentPropertyFor } from "@/lib/current-property";
 import type { LinkedKind } from "../categories";
 import { isUuid, shortBookingRef } from "../references";
 import { tabStatuses, type TicketStatus, type TicketTab } from "../status";
@@ -20,6 +21,8 @@ export type SupportScope = {
   userEmail: string;
   orgId: string;
   canSeeAll: boolean;
+  /** The current hotel, when it belongs to this org; null otherwise. */
+  currentPropertyId: string | null;
   db: NonNullable<Awaited<ReturnType<typeof getOrgScopedDb>>>;
 };
 
@@ -30,7 +33,10 @@ type SessionWithUser = {
 
 export async function supportScope(session: SessionWithUser | null | undefined): Promise<SupportScope | null> {
   if (!session) return null;
-  const orgId = await activeOrgId(session);
+  // The current hotel's org, as activeOrgId would pick it; activeOrgId only
+  // for its fallbacks (no reachable hotel yet), so the hotel resolves once.
+  const current = await currentPropertyFor(session);
+  const orgId = current?.organizationId ?? (await activeOrgId(session));
   const db = await getOrgScopedDb({ user: session.user, session: { activeOrganizationId: orgId } });
   if (!db) return null;
   return {
@@ -39,6 +45,7 @@ export async function supportScope(session: SessionWithUser | null | undefined):
     userEmail: session.user.email,
     orgId: db.organizationId,
     canSeeAll: db.memberRole === "owner" || db.memberRole === "admin",
+    currentPropertyId: current?.organizationId === db.organizationId ? current.propertyId : null,
     db,
   };
 }
@@ -301,13 +308,18 @@ export async function resolveLinked(
   return row ? { label: `Booking ${shortBookingRef(row.id)}`, propertyId: row.property_id } : null;
 }
 
-/** The property a ticket without a linked item is filed under: the user's first. */
+/**
+ * The property a ticket without a linked item is filed under: the current
+ * hotel, re-checked against this org and the user's access. Never "the
+ * user's first hotel by name": with several hotels that files the ticket
+ * under one the host is not looking at. Null without a current hotel here.
+ */
 export async function defaultPropertyId(scope: SupportScope): Promise<string | null> {
+  if (!scope.currentPropertyId) return null;
   const row = await scope.db.queryOne<{ id: string }>(
     `SELECT p.id::text AS id FROM properties p
-      WHERE p.organization_id = $1 AND ${propertyReadAccessSql("$2")}
-      ORDER BY p.name LIMIT 1`,
-    [scope.userId],
+      WHERE p.id = $3::uuid AND p.organization_id = $1 AND ${propertyReadAccessSql("$2")}`,
+    [scope.userId, scope.currentPropertyId],
   );
   return row?.id ?? null;
 }
