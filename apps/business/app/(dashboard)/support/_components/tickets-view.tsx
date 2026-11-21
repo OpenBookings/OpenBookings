@@ -1,5 +1,6 @@
 "use client";
 
+import { CountBadge } from "@/components/ui/status-badge";
 import { LifeBuoy } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -110,9 +111,7 @@ export function TicketsView({
             {TICKET_TABS.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
-                <Badge variant="secondary" className="ml-1.5 px-1.5">
-                  {counts[t.value]}
-                </Badge>
+                <CountBadge>{counts[t.value]}</CountBadge>
               </TabsTrigger>
             ))}
           </TabsList>

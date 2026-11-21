@@ -1,10 +1,10 @@
+import { StatusBadge } from "@/components/ui/status-badge";
 import { redirect } from "next/navigation";
 import { queryOne } from "@openbookings/db";
 import { rolesWith } from "@openbookings/authz/permissions";
 import { retrieveConnectAccount } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -67,9 +67,9 @@ export default async function FinancePage() {
             <CardTitle className="flex items-center gap-2">
               Payouts
               {payouts.state === "ok" ? (
-                <Badge variant={payouts.payoutsEnabled ? "secondary" : "destructive"}>
+                <StatusBadge tone={payouts.payoutsEnabled ? "positive" : "attention"}>
                   {payouts.payoutsEnabled ? "Active" : "Paused"}
-                </Badge>
+                </StatusBadge>
               ) : null}
             </CardTitle>
             <CardDescription>

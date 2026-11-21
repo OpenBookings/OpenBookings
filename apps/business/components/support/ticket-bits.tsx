@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
@@ -18,9 +18,9 @@ export function TicketStatusBadge({
   className?: string;
 }) {
   return (
-    <Badge variant={status === "resolved" ? "outline" : "secondary"} className={cn("shrink-0", className)}>
+    <StatusBadge tone={status === "resolved" ? "positive" : "neutral"} className={className}>
       {statusLabel(status, assistantEnabled)}
-    </Badge>
+    </StatusBadge>
   );
 }
 

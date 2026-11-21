@@ -1,10 +1,10 @@
 "use client";
 
+import { CountBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Star } from "lucide-react";
 import { REVIEW_BANDS, type ReviewBand } from "@openbookings/pricing";
-import { Badge } from "@/components/ui/badge";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -113,9 +113,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
               <TabsTrigger key={t.value} value={t.value} className="flex-1 sm:flex-none">
                 <span className="sm:hidden">{t.short}</span>
                 <span className="hidden sm:inline">{t.label}</span>
-                <Badge variant="secondary" className="ml-1.5 px-1.5">
-                  {counts[t.value]}
-                </Badge>
+                <CountBadge>{counts[t.value]}</CountBadge>
               </TabsTrigger>
             ))}
           </TabsList>

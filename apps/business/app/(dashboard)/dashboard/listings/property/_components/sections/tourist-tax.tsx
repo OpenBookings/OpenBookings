@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import { ChevronDownIcon, LandmarkIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import posthog from "posthog-js";
@@ -15,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -144,9 +144,9 @@ export function TouristTaxSection({ data }: SectionProps) {
 }
 
 const STATUS = {
-  current: { label: "Current", variant: "default" },
-  upcoming: { label: "Upcoming", variant: "secondary" },
-  previous: { label: "Ended", variant: "outline" },
+  current: { label: "Current", tone: "positive" },
+  upcoming: { label: "Upcoming", tone: "attention" },
+  previous: { label: "Ended", tone: "neutral" },
 } as const;
 
 function RuleCard({
@@ -189,7 +189,7 @@ function RuleCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <Badge variant={STATUS[status].variant}>{STATUS[status].label}</Badge>
+            <StatusBadge tone={STATUS[status].tone}>{STATUS[status].label}</StatusBadge>
             <span className="font-medium">
               {status === "upcoming" ? "Starts" : "From"} {longDate(rule.effectiveFrom)}
             </span>

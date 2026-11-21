@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import Link from "next/link";
 import { Ban, CalendarCog, Lock, PencilLine, Percent, Tag, Undo2 } from "lucide-react";
@@ -549,9 +550,7 @@ function StatusPill({ run, cell }: { run: CellRun; cell: RateCell }) {
   if (cell.bookable) {
     const restriction = chipLabel(cell.reasons);
     return (
-      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-(--ari-bookable-bg) px-2 py-0.5 font-medium text-(--ari-bookable-fg) text-xs">
-        {restriction ? `Bookable · ${restriction}` : "Bookable"}
-      </span>
+      <StatusBadge tone="positive">{restriction ? `Bookable · ${restriction}` : "Bookable"}</StatusBadge>
     );
   }
 

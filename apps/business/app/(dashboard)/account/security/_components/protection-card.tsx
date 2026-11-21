@@ -1,5 +1,5 @@
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CircleCheck, CircleDashed } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { Protection, ProtectionTaskId } from "@/lib/security-tasks";
 import { formatSecurityTimestamp } from "@/lib/security-timestamp";
@@ -32,7 +32,7 @@ export function ProtectionCard({
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   {openTask.title}
-                  <Badge className="bg-(--accent-3) text-(--accent-11)">Recommended</Badge>
+                  <StatusBadge tone="attention">Recommended</StatusBadge>
                 </p>
                 <p className="mt-1 text-[13px] text-muted-foreground">{openTask.description}</p>
               </div>

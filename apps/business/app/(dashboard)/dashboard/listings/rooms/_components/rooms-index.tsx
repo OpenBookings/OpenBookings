@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusBadge } from "@/components/ui/status-badge";
 import Image from "next/image";
 import * as React from "react";
 import Link from "next/link";
@@ -27,7 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -205,9 +205,9 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                 <TableCell className="text-right tabular-nums">{room.units}</TableCell>
                 <TableCell className="text-right tabular-nums">{room.activeRates}</TableCell>
                 <TableCell>
-                  <Badge variant={room.status === "published" ? "secondary" : "outline"}>
+                  <StatusBadge tone={room.status === "published" ? "positive" : "neutral"}>
                     {room.status === "published" ? "Published" : "Draft"}
-                  </Badge>
+                  </StatusBadge>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
