@@ -379,15 +379,16 @@ function HeaderRow({
             key={date}
             role="columnheader"
             className={cn(
-              "flex h-[52px] flex-col items-center justify-center rounded-[10px]",
-              isToday && "bg-(--accent-3)",
+              "flex h-[52px] flex-col items-center justify-center rounded-lg",
+              // Today is the one paper mark on the grid (concept 2026-11-21).
+              isToday && "bg-primary",
               !isToday && isWeekend(date) && "bg-(--gray-a1)",
             )}
           >
             <span
               className={cn(
                 "text-[10px] uppercase tracking-wide",
-                isToday ? "text-(--accent-11)" : "text-muted-foreground",
+                isToday ? "font-semibold text-primary-foreground" : "text-muted-foreground",
               )}
             >
               {isToday ? "Today" : weekdayFormatter.format(parseDate(date))}
@@ -395,7 +396,7 @@ function HeaderRow({
             <span
               className={cn(
                 "font-semibold text-base leading-tight tabular-nums",
-                isToday ? "text-(--accent-11)" : "text-foreground",
+                isToday ? "text-primary-foreground" : "text-foreground",
               )}
             >
               {dayFormatter.format(parseDate(date))}
@@ -443,14 +444,14 @@ function RoomTypeRowView({
       style={{ gridTemplateColumns: gridTemplate, gap: GAP }}
     >
       <div
-        className="sticky left-0 z-10 rounded-[10px] bg-(--ari-group)"
+        className="sticky left-0 z-10 rounded-lg bg-(--ari-group)"
         style={{ width: RAIL_WIDTH }}
       >
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="flex h-[52px] w-full items-center gap-2 rounded-[10px] px-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+          className="flex h-[52px] w-full items-center gap-2 rounded-lg px-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
         >
           <ChevronRight
             className={cn(
@@ -595,7 +596,7 @@ function AvailabilityCellView({
         staged ? ", unpublished change" : ""
       }`}
       className={cn(
-        "flex h-[52px] flex-col justify-center gap-1.5 rounded-[10px] border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+        "flex h-[52px] flex-col justify-center gap-1.5 rounded-lg border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
         isToday && "border-(--accent-7) bg-(--accent-3)",
         active && "ring-2 ring-(--accent-11)",
         staged && "border-dashed border-primary",
@@ -689,7 +690,7 @@ function RoomClosureBar({
         run.dates[0],
         run.dates[span - 1],
       )}: room type closed${closure.note ? `, note: ${closure.note}` : ""}`}
-      className="flex h-[52px] items-center gap-2 overflow-hidden rounded-[10px] border border-(--ari-border-strong) px-3 text-left text-(--ari-soldout-fg) text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+      className="flex h-[52px] items-center gap-2 overflow-hidden rounded-lg border border-(--ari-border-strong) px-3 text-left text-(--ari-soldout-fg) text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
       <span className="truncate">
@@ -743,7 +744,7 @@ function RatePlanRowView({
       style={{ gridTemplateColumns: gridTemplate, gap: GAP }}
     >
       <div
-        className="sticky left-0 z-10 flex h-14 items-center rounded-[10px] bg-(--ari-group) pr-2 pl-[38px]"
+        className="sticky left-0 z-10 flex h-14 items-center rounded-lg bg-(--ari-group) pr-2 pl-[38px]"
         style={{ width: RAIL_WIDTH }}
       >
         <StatusDot status={plan.status} />
@@ -911,7 +912,7 @@ function RunCell({
               staged ? ", unpublished change" : ""
             }`}
             className={cn(
-              "flex h-14 flex-col justify-center gap-1 rounded-[10px] border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+              "flex h-14 flex-col justify-center gap-1 rounded-lg border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
               isToday && "border-(--accent-7)",
               active && "ring-2 ring-(--accent-11)",
               selected && "bg-primary/15 ring-2 ring-(--accent-11) ring-inset",
@@ -981,7 +982,7 @@ function RunCell({
           staged ? ", unpublished change" : ""
         }`}
         className={cn(
-          "flex h-14 flex-col justify-center gap-1 rounded-[10px] border px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+          "flex h-14 flex-col justify-center gap-1 rounded-lg border px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
           style.className,
           active && "ring-2 ring-(--accent-11)",
           staged && "border-dashed border-primary",
@@ -1009,7 +1010,7 @@ function RunCell({
         staged ? ", unpublished change" : ""
       }`}
       className={cn(
-        "flex h-14 items-center gap-2 overflow-hidden rounded-[10px] border px-3 text-left text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+        "flex h-14 items-center gap-2 overflow-hidden rounded-lg border px-3 text-left text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
         style.className,
         active && "ring-2 ring-(--accent-11)",
         staged && "border-dashed border-primary",
@@ -1044,7 +1045,7 @@ function NoRatePlansRow({ gridTemplate }: { gridTemplate: string }) {
       style={{ gridTemplateColumns: gridTemplate, gap: GAP }}
     >
       <div
-        className="sticky left-0 z-10 flex h-14 items-center rounded-[10px] bg-(--ari-group) pr-2 pl-[38px] text-muted-foreground text-sm"
+        className="sticky left-0 z-10 flex h-14 items-center rounded-lg bg-(--ari-group) pr-2 pl-[38px] text-muted-foreground text-sm"
         style={{ width: RAIL_WIDTH }}
       >
         Add a rate plan to start selling

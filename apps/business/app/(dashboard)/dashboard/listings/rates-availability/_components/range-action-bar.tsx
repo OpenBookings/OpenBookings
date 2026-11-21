@@ -74,7 +74,7 @@ export function RangeActionBar({
     <div
       role="region"
       aria-label="Edit selected dates"
-      className="-translate-x-1/2 fixed bottom-6 left-1/2 z-40 flex flex-wrap items-center gap-2 rounded-full border bg-popover px-3 py-2 shadow-lg"
+      className="-translate-x-1/2 fixed bottom-6 left-1/2 z-40 flex flex-wrap items-center gap-2 rounded-xl border bg-popover px-3 py-2 shadow-lg"
     >
       <span className="px-1 text-sm">
         <span className="font-medium">{range.plan.name}</span>
@@ -108,7 +108,6 @@ export function RangeActionBar({
         />
         <Button
           size="sm"
-          className="rounded-full"
           disabled={!priceValid}
           onClick={() =>
             stage((date) => ({
@@ -127,7 +126,6 @@ export function RangeActionBar({
         <Button
           size="sm"
           variant="outline"
-          className="rounded-full"
           onClick={() =>
             stage((date) => ({
               kind: "closure",
@@ -147,7 +145,6 @@ export function RangeActionBar({
         <Button
           size="sm"
           variant="outline"
-          className="rounded-full"
           onClick={() =>
             stage((date) => ({
               kind: "closure",
@@ -166,7 +163,7 @@ export function RangeActionBar({
       <Button
         size="icon"
         variant="ghost"
-        className="size-8 rounded-full"
+        className="size-8"
         onClick={onClear}
         aria-label="Clear selection"
       >
