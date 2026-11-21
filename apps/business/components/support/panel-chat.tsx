@@ -1,8 +1,8 @@
 "use client";
 
 import { ArrowLeft, Ellipsis, SendHorizonal, X } from "lucide-react";
-import Link from "next/link";
 import * as React from "react";
+import { ConsoleLink } from "@/components/dashboard/console-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,17 +34,17 @@ function ContextStrip({ ticket }: { ticket: TicketDetail }) {
         {categoryLabel(ticket.category)}
       </Badge>
       {linked ? (
-        <Link
+        // A listing link switches to that hotel: ConsoleLink makes it a full page load.
+        <ConsoleLink
           href={
             linked.type === "booking"
               ? `/dashboard/bookings/reservations?id=${encodeURIComponent(linked.id)}`
               : `/dashboard/listings/property?property=${encodeURIComponent(linked.id)}`
           }
-          prefetch={false}
           className="min-w-0 hover:underline"
         >
           {linked.type === "booking" ? <BookingRef bookingId={linked.id} stacked /> : <span className="font-medium">{linked.label}</span>}
-        </Link>
+        </ConsoleLink>
       ) : null}
     </div>
   );

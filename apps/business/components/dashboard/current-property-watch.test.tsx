@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StaleHotelNotice, checkForSwitchedHotel } from "./current-property-watch";
+import { StaleHotelNotice, checkForSwitchedHotel, reactionToSwitch } from "./current-property-watch";
 
 const reply = (body: unknown, ok = true) => async () => ({ ok, json: async () => body }) as Response;
 
@@ -22,5 +22,13 @@ describe("CurrentPropertyWatch", () => {
     expect(await checkForSwitchedHotel("p-a", reply({ error: "unauthorized" }, false))).toBeNull();
     expect(await checkForSwitchedHotel("p-a", reply({ propertyId: null, propertyName: null }))).toBeNull();
     expect(await checkForSwitchedHotel(null, reply({ propertyId: "p-b", propertyName: "Hotel Bravo" }))).toBeNull();
+  });
+
+  test("a switch found on focus is another tab's: show the notice", () => {
+    expect(reactionToSwitch("focus")).toBe("notice");
+  });
+
+  test("a switch found after an in-tab navigation is this tab's: refresh the layout, no notice", () => {
+    expect(reactionToSwitch("navigation")).toBe("refresh");
   });
 });

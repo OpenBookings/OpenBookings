@@ -1,10 +1,13 @@
-import Link from "next/link";
 import { Check, Circle } from "lucide-react";
 import type { ReadinessItem } from "@openbookings/billing/readiness";
 import type { PropertyChecklist } from "@/lib/billing/queries";
+import { ConsoleLink } from "@/components/dashboard/console-link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-/** Where each missing item is fixed. */
+/**
+ * Where each missing item is fixed. The listings links switch to the item's
+ * hotel (`?property=`), so ConsoleLink renders them as full page loads.
+ */
 function fixLink(item: ReadinessItem, propertyId: string): string {
   switch (item) {
     case "stripe_account":
@@ -45,9 +48,9 @@ export function ReadinessChecklist({ properties }: { properties: PropertyCheckli
                 {p.missing.map((m) => (
                   <li key={m.item} className="flex items-center gap-2">
                     <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <Link href={fixLink(m.item, p.propertyId)} prefetch={false} className="underline underline-offset-2">
+                    <ConsoleLink href={fixLink(m.item, p.propertyId)} className="underline underline-offset-2">
                       {m.text}
-                    </Link>
+                    </ConsoleLink>
                   </li>
                 ))}
               </ul>

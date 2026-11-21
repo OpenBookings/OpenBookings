@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -26,6 +27,20 @@ export async function checkForSwitchedHotel(
   }
 }
 
+/** What made the tab check: it regained focus or visibility, or it navigated client-side. */
+export type CheckTrigger = "focus" | "navigation";
+
+/**
+ * How a tab reacts to finding the session on another hotel. Found on focus,
+ * the switch happened in another tab: say so and let the user reload. Found
+ * right after a client-side navigation, this tab did it (a link that switched
+ * the hotel on the server while Next kept the old layout): re-render the
+ * layout on the new hotel, without the "another tab" copy.
+ */
+export function reactionToSwitch(trigger: CheckTrigger): "notice" | "refresh" {
+  return trigger === "navigation" ? "refresh" : "notice";
+}
+
 export function StaleHotelNotice({ hotelName, onReload }: { hotelName: string; onReload: () => void }) {
   return (
     <div
@@ -42,29 +57,48 @@ export function StaleHotelNotice({ hotelName, onReload }: { hotelName: string; o
 
 /**
  * Tells a tab left open on hotel A that the session now points at hotel B.
- * Checks only when the tab regains focus or becomes visible, never on a timer.
+ * Checks when the tab regains focus or becomes visible (switched in another
+ * tab: notice), and after each client-side navigation (switched by a link in
+ * this tab: refresh the layout). Never on a timer.
  */
 export function CurrentPropertyWatch({ renderedPropertyId }: { renderedPropertyId: string | null }) {
   const [switched, setSwitched] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const lastPathname = useRef(pathname);
 
   useEffect(() => {
     if (!renderedPropertyId) return;
     let cancelled = false;
-    const check = async () => {
+    const check = async (trigger: CheckTrigger) => {
       const found = await checkForSwitchedHotel(renderedPropertyId);
-      if (!cancelled) setSwitched(found ? found.hotelName : null);
+      if (cancelled) return;
+      if (found && reactionToSwitch(trigger) === "refresh") {
+        setSwitched(null);
+        router.refresh();
+      } else if (found || trigger === "focus") {
+        setSwitched(found ? found.hotelName : null);
+      }
     };
+    const onFocus = () => void check("focus");
     const onVisible = () => {
-      if (document.visibilityState === "visible") void check();
+      if (document.visibilityState === "visible") void check("focus");
     };
-    window.addEventListener("focus", check);
+    window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
+    // A client-side navigation keeps this layout. When the server changed the
+    // current hotel on the way (a ?property= link the proxy handled), the
+    // sidebar is stale now. Not on mount: the layout just rendered.
+    if (lastPathname.current !== pathname) {
+      lastPathname.current = pathname;
+      void check("navigation");
+    }
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", check);
+      window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [renderedPropertyId]);
+  }, [renderedPropertyId, pathname, router]);
 
   if (!switched) return null;
   return <StaleHotelNotice hotelName={switched} onReload={() => window.location.reload()} />;
