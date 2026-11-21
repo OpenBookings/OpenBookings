@@ -10,8 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // Calm, not loud: a tinted danger action (concept 2026-11-21).
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+          "border border-destructive/25 bg-destructive/12 text-destructive hover:bg-destructive/20 focus-visible:ring-destructive/30",
         outline:
           "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
