@@ -1,6 +1,7 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "@/components/dashboard/sidebar-08/app-sidebar";
 import { SessionEntryOverlay } from "@/components/SessionEntryOverlay";
+import { CurrentPropertyWatch } from "@/components/dashboard/current-property-watch";
 import { PasskeyNudge } from "@/components/dashboard/passkey-nudge";
 import { SupportPanel } from "@/components/support/support-panel";
 import { SupportProvider } from "@/components/support/support-provider";
@@ -33,6 +34,7 @@ export default async function DashboardLayout({
       <SessionEntryOverlay />
       <DashboardSidebar brand={brand} reviewsWaiting={reviewsWaiting} />
       <SidebarInset>
+        <CurrentPropertyWatch renderedPropertyId={propertyId} hotelName={current?.propertyName ?? ""} />
         <PasskeyNudge />
         {children}
       </SidebarInset>

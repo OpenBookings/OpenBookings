@@ -17,6 +17,12 @@ import { policyView } from "../policy-view";
 export type HostToolContext = {
   /** Business user id from the Chatwoot contact identifier; null if missing. */
   hostUserId: string | null;
+  /**
+   * The organization of the support ticket, read server-side from
+   * support_tickets by conversation id; null when there is no ticket row.
+   * Booking lookups stay inside it and return nothing when it is null.
+   */
+  organizationId: string | null;
 };
 
 /** Missing and out-of-scope must look the same, or the tool leaks existence. */
@@ -85,11 +91,11 @@ export const HOST_TOOLS = {
     execute: async (args: z.infer<typeof getBookingArgs>, ctx: HostToolContext) => {
       if (!ctx.hostUserId) return NO_VERIFIED_HOST;
       if (args.booking_reference) {
-        const match = await findHostBooking(ctx.hostUserId, args.booking_reference);
+        const match = await findHostBooking(ctx.hostUserId, ctx.organizationId, args.booking_reference);
         if (match.kind === "ambiguous") return AMBIGUOUS_BOOKING;
         return match.kind === "found" ? { found: true, booking: bookingView(match.booking) } : NO_MATCHING_BOOKING;
       }
-      const rows = await listHostBookings(ctx.hostUserId);
+      const rows = await listHostBookings(ctx.hostUserId, ctx.organizationId);
       return rows.length > 0
         ? { found: true, bookings: rows.map(bookingView) }
         : { found: false, note: "No bookings on this host's properties yet." };
@@ -101,7 +107,7 @@ export const HOST_TOOLS = {
     schema: bookingRefArgs,
     execute: async (args: z.infer<typeof bookingRefArgs>, ctx: HostToolContext) => {
       if (!ctx.hostUserId) return NO_VERIFIED_HOST;
-      const match = await findHostBooking(ctx.hostUserId, args.booking_reference);
+      const match = await findHostBooking(ctx.hostUserId, ctx.organizationId, args.booking_reference);
       if (match.kind === "ambiguous") return AMBIGUOUS_BOOKING;
       if (match.kind === "none") return NO_MATCHING_BOOKING;
       const b = match.booking;
