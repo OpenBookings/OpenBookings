@@ -1,6 +1,7 @@
 import { userCan as realUserCan, type SessionLike } from "@openbookings/authz";
 import { queryOne as realQueryOne } from "@openbookings/db";
 import type { ReplyError } from "@openbookings/db/reviews";
+import { currentPropertyPin } from "@/lib/current-property";
 
 /**
  * Who may reply to a review, and the words for every way a reply can fail.
@@ -17,7 +18,8 @@ export type ReviewActorDeps = {
 /**
  * The signed-in member acting on a review (or on one reply to it), or null
  * when the review doesn't exist or they can't see its property's bookings.
- * Both look the same to the caller.
+ * Both look the same to the caller. The default check is pinned to the
+ * current hotel: a stale tab cannot reply on another hotel's reviews.
  */
 export async function reviewActor(
   session: SessionLike | null,
@@ -28,7 +30,7 @@ export async function reviewActor(
   const id = "reviewId" in target ? target.reviewId : target.replyId;
   if (!UUID.test(id)) return null;
   const queryOne = deps.queryOne ?? realQueryOne;
-  const userCan = deps.userCan ?? ((s, p, perm) => realUserCan(s, p, perm));
+  const canRead = deps.userCan ?? (async (s, p, perm) => realUserCan(s, p, perm, await currentPropertyPin()));
   const row =
     "reviewId" in target
       ? await queryOne<{ property_id: string; review_id: string }>(
@@ -42,7 +44,7 @@ export async function reviewActor(
           [id],
         );
   if (!row) return null;
-  if (!(await userCan(session, row.property_id, { booking: ["read"] }))) return null;
+  if (!(await canRead(session, row.property_id, { booking: ["read"] }))) return null;
   return { userId: session.user.id, propertyId: row.property_id, reviewId: row.review_id };
 }
 

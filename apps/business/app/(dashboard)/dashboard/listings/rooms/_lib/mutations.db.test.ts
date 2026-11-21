@@ -85,6 +85,8 @@ describeWithDb("Rooms editor against Postgres", () => {
       },
       purge: async () => {},
       loadRoom: (s, id) => loadRoomEditor(s, propertyId, id, propertyDb(s)),
+      // Read at call time: each test makes its own property, current in this "tab".
+      pin: async () => ({ currentPropertyId: propertyId }),
     };
   });
 

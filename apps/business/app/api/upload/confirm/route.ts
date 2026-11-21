@@ -1,4 +1,5 @@
 import { getServerSession } from "@/lib/auth";
+import { currentPropertyPin } from "@/lib/current-property";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty, userOwnsRoom } from "@openbookings/authz";
 import { getBucketName, getS3, publicUrl } from "@/lib/s3";
@@ -61,7 +62,8 @@ export async function POST(req: Request) {
 
   // Room target — unchanged behaviour.
   if (typeof roomId === "string" && roomId) {
-    if (!(await userOwnsRoom(session, roomId))) {
+    // Pinned to the current hotel, like every console write.
+    if (!(await userOwnsRoom(session, roomId, await currentPropertyPin()))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const maxRow = await queryOne<{ max_order: number | null }>(
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
     if (typeof group !== "string" || !IMAGE_GROUPS.has(group)) {
       return NextResponse.json({ error: "Invalid group" }, { status: 400 });
     }
-    if (!(await userOwnsProperty(session, propertyId))) {
+    if (!(await userOwnsProperty(session, propertyId, await currentPropertyPin()))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

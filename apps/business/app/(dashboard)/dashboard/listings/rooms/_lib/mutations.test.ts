@@ -31,10 +31,12 @@ const STRANGER = "host-stranger";
 const PROPERTY = "11111111-1111-1111-1111-111111111111";
 const ROOM = "22222222-2222-2222-2222-222222222222";
 const RATE = "33333333-3333-3333-3333-333333333333";
+/** Another hotel of the owner's, current in another tab. */
+const OTHER_PROPERTY = "44444444-4444-4444-4444-444444444444";
 
 const session = (id: string): SessionLike => ({ user: { id, account_type: "business" } });
 
-function fakeDeps() {
+function fakeDeps(current: string = PROPERTY) {
   const statements: string[] = [];
   const calls: { sql: string; values: unknown[] }[] = [];
   const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql);
@@ -43,9 +45,11 @@ function fakeDeps() {
     statements.push(sql);
     // The authz package's three ownership checks.
     if (/SELECT TRUE AS ok/.test(sql)) {
-      const [id, userId] = values as [string, string];
+      // A third value is the current-hotel pin: everything here is on PROPERTY.
+      const [id, userId, pin] = values as [string, string, string | undefined];
       const known = [PROPERTY, ROOM, RATE].includes(id);
-      return (known && userId === OWNER ? { ok: true } : null) as T | null;
+      const onCurrent = pin === undefined || pin === PROPERTY;
+      return (known && userId === OWNER && onCurrent ? { ok: true } : null) as T | null;
     }
     if (/FROM rooms WHERE id = \$1 AND archived_at IS NULL/.test(sql)) {
       return { id: ROOM, is_active: false } as T;
@@ -71,6 +75,7 @@ function fakeDeps() {
     transaction: (fn) => fn({ query, queryOne }),
     purge: async () => {},
     loadRoom: async () => null,
+    pin: async () => ({ currentPropertyId: current }),
   };
   return { deps, writes: () => statements.filter(isWrite), calls };
 }
@@ -91,6 +96,49 @@ const amenitiesForm = () =>
   form({ roomId: ROOM, amenityKeys: ["wifi"], featuredAmenityKeys: ["wifi"] });
 const rateForm = (ratePlanId = "") =>
   form({ ratePlanId, roomId: ROOM, name: "Bed & Breakfast", minAdvanceDays: "0", maxAdvanceDays: "none", refundable: "true" });
+
+describe("a stale tab still showing a hotel the owner switched away from", () => {
+  const owner = session(OWNER);
+
+  test.each([
+    ["createRoom", (d: MutationDeps) => createRoom(owner, PROPERTY, d)],
+    ["archiveRoom", (d: MutationDeps) => archiveRoom(owner, ROOM, d)],
+    ["reorderRooms", (d: MutationDeps) => reorderRooms(owner, PROPERTY, [ROOM], d)],
+    ["setRoomPublished", (d: MutationDeps) => setRoomPublished(owner, ROOM, false, d)],
+    ["setRateActive", (d: MutationDeps) => setRateActive(owner, RATE, false, d)],
+    ["duplicateRate", (d: MutationDeps) => duplicateRate(owner, RATE, d)],
+    ["archiveRate", (d: MutationDeps) => archiveRate(owner, RATE, d)],
+  ])("is refused by %s as property-switched, and nothing is written", async (_name, run) => {
+    const { deps, writes } = fakeDeps(OTHER_PROPERTY);
+    const result = await run(deps);
+    expect(result).toMatchObject({ ok: false, reason: "property-switched" });
+    expect(writes()).toEqual([]);
+  });
+
+  test.each([
+    ["saveRoomIdentity", (d: MutationDeps) => saveRoomIdentity(owner, identityForm(), d)],
+    ["saveRoomSpace", (d: MutationDeps) => saveRoomSpace(owner, spaceForm(), d)],
+    ["saveRoomAmenities", (d: MutationDeps) => saveRoomAmenities(owner, amenitiesForm(), d)],
+    ["saveRate (create)", (d: MutationDeps) => saveRate(owner, rateForm(), d)],
+    ["saveRate (update)", (d: MutationDeps) => saveRate(owner, rateForm(RATE), d)],
+  ])("is refused by %s, and nothing is written", async (_name, run) => {
+    const { deps, writes } = fakeDeps(OTHER_PROPERTY);
+    await expect(run(deps)).rejects.toBeInstanceOf(NotFoundError);
+    expect(writes()).toEqual([]);
+  });
+
+  test("no current hotel refuses every write", async () => {
+    const { deps, writes } = fakeDeps("");
+    expect((await createRoom(owner, PROPERTY, deps)).ok).toBe(false);
+    await expect(saveRoomIdentity(owner, identityForm(), deps)).rejects.toBeInstanceOf(NotFoundError);
+    expect(writes()).toEqual([]);
+  });
+
+  test("a stranger's refusal carries no reason", async () => {
+    const { deps } = fakeDeps(OTHER_PROPERTY);
+    expect(await archiveRoom(session(STRANGER), ROOM, deps)).toEqual({ ok: false, error: "Room type not found" });
+  });
+});
 
 describe("a host who does not own the property", () => {
   const stranger = session(STRANGER);

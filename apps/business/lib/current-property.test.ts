@@ -3,7 +3,7 @@ import { mockModules } from "@/lib/mock-modules";
 
 await mockModules(import.meta.dir, { "@/lib/auth": () => ({ getServerSession: async () => null }) }, ["@/lib/auth"]);
 
-const { currentPropertyFor } = await import("./current-property");
+const { currentPropertyFor, pinnedAccess } = await import("./current-property");
 const { activeOrgId } = await import("./active-org");
 
 type Hotel = { property_id: string; property_name: string; organization_id: string; organization_name: string };
@@ -58,5 +58,41 @@ describe("currentPropertyFor", () => {
     const none = fake([], null);
     expect(await currentPropertyFor(session(), none)).toBeNull();
     expect(none.writes).toEqual([]);
+  });
+});
+
+describe("pinnedAccess", () => {
+  const CURRENT = { currentPropertyId: "11111111-1111-4111-8111-111111111111" };
+  /** A fake authz check: the target is reachable, and on the current hotel only when `onCurrent`. */
+  const check = (reachable: boolean, onCurrent: boolean) => {
+    const pins: unknown[] = [];
+    const fn = async (pin: { currentPropertyId?: string }) => {
+      pins.push(pin);
+      return reachable && (pin.currentPropertyId === undefined || onCurrent);
+    };
+    return { fn, pins };
+  };
+
+  it("passes a target on the current hotel with one check", async () => {
+    const { fn, pins } = check(true, true);
+    expect(await pinnedAccess(CURRENT, fn)).toBe("ok");
+    expect(pins).toEqual([CURRENT]);
+  });
+
+  it("says property-switched when only the pin refused it", async () => {
+    const { fn, pins } = check(true, false);
+    expect(await pinnedAccess(CURRENT, fn)).toBe("property-switched");
+    expect(pins).toEqual([CURRENT, {}]);
+  });
+
+  it("is a plain refusal for a target the user cannot reach at all", async () => {
+    const { fn } = check(false, false);
+    expect(await pinnedAccess(CURRENT, fn)).toBe("denied");
+  });
+
+  it("refuses with no current hotel, pinning the empty id authz rejects", async () => {
+    const { fn, pins } = check(true, false);
+    expect(await pinnedAccess({ currentPropertyId: "" }, fn)).toBe("property-switched");
+    expect(pins[0]).toEqual({ currentPropertyId: "" });
   });
 });

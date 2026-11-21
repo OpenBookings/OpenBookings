@@ -59,3 +59,37 @@ export const getSwitchableProperties = cache(async (): Promise<SwitchablePropert
   if (!session) return [];
   return listSwitchableProperties(session.user.id);
 });
+
+/**
+ * What a write check pins to (authz `deps.currentPropertyId`): the current
+ * hotel, so a stale tab still showing hotel A cannot write to A after the user
+ * switched to B. With no current hotel the pin is "", which authz refuses as
+ * not a UUID: no current hotel, no writes.
+ */
+export type PropertyPin = { currentPropertyId: string };
+
+export async function currentPropertyPin(): Promise<PropertyPin> {
+  return { currentPropertyId: (await getCurrentProperty())?.propertyId ?? "" };
+}
+
+export type PinnedAccess = "ok" | "denied" | "property-switched";
+
+/**
+ * Runs an authz check pinned to the current hotel. When it refuses, a second,
+ * unpinned run tells the two refusals apart: a target the user can reach,
+ * just not on the hotel on screen, is "property-switched" (the action can say
+ * the hotel changed); anything else is "denied". The second run only happens
+ * on a refusal, and only reveals what the user can already reach.
+ */
+export async function pinnedAccess(
+  pin: PropertyPin,
+  check: (pin: Partial<PropertyPin>) => Promise<boolean>,
+): Promise<PinnedAccess> {
+  if (await check(pin)) return "ok";
+  return (await check({})) ? "property-switched" : "denied";
+}
+
+/** `{ reason: "property-switched" }` for a refusal the pin caused, else nothing, to spread into a result. */
+export function switchedReason(access: PinnedAccess): { reason?: "property-switched" } {
+  return access === "property-switched" ? { reason: "property-switched" } : {};
+}

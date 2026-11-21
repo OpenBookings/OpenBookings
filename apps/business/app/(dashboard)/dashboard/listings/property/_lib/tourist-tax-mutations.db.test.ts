@@ -49,7 +49,8 @@ describeWithDb("Tourist tax rules against Postgres", () => {
   beforeAll(async () => {
     db = new Client({ connectionString });
     await db.connect();
-    deps = { queryOne: one };
+    // The pin reads the test property at call time: it is the current hotel.
+    deps = { queryOne: one, pin: async () => ({ currentPropertyId: propertyId }) };
   });
 
   afterAll(async () => {

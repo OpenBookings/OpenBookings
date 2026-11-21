@@ -1,5 +1,6 @@
 import { userOwnsProperty, type SessionLike } from "@openbookings/authz";
 import { withTransaction } from "@openbookings/db";
+import { currentPropertyPin, pinnedAccess, switchedReason, type PinnedAccess } from "@/lib/current-property";
 import { parseRuleGroupForm, type RuleGroupForm } from "./rule-group-schema";
 
 /**
@@ -9,28 +10,42 @@ import { parseRuleGroupForm, type RuleGroupForm } from "./rule-group-schema";
  *
  * Ownership: the caller must be able to edit the property, and every rate
  * plan and every existing row of the group must belong to it. An id the
- * caller doesn't own gets the same answer as one that doesn't exist.
+ * caller doesn't own gets the same answer as one that doesn't exist. The
+ * property must also be the current hotel: a stale tab still showing another
+ * hotel is refused with `reason: "property-switched"`.
  */
 
 export type TxDb = { query: <T>(text: string, values?: unknown[]) => Promise<T[]> };
 
 export type RuleGroupDeps = {
   tx: <T>(fn: (db: TxDb) => Promise<T>) => Promise<T>;
-  canEditProperty: (session: SessionLike, propertyId: string) => Promise<boolean>;
+  /** May the caller edit this property, pinned to the current hotel. */
+  editAccess: (session: SessionLike, propertyId: string) => Promise<PinnedAccess>;
   newId: () => string;
 };
 
 const defaultDeps: RuleGroupDeps = {
   tx: (fn) => withTransaction((client) => fn({ query: async (text, values) => (await client.query(text, values)).rows })),
-  canEditProperty: (session, propertyId) => userOwnsProperty(session, propertyId),
+  editAccess: async (session, propertyId) =>
+    pinnedAccess(await currentPropertyPin(), (pin) => userOwnsProperty(session, propertyId, pin)),
   newId: () => crypto.randomUUID(),
 };
 
 export type RuleGroupResult =
   | { ok: true; groupId: string; propertyId: string }
-  | { ok: false; error: string; errors?: Record<string, string[] | undefined> };
+  | {
+      ok: false;
+      error: string;
+      errors?: Record<string, string[] | undefined>;
+      /** The rule's hotel is not the current one (a stale tab). */
+      reason?: "property-switched";
+    };
 
-const NOT_FOUND = { ok: false, error: "Rule not found" } as const;
+const notFound = (access: PinnedAccess = "denied"): RuleGroupResult => ({
+  ok: false,
+  error: "Rule not found",
+  ...switchedReason(access),
+});
 
 export type SaveRuleGroupInput = RuleGroupForm & { propertyId: string; groupId?: string };
 
@@ -51,19 +66,20 @@ WHERE m.rule_group_id = $1`;
 
 type GroupRow = { rate_plan_id: string; is_active: boolean; property_id: string };
 
-/** The property a group belongs to, when the caller may edit it; null otherwise. */
+/** The property a group belongs to, when the caller may edit it; otherwise why not. */
 async function ownedGroupProperty(
   session: SessionLike,
   groupId: string,
   db: TxDb,
   deps: RuleGroupDeps,
-): Promise<{ propertyId: string; rows: GroupRow[] } | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(groupId)) return null;
+): Promise<{ propertyId: string; rows: GroupRow[] } | { refused: PinnedAccess }> {
+  if (!/^[0-9a-f-]{36}$/i.test(groupId)) return { refused: "denied" };
   const rows = await db.query<GroupRow>(GROUP_ROWS_SQL, [groupId]);
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return { refused: "denied" };
   const propertyId = rows[0].property_id;
-  if (rows.some((r) => r.property_id !== propertyId)) return null;
-  return (await deps.canEditProperty(session, propertyId)) ? { propertyId, rows } : null;
+  if (rows.some((r) => r.property_id !== propertyId)) return { refused: "denied" };
+  const access = await deps.editAccess(session, propertyId);
+  return access === "ok" ? { propertyId, rows } : { refused: access };
 }
 
 export async function saveRuleGroup(
@@ -75,7 +91,9 @@ export async function saveRuleGroup(
   if (!parsed.ok) return { ok: false, error: "Check the highlighted fields.", errors: parsed.errors };
   const rule = parsed.data;
 
-  if (!input.propertyId || !(await deps.canEditProperty(session, input.propertyId))) return NOT_FOUND;
+  if (!input.propertyId) return notFound();
+  const access = await deps.editAccess(session, input.propertyId);
+  if (access !== "ok") return notFound(access);
 
   return deps.tx(async (db) => {
     const propertyPlans = new Set(
@@ -89,7 +107,8 @@ export async function saveRuleGroup(
     let active = true;
     if (input.groupId) {
       const owned = await ownedGroupProperty(session, input.groupId, db, deps);
-      if (!owned || owned.propertyId !== input.propertyId) return NOT_FOUND;
+      if ("refused" in owned) return notFound(owned.refused);
+      if (owned.propertyId !== input.propertyId) return notFound();
       groupId = input.groupId;
       active = owned.rows.some((r) => r.is_active);
       await db.query(
@@ -137,7 +156,7 @@ export async function setRuleGroupActive(
 ): Promise<RuleGroupResult> {
   return deps.tx(async (db) => {
     const owned = await ownedGroupProperty(session, groupId, db, deps);
-    if (!owned) return NOT_FOUND;
+    if ("refused" in owned) return notFound(owned.refused);
     await db.query(`UPDATE rate_modifiers SET is_active = $1 WHERE rule_group_id = $2`, [active, groupId]);
     return { ok: true, groupId, propertyId: owned.propertyId };
   });
@@ -150,7 +169,7 @@ export async function deleteRuleGroup(
 ): Promise<RuleGroupResult> {
   return deps.tx(async (db) => {
     const owned = await ownedGroupProperty(session, groupId, db, deps);
-    if (!owned) return NOT_FOUND;
+    if ("refused" in owned) return notFound(owned.refused);
     await db.query(`DELETE FROM rate_modifiers WHERE rule_group_id = $1`, [groupId]);
     return { ok: true, groupId, propertyId: owned.propertyId };
   });

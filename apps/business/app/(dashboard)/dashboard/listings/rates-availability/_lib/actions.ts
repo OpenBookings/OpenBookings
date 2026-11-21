@@ -23,6 +23,13 @@ import { VERSION_SQL } from "./ari-query";
 import { dateRange, isoDate, MAX_RANGE_DAYS } from "./date-range";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
+import {
+  currentPropertyPin,
+  pinnedAccess,
+  switchedReason,
+  type PinnedAccess,
+  type PropertyPin,
+} from "@/lib/current-property";
 import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
 
 /**
@@ -32,14 +39,22 @@ import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
  *
  * Ownership goes through @openbookings/authz on every call. The client passes
  * ids, so they are untrusted until checked; a failed check returns the same
- * generic error as a bad payload rather than confirming the id exists.
+ * generic error as a bad payload rather than confirming the id exists. Every
+ * check is pinned to the current hotel: a stale tab still showing another
+ * hotel is refused with `reason: "property-switched"`.
  */
 
 const ROUTE = "/dashboard/listings/rates-availability";
 
 export type ActionResult =
   | { ok: true; affected: number }
-  | { ok: false; error: string; code?: typeof RATES_CONFIRMATION_REQUIRED };
+  | {
+      ok: false;
+      error: string;
+      code?: typeof RATES_CONFIRMATION_REQUIRED;
+      /** The target is on another hotel than the current one (a stale tab). */
+      reason?: "property-switched";
+    };
 
 async function requireSession() {
   const session = await getServerSession();
@@ -47,8 +62,13 @@ async function requireSession() {
   return session;
 }
 
-function failed(message: string): ActionResult {
-  return { ok: false, error: message };
+function failed(message: string, access?: PinnedAccess): ActionResult {
+  return { ok: false, error: message, ...(access ? switchedReason(access) : {}) };
+}
+
+/** An authz check pinned to the current hotel. */
+async function pinned(check: (pin: Partial<PropertyPin>) => Promise<boolean>): Promise<PinnedAccess> {
+  return pinnedAccess(await currentPropertyPin(), check);
 }
 
 // ─────────────────────────────────────────────
@@ -86,9 +106,8 @@ export async function setAvailability(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRoom(session, data.roomId))) {
-    return failed("Room type not found");
-  }
+  const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
+  if (access !== "ok") return failed("Room type not found", access);
 
   const rows = await query<{ id: string }>(
     `INSERT INTO room_inventory
@@ -167,9 +186,8 @@ export async function setRestriction(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRatePlan(session, data.ratePlanId))) {
-    return failed("Rate plan not found");
-  }
+  const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
+  if (access !== "ok") return failed("Rate plan not found", access);
 
   const hasStayRule =
     data.minStay !== null ||
@@ -240,9 +258,8 @@ export async function clearRestrictions(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRatePlan(session, data.ratePlanId))) {
-    return failed("Rate plan not found");
-  }
+  const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
+  if (access !== "ok") return failed("Rate plan not found", access);
 
   const scopeClause =
     data.scope === "closures"
@@ -298,9 +315,8 @@ export async function createRatePlan(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRoom(session, data.roomId))) {
-    return failed("Room type not found");
-  }
+  const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
+  if (access !== "ok") return failed("Room type not found", access);
   // A rate plan carries a price. No price is stored until the organisation
   // has confirmed, on record, that its rates include tax.
   if (!(await roomRatesConfirmed(data.roomId))) {
@@ -374,9 +390,8 @@ export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRatePlan(session, data.ratePlanId))) {
-    return failed("Rate plan not found");
-  }
+  const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
+  if (access !== "ok") return failed("Rate plan not found", access);
   // Same gate as createRatePlan: no price is stored until the organisation
   // has confirmed, on record, that its rates include tax.
   if (!(await ratePlanRatesConfirmed(data.ratePlanId))) {
@@ -419,7 +434,8 @@ export async function confirmInclusiveRates(propertyId: string): Promise<ActionR
   if (!parsed.success) return failed("Property not found");
 
   const session = await requireSession();
-  if (!(await userOwnsProperty(session, parsed.data))) return failed("Property not found");
+  const access = await pinned((pin) => userOwnsProperty(session, parsed.data, pin));
+  if (access !== "ok") return failed("Property not found", access);
   if (!(await userCanConfirmRates(session, parsed.data))) {
     return failed("Only an owner or admin of your organisation can confirm this.");
   }
@@ -500,9 +516,8 @@ export async function closeRoomType(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRoom(session, data.roomId))) {
-    return failed("Room type not found");
-  }
+  const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
+  if (access !== "ok") return failed("Room type not found", access);
 
   const rows = await query<{ id: string }>(
     `INSERT INTO room_closures (room_id, start_date, end_date, note, created_by)
@@ -533,9 +548,8 @@ export async function reopenRoomType(
   const data = parsed.data;
 
   const session = await requireSession();
-  if (!(await userOwnsRoom(session, data.roomId))) {
-    return failed("Room type not found");
-  }
+  const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
+  if (access !== "ok") return failed("Room type not found", access);
 
   const rows = await query<{ id: string }>(
     `UPDATE room_closures
@@ -630,6 +644,7 @@ export type PublishResult =
       stale?: true;
       version?: string;
       code?: typeof RATES_CONFIRMATION_REQUIRED;
+      reason?: "property-switched";
     };
 
 /**
@@ -663,6 +678,17 @@ export async function publishAriChanges(
   const session = await requireSession();
   const userId = session.user.id;
 
+  // The draft was made on one hotel's grid; it publishes only while that
+  // hotel is still the current one, so a stale tab cannot write after a switch.
+  const pin = await currentPropertyPin();
+  if (data.propertyId !== pin.currentPropertyId) {
+    return {
+      ok: false,
+      error: "You switched hotel in another tab. Reload to see this hotel's rates.",
+      reason: "property-switched",
+    };
+  }
+
   try {
     const result = await withTransaction(async (client) => {
       const one = async <T>(text: string, values?: unknown[]): Promise<T | null> => {
@@ -680,12 +706,12 @@ export async function publishAriChanges(
       }
 
       for (const roomId of roomIds) {
-        if (!(await userOwnsRoom(session, roomId, { queryOne: one }))) {
+        if (!(await userOwnsRoom(session, roomId, { queryOne: one, ...pin }))) {
           throw new PublishError("Room type not found");
         }
       }
       for (const ratePlanId of ratePlanIds) {
-        if (!(await userOwnsRatePlan(session, ratePlanId, { queryOne: one }))) {
+        if (!(await userOwnsRatePlan(session, ratePlanId, { queryOne: one, ...pin }))) {
           throw new PublishError("Rate plan not found");
         }
       }
