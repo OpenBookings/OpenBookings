@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { SwitchableProperty } from "@openbookings/authz";
 import { renderToStaticMarkup } from "react-dom/server";
 import { mockModules } from "@/lib/mock-modules";
@@ -8,11 +8,12 @@ await mockModules(import.meta.dir, {
     usePathname: () => "/dashboard/bookings/reservations",
     useRouter: () => ({}),
     useSearchParams: () => new URLSearchParams(),
+    unstable_rethrow: () => {},
   }),
   "@/lib/switch-property": () => ({ switchProperty: async () => ({ ok: false }) }),
 });
 
-const { PropertySwitcher, PropertyList } = await import("./property-switcher");
+const { PropertySwitcher, PropertyList, pickHotel } = await import("./property-switcher");
 const { SidebarProvider } = await import("@/components/ui/sidebar");
 
 let next = 0;
@@ -102,5 +103,74 @@ describe("the hotel list", () => {
     const many = Array.from({ length: 8 }, (_, i) => hotel(`Hotel ${i}`, "Canal Group"));
     expect(list(many.slice(0, 7))).not.toContain("Find a hotel");
     expect(list(many)).toContain("Find a hotel");
+  });
+});
+
+describe("picking a hotel", () => {
+  const RETURN_TO = "/dashboard/bookings/reservations/abc";
+
+  function pick(
+    property: SwitchableProperty,
+    switchProperty: (id: string, returnTo: string) => Promise<{ ok: false } | undefined>,
+    rethrow: (error: unknown) => void = () => {},
+  ) {
+    const log: string[] = [];
+    let attempt: Promise<void> = Promise.resolve();
+    const deps = {
+      close: () => log.push("close"),
+      begin: (p: SwitchableProperty, run: () => Promise<void>) => {
+        log.push(`begin ${p.propertyName}`);
+        attempt = run();
+      },
+      switchProperty: mock(switchProperty),
+      fail: (p: SwitchableProperty) => log.push(`fail ${p.propertyName}`),
+      rethrow,
+    };
+    pickHotel(property, aurora.propertyId, RETURN_TO, deps);
+    return { log, deps, done: () => attempt };
+  }
+
+  test("another hotel: switches on the server with the current path", async () => {
+    // A switch redirects, which never resolves with a result.
+    const { log, deps, done } = pick(canal, async () => undefined);
+    await done();
+    expect(deps.switchProperty).toHaveBeenCalledWith(canal.propertyId, RETURN_TO);
+    expect(log).toEqual(["close", "begin Hotel Prinsengracht"]);
+  });
+
+  test("the current hotel: just closes the list", async () => {
+    const { log, deps, done } = pick(aurora, async () => undefined);
+    await done();
+    expect(deps.switchProperty).not.toHaveBeenCalled();
+    expect(log).toEqual(["close"]);
+  });
+
+  test("a refusal fails", async () => {
+    const { log, done } = pick(canal, async () => ({ ok: false }));
+    await done();
+    expect(log).toEqual(["close", "begin Hotel Prinsengracht", "fail Hotel Prinsengracht"]);
+  });
+
+  test("a thrown error fails instead of reaching the error boundary", async () => {
+    const { log, done } = pick(canal, async () => {
+      throw new Error("offline");
+    });
+    await done();
+    expect(log).toEqual(["close", "begin Hotel Prinsengracht", "fail Hotel Prinsengracht"]);
+  });
+
+  test("a redirect is rethrown for Next to follow", async () => {
+    const redirect = new Error("NEXT_REDIRECT");
+    const { log, done } = pick(
+      canal,
+      async () => {
+        throw redirect;
+      },
+      (error) => {
+        if (error === redirect) throw error;
+      },
+    );
+    await expect(done()).rejects.toBe(redirect);
+    expect(log).toEqual(["close", "begin Hotel Prinsengracht"]);
   });
 });

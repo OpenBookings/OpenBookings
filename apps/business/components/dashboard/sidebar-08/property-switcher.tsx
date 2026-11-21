@@ -3,7 +3,7 @@
 import type { SwitchableProperty } from "@openbookings/authz";
 import { roleLabel } from "@openbookings/authz/role-guide";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { unstable_rethrow, usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -105,6 +105,38 @@ export function PropertyList({
   );
 }
 
+export type PickDeps = {
+  /** Closes the list. */
+  close: () => void;
+  /** Puts up the loader for `property` and runs `attempt` (in a transition). */
+  begin: (property: SwitchableProperty, attempt: () => Promise<void>) => void;
+  switchProperty: (propertyId: string, returnTo: string) => Promise<{ ok: false } | undefined>;
+  /** Takes the loader down and says the switch didn't happen. */
+  fail: (property: SwitchableProperty) => void;
+  /** Lets Next's own errors through; a switch succeeds by throwing a redirect. */
+  rethrow?: (error: unknown) => void;
+};
+
+/**
+ * What picking a hotel in the list does. The current hotel only closes the
+ * list. Another one switches on the server, which redirects on success; a
+ * refusal or a failed call (offline, server error) comes back as `fail`
+ * rather than reaching the error boundary.
+ */
+export function pickHotel(property: SwitchableProperty, currentId: string, returnTo: string, deps: PickDeps): void {
+  deps.close();
+  if (property.propertyId === currentId) return;
+  deps.begin(property, async () => {
+    try {
+      const result = await deps.switchProperty(property.propertyId, returnTo);
+      if (result?.ok === false) deps.fail(property);
+    } catch (error) {
+      (deps.rethrow ?? unstable_rethrow)(error);
+      deps.fail(property);
+    }
+  });
+}
+
 /**
  * The sidebar header. With two or more hotels it is the switcher: the current
  * hotel and its company plus a chevron, opening the list. Picking another
@@ -126,17 +158,21 @@ export function PropertySwitcher({
 
   if (!current || properties.length < 2) return <SidebarBrand hotel={current} />;
 
-  const select = (property: SwitchableProperty) => {
-    setOpen(false);
-    if (property.propertyId === current.propertyId) return;
-    setOpenMobile(false);
-    setTarget(property);
-    startSwitch(async () => {
-      // A switch redirects; a result means the server refused (access gone).
-      const result = await switchProperty(property.propertyId, pathname);
-      if (result?.ok === false) toast.error(`Couldn't switch to ${property.propertyName}.`);
+  const select = (property: SwitchableProperty) =>
+    pickHotel(property, current.propertyId, pathname, {
+      close: () => setOpen(false),
+      // The loader goes up first, outside the transition, so it shows at once.
+      begin: (picked, attempt) => {
+        setOpenMobile(false);
+        setTarget(picked);
+        startSwitch(attempt);
+      },
+      switchProperty,
+      fail: (picked) => {
+        setTarget(null);
+        toast.error(`Couldn't switch to ${picked.propertyName}.`);
+      },
     });
-  };
 
   return (
     <>

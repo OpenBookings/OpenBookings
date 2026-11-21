@@ -168,6 +168,9 @@ export function NavMain({
             );
           }
 
+          // Every page in it greyed: the header is muted too, but still opens.
+          const muted = item.items?.every((sub) => isGreyed(sub.navKey)) || undefined;
+
           return (
             <Collapsible
               key={item.title}
@@ -179,6 +182,8 @@ export function NavMain({
                 <SidebarMenuButton
                   tooltip={item.title}
                   isActive={isItemActive(item)}
+                  data-muted={muted}
+                  className="data-muted:opacity-50"
                   onClick={() => {
                     // The icon rail has no room for the submenu — expand first.
                     if (isCollapsed) setOpen(true);
@@ -189,7 +194,7 @@ export function NavMain({
                   <span>{item.title}</span>
                 </SidebarMenuButton>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuAction className="data-[state=open]:rotate-90">
+                  <SidebarMenuAction data-muted={muted} className="data-muted:opacity-50 data-[state=open]:rotate-90">
                     <ChevronRight />
                     <span className="sr-only">Toggle {item.title}</span>
                   </SidebarMenuAction>

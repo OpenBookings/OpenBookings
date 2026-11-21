@@ -75,6 +75,18 @@ describe("NavMain", () => {
     expect(html).not.toContain('aria-disabled="true"');
   });
 
+  test("a group whose every page is greyed is muted but still opens", () => {
+    const html = render({ ...open, payouts: "none", billing: "none" });
+    expect(html.split('data-muted="true"').length - 1).toBe(2); // the header and its toggle
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("Payouts");
+    expect(html).toContain("Billing");
+  });
+
+  test("a group with one page that opens stays normal", () => {
+    expect(render({ ...open, payouts: "none", billing: "view" })).not.toContain('data-muted="');
+  });
+
   test("the tooltip names the hotel and the page", () => {
     expect(cantOpenReason("Hotel Aurora", "Payouts")).toBe("Your role at Hotel Aurora can't open Payouts.");
   });
