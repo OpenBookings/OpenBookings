@@ -6,6 +6,7 @@ import {
 } from "@openbookings/authz";
 import { query as dbQuery, queryOne as dbQueryOne, withTransaction } from "@openbookings/db";
 import type { z } from "zod";
+import { getCurrentProperty } from "@/lib/current-property";
 import { purgePropertyPage, type PurgeTarget } from "@/lib/purge-property-page";
 import type { FormState } from "../../_lib/editor";
 import { canPublish } from "./completion";
@@ -56,7 +57,7 @@ const defaultDeps: MutationDeps = {
       }),
     ),
   purge: (target) => purgePropertyPage(target),
-  loadRoom: loadRoomEditor,
+  loadRoom: async (session, roomId) => loadRoomEditor(session, (await getCurrentProperty())?.propertyId ?? null, roomId),
 };
 
 export type Result<Extra = object> =

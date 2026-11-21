@@ -1,4 +1,4 @@
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import {
   bookableUnits,
   hasStayLengthDiscount,
@@ -28,8 +28,9 @@ import type {
  * against different grains, not because of a round-trip budget: fusing them
  * would multiply every availability row by the rate-plan count for no gain.
  *
- * Both are host-scoped through getHostScopedDb, so `$1` is always the verified
- * owner id and callers' own params start at `$2`.
+ * Both are bound to the current hotel through getPropertyScopedDb: `$1` is
+ * the user, `$2` the hotel (CURRENT_PROPERTY_SQL), callers' own params start
+ * at `$3`.
  */
 
 // ─────────────────────────────────────────────
@@ -207,8 +208,7 @@ scope_rooms AS (
   SELECT r.id, r.name, r.room_type, r.base_occupancy, r.total_units, r.is_active AS on_sale
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE ${propertyReadAccessSql("$1")}
-    AND p.id = $2
+  WHERE ${CURRENT_PROPERTY_SQL}
     AND r.archived_at IS NULL
 ),
 booked AS (
@@ -315,8 +315,7 @@ scope_plans AS (
   FROM rate_plans rp
   JOIN rooms r      ON r.id = rp.room_id
   JOIN properties p ON p.id = r.property_id
-  WHERE ${propertyReadAccessSql("$1")}
-    AND p.id = $2
+  WHERE ${CURRENT_PROPERTY_SQL}
     AND r.archived_at IS NULL
     AND rp.archived_at IS NULL
 )
@@ -413,8 +412,7 @@ FROM rate_modifiers m
 JOIN rate_plans rp ON rp.id = m.rate_plan_id
 JOIN rooms r       ON r.id = rp.room_id
 JOIN properties p  ON p.id = r.property_id
-WHERE ${propertyReadAccessSql("$1")}
-  AND p.id = $2
+WHERE ${CURRENT_PROPERTY_SQL}
 GROUP BY m.rate_plan_id
 `;
 
@@ -440,7 +438,7 @@ WITH scope_rooms AS (
   SELECT r.id
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
-  WHERE ${propertyReadAccessSql("$1")} AND p.id = $2 AND r.archived_at IS NULL
+  WHERE ${CURRENT_PROPERTY_SQL} AND r.archived_at IS NULL
 ),
 signatures AS (
   SELECT 'o' || ro.id::text || ro.price_per_night::text || ro.is_active::text
@@ -562,12 +560,11 @@ export async function loadAriGrid(
   range: AriRange,
   options: AriQueryOptions = {},
 ): Promise<AriGridData | null> {
-  const host = getHostScopedDb(session);
+  const host = getPropertyScopedDb(session, propertyId);
   const stayLength = Math.max(1, Math.floor(options.stayLength ?? 1));
 
   const property = await host.queryOne<PropertyRow>(
-    `SELECT p.id, p.name, p.timezone FROM properties p WHERE ${propertyReadAccessSql("$1")} AND p.id = $2`,
-    [propertyId],
+    `SELECT p.id, p.name, p.timezone FROM properties p WHERE ${CURRENT_PROPERTY_SQL}`,
   );
   if (!property) return null;
   // Lead-time rules (early bird, last minute) count from the property's date.
@@ -579,12 +576,12 @@ export async function loadAriGrid(
   // truncated stay and read as artificially cheap.
   const priceRangeEnd = addDays(range.end, stayLength - 1);
 
-  const params = [propertyId, range.start, range.end];
-  const priceParams = [propertyId, range.start, priceRangeEnd];
+  const params = [range.start, range.end];
+  const priceParams = [range.start, priceRangeEnd];
   const [availabilityRows, rateRows, modifierRows, versionRow] = await Promise.all([
     host.query<AvailabilityQueryRow>(AVAILABILITY_SQL, params),
     host.query<RateQueryRow>(RATES_SQL, priceParams),
-    host.query<ModifierQueryRow>(MODIFIERS_SQL, [propertyId]),
+    host.query<ModifierQueryRow>(MODIFIERS_SQL),
     // Fetched with the grid, not after it: a version read later could see a
     // write that landed between the two, and stamp stale data as current.
     host.queryOne<{ version: string }>(VERSION_SQL, params),
@@ -789,14 +786,4 @@ export async function loadAriGrid(
     stayLength,
     version: versionRow?.version ?? "empty",
   };
-}
-
-/** The host's properties, for the (currently implicit) property picker. */
-export async function loadHostProperties(
-  session: SessionLike,
-): Promise<PropertyRow[]> {
-  const host = getHostScopedDb(session);
-  return host.query<PropertyRow>(
-    `SELECT p.id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} ORDER BY p.name`,
-  );
 }

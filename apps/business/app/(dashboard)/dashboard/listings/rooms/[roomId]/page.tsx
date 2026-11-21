@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { RoomEditor } from "../_components/room-editor";
@@ -25,9 +26,10 @@ async function EditorContent({ params }: PageProps) {
   if (!session) redirect("/login");
 
   const { roomId } = await params;
-  // Host-scoped: another host's room, an archived one and a made-up id are
-  // all the same 404.
-  const data = await loadRoomEditor(session, roomId);
+  // Scoped to the current hotel: another hotel's room, an archived one and a
+  // made-up id are all the same 404.
+  const current = await getCurrentProperty();
+  const data = await loadRoomEditor(session, current?.propertyId ?? null, roomId);
   if (!data) notFound();
 
   return (

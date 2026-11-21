@@ -2,16 +2,17 @@ import { PageHold } from "@/components/dashboard/page-loaders";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
+import { getCurrentProperty } from "@/lib/current-property";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { MessagesView } from "@/components/dashboard/messages/messages-view";
 import type { ThreadListItem } from "@openbookings/messaging";
 
-export default async function MessagesPage() {
-  const session = await getServerSession();
-  if (!session) redirect("/login");
-
-  const host = getHostScopedDb(session);
-  const threads = await host.query<ThreadListItem>(
+/**
+ * The current hotel's guest threads. `t.host_id = $1` stays: messages are
+ * tied to the user they were stamped for.
+ */
+function loadThreads(session: SessionLike, propertyId: string) {
+  return getPropertyScopedDb(session, propertyId).query<ThreadListItem>(
     `SELECT
        t.id,
        t.status,
@@ -45,9 +46,18 @@ export default async function MessagesPage() {
      ) unread ON true
      -- host_id is stamped when the thread is created; a host who has since left
      -- the organization must not keep seeing its guest conversations.
-     WHERE t.host_id = $1 AND ${propertyReadAccessSql("$1")}
+     WHERE t.host_id = $1 AND ${CURRENT_PROPERTY_SQL}
      ORDER BY t.updated_at DESC`,
   );
+}
+
+export default async function MessagesPage() {
+  const session = await getServerSession();
+  if (!session) redirect("/login");
+
+  // None without a current hotel.
+  const current = await getCurrentProperty();
+  const threads = current ? await loadThreads(session, current.propertyId) : [];
 
   return (
     <PageHold id="messages" fill>

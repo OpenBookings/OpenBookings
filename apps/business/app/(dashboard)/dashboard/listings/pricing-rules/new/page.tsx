@@ -1,13 +1,14 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { RuleForm } from "../_components/rule-form";
 import { NoProperty, PricingRulesLoading } from "../_components/states";
 import { loadPricingRules } from "../_lib/query";
 
 interface PageProps {
-  searchParams: Promise<{ section?: string; plan?: string; property?: string }>;
+  searchParams: Promise<{ section?: string; plan?: string }>;
 }
 
 export default function NewPricingRulePage({ searchParams }: PageProps) {
@@ -25,7 +26,8 @@ async function NewRuleContent({ searchParams }: PageProps) {
   if (!session) redirect("/login");
 
   const params = await searchParams;
-  const data = await loadPricingRules(session, params.property);
+  const current = await getCurrentProperty();
+  const data = await loadPricingRules(session, current?.propertyId ?? null);
   if (!data) return <NoProperty />;
 
   const section = params.section === "discount" ? "discount" : "adjustment";

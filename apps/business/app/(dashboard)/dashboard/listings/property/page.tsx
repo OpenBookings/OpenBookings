@@ -4,34 +4,31 @@ import { BuildingIcon } from "lucide-react";
 import { query } from "@openbookings/db";
 import { propertyReadiness, readinessCopy, readinessEnforced } from "@openbookings/billing/readiness";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { PropertyEditor } from "./_components/property-editor";
 import { loadAmenityCatalog, loadEditorData } from "./_lib/query";
 
-interface PageProps {
-  searchParams: Promise<{ property?: string }>;
-}
-
-export default function PropertyPage({ searchParams }: PageProps) {
+export default function PropertyPage() {
   return (
     // No header of its own: the listings layout already renders the section
     // name above this, and a second one only steals pane height.
     <div className="flex min-h-0 flex-1 flex-col">
       <Suspense fallback={<PageLoading id="property" />}>
-        <EditorContent searchParams={searchParams} />
+        <EditorContent />
       </Suspense>
     </div>
   );
 }
 
-async function EditorContent({ searchParams }: PageProps) {
+async function EditorContent() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const { property } = await searchParams;
+  const current = await getCurrentProperty();
   const [data, amenities] = await Promise.all([
-    loadEditorData(session, property),
+    loadEditorData(session, current?.propertyId ?? null),
     loadAmenityCatalog(),
   ]);
 

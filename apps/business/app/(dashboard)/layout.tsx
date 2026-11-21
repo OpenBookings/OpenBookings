@@ -6,6 +6,7 @@ import { SupportPanel } from "@/components/support/support-panel";
 import { SupportProvider } from "@/components/support/support-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { loadPropertyBrand } from "@/lib/property-brand";
 import { loadSupportBootstrap } from "@/lib/support/server/bootstrap";
 import { countReviewsNeedingReply } from "@/lib/reviews/query";
@@ -18,12 +19,13 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession();
+  const [session, current] = await Promise.all([getServerSession(), getCurrentProperty()]);
+  const propertyId = current?.propertyId ?? null;
   const [brand, support, reviewsWaiting] = await Promise.all([
-    loadPropertyBrand(session),
+    loadPropertyBrand(session, propertyId),
     // Null unless SUPPORT_CHAT_ENABLED and the session has a verified org.
     loadSupportBootstrap(),
-    session?.user.account_type === "business" ? countReviewsNeedingReply(session) : Promise.resolve(0),
+    session?.user.account_type === "business" ? countReviewsNeedingReply(session, propertyId) : Promise.resolve(0),
   ]);
 
   const shell = (

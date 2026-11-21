@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 
 /**
  * The identity the dashboard chrome wears: whose property this is, and the
@@ -38,28 +38,24 @@ export function toPropertyBrand(row: PropertyBrandRow | null): PropertyBrand | n
 }
 
 /**
- * The host's property and its logo, for the sidebar header.
- *
- * One property per host today, so this takes the first by name the same way
- * loadEditorData does — deliberately the same ordering, so the header can
- * never name a different property than the editor opens. A property switcher
- * would replace both call sites together.
+ * The current hotel and its logo, for the sidebar header. The caller passes
+ * the current hotel (getCurrentProperty); null means there is none, and the
+ * sidebar keeps the plain OpenBookings header.
  *
  * Wrapped in React's request cache: the dashboard layout is the only caller
  * now, but a second one must not mean a second round-trip.
  */
 export const loadPropertyBrand = cache(
-  async (session: SessionLike | null | undefined): Promise<PropertyBrand | null> => {
-    if (!session) return null;
+  async (session: SessionLike | null | undefined, propertyId: string | null): Promise<PropertyBrand | null> => {
+    if (!session || !propertyId) return null;
 
-    const host = getHostScopedDb(session);
-    const row = await host.queryOne<PropertyBrandRow>(
+    const row = await getPropertyScopedDb(session, propertyId).queryOne<PropertyBrandRow>(
       `SELECT p.name, i.url AS logo_url
          FROM properties p
          LEFT JOIN property_images i
            ON i.property_id = p.id AND i."group" = 'logo'
-        WHERE ${propertyReadAccessSql("$1")}
-        ORDER BY p.name
+        WHERE ${CURRENT_PROPERTY_SQL}
+        ORDER BY i.sort_order, i.created_at, i.id
         LIMIT 1`,
     );
 

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { RuleForm } from "../_components/rule-form";
 import { PricingRulesLoading } from "../_components/states";
@@ -26,8 +27,10 @@ async function EditRuleContent({ params }: PageProps) {
   if (!session) redirect("/login");
 
   const { groupId } = await params;
-  // Host-scoped: another host's rule and a made-up id are the same 404.
-  const loaded = await loadRuleGroup(session, groupId);
+  // Scoped to the current hotel: another hotel's rule and a made-up id are
+  // the same 404.
+  const current = await getCurrentProperty();
+  const loaded = await loadRuleGroup(session, current?.propertyId ?? null, groupId);
   if (!loaded) notFound();
   const section = sectionOf(loaded.rule);
 

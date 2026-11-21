@@ -27,8 +27,10 @@ describeWithDb("loadHostReservations against Postgres", () => {
   let propertyId: string;
 
   const session = (id: string): SessionLike => ({ user: { id, account_type: "business" } });
-  const hostDb = (s: SessionLike) => ({
-    query: async <T,>(sql: string, values: unknown[] = []) => (await db.query(sql, [s.user.id, ...values])).rows as T[],
+  /** getPropertyScopedDb's shape, bound to this transaction and the test property. */
+  const propertyDb = (s: SessionLike) => ({
+    query: async <T,>(sql: string, values: unknown[] = []) =>
+      (await db.query(sql, [s.user.id, propertyId, ...values])).rows as T[],
   });
   const one = async (sql: string, values: unknown[]) => (await db.query(sql, values)).rows[0] as { id: string };
 
@@ -94,7 +96,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
   });
 
   test("the owner sees the booking, its two rooms, and can cancel it", async () => {
-    const list = await loadHostReservations(session(owner), hostDb(session(owner)));
+    const list = await loadHostReservations(session(owner), propertyId, propertyDb(session(owner)));
     const booking = list.find((r) => r.id === bookingId);
     expect(booking?.rooms).toHaveLength(2);
     expect(booking?.actions).toContain("cancel");
@@ -107,7 +109,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
        WHERE id = (SELECT id FROM reservations WHERE booking_id = $1 LIMIT 1)`,
       [bookingId],
     );
-    const booking = (await loadHostReservations(session(owner), hostDb(session(owner)))).find((r) => r.id === bookingId);
+    const booking = (await loadHostReservations(session(owner), propertyId, propertyDb(session(owner)))).find((r) => r.id === bookingId);
     expect(booking).toMatchObject({ guests: 4, partyLabel: "4 adults, 1 infant", extrasLabel: "1 cot", atHotelAmount: 50 });
   });
 
@@ -123,7 +125,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
       amountCents: 7_500,
       occurredAt: new Date("2031-01-02T09:00:00Z"),
     });
-    const booking = (await loadHostReservations(session(owner), hostDb(session(owner)))).find((r) => r.id === bookingId);
+    const booking = (await loadHostReservations(session(owner), propertyId, propertyDb(session(owner)))).find((r) => r.id === bookingId);
     expect(booking?.refundedAmount).toBe(75);
     expect(booking?.outsideRefunds).toEqual([
       { kind: "refund", amount: 75, at: expect.stringMatching(/^2031-01-02T09:00:00/), split: null },
@@ -132,7 +134,7 @@ describeWithDb("loadHostReservations against Postgres", () => {
   });
 
   test("another host sees nothing", async () => {
-    const list = await loadHostReservations(session(stranger), hostDb(session(stranger)));
+    const list = await loadHostReservations(session(stranger), propertyId, propertyDb(session(stranger)));
     expect(list.find((r) => r.id === bookingId)).toBeUndefined();
   });
 
@@ -154,13 +156,13 @@ describeWithDb("loadHostReservations against Postgres", () => {
     });
 
     test("grants nothing with testing mode off", async () => {
-      const list = await loadHostReservations(session(stranger), hostDb(session(stranger)), new Date(), false);
+      const list = await loadHostReservations(session(stranger), propertyId, propertyDb(session(stranger)), new Date(), false);
       expect(list.find((r) => r.id === bookingId)).toBeUndefined();
       expect(await userOwnsProperty(session(stranger), propertyId, ownsDeps(false))).toBe(false);
     });
 
     test("applies with testing mode on", async () => {
-      const list = await loadHostReservations(session(stranger), hostDb(session(stranger)), new Date(), true);
+      const list = await loadHostReservations(session(stranger), propertyId, propertyDb(session(stranger)), new Date(), true);
       expect(list.find((r) => r.id === bookingId)).toBeDefined();
       expect(await userOwnsProperty(session(stranger), propertyId, ownsDeps(true))).toBe(true);
     });

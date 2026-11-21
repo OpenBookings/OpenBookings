@@ -1,15 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { createReadinessLoader, type ReadinessDeps } from "./readiness-loader";
 
-const HOST = { id: "p1", is_active: true, stripe_account_id: "acct_1" };
+const PROP = "11111111-1111-4111-8111-111111111111";
+const HOST = { id: PROP, is_active: true, stripe_account_id: "acct_1" };
 
 /** Answers the three queries in the order the loader asks them. */
 function deps(over: Partial<ReadinessDeps> & { host?: typeof HOST | null; found?: boolean } = {}) {
   const calls = { queries: 0, stripe: 0 };
   const host = over.host === undefined ? HOST : over.host;
+  const seen: { sql: string; values: unknown[] }[] = [];
   const base: ReadinessDeps = {
-    queryOne: async <T,>(sql: string) => {
+    queryOne: async <T,>(sql: string, values: unknown[] = []) => {
       calls.queries += 1;
+      seen.push({ sql, values });
       if (sql.includes("FROM properties")) return host as T | null;
       return { found: over.found ?? true } as T;
     },
@@ -19,7 +22,7 @@ function deps(over: Partial<ReadinessDeps> & { host?: typeof HOST | null; found?
     },
     ...over,
   };
-  return { load: createReadinessLoader(base), calls };
+  return { load: createReadinessLoader(base), calls, seen };
 }
 
 const states = (items: { state: string }[]) => items.map((i) => i.state);
@@ -27,23 +30,23 @@ const states = (items: { state: string }[]) => items.map((i) => i.state);
 describe("readiness loader", () => {
   test("a host with no property has everything still to do, and Stripe is not asked", async () => {
     const { load, calls } = deps({ host: null });
-    expect(states(await load("u1", "2026-10-01"))).toEqual(["todo", "todo", "todo", "todo"]);
+    expect(states(await load("u1", PROP, "2026-10-01"))).toEqual(["todo", "todo", "todo", "todo"]);
     expect(calls.stripe).toBe(0);
   });
 
   test("a live listing with availability, a rate plan and charges enabled is ready", async () => {
     const { load } = deps();
-    expect(states(await load("u1", "2026-10-01"))).toEqual(["done", "done", "done", "done"]);
+    expect(states(await load("u1", PROP, "2026-10-01"))).toEqual(["done", "done", "done", "done"]);
   });
 
   test("missing availability and rate plan are to do; an inactive listing too", async () => {
     const { load } = deps({ host: { ...HOST, is_active: false }, found: false });
-    expect(states(await load("u1", "2026-10-01"))).toEqual(["todo", "todo", "todo", "done"]);
+    expect(states(await load("u1", PROP, "2026-10-01"))).toEqual(["todo", "todo", "todo", "done"]);
   });
 
   test("no Stripe account is to do, without calling Stripe", async () => {
     const { load, calls } = deps({ host: { ...HOST, stripe_account_id: null as unknown as string } });
-    expect(states(await load("u1", "2026-10-01"))[3]).toBe("todo");
+    expect(states(await load("u1", PROP, "2026-10-01"))[3]).toBe("todo");
     expect(calls.stripe).toBe(0);
   });
 
@@ -53,30 +56,30 @@ describe("readiness loader", () => {
         throw new Error("stripe down");
       },
     });
-    expect(states(await load("u1", "2026-10-01"))).toEqual(["done", "done", "done", "unknown"]);
+    expect(states(await load("u1", PROP, "2026-10-01"))).toEqual(["done", "done", "done", "unknown"]);
   });
 
   test("a Stripe call that hangs gives up after the timeout instead of blocking the page", async () => {
     const { load } = deps({ retrieveAccount: () => new Promise(() => {}), timeoutMs: 20 });
     const started = Date.now();
-    expect(states(await load("u1", "2026-10-01"))[3]).toBe("unknown");
+    expect(states(await load("u1", PROP, "2026-10-01"))[3]).toBe("unknown");
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
   test("the answer is reused for the same host within the TTL and refetched after it", async () => {
     let clock = 1_000;
     const { load, calls } = deps({ now: () => clock, ttlMs: 60_000 });
-    await load("u1", "2026-10-01");
+    await load("u1", PROP, "2026-10-01");
     const afterFirst = calls.queries;
-    await load("u1", "2026-10-01");
+    await load("u1", PROP, "2026-10-01");
     expect(calls.queries).toBe(afterFirst);
     expect(calls.stripe).toBe(1);
 
-    await load("u2", "2026-10-01");
+    await load("u2", PROP, "2026-10-01");
     expect(calls.queries).toBe(afterFirst * 2);
 
     clock += 60_001;
-    await load("u1", "2026-10-01");
+    await load("u1", PROP, "2026-10-01");
     expect(calls.queries).toBe(afterFirst * 3);
   });
 
@@ -89,8 +92,31 @@ describe("readiness loader", () => {
         return { charges_enabled: true };
       },
     });
-    expect(states(await load("u1", "2026-10-01"))[3]).toBe("unknown");
+    expect(states(await load("u1", PROP, "2026-10-01"))[3]).toBe("unknown");
     fail = false;
-    expect(states(await load("u1", "2026-10-01"))[3]).toBe("done");
+    expect(states(await load("u1", PROP, "2026-10-01"))[3]).toBe("done");
+  });
+
+  test("reads the current hotel, not the user's oldest property", async () => {
+    const { load, seen } = deps();
+    await load("u1", PROP, "2026-10-01");
+    const host = seen.find((q) => q.sql.includes("FROM properties p"))!;
+    expect(host.sql).toContain("p.id = $2");
+    expect(host.sql).not.toContain("ORDER BY p.created_at");
+    expect(host.values).toEqual(["u1", PROP]);
+  });
+
+  test("no current hotel has everything still to do, without a query", async () => {
+    const { load, calls } = deps();
+    expect(states(await load("u1", null, "2026-10-01"))).toEqual(["todo", "todo", "todo", "todo"]);
+    expect(calls.queries).toBe(0);
+  });
+
+  test("the answer is kept per hotel, so switching hotel asks again", async () => {
+    const { load, calls } = deps();
+    await load("u1", PROP, "2026-10-01");
+    const afterFirst = calls.queries;
+    await load("u1", "22222222-2222-4222-8222-222222222222", "2026-10-01");
+    expect(calls.queries).toBe(afterFirst * 2);
   });
 });
