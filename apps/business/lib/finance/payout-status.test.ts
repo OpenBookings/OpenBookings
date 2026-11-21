@@ -3,8 +3,9 @@ import type { CurrentProperty } from "@openbookings/authz";
 import { loadPayoutStatus, type PayoutDeps } from "./payout-status";
 
 const ORG = "org-current";
+const PROPERTY = "11111111-1111-4111-8111-111111111111";
 const current = (role: string, hasPropertyAccess = false): CurrentProperty => ({
-  propertyId: "11111111-1111-4111-8111-111111111111",
+  propertyId: PROPERTY,
   propertyName: "Zeezicht",
   logoUrl: null,
   organizationId: ORG,
@@ -30,14 +31,34 @@ function fake(account: string | null) {
 }
 
 describe("payout status", () => {
-  test("reads the current organization's Stripe account, falling back to the user's own onboarding", async () => {
+  test("reads the current organization's Stripe account, then the current hotel's own", async () => {
     const { deps, seen } = fake("acct_1");
     expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "ok", payoutsEnabled: true, requirementsDue: 1 });
     expect(seen).toHaveLength(1);
-    expect(seen[0].values).toEqual([ORG, "u1"]);
+    expect(seen[0].values).toEqual([ORG, PROPERTY]);
     expect(seen[0].sql).toContain("org_profile");
     expect(seen[0].sql).toContain("organization_id = $1");
-    expect(seen[0].sql).toContain("host_onboarding WHERE user_id = $2");
+    expect(seen[0].sql).toContain("p.id = $2");
+    expect(seen[0].sql).not.toContain("host_onboarding");
+  });
+
+  test("never shows the user's own onboarding account on a hotel whose org has none", async () => {
+    // The user's onboarding account belongs to another org of theirs (or the
+    // demo org has none): only a query that reads host_onboarding finds it.
+    const seen: string[] = [];
+    let stripe = 0;
+    const deps: PayoutDeps = {
+      queryOne: async <T,>(sql: string) => {
+        seen.push(sql);
+        return { stripe_account_id: sql.includes("host_onboarding") ? "acct_other_org" : null } as T;
+      },
+      retrieveAccount: async () => {
+        stripe += 1;
+        return { payouts_enabled: true };
+      },
+    };
+    expect(await loadPayoutStatus(current("owner"), "u1", deps)).toEqual({ state: "none" });
+    expect(stripe).toBe(0);
   });
 
   test("is hidden from a role that may not read payouts, without asking the database or Stripe", async () => {

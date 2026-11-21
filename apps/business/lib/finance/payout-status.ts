@@ -28,10 +28,13 @@ const defaultDeps: PayoutDeps = {
  * no bank details are fetched, shown or stored here. Those live in the
  * organization's own Stripe Dashboard, behind Stripe's login.
  *
- * The account is the current organization's (org_profile). The user's own
- * onboarding account is the fallback only while that organization has none,
- * and the only source without a current hotel. A role that may not read
- * payouts sees that they are not theirs to view, and Stripe is not asked.
+ * With a current hotel the account is the current organization's
+ * (org_profile), else that hotel's own properties.stripe_account_id. Never
+ * the user's onboarding account: that belongs to whichever org the user
+ * onboarded, and showing it on another org's hotel would mix two orgs on one
+ * screen. Without a current hotel the user's own onboarding account is the
+ * only source. A role that may not read payouts sees that they are not
+ * theirs to view, and Stripe is not asked.
  */
 export async function loadPayoutStatus(
   current: CurrentProperty | null,
@@ -46,9 +49,10 @@ export async function loadPayoutStatus(
     ? await deps.queryOne<{ stripe_account_id: string | null }>(
         `SELECT COALESCE(
            (SELECT op.stripe_account_id FROM org_profile op WHERE op.organization_id = $1),
-           (SELECT step_data->>'stripe_account_id' FROM host_onboarding WHERE user_id = $2)
+           (SELECT p.stripe_account_id FROM properties p
+             WHERE p.id = $2::uuid AND p.organization_id = $1)
          ) AS stripe_account_id`,
-        [current.organizationId, userId],
+        [current.organizationId, current.propertyId],
       )
     : await deps.queryOne<{ stripe_account_id: string | null }>(
         `SELECT step_data->>'stripe_account_id' AS stripe_account_id FROM host_onboarding WHERE user_id = $1`,
