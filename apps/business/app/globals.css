@@ -54,11 +54,28 @@
   --accent-9: var(--mk-paper);
   --accent-11: var(--gray-12);
 
-  /* Status — Radix greenDark / amberDark (steps 3 surface, 11 text) */
-  --green-3: #132d21;
-  --green-11: #3dd68c;
-  --amber-3: #302008;
-  --amber-11: #ffca16;
+  /*
+   * State — one mapping for the whole console, on the logo's pastel
+   * spectrum. Colour sits in a dot or a tint (≤ 16%), never a solid fill,
+   * and a word always says the same thing.
+   *   positive  = good, live, paid, confirmed     (mint)
+   *   attention = needs a decision                (amber)
+   *   onsite    = the guest is on the property    (sky)
+   *   stopped   = cancelled, closed, no-show      (coral)
+   *   adjusted  = changed by a rule (prices only) (lilac, nowhere else)
+   */
+  --state-positive: var(--spectrum-mint);
+  --state-attention: var(--spectrum-amber);
+  --state-onsite: var(--spectrum-sky);
+  --state-stopped: var(--spectrum-coral);
+  --state-adjusted: var(--spectrum-lilac);
+  --state-neutral: var(--gray-11);
+
+  /* Radix green/amber names, kept for older call sites, now on the spectrum. */
+  --green-3: color-mix(in oklch, var(--state-positive) 15%, transparent);
+  --green-11: var(--state-positive);
+  --amber-3: color-mix(in oklch, var(--state-attention) 15%, transparent);
+  --amber-11: var(--state-attention);
 
   /* Danger — Radix redDark */
   --red-3: color(display-p3 0.211 0.081 0.099); /* #3B1219 */
@@ -146,39 +163,39 @@
    * so a state cannot drift between a cell, its bar, the detail sheet and the
    * legend that explains them.
    */
-  --ari-group: #262626;
-  --ari-cell: #222222;
-  --ari-border: #2e2e2e;
-  --ari-border-strong: #3a3a3a;
+  --ari-group: oklch(20% 0.005 290);
+  --ari-cell: var(--surface-raised);
+  --ari-border: var(--line);
+  --ari-border-strong: var(--line-strong);
 
   /* Availability bar. The number stays foreground; the bar carries the level. */
-  --ari-avail-ok: #3fae6e;
-  --ari-avail-low: #e8853a;
+  --ari-avail-ok: var(--state-positive);
+  --ari-avail-low: var(--state-attention);
 
   /* A price moved by an override or a modifier. */
-  --ari-adjusted-bg: #2a2342;
-  --ari-adjusted-fg: #b9a6ff;
+  --ari-adjusted-bg: color-mix(in oklch, var(--state-adjusted) 15%, transparent);
+  --ari-adjusted-fg: color-mix(in oklch, var(--state-adjusted) 82%, white);
 
   /* Still bookable, just constrained — min/max stay, CTA/CTD. */
-  --ari-restricted-bg: #3a2a14;
-  --ari-restricted-fg: #f0a54a;
+  --ari-restricted-bg: color-mix(in oklch, var(--state-attention) 15%, transparent);
+  --ari-restricted-fg: color-mix(in oklch, var(--state-attention) 82%, white);
 
   /* Closed by a person. Never used for sold out, which nobody chose. */
-  --ari-stopsell-bg: #3a1d1d;
-  --ari-stopsell-border: #5c2a2a;
-  --ari-stopsell-fg: #ff8a80;
+  --ari-stopsell-bg: color-mix(in oklch, var(--state-stopped) 15%, transparent);
+  --ari-stopsell-border: color-mix(in oklch, var(--state-stopped) 32%, transparent);
+  --ari-stopsell-fg: color-mix(in oklch, var(--state-stopped) 82%, white);
 
   /* Nothing left to sell. Grey, because it is arithmetic rather than a decision. */
-  --ari-soldout-chip: #333333;
-  --ari-soldout-fg: #c4c4c4;
+  --ari-soldout-chip: oklch(100% 0 0 / 0.09);
+  --ari-soldout-fg: var(--gray-11);
 
   /* The room type is shut. Hatched, so it reads apart from sold out in greyscale. */
-  --ari-closed-hatch-a: #242424;
-  --ari-closed-hatch-b: #2c2c2c;
+  --ari-closed-hatch-a: oklch(17% 0.004 290);
+  --ari-closed-hatch-b: oklch(21% 0.005 290);
 
   /* Refundable tag, and the sheet's "bookable" pill. */
-  --ari-bookable-bg: #173024;
-  --ari-bookable-fg: #6fd69a;
+  --ari-bookable-bg: color-mix(in oklch, var(--state-positive) 15%, transparent);
+  --ari-bookable-fg: color-mix(in oklch, var(--state-positive) 82%, white);
 
   --font-sans: Libre Franklin, ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-gloock), serif;
@@ -238,6 +255,14 @@
   --color-surface-overlay: var(--surface-overlay);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+
+  /* Console state */
+  --color-state-positive: var(--state-positive);
+  --color-state-attention: var(--state-attention);
+  --color-state-onsite: var(--state-onsite);
+  --color-state-stopped: var(--state-stopped);
+  --color-state-adjusted: var(--state-adjusted);
+  --color-state-neutral: var(--state-neutral);
 
   /* OpenBookings brand */
   --color-ob-brand: var(--ob-brand);
