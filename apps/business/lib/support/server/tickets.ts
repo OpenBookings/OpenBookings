@@ -1,6 +1,6 @@
 import { getOrgScopedDb, propertyReadAccessSql } from "@openbookings/authz";
 import { activeOrgId } from "@/lib/active-org";
-import { currentPropertyFor } from "@/lib/current-property";
+import { cachedCurrentPropertyFor } from "@/lib/current-property";
 import type { LinkedKind } from "../categories";
 import { isUuid, shortBookingRef } from "../references";
 import { tabStatuses, type TicketStatus, type TicketTab } from "../status";
@@ -34,8 +34,9 @@ type SessionWithUser = {
 export async function supportScope(session: SessionWithUser | null | undefined): Promise<SupportScope | null> {
   if (!session) return null;
   // The current hotel's org, as activeOrgId would pick it; activeOrgId only
-  // for its fallbacks (no reachable hotel yet), so the hotel resolves once.
-  const current = await currentPropertyFor(session);
+  // for its fallbacks (no reachable hotel yet). Both read the request's one
+  // cached resolve.
+  const current = await cachedCurrentPropertyFor(session);
   const orgId = current?.organizationId ?? (await activeOrgId(session));
   const db = await getOrgScopedDb({ user: session.user, session: { activeOrganizationId: orgId } });
   if (!db) return null;

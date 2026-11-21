@@ -127,14 +127,19 @@ export function pickCurrentProperty(list: SwitchableProperty[], stored: StoredPo
  * bound to both the session id and the user id; a missing row means nothing
  * stored. Also returns the stored pointers so callers can tell when the
  * resolved hotel differs from what the session row says.
+ *
+ * `known.list` is this user's listSwitchableProperties, when the caller has
+ * already asked for it in the same request; it is used instead of listing
+ * again.
  */
 export async function resolveCurrentProperty(
   ptr: SessionPointer,
   deps: AuthzDeps = {},
+  known: { list?: Promise<SwitchableProperty[]> | SwitchableProperty[] } = {},
 ): Promise<{ current: CurrentProperty | null; stored: StoredPointers }> {
   const queryOne = deps.queryOne ?? dbQueryOne;
   const [list, row] = await Promise.all([
-    listSwitchableProperties(ptr.userId, deps),
+    known.list ?? listSwitchableProperties(ptr.userId, deps),
     queryOne<StoredPointers>(
       `SELECT "activePropertyId", "activeOrganizationId"
        FROM "session"

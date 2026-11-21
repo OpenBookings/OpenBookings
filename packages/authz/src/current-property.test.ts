@@ -150,6 +150,20 @@ describe("resolveCurrentProperty", () => {
     );
     expect(result).toEqual({ current: b1, stored: { activePropertyId: null, activeOrganizationId: null } });
   });
+
+  test("uses a list the caller already has instead of listing again", async () => {
+    const result = await resolveCurrentProperty(
+      { userId: "u1", sessionId: "s1" },
+      {
+        query: async () => {
+          throw new Error("listed again");
+        },
+        queryOne: async <T>() => ({ activePropertyId: "b1", activeOrganizationId: "org-b" }) as T,
+      },
+      { list: Promise.resolve([a1, b1]) },
+    );
+    expect(result.current).toEqual(b1);
+  });
 });
 
 describe("setCurrentProperty", () => {

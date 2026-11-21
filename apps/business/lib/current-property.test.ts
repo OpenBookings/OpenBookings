@@ -5,6 +5,7 @@ await mockModules(import.meta.dir, { "@/lib/auth": () => ({ getServerSession: as
 
 const { currentPropertyFor, pinnedAccess } = await import("./current-property");
 const { activeOrgId } = await import("./active-org");
+const { DEMO_ORG_ID } = await import("@openbookings/mode");
 
 type Hotel = { property_id: string; property_name: string; organization_id: string; organization_name: string };
 const hotel = (p: string, o: string): Hotel => ({ property_id: p, property_name: `Hotel ${p}`, organization_id: o, organization_name: `Org ${o}` });
@@ -52,6 +53,46 @@ describe("currentPropertyFor", () => {
     const stale = fake([hotel("p1", "orgA")], { activePropertyId: "p1", activeOrganizationId: "orgOld" });
     await currentPropertyFor(session(), stale);
     expect(stale.writes).toEqual([["p1", "orgA", "s1", "u1"]]);
+  });
+
+  it("does not persist a demo hotel it only fell back to, so a real hotel wins once there is one", async () => {
+    // Testing mode, no hotel of their own yet: the demo hotel is the only pick.
+    const demoOnly = fake([hotel("d1", DEMO_ORG_ID)], { activePropertyId: null, activeOrganizationId: null });
+    expect((await currentPropertyFor(session(), demoOnly))?.propertyId).toBe("d1");
+    expect(demoOnly.writes).toEqual([]);
+
+    // Given a real hotel later: nothing stored, so the own hotel (listed first) wins and is persisted.
+    const later = fake([hotel("p1", "orgA"), hotel("d1", DEMO_ORG_ID)], { activePropertyId: null, activeOrganizationId: null });
+    expect((await currentPropertyFor(session(), later))?.propertyId).toBe("p1");
+    expect(later.writes).toEqual([["p1", "orgA", "s1", "u1"]]);
+  });
+
+  it("keeps a demo hotel picked on purpose", async () => {
+    const picked = fake([hotel("p1", "orgA"), hotel("d1", DEMO_ORG_ID)], {
+      activePropertyId: "d1",
+      activeOrganizationId: DEMO_ORG_ID,
+    });
+    expect((await currentPropertyFor(session(), picked))?.propertyId).toBe("d1");
+    expect(picked.writes).toEqual([]);
+  });
+
+  it("uses a list the request already has instead of listing again", async () => {
+    const stored = fake([], { activePropertyId: "p1", activeOrganizationId: "orgA" });
+    const noListing = async <T,>(): Promise<T[]> => {
+      throw new Error("listed again");
+    };
+    const p1 = {
+      propertyId: "p1",
+      propertyName: "Hotel p1",
+      logoUrl: null,
+      organizationId: "orgA",
+      organizationName: "Org orgA",
+      role: "owner",
+      hasPropertyAccess: false,
+    };
+    const current = await currentPropertyFor(session(), { query: noListing, queryOne: stored.queryOne }, { list: Promise.resolve([p1]) });
+    expect(current).toEqual(p1);
+    expect(stored.writes).toEqual([]);
   });
 
   it("returns null and writes nothing when no hotel is reachable", async () => {

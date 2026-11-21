@@ -1,6 +1,6 @@
 import { query } from "@openbookings/db";
 import { DEMO_ORG_ID, isTestingMode } from "@openbookings/demo";
-import { currentPropertyFor } from "@/lib/current-property";
+import { cachedCurrentPropertyFor, currentPropertyFor } from "@/lib/current-property";
 
 type Deps = {
   query?: <T>(text: string, values?: unknown[]) => Promise<T[]>;
@@ -26,7 +26,13 @@ export async function activeOrgId(session: {
   const testing = deps.testing ?? isTestingMode();
   // A caller that fakes only `query` gets a matching single-row reader.
   const queryOne = deps.queryOne ?? (deps.query ? async <T,>(text: string, values?: unknown[]) => (await deps.query!<T>(text, values))[0] ?? null : undefined);
-  const current = await currentPropertyFor(session as Parameters<typeof currentPropertyFor>[0], { query: deps.query, queryOne, testing: deps.testing });
+  const asSession = session as Parameters<typeof currentPropertyFor>[0];
+  // With the real database, the request's one resolve (shared with the layout
+  // and the page); a caller that passes its own database resolves on it.
+  const current =
+    deps.query || deps.queryOne || deps.testing !== undefined
+      ? await currentPropertyFor(asSession, { query: deps.query, queryOne, testing: deps.testing })
+      : await cachedCurrentPropertyFor(asSession);
   if (current) return current.organizationId;
   const active = session.session.activeOrganizationId;
   if (typeof active === "string" && active && (testing || active !== DEMO_ORG_ID)) return active;
