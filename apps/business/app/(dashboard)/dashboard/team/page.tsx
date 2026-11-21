@@ -5,6 +5,8 @@ import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { Card } from "@/components/ui/card";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { loadTeam, stepUpFactors, teamScope } from "@/lib/team/server";
 import { RoleGuide } from "./_components/role-guide";
 import { TeamManager } from "./_components/team-manager";
@@ -13,10 +15,26 @@ import { TeamManager } from "./_components/team-manager";
  * Who is on the team, and what each role means. Owners and general managers
  * get two tabs, People (add, change and remove people) and Roles; everyone
  * else sees their own role and the roles table, but not their colleagues.
+ * That split is the rule table's "edit" and "view" for the team page
+ * (@openbookings/authz/nav-access; page-access.test.ts keeps canManageTeam
+ * in step with it).
  */
 export default async function TeamPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
+  const access = await pageAccess("team");
+  if (access.level === "none") {
+    return (
+      <>
+        <SiteHeader title="Team" />
+        <div className="flex min-h-0 flex-1 flex-col py-4 md:py-6">
+          <PageHold id="team" fill>
+            <NoAccessPage navKey="team" current={access.current} />
+          </PageHold>
+        </div>
+      </>
+    );
+  }
   const scope = await teamScope(session);
 
   let body: React.ReactNode;

@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { EditFieldset } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -97,6 +98,8 @@ export function AriDetailPanel({
         className="w-full gap-0 sm:max-w-[380px]"
         onInteractOutside={(event) => event.preventDefault()}
       >
+        {/* View-only roles read the details; staging and edit buttons are disabled. */}
+        <EditFieldset>
         {selection?.kind === "availability" && (
           <AvailabilityDetail
             room={selection.room}
@@ -119,6 +122,7 @@ export function AriDetailPanel({
             onStage={onStage}
           />
         )}
+        </EditFieldset>
       </SheetContent>
     </Sheet>
   );

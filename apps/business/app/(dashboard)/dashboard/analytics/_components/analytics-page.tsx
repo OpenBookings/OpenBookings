@@ -13,6 +13,8 @@ import { getReadiness } from "@/lib/analytics/readiness-query";
 import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "@/lib/analytics/readiness";
 import type { AnyPageData, PageData } from "@/lib/analytics/types";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { AnalyticsBody } from "./analytics-body";
 import { DemoBanner } from "./demo-banner";
 import { EmptyProvider } from "./empty-context";
@@ -39,6 +41,8 @@ async function loadReadiness(userId: string, today: string): Promise<ReadinessIt
  * gets the real view at zero under a blurred cover with one message on it.
  * Demo data is internal: the `demo` flag works, and nothing on the page offers
  * it. The request never says which property: there is nothing here to tamper with.
+ * A role that can't open analytics at the current hotel gets the no-access
+ * state, and no figures are read.
  */
 export async function AnalyticsPage<P extends PageId>({
   page,
@@ -47,6 +51,15 @@ export async function AnalyticsPage<P extends PageId>({
 }: AnalyticsRouteProps & { page: P; View: ComponentType<{ data: PageData<P> }> }) {
   const session = await getServerSession();
   if (!session) redirect("/login");
+
+  const access = await pageAccess("analytics");
+  if (access.level === "none") {
+    return (
+      <AnalyticsBody page={page}>
+        <NoAccessPage navKey="analytics" current={access.current} />
+      </AnalyticsBody>
+    );
+  }
 
   const params = await searchParams;
   // Computed once and passed down, so every figure agrees on what day it is.

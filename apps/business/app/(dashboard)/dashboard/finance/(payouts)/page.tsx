@@ -1,7 +1,8 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { pageAccess } from "@/lib/page-access";
 import { loadPayoutStatus } from "@/lib/finance/payout-status";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
 import {
@@ -17,7 +18,15 @@ import { PageHold } from "@/components/dashboard/page-loaders";
 export default async function FinancePage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  const payouts = await loadPayoutStatus(await getCurrentProperty(), session.user.id);
+  const access = await pageAccess("payouts");
+  if (access.level === "none") {
+    return (
+      <PageHold id="payouts" fill>
+        <NoAccessPage navKey="payouts" current={access.current} />
+      </PageHold>
+    );
+  }
+  const payouts = await loadPayoutStatus(access.current, session.user.id);
 
   return (
     <PageHold id="payouts">

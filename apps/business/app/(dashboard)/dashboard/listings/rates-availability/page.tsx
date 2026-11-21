@@ -3,7 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import {
   propertyHasOrganisation,
   propertyRatesConfirmed,
@@ -71,6 +73,9 @@ async function AriContent({ searchParams }: PageProps) {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
+  const access = await pageAccess("rates");
+  if (access.level === "none") return <NoAccessPage navKey="rates" current={access.current} />;
+
   const params = await searchParams;
   const { start, windowDays, stayLength } = parseParams(params);
 
@@ -94,7 +99,7 @@ async function AriContent({ searchParams }: PageProps) {
   }
 
   // The current hotel, never one named in the URL.
-  const current = await getCurrentProperty();
+  const { current } = access;
   if (!current) return <EmptyState />;
   const propertyId = current.propertyId;
 
@@ -118,13 +123,15 @@ async function AriContent({ searchParams }: PageProps) {
   // thrown away on every chevron press. Switching property is a different
   // dataset, so there a fresh shell is right.
   return (
-    <AriView
-      key={propertyId}
-      data={data}
-      startDate={start}
-      windowDays={windowDays}
-      rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
-    />
+    <EditAccessProvider canEdit={access.level === "edit"} hotelName={current.propertyName}>
+      <AriView
+        key={propertyId}
+        data={data}
+        startDate={start}
+        windowDays={windowDays}
+        rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
+      />
+    </EditAccessProvider>
   );
 }
 

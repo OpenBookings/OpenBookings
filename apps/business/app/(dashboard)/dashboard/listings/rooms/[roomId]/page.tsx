@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { RoomEditor } from "../_components/room-editor";
@@ -28,7 +30,15 @@ async function EditorContent({ params }: PageProps) {
   const { roomId } = await params;
   // Scoped to the current hotel: another hotel's room, an archived one and a
   // made-up id are all the same 404.
-  const current = await getCurrentProperty();
+  const access = await pageAccess("rooms");
+  if (access.level === "none") {
+    return (
+      <PageHold id="room" fill>
+        <NoAccessPage navKey="rooms" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
   const data = await loadRoomEditor(session, current?.propertyId ?? null, roomId);
   if (!data) notFound();
 
@@ -36,7 +46,9 @@ async function EditorContent({ params }: PageProps) {
     <>
       <BreadcrumbLabel segment={roomId} label={data.room.name} />
       <PageHold id="room" fill>
-        <RoomEditor data={data} />
+        <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+          <RoomEditor data={data} />
+        </EditAccessProvider>
       </PageHold>
     </>
   );

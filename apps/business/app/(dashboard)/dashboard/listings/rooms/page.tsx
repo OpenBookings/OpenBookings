@@ -2,7 +2,9 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { BuildingIcon } from "lucide-react";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { RoomsIndex } from "./_components/rooms-index";
@@ -24,13 +26,23 @@ async function IndexContent() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const current = await getCurrentProperty();
+  const access = await pageAccess("rooms");
+  if (access.level === "none") {
+    return (
+      <PageHold id="rooms" fill>
+        <NoAccessPage navKey="rooms" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
   const data = await loadRoomsIndex(session, current?.propertyId ?? null);
   if (!data) return <NoProperty />;
 
   return (
     <PageHold id="rooms" fill>
-      <RoomsIndex data={data} />
+      <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+        <RoomsIndex data={data} />
+      </EditAccessProvider>
     </PageHold>
   );
 }

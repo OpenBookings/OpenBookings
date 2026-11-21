@@ -2,7 +2,8 @@ import { PageHold } from "@/components/dashboard/page-loaders";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { pageAccess } from "@/lib/page-access";
 import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { MessagesView } from "@/components/dashboard/messages/messages-view";
 import type { ThreadListItem } from "@openbookings/messaging";
@@ -55,8 +56,16 @@ export default async function MessagesPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
+  const access = await pageAccess("messages");
+  if (access.level === "none") {
+    return (
+      <PageHold id="messages" fill>
+        <NoAccessPage navKey="messages" current={access.current} />
+      </PageHold>
+    );
+  }
   // None without a current hotel.
-  const current = await getCurrentProperty();
+  const { current } = access;
   const threads = current ? await loadThreads(session, current.propertyId) : [];
 
   return (

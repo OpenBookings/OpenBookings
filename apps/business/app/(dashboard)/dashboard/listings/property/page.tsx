@@ -4,7 +4,9 @@ import { BuildingIcon } from "lucide-react";
 import { query } from "@openbookings/db";
 import { propertyReadiness, readinessCopy, readinessEnforced } from "@openbookings/billing/readiness";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { PropertyEditor } from "./_components/property-editor";
@@ -26,7 +28,15 @@ async function EditorContent() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const current = await getCurrentProperty();
+  const access = await pageAccess("property");
+  if (access.level === "none") {
+    return (
+      <PageHold id="property" fill>
+        <NoAccessPage navKey="property" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
   const [data, amenities] = await Promise.all([
     loadEditorData(session, current?.propertyId ?? null),
     loadAmenityCatalog(),
@@ -47,7 +57,9 @@ async function EditorContent() {
 
   return (
     <PageHold id="property" fill>
-      <PropertyEditor data={data} amenities={amenities} readiness={readiness} />
+      <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+        <PropertyEditor data={data} amenities={amenities} readiness={readiness} />
+      </EditAccessProvider>
     </PageHold>
   );
 }

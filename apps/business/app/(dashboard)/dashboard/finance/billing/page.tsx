@@ -4,6 +4,8 @@ import { getBillingProfile } from "@openbookings/billing/profiles";
 import { countryNameOf } from "@openbookings/billing/render/document";
 import { EU_COUNTRY_CODES, vatTreatmentFor } from "@openbookings/billing/vat";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { billingAccess } from "@/lib/billing/scope";
 import { listInvoices, organizationReadiness, upcomingInvoice } from "@/lib/billing/queries";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +35,15 @@ function checkedOn(d: Date): string {
 export default async function BillingPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
+
+  const access = await pageAccess("billing");
+  if (access.level === "none") {
+    return (
+      <PageHold id="billing" fill>
+        <NoAccessPage navKey="billing" current={access.current} />
+      </PageHold>
+    );
+  }
 
   // Access is decided here on every request, not by the layout.
   const scope = await billingAccess(session, { billing: ["read"] });

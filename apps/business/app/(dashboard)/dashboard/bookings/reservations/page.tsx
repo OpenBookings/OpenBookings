@@ -5,13 +5,22 @@ import { redirect } from "next/navigation";
 import { ReservationsView } from "@/components/dashboard/reservations-view";
 import { bucketReservations } from "@/components/dashboard/reservation-types";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { pageAccess } from "@/lib/page-access";
 import { loadHostReservations } from "@/lib/reservations/query";
 
 export default async function ReservationsPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  const current = await getCurrentProperty();
+  const access = await pageAccess("reservations");
+  if (access.level === "none") {
+    return (
+      <PageHold id="reservations" fill>
+        <NoAccessPage navKey="reservations" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
   const reservations = await loadHostReservations(session, current?.propertyId ?? null);
 
   return (

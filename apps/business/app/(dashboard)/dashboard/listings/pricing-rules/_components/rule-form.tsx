@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { discountLabel, type ModifierType } from "@openbookings/pricing";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { EditFieldset, useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -97,6 +98,7 @@ export function RuleForm({
   const router = useRouter();
   const [v, setV] = React.useState<Values>(() => initialValues(section, rule, planId));
   const [pending, setPending] = React.useState(false);
+  const { canEdit } = useEditAccess();
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<FieldErrors>({});
   const set = (patch: Partial<Values>) => setV((prev) => ({ ...prev, ...patch }));
@@ -128,6 +130,7 @@ export function RuleForm({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!canEdit) return;
     setPending(true);
     setError(null);
     setErrors({});
@@ -168,10 +171,12 @@ export function RuleForm({
             <Button variant="outline" asChild>
               <Link href={backHref}>Cancel</Link>
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Spinner />}
-              {`Save ${isDiscount ? "discount" : "adjustment"}`}
-            </Button>
+            <ViewOnlyHint>
+              <Button type="submit" disabled={pending || !canEdit}>
+                {pending && <Spinner />}
+                {`Save ${isDiscount ? "discount" : "adjustment"}`}
+              </Button>
+            </ViewOnlyHint>
           </>
         }
       />
@@ -183,6 +188,8 @@ export function RuleForm({
         </Alert>
       )}
 
+      {/* View-only roles see the rule, every field disabled. */}
+      <EditFieldset>
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
           <Card className="gap-3.5 p-5">
@@ -418,6 +425,7 @@ export function RuleForm({
           )}
         </aside>
       </div>
+      </EditFieldset>
     </form>
   );
 }
@@ -537,9 +545,11 @@ function DeleteRule({ groupId, noun, backHref }: { groupId: string; noun: string
           </Button>
         </div>
       ) : (
-        <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
-          Delete
-        </Button>
+        <ViewOnlyHint>
+          <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
+            Delete
+          </Button>
+        </ViewOnlyHint>
       )}
     </Card>
   );

@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { getCurrentProperty } from "@/lib/current-property";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { RuleForm } from "../_components/rule-form";
 import { PricingRulesLoading } from "../_components/states";
@@ -29,7 +31,9 @@ async function EditRuleContent({ params }: PageProps) {
   const { groupId } = await params;
   // Scoped to the current hotel: another hotel's rule and a made-up id are
   // the same 404.
-  const current = await getCurrentProperty();
+  const access = await pageAccess("pricingRules");
+  if (access.level === "none") return <NoAccessPage navKey="pricingRules" current={access.current} />;
+  const { current } = access;
   const loaded = await loadRuleGroup(session, current?.propertyId ?? null, groupId);
   if (!loaded) notFound();
   const section = sectionOf(loaded.rule);
@@ -38,14 +42,16 @@ async function EditRuleContent({ params }: PageProps) {
     <>
       <BreadcrumbLabel segment="pricing-rules" label="Pricing rules" />
       <BreadcrumbLabel segment={groupId} label={section === "discount" ? "Edit discount" : "Edit price adjustment"} />
-      <RuleForm
-        section={section}
-        propertyId={loaded.data.property.id}
-        plans={loaded.data.plans}
-        rules={loaded.data.rules}
-        rule={loaded.rule}
-        planId={null}
-      />
+      <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+        <RuleForm
+          section={section}
+          propertyId={loaded.data.property.id}
+          plans={loaded.data.plans}
+          rules={loaded.data.rules}
+          rule={loaded.rule}
+          planId={null}
+        />
+      </EditAccessProvider>
     </>
   );
 }
