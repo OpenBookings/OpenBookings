@@ -9,6 +9,7 @@ import { discountLabel, type ModifierType } from "@openbookings/pricing";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -184,7 +185,8 @@ export function RuleForm({
 
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
-          <Card title="Type">
+          <Card className="gap-3.5 p-5">
+            <SectionHeader title="Type" />
             <RadioGroup
               aria-label={`Kind of ${noun}`}
               value={v.kind}
@@ -207,7 +209,8 @@ export function RuleForm({
             )}
           </Card>
 
-          <Card title={isDiscount ? "Discount" : "Adjustment"}>
+          <Card className="gap-3.5 p-5">
+            <SectionHeader title={isDiscount ? "Discount" : "Adjustment"} />
             {v.kind === "weekend" && (
               <div className="flex flex-col gap-1.5">
                 <Label>On these nights</Label>
@@ -334,7 +337,8 @@ export function RuleForm({
             </p>
           </Card>
 
-          <Card title="Rate plans">
+          <Card className="gap-3.5 p-5">
+            <SectionHeader title="Rate plans" />
             <RadioGroup
               aria-label="Rate plans"
               value={v.scope}
@@ -377,7 +381,8 @@ export function RuleForm({
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
-          <Card title="Summary">
+          <Card className="gap-3.5 p-5">
+            <SectionHeader title="Summary" />
             {isDiscount ? (
               <div className="flex flex-col gap-1">
                 <span className="text-muted-foreground text-xs">At checkout guests see</span>
@@ -417,15 +422,6 @@ export function RuleForm({
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3.5 rounded-xl border bg-card p-5">
-      <SectionHeader title={title} />
-      {children}
-    </section>
-  );
-}
-
 function CompetesWith({
   rules,
   current,
@@ -440,7 +436,8 @@ function CompetesWith({
     planIds === null || other.appliesToAll || other.ratePlanIds.some((id) => planIds.includes(id));
   const others = rules.filter((r) => r.id !== current?.id && sectionOf(r) === "discount" && overlaps(r));
   return (
-    <Card title="Competes with">
+    <Card className="gap-3.5 p-5">
+      <SectionHeader title="Competes with" />
       {others.length === 0 ? (
         <p className="text-muted-foreground text-sm">No other discounts on these rate plans. This one always applies when a stay qualifies.</p>
       ) : (
@@ -474,7 +471,8 @@ function PriceExamples({
     preview.adjustmentType === "flat" ? bar + preview.adjustmentValue : Math.round(bar * (1 + preview.adjustmentValue / 100) * 100) / 100;
   const euro = (n: number) => `€${Number.isInteger(n) ? n : n.toFixed(2)}`;
   return (
-    <Card title="What it does to your prices">
+    <Card className="gap-3.5 p-5">
+      <SectionHeader title="What it does to your prices" />
       {preview.adjustmentValue === 0 || priced.length === 0 ? (
         <p className="text-muted-foreground text-sm">Enter an amount to see the new prices.</p>
       ) : (
@@ -521,7 +519,7 @@ function DeleteRule({ groupId, noun, backHref }: { groupId: string; noun: string
   };
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-5">
+    <Card className="flex-row flex-wrap items-center justify-between gap-3 p-5">
       <div>
         <h2 className="font-semibold">Delete this {noun}</h2>
         <p className="mt-1 text-muted-foreground text-sm">
@@ -543,7 +541,7 @@ function DeleteRule({ groupId, noun, backHref }: { groupId: string; noun: string
           Delete
         </Button>
       )}
-    </section>
+    </Card>
   );
 }
 

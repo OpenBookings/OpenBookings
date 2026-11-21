@@ -163,7 +163,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
       </div>
 
       <div className="flex min-h-0 flex-1 items-start px-4 lg:items-stretch lg:px-6">
-        <div className="max-h-full min-w-0 flex-1 overflow-y-auto rounded-lg border lg:max-w-sm lg:self-start">
+        <div className="max-h-full min-w-0 flex-1 overflow-y-auto rounded-xl border lg:max-w-sm lg:self-start">
           <ReviewsList
             reviews={list}
             selectedId={selected?.id ?? null}
@@ -176,7 +176,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
           {selected && isDesktop ? (
             <ReviewDetail key={selected.id} review={selected} />
           ) : (
-            <div className="flex flex-1 items-center justify-center rounded-lg border p-6 text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center rounded-xl border p-6 text-sm text-muted-foreground">
               Select a review to read it.
             </div>
           )}

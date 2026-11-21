@@ -76,7 +76,7 @@ export function TicketsView({
 
   if (!support) {
     return (
-      <p className="mx-4 rounded-lg border px-4 py-10 text-center text-sm text-muted-foreground lg:mx-6">
+      <p className="mx-4 rounded-xl border px-4 py-10 text-center text-sm text-muted-foreground lg:mx-6">
         Support is unavailable right now. Please try again in a moment.
       </p>
     );
@@ -120,7 +120,7 @@ export function TicketsView({
       </div>
 
       {tickets.length === 0 ? (
-        <div className="rounded-lg border px-4 py-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border px-4 py-10 text-center text-sm text-muted-foreground">
           {tab === "open" ? (
             <>
               No open tickets.{" "}
@@ -135,7 +135,7 @@ export function TicketsView({
           )}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-xl border">
           <Table>
             <TableHeader className="max-md:sr-only">
               <TableRow>

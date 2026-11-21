@@ -7,6 +7,7 @@ import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -164,7 +165,7 @@ function RulesSection({
           </EmptyDescription>
         </Empty>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-hidden rounded-xl border">
           <Table className={isDiscount ? "min-w-[760px]" : "min-w-[620px]"}>
             <TableHeader className="bg-muted">
               <TableRow>
@@ -256,7 +257,7 @@ function PriceBuildCard() {
     { title: "+ Extra guests", detail: "Never discounted" },
   ];
   return (
-    <section aria-label="How a guest's price is built" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <Card role="region" aria-label="How a guest's price is built" className="gap-3 p-5">
       <SectionHeader title="How a guest's price is built" />
       <ol className="flex flex-col gap-3">
         {steps.map((step, i) => (
@@ -275,6 +276,6 @@ function PriceBuildCard() {
         ))}
       </ol>
       <p className="border-t pt-3 text-sm">= What the guest pays, with tourist tax from your tourist tax rules on top.</p>
-    </section>
+    </Card>
   );
 }

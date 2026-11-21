@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { roleLabel } from "@openbookings/authz/role-guide";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { SiteHeader } from "@/components/dashboard/site-header";
+import { Card } from "@/components/ui/card";
 import { getServerSession } from "@/lib/auth";
 import { loadTeam, stepUpFactors, teamScope } from "@/lib/team/server";
 import { RoleGuide } from "./_components/role-guide";
@@ -38,12 +39,12 @@ export default async function TeamPage() {
     );
   } else {
     body = (
-      <section className="rounded-lg border p-4">
+      <Card className="gap-0 p-5">
         <SectionHeader
           title={`Your role at ${scope.orgName}: ${roleLabel(scope.role)}`}
           description="Owners and general managers add people and change roles. Ask one of them if you need more access."
         />
-      </section>
+      </Card>
     );
   }
 

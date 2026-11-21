@@ -136,7 +136,7 @@ function SpaceFields({
       <SectionLabel>Beds</SectionLabel>
 
       <Field data-invalid={bedsInvalid}>
-        <div className="divide-y rounded-lg border">
+        <div className="divide-y overflow-hidden rounded-xl border">
           {BED_TYPES.map(({ key, label: bed, plural }) => (
             <Field key={key} orientation="horizontal" className="px-4 py-2.5">
               <FieldLabel htmlFor={`bed-${key}`} className="font-normal">

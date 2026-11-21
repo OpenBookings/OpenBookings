@@ -3,6 +3,7 @@
 import * as React from "react";
 import { SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,7 +57,7 @@ export function TryAStay({ plans, defaultPlanId }: { plans: PlanOption[]; defaul
   };
 
   return (
-    <section aria-label="Try a stay" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <Card role="region" aria-label="Try a stay" className="gap-3 p-5">
       <SectionHeader title="Try a stay" description="See what a guest would pay, rule by rule." />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
@@ -129,7 +130,7 @@ export function TryAStay({ plans, defaultPlanId }: { plans: PlanOption[]; defaul
           <p className="text-muted-foreground text-xs">Plus tourist tax. Priced for the room&apos;s standard occupancy.</p>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 

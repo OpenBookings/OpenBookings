@@ -231,7 +231,7 @@ function PoliciesFields({
         {methods.map((m) => (
           <input key={m} type="hidden" name="paymentMethods" value={m} />
         ))}
-        <div className="divide-y rounded-lg border">
+        <div className="divide-y overflow-hidden rounded-xl border">
           {PAYMENT_METHODS.map((m) => (
             <Field key={m} orientation="horizontal" className="px-4 py-3">
               <FieldLabel htmlFor={`method-${m}`} className="font-normal">

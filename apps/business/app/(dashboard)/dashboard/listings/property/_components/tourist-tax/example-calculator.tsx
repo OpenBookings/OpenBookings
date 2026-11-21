@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { TouristTaxRule } from "@openbookings/pricing";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -74,7 +75,7 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
   );
 
   return (
-    <div className="flex flex-col gap-5 rounded-xl border p-5">
+    <Card className="gap-5 p-5">
       <div>
         <h3 className="font-medium">Example booking</h3>
         <p className="text-muted-foreground text-sm">
@@ -137,7 +138,7 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
         Before Stripe&apos;s payment fees. The {eur.format(result.touristTax.total)} tourist tax is
         yours to pay to your town; OpenBookings never takes commission on it.
       </p>
-    </div>
+    </Card>
   );
 }
 

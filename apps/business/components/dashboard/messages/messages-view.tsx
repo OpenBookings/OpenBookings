@@ -59,14 +59,14 @@ export function MessagesView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-stretch px-4 lg:px-6">
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border lg:max-w-sm">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border lg:max-w-sm">
           <MessagesList threads={threads} selectedId={selectedId} onSelect={handleSelect} />
         </div>
         <div className="hidden flex-1 lg:ml-4 lg:flex lg:min-h-0 lg:flex-col">
           {selected ? (
             <ThreadView key={selected.id} thread={selected} currentUserId={currentUserId} onClose={handleClose} />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border p-6 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border p-6 text-center">
               <MessageSquare className="size-8 text-muted-foreground/60" />
               <p className="text-sm text-muted-foreground">Select a conversation to view messages.</p>
             </div>

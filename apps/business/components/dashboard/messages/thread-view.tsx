@@ -57,7 +57,7 @@ export function ThreadView({
   let lastDay = "";
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border">
+    <div className="flex flex-1 flex-col overflow-hidden rounded-xl border">
       <div className="flex items-center justify-between gap-2 border-b bg-muted px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{thread.guest_name ?? "Guest"}</div>

@@ -73,63 +73,65 @@ function PropertiesLabel() {
 function RoleMatrix({ yours }: { yours: HostRole | null }) {
   const cell = (role: HostRole) => cn("px-3 py-2.5 text-center", role === yours && "bg-accent");
   return (
-    <div className="hidden overflow-x-auto rounded-lg border md:block">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
-        <caption className="sr-only">What each role can do</caption>
-        <thead>
-          <tr className="border-b align-bottom">
-            <th scope="col" className="w-[32%] px-4 py-3 text-left font-normal">
-              <span className="sr-only">Ability</span>
-            </th>
-            {ROLE_ORDER.map((role) => (
-              <th key={role} scope="col" className={cn(cell(role), "pt-3 font-medium")}>
-                {role === yours ? (
-                  <Badge variant="secondary" className="mb-1.5">
-                    Your role
-                  </Badge>
-                ) : null}
-                <span className="block">{ROLE_INFO[role].label}</span>
+    <div className="hidden overflow-hidden rounded-xl border md:block">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] border-collapse text-sm">
+          <caption className="sr-only">What each role can do</caption>
+          <thead>
+            <tr className="border-b align-bottom">
+              <th scope="col" className="w-[32%] px-4 py-3 text-left font-normal">
+                <span className="sr-only">Ability</span>
               </th>
-            ))}
-          </tr>
-          <tr className="border-b">
-            <th scope="row" className="px-4 py-2.5 text-left font-normal">
-              <PropertiesLabel />
-            </th>
-            {ROLE_ORDER.map((role) => (
-              <td key={role} className={cell(role)}>
-                <Coverage all={!isPropertyScoped(role)} />
-              </td>
-            ))}
-          </tr>
-        </thead>
-        {ABILITY_GROUPS.map((group) => (
-          <tbody key={group}>
-            <tr>
-              <th
-                scope="colgroup"
-                colSpan={ROLE_ORDER.length + 1}
-                className="border-b px-4 pt-5 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {group}
-              </th>
-            </tr>
-            {ABILITIES.filter((a) => a.group === group).map((ability) => (
-              <tr key={ability.label} className="border-b last:border-b-0">
-                <th scope="row" className="px-4 py-2.5 text-left font-normal">
-                  {ability.label}
-                  {ability.hint ? <span className="block text-xs text-muted-foreground">{ability.hint}</span> : null}
+              {ROLE_ORDER.map((role) => (
+                <th key={role} scope="col" className={cn(cell(role), "pt-3 font-medium")}>
+                  {role === yours ? (
+                    <Badge variant="secondary" className="mb-1.5">
+                      Your role
+                    </Badge>
+                  ) : null}
+                  <span className="block">{ROLE_INFO[role].label}</span>
                 </th>
-                {ROLE_ORDER.map((role) => (
-                  <td key={role} className={cell(role)}>
-                    <Allowed yes={roleHas(role, ability.permission)} />
-                  </td>
-                ))}
+              ))}
+            </tr>
+            <tr className="border-b">
+              <th scope="row" className="px-4 py-2.5 text-left font-normal">
+                <PropertiesLabel />
+              </th>
+              {ROLE_ORDER.map((role) => (
+                <td key={role} className={cell(role)}>
+                  <Coverage all={!isPropertyScoped(role)} />
+                </td>
+              ))}
+            </tr>
+          </thead>
+          {ABILITY_GROUPS.map((group) => (
+            <tbody key={group}>
+              <tr>
+                <th
+                  scope="colgroup"
+                  colSpan={ROLE_ORDER.length + 1}
+                  className="border-b px-4 pt-5 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {group}
+                </th>
               </tr>
-            ))}
-          </tbody>
-        ))}
-      </table>
+              {ABILITIES.filter((a) => a.group === group).map((ability) => (
+                <tr key={ability.label} className="border-b last:border-b-0">
+                  <th scope="row" className="px-4 py-2.5 text-left font-normal">
+                    {ability.label}
+                    {ability.hint ? <span className="block text-xs text-muted-foreground">{ability.hint}</span> : null}
+                  </th>
+                  {ROLE_ORDER.map((role) => (
+                    <td key={role} className={cell(role)}>
+                      <Allowed yes={roleHas(role, ability.permission)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
     </div>
   );
 }

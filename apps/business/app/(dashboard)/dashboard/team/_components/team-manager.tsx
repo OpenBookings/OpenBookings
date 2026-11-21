@@ -159,7 +159,7 @@ export function TeamManager({
         </Empty>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -213,7 +213,7 @@ export function TeamManager({
       {team.invitations.length > 0 ? (
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Waiting to accept</h3>
-          <ul className="flex flex-col divide-y rounded-lg border">
+          <ul className="flex flex-col divide-y overflow-hidden rounded-xl border">
             {team.invitations.map((invitation) => (
               <li key={invitation.invitationId} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-sm">
                 <span className="min-w-0 flex-1 truncate font-medium">{invitation.email}</span>

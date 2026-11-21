@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Empty,
@@ -186,7 +187,7 @@ function RuleCard({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border p-5">
+    <Card className="gap-3 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -249,6 +250,6 @@ function RuleCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Card>
   );
 }

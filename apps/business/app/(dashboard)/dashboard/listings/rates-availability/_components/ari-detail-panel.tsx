@@ -892,7 +892,7 @@ function StagePriceForm({
   const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2 rounded-lg border p-3">
       <Label htmlFor="ari-price" className="text-xs">
         Set price for {dateCount(dates)}
       </Label>

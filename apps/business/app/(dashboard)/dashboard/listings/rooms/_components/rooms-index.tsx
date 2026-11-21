@@ -138,7 +138,7 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
         }
       />
 
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>

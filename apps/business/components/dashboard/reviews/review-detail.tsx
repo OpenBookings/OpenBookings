@@ -29,7 +29,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
     });
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto rounded-lg border">
+    <div className="flex flex-1 flex-col overflow-y-auto rounded-xl border">
       <div className="flex flex-wrap items-start gap-x-3.5 gap-y-2.5 border-b px-4 py-4 sm:px-5">
         <span className={cn(SCORE_CHIP, "h-10 min-w-11 px-2 text-lg")}>{review.score}</span>
         <div className="min-w-0 flex-1 basis-44">
