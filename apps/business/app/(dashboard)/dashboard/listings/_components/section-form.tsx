@@ -47,6 +47,21 @@ interface SectionFormProps<T> {
  * components from drifting apart, which is the failure mode this wrapper exists
  * to prevent.
  */
+/**
+ * The element to focus for a field name. A RadioGroup submits through a
+ * hidden input, so focus its checked radio (or the first one) instead.
+ */
+function fieldElement(form: HTMLFormElement | null, name: string): HTMLElement | null {
+  const el = form?.querySelector<HTMLElement>(`[name="${name}"]`) ?? null;
+  const group = el?.getAttribute("aria-hidden") === "true" ? el.closest<HTMLElement>('[role="radiogroup"]') : null;
+  if (!group) return el;
+  return (
+    group.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ??
+    group.querySelector<HTMLElement>('[role="radio"]') ??
+    el
+  );
+}
+
 export function SectionForm<T>({
   sectionId,
   title,
@@ -89,13 +104,13 @@ export function SectionForm<T>({
   React.useEffect(() => {
     if (errorEntries.length === 0) return;
     const first = errorEntries[0][0];
-    const el = formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`);
+    const el = fieldElement(formRef.current, first);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [state.errors]);
 
   function focusField(name: string) {
-    const el = formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`);
+    const el = fieldElement(formRef.current, name);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
@@ -137,13 +152,14 @@ export function SectionForm<T>({
               <ul className="flex flex-col gap-1">
                 {errorEntries.map(([name, messages]) => (
                   <li key={name}>
-                    <button
+                    <Button
                       type="button"
+                      variant="link"
                       onClick={() => focusField(name)}
-                      className="text-left underline underline-offset-2 hover:no-underline"
+                      className="h-auto whitespace-normal p-0 text-left font-normal text-destructive underline underline-offset-2 hover:no-underline"
                     >
                       {messages![0]}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

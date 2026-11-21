@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -33,12 +34,14 @@ export function NotificationsDialog({
           </DialogDescription>
         </DialogHeader>
         {NOTIFICATIONS.length === 0 ? (
-          <div className="flex flex-col items-center gap-1 rounded-xl border border-dashed py-12 text-center">
-            <BellOff className="size-5 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              You&apos;re all caught up.
-            </p>
-          </div>
+          <Empty className="gap-2 border py-12 md:py-12">
+            <EmptyHeader className="gap-1">
+              <EmptyMedia className="mb-0 text-muted-foreground">
+                <BellOff className="size-5" />
+              </EmptyMedia>
+              <EmptyDescription>You&apos;re all caught up.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <ul className="-mx-2 max-h-96 divide-y overflow-y-auto">
             {NOTIFICATIONS.map((entry) => (

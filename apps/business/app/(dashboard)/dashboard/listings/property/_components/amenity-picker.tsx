@@ -5,6 +5,7 @@ import { CheckIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react";
 import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 import type { AmenityCatalogEntry } from "../_lib/query";
@@ -154,31 +155,26 @@ export function AmenityPicker({ amenities, selectedIds, disabled, onChange }: Am
         )}
       </div>
 
-      <div role="group" aria-label="Filter amenities" className="flex flex-wrap gap-1.5">
-        {chips.map((chip) => {
-          const active = !q && filter === chip.value;
-          return (
-            <button
-              key={chip.value}
-              type="button"
-              aria-pressed={active}
-              onClick={() => {
-                setFilter(chip.value);
-                setQueryText("");
-              }}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors",
-                active
-                  ? "border-foreground bg-foreground text-background"
-                  : "text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-              )}
-            >
-              {chip.label}
-              <span className={cn("tabular-nums", active ? "opacity-70" : "opacity-60")}>{chip.count}</span>
-            </button>
-          );
-        })}
-      </div>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        spacing={1.5}
+        value={q ? "" : filter}
+        onValueChange={(next) => {
+          if (next) setFilter(next);
+          setQueryText("");
+        }}
+        aria-label="Filter amenities"
+        className="w-auto flex-wrap"
+      >
+        {chips.map((chip) => (
+          <ToggleGroupItem key={chip.value} value={chip.value} className="gap-1.5 text-xs">
+            {chip.label}
+            <span className="text-muted-foreground tabular-nums">{chip.count}</span>
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
 
       <div className="flex max-h-[28rem] flex-col gap-4 overflow-y-auto rounded-lg border p-3">
         {visible.length === 0 && (

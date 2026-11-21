@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupText, InputGroupTextarea } from "@/components/ui/input-group";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -437,37 +438,33 @@ function RateForm({
         <Section title="Cancellation">
           <Field data-invalid={!!err("refundable")}>
             <FieldLabel>Cancellation</FieldLabel>
-            <div role="radiogroup" aria-label="Cancellation" className="grid gap-2">
+            <RadioGroup
+              name="refundable"
+              aria-label="Cancellation"
+              value={refundable}
+              disabled={pending}
+              onValueChange={(value) => {
+                setRefundable(value);
+                markDirty();
+              }}
+              className="gap-2"
+            >
               {(
                 [
                   ["true", `Refundable — follows your property's policy (${TIER_LABELS[propertyTier]})`, TIER_SUMMARIES[propertyTier]],
                   ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Must be at least 10% cheaper than a refundable rate on this room.`],
                 ] as const
               ).map(([value, label, summary]) => (
-                <label
+                <RadioGroupCard
                   key={value}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                >
-                  <input
-                    type="radio"
-                    name="refundable"
-                    value={value}
-                    data-field="refundable"
-                    checked={refundable === value}
-                    disabled={pending}
-                    onChange={() => {
-                      setRefundable(value);
-                      markDirty();
-                    }}
-                    className="mt-0.5 accent-primary"
-                  />
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">{label}</span>
-                    <span className="text-muted-foreground">{summary}</span>
-                  </span>
-                </label>
+                  value={value}
+                  data-field="refundable"
+                  aria-invalid={!!err("refundable")}
+                  title={label}
+                  description={summary}
+                />
               ))}
-            </div>
+            </RadioGroup>
             {err("refundable") && <FieldError>{err("refundable")}</FieldError>}
           </Field>
         </Section>

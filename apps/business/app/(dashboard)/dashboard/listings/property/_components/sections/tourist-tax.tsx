@@ -96,9 +96,11 @@ export function TouristTaxSection({ data }: SectionProps) {
               {groups.current ? (
                 <RuleCard propertyId={property.id} rule={groups.current} status="current" today={today} />
               ) : (
-                <p className="rounded-lg border border-dashed p-4 text-muted-foreground text-sm">
-                  No rule applies yet. Guests pay no tourist tax until your first rule starts.
-                </p>
+                <Empty className="gap-0 border p-4 md:p-6">
+                  <EmptyDescription>
+                    No rule applies yet. Guests pay no tourist tax until your first rule starts.
+                  </EmptyDescription>
+                </Empty>
               )}
 
               {groups.upcoming.map((rule) => (

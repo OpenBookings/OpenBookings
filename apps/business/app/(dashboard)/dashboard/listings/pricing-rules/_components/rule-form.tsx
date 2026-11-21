@@ -3,14 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { AlertCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 import { discountLabel, type ModifierType } from "@openbookings/pricing";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -174,39 +176,25 @@ export function RuleForm({
       />
 
       {error && (
-        <p role="alert" className="rounded-lg border border-(--red-7) bg-(--red-3) px-4 py-3 text-(--red-11) text-sm">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
           <Card title="Type">
-            <div
-              role="radiogroup"
+            <RadioGroup
               aria-label={`Kind of ${noun}`}
-              className={cn("grid gap-2.5", isDiscount ? "sm:grid-cols-3" : "sm:grid-cols-2")}
+              value={v.kind}
+              onValueChange={(kind) => set({ kind: kind as RuleKind })}
+              className={cn("gap-2.5", isDiscount ? "sm:grid-cols-3" : "sm:grid-cols-2")}
             >
-              {KIND_OPTIONS[section].map((option) => {
-                const selected = v.kind === option.kind;
-                return (
-                  <button
-                    key={option.kind}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => set({ kind: option.kind })}
-                    className={cn(
-                      "flex flex-col gap-1 rounded-lg border p-3.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
-                      selected ? "border-primary bg-primary/10" : "hover:bg-muted",
-                    )}
-                  >
-                    <span className="font-medium text-sm">{option.title}</span>
-                    <span className="text-muted-foreground text-xs">{option.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
+              {KIND_OPTIONS[section].map((option) => (
+                <RadioGroupCard key={option.kind} value={option.kind} title={option.title} description={option.hint} />
+              ))}
+            </RadioGroup>
             <FieldMessage message={fieldError("kind")} />
             {!isDiscount && (
               <p className="text-muted-foreground text-xs">
@@ -347,47 +335,41 @@ export function RuleForm({
           </Card>
 
           <Card title="Rate plans">
-            <div role="radiogroup" aria-label="Rate plans" className="flex flex-col gap-3">
-            <ScopeOption
-              selected={v.scope === "all"}
-              onSelect={() => set({ scope: "all" })}
-              title="All rate plans"
-              hint="Including rate plans you add later."
-            />
-            <ScopeOption
-              selected={v.scope === "some"}
-              onSelect={() => set({ scope: "some" })}
-              title="Choose rate plans"
+            <RadioGroup
+              aria-label="Rate plans"
+              value={v.scope}
+              onValueChange={(scope) => set({ scope: scope as "all" | "some" })}
             >
-              {v.scope === "some" && (
-                <div className="grid gap-x-6 gap-y-3 pl-7 sm:grid-cols-2">
-                  {plansByRoom(plans).map((room) => (
-                    <fieldset key={room.roomId} className="flex flex-col gap-2">
-                      <legend className="mb-1 font-medium text-muted-foreground text-xs">{room.roomName}</legend>
-                      {room.plans.map((plan) => {
-                        const checked = v.ratePlanIds.includes(plan.id);
-                        return (
-                          <Label key={plan.id} className="flex items-center gap-2.5 font-normal">
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(on) =>
-                                set({
-                                  ratePlanIds: on
-                                    ? [...v.ratePlanIds, plan.id]
-                                    : v.ratePlanIds.filter((id) => id !== plan.id),
-                                })
-                              }
-                            />
-                            {plan.name}
-                          </Label>
-                        );
-                      })}
-                    </fieldset>
-                  ))}
-                </div>
-              )}
-            </ScopeOption>
-            </div>
+              <RadioGroupCard value="all" title="All rate plans" description="Including rate plans you add later." />
+              <RadioGroupCard value="some" title="Choose rate plans" />
+            </RadioGroup>
+            {v.scope === "some" && (
+              <div className="grid gap-x-6 gap-y-3 pl-10 sm:grid-cols-2">
+                {plansByRoom(plans).map((room) => (
+                  <fieldset key={room.roomId} className="flex flex-col gap-2">
+                    <legend className="mb-1 font-medium text-muted-foreground text-xs">{room.roomName}</legend>
+                    {room.plans.map((plan) => {
+                      const checked = v.ratePlanIds.includes(plan.id);
+                      return (
+                        <Label key={plan.id} className="flex items-center gap-2.5 font-normal">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(on) =>
+                              set({
+                                ratePlanIds: on
+                                  ? [...v.ratePlanIds, plan.id]
+                                  : v.ratePlanIds.filter((id) => id !== plan.id),
+                              })
+                            }
+                          />
+                          {plan.name}
+                        </Label>
+                      );
+                    })}
+                  </fieldset>
+                ))}
+              </div>
+            )}
             <FieldMessage message={fieldError("ratePlanIds")} />
           </Card>
 
@@ -399,7 +381,7 @@ export function RuleForm({
             {isDiscount ? (
               <div className="flex flex-col gap-1">
                 <span className="text-muted-foreground text-xs">At checkout guests see</span>
-                <span className="font-semibold text-(--green-11) text-lg">
+                <span className="font-semibold text-state-positive text-lg">
                   {discountLabel({ type: preview.type, trigger_condition: preview.triggerCondition })}{" "}
                   {amount > 0 ? `−${amount}%` : ""}
                 </span>
@@ -441,47 +423,6 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <SectionHeader title={title} />
       {children}
     </section>
-  );
-}
-
-function ScopeOption({
-  selected,
-  onSelect,
-  title,
-  hint,
-  children,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  title: string;
-  hint?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-3 rounded-lg border p-3", selected && "border-primary")}>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selected}
-        onClick={onSelect}
-        className="flex items-start gap-2.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2",
-            selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50",
-          )}
-        >
-          {selected && <Check className="size-2.5" strokeWidth={4} />}
-        </span>
-        <span className="flex flex-col gap-0.5">
-          <span className="text-sm">{title}</span>
-          {hint && <span className="text-muted-foreground text-xs">{hint}</span>}
-        </span>
-      </button>
-      {children}
-    </div>
   );
 }
 

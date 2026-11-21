@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Monitor } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { Button } from "@/components/ui/button";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
 import { AriDetailPanel } from "./ari-detail-panel";
@@ -268,13 +269,14 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
               <>
                 Prices are locked until your organisation confirms that its
                 rates include VAT.{" "}
-                <button
+                <Button
                   type="button"
-                  className="underline underline-offset-2"
+                  variant="link"
+                  className="h-auto p-0 text-xs text-foreground underline underline-offset-2 hover:no-underline"
                   onClick={() => setConfirmOpen(true)}
                 >
                   Review
-                </button>
+                </Button>
               </>
             )}
           </p>

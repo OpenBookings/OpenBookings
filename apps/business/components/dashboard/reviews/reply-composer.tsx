@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { REPLY_BODY_MAX } from "@openbookings/pricing";
 import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { replyToReview, skipReviewReply, type ReplyActionResult } from "@/lib/reviews/actions";
 import { needsReply, type HostReview } from "@/lib/reviews/shape";
@@ -82,9 +83,15 @@ export function ReplyComposer({ review }: { review: HostReview }) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
         <span>You marked this review as needing no reply.</span>
-        <button type="button" disabled={pending} onClick={() => markSkipped(false)} className="underline underline-offset-2 hover:text-foreground">
+        <Button
+          type="button"
+          variant="link"
+          disabled={pending}
+          onClick={() => markSkipped(false)}
+          className="h-auto p-0 font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
           Undo
-        </button>
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setReplyAnyway(true)}>
           Reply anyway
         </Button>
@@ -104,24 +111,31 @@ export function ReplyComposer({ review }: { review: HostReview }) {
   if (mode === null) {
     return (
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
-        <p className="text-sm font-semibold">How do you want to reply to {review.authorName}?</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <ChoiceButton title="Publicly" detail="Shows under the review on your property page" onClick={() => setMode("public")} />
-          <ChoiceButton
+        <p id={`${fieldId}-how`} className="text-sm font-semibold">
+          How do you want to reply to {review.authorName}?
+        </p>
+        <RadioGroup
+          aria-labelledby={`${fieldId}-how`}
+          onValueChange={(next) => setMode(next as Mode)}
+          className="gap-2 sm:grid-cols-2"
+        >
+          <RadioGroupCard value="public" title="Publicly" description="Shows under the review on your property page" />
+          <RadioGroupCard
+            value="private"
             title="Privately"
-            detail={`Sends a message to ${review.authorName} in Messages`}
-            onClick={() => setMode("private")}
+            description={`Sends a message to ${review.authorName} in Messages`}
           />
-        </div>
+        </RadioGroup>
         {review.status === "published" && !skipped ? (
-          <button
+          <Button
             type="button"
+            variant="link"
             disabled={pending}
             onClick={() => markSkipped(true)}
-            className="self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            className="h-auto self-start p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
           >
             No reply needed
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -156,13 +170,14 @@ export function ReplyComposer({ review }: { review: HostReview }) {
             · {isPublic ? `signed ${review.propertyName}` : `to ${review.authorName} in Messages`}
           </span>
         </label>
-        <button
+        <Button
           type="button"
+          variant="link"
           onClick={() => setMode(null)}
-          className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          className="h-auto p-0 font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
         >
           {canPublic ? "Change" : "Cancel"}
-        </button>
+        </Button>
       </div>
       <ReplyField
         id={fieldId}
@@ -185,15 +200,3 @@ export function ReplyComposer({ review }: { review: HostReview }) {
   );
 }
 
-function ChoiceButton({ title, detail, onClick }: { title: string; detail: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-col gap-0.5 rounded-md border border-input bg-background px-3 py-2.5 text-left transition-colors hover:border-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    >
-      <span className="text-sm font-semibold">{title}</span>
-      <span className="text-xs text-muted-foreground">{detail}</span>
-    </button>
-  );
-}

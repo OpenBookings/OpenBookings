@@ -291,7 +291,7 @@ export function AriGrid({
             <div
               key={group.room.id}
               role="rowgroup"
-              className="rounded-[14px] bg-(--ari-group) p-1.5"
+              className="rounded-xl bg-(--ari-group) p-1.5"
             >
               {group.rows.map((row) => (
                 <React.Fragment key={row.key}>
@@ -597,8 +597,8 @@ function AvailabilityCellView({
       }`}
       className={cn(
         "flex h-[52px] flex-col justify-center gap-1.5 rounded-lg border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-        isToday && "border-(--accent-7) bg-(--accent-3)",
-        active && "ring-2 ring-(--accent-11)",
+        isToday && "border-foreground/25 bg-accent",
+        active && "ring-2 ring-foreground",
         staged && "border-dashed border-primary",
       )}
     >
@@ -913,9 +913,9 @@ function RunCell({
             }`}
             className={cn(
               "flex h-14 flex-col justify-center gap-1 rounded-lg border border-(--ari-border) bg-(--ari-cell) px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-              isToday && "border-(--accent-7)",
-              active && "ring-2 ring-(--accent-11)",
-              selected && "bg-primary/15 ring-2 ring-(--accent-11) ring-inset",
+              isToday && "border-foreground/25",
+              active && "ring-2 ring-foreground",
+              selected && "bg-primary/15 ring-2 ring-foreground ring-inset",
               staged && "border-dashed border-primary",
             )}
           >
@@ -984,7 +984,7 @@ function RunCell({
         className={cn(
           "flex h-14 flex-col justify-center gap-1 rounded-lg border px-2.5 text-left transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
           style.className,
-          active && "ring-2 ring-(--accent-11)",
+          active && "ring-2 ring-foreground",
           staged && "border-dashed border-primary",
         )}
       >
@@ -1012,7 +1012,7 @@ function RunCell({
       className={cn(
         "flex h-14 items-center gap-2 overflow-hidden rounded-lg border px-3 text-left text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
         style.className,
-        active && "ring-2 ring-(--accent-11)",
+        active && "ring-2 ring-foreground",
         staged && "border-dashed border-primary",
       )}
     >

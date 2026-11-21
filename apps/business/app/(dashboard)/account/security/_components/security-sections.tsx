@@ -79,7 +79,7 @@ function Row({
 }) {
   return (
     <li className="flex flex-wrap items-center gap-4 px-5 py-4">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-muted-foreground">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
         {icon}
       </span>
       <div className="min-w-0 flex-1 basis-40">

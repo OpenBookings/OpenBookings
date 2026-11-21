@@ -7,6 +7,7 @@ import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -155,11 +156,13 @@ function RulesSection({
       />
 
       {rules.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
-          {isDiscount
-            ? "No discounts yet. Guests pay the full price for every stay."
-            : "No price adjustments yet. Every night sells at its own price."}
-        </p>
+        <Empty className="gap-0 border p-6 md:p-6">
+          <EmptyDescription>
+            {isDiscount
+              ? "No discounts yet. Guests pay the full price for every stay."
+              : "No price adjustments yet. Every night sells at its own price."}
+          </EmptyDescription>
+        </Empty>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table className={isDiscount ? "min-w-[760px]" : "min-w-[620px]"}>

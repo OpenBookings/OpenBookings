@@ -3,10 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { TriangleAlertIcon, X } from "lucide-react";
 import { reviewBand } from "@openbookings/pricing";
 import type { ReviewReply } from "@openbookings/db/reviews";
+import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
 import { useOptionalSupport } from "@/components/support/support-provider";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -60,18 +62,26 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
           <span>Posted {formatRelativeTime(review.postedAt)}</span>
           <span>Verified stay</span>
           {support ? (
-            <button type="button" onClick={report} className="underline underline-offset-2 hover:text-foreground">
+            <Button
+              type="button"
+              variant="link"
+              onClick={report}
+              className="h-auto p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
               Report
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
 
       <div className="flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5">
         {review.status === "pending" ? (
-          <p className="rounded-md bg-(--amber-3) px-3 py-2.5 text-sm text-(--amber-11)">
-            Our automated check held this review for a person. It isn&apos;t public yet.
-          </p>
+          <AttentionAlert role="status">
+            <TriangleAlertIcon />
+            <AlertDescription className="text-foreground">
+              Our automated check held this review for a person. It isn&apos;t public yet.
+            </AlertDescription>
+          </AttentionAlert>
         ) : null}
 
         {review.replies.map((reply) => (

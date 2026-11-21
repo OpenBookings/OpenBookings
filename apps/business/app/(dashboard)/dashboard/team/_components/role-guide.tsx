@@ -6,6 +6,7 @@ import { isPropertyScoped, type HostRole } from "@openbookings/authz/permissions
 import { ABILITIES, ABILITY_GROUPS, ROLE_INFO, ROLE_ORDER, roleHas } from "@openbookings/authz/role-guide";
 import { SectionHeader, SectionLabel } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,7 @@ function PropertiesLabel() {
 }
 
 function RoleMatrix({ yours }: { yours: HostRole | null }) {
-  const cell = (role: HostRole) => cn("px-3 py-2.5 text-center", role === yours && "bg-(--accent-3)/50");
+  const cell = (role: HostRole) => cn("px-3 py-2.5 text-center", role === yours && "bg-accent");
   return (
     <div className="hidden overflow-x-auto rounded-lg border md:block">
       <table className="w-full min-w-[760px] border-collapse text-sm">
@@ -136,7 +137,7 @@ function RoleMatrix({ yours }: { yours: HostRole | null }) {
 function Allowed({ yes }: { yes: boolean }) {
   return yes ? (
     <>
-      <Check className="mx-auto size-4 text-(--green-11)" aria-hidden />
+      <Check className="mx-auto size-4 text-state-positive" aria-hidden />
       <span className="sr-only">Yes</span>
     </>
   ) : (
@@ -151,12 +152,12 @@ function Allowed({ yes }: { yes: boolean }) {
 function Coverage({ all, className }: { all: boolean; className?: string }) {
   return all ? (
     <>
-      <Check className={cn("mx-auto size-4 text-(--green-11)", className)} aria-hidden />
+      <Check className={cn("mx-auto size-4 text-state-positive", className)} aria-hidden />
       <span className="sr-only">All properties</span>
     </>
   ) : (
     <>
-      <Slash className={cn("mx-auto size-4 text-(--amber-11)", className)} aria-hidden />
+      <Slash className={cn("mx-auto size-4 text-state-attention", className)} aria-hidden />
       <span className="sr-only">Only chosen properties</span>
     </>
   );
@@ -168,24 +169,21 @@ function RolePicker({ yours }: { yours: HostRole | null }) {
   const all = !isPropertyScoped(role);
   return (
     <div className="flex flex-col gap-4 md:hidden">
-      <div role="group" aria-label="Pick a role to see what it can do" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        spacing={2}
+        value={role}
+        onValueChange={(next) => isRole(next) && setRole(next)}
+        aria-label="Pick a role to see what it can do"
+        className="-mx-4 w-auto justify-start overflow-x-auto px-4 pb-1"
+      >
         {ROLE_ORDER.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            aria-pressed={choice === role}
-            onClick={() => setRole(choice)}
-            className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
-              choice === role
-                ? "border-foreground bg-foreground text-background"
-                : "border-input text-muted-foreground hover:text-foreground",
-            )}
-          >
+          <ToggleGroupItem key={choice} value={choice} className="whitespace-nowrap">
             {ROLE_INFO[choice].label}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-medium">{info.label}</h3>
@@ -206,7 +204,7 @@ function RolePicker({ yours }: { yours: HostRole | null }) {
               return (
                 <li key={ability.label} className={cn("flex gap-2", !yes && "text-muted-foreground")}>
                   {yes ? (
-                    <Check className="mt-0.5 size-4 shrink-0 text-(--green-11)" aria-hidden />
+                    <Check className="mt-0.5 size-4 shrink-0 text-state-positive" aria-hidden />
                   ) : (
                     <Minus className="mt-0.5 size-4 shrink-0" aria-hidden />
                   )}

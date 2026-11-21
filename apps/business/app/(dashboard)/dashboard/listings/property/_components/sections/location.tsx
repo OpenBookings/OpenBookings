@@ -22,7 +22,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Map, MapMarker, MarkerContent, useMap, type MapRef } from "@/components/ui/map";
@@ -438,23 +440,25 @@ function LocationFields({
         {pinManual && <input type="hidden" name="pinSetManually" value="on" />}
 
         {editingPin && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <p className="flex-1">
-              Drag the pin, or click the map, to where guests should arrive. You are overriding
-              your address — guests navigate to this exact spot.
-            </p>
-            <Button type="button" size="sm" onClick={() => setEditingPin(false)}>
-              <CheckIcon />
-              Done
-            </Button>
-          </div>
+          <AttentionAlert role="status">
+            <TriangleAlertIcon />
+            <AlertDescription className="flex flex-wrap items-start justify-between gap-3 text-foreground">
+              <p className="min-w-0 flex-1">
+                Drag the pin, or click the map, to where guests should arrive. You are overriding
+                your address — guests navigate to this exact spot.
+              </p>
+              <Button type="button" size="sm" onClick={() => setEditingPin(false)}>
+                <CheckIcon />
+                Done
+              </Button>
+            </AlertDescription>
+          </AttentionAlert>
         )}
 
         <div
           className={cn(
             "relative h-80 overflow-hidden rounded-lg border",
-            editingPin && "ring-2 ring-amber-500/50",
+            editingPin && "ring-[3px] ring-state-attention/50",
           )}
         >
           <Map
@@ -502,7 +506,7 @@ function LocationFields({
                 </>
               ) : locate === "approximate" ? (
                 <>
-                  <TriangleAlertIcon className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <TriangleAlertIcon className="size-3.5 shrink-0 text-state-attention" />
                   Approximate location. Check the pin, or use Edit pinpoint.
                 </>
               ) : (

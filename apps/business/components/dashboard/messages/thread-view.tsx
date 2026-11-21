@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { SendHorizonal, X } from "lucide-react";
+import { SendHorizonal, TriangleAlertIcon, X } from "lucide-react";
+import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { InlineLoader } from "@/components/dashboard/inline-loader";
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
 import {
   MessageScrollerProvider,
   MessageScroller,
@@ -135,7 +137,12 @@ export function ThreadView({
         </MessageScroller>
       </MessageScrollerProvider>
 
-      {warning && <div className="border-t bg-amber-50 px-4 py-2 text-xs text-amber-800">{warning}</div>}
+      {warning && (
+        <AttentionAlert className="rounded-none border-x-0 border-b-0 px-4 py-2 text-xs">
+          <TriangleAlertIcon />
+          <AlertDescription className="text-foreground text-xs">{warning}</AlertDescription>
+        </AttentionAlert>
+      )}
 
       <div className="flex items-end gap-2 border-t p-3">
         <Textarea

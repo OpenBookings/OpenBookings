@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Dialog,
   DialogContent,
@@ -30,9 +31,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import type { Team, TeamMember } from "@/lib/team/server";
 import { cancelInvitation, inviteMember, removeMember, updateMember, type TeamResult } from "../_lib/actions";
 
@@ -146,11 +147,16 @@ export function TeamManager({
       </div>
 
       {justYou ? (
-        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          It&apos;s just you for now. As {roleLabel(actorRole).toLowerCase()} you already have everything a
-          general manager can do, so there&apos;s nobody else you need to add. Invite people when you want help
-          at the desk, with reservations or with the books.
-        </p>
+        <Empty className="border p-6 md:p-8">
+          <EmptyHeader className="max-w-lg">
+            <EmptyTitle className="text-base">It&apos;s just you for now</EmptyTitle>
+            <EmptyDescription>
+              As {roleLabel(actorRole).toLowerCase()} you already have everything a general manager can do, so
+              there&apos;s nobody else you need to add. Invite people when you want help at the desk, with
+              reservations or with the books.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border">
@@ -365,14 +371,16 @@ function AccessDialog(props: {
           <fieldset className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-3">
               <legend className="text-sm font-medium">Role</legend>
-              <button
+              <Button
                 type="button"
+                variant="link"
                 onClick={props.onCompareRoles}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                className="h-auto p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 Compare roles
-              </button>
+              </Button>
             </div>
+            <RadioGroup value={role} onValueChange={setRole} name="role" aria-label="Role" className="gap-2">
             {roleChoices.map((choice) => {
               const info = ROLE_INFO[choice];
               const id = `role-${choice}`;
@@ -380,31 +388,23 @@ function AccessDialog(props: {
               const disabled = !props.roles.includes(choice);
               const choiceScoped = isPropertyScoped(choice);
               return (
-                <div
-                  key={choice}
-                  className={cn(
-                    "rounded-md border px-3 py-2.5 transition-colors",
-                    checked ? "border-(--accent-7) bg-(--accent-3)/40" : "hover:bg-accent",
-                    disabled && "opacity-60",
-                  )}
-                >
-                  <label htmlFor={id} className="grid cursor-pointer grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-0.5">
-                    <input
-                      id={id}
-                      type="radio"
-                      name="role"
-                      value={choice}
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={() => setRole(choice)}
-                      className="mt-1 size-3.5 accent-(--accent-9)"
-                    />
-                    <span className="text-sm font-medium">{info.label}</span>
-                    <span className="text-xs text-muted-foreground">{choiceScoped ? "Chosen properties" : "All properties"}</span>
-                    <span className="col-start-2 col-end-4 text-xs text-muted-foreground">{info.summary}</span>
-                  </label>
+                <div key={choice} className="flex flex-col gap-2">
+                  <RadioGroupCard
+                    id={id}
+                    value={choice}
+                    disabled={disabled}
+                    title={
+                      <>
+                        {info.label}
+                        <span className="font-normal text-muted-foreground text-xs">
+                          {" "}· {choiceScoped ? "Chosen properties" : "All properties"}
+                        </span>
+                      </>
+                    }
+                    description={info.summary}
+                  />
                   {checked && choiceScoped ? (
-                    <div role="group" aria-label="Properties" className="mt-3 ml-6.5 flex flex-col gap-2">
+                    <div role="group" aria-label="Properties" className="mb-1 ml-10 flex flex-col gap-2">
                       {properties.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Your organisation has no properties yet.</p>
                       ) : (
@@ -438,6 +438,7 @@ function AccessDialog(props: {
                 </div>
               );
             })}
+            </RadioGroup>
           </fieldset>
 
           <DialogFooter className="sm:justify-between">

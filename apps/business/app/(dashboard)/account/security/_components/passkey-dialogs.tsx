@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DANGER_OUTLINE, PendingButton } from "./pending-button";
 
 /** Longest label a passkey can be given on this page. */
@@ -129,21 +130,25 @@ function NameForm({
           aria-describedby="passkey-name-help"
           aria-invalid={error ? true : undefined}
         />
-        <div className="flex flex-wrap gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={2}
+          value={SUGGESTIONS.includes(name) ? name : ""}
+          onValueChange={(suggestion) => {
+            if (suggestion) setName(suggestion);
+            inputRef.current?.focus();
+          }}
+          aria-label="Suggested names"
+          className="flex-wrap"
+        >
           {SUGGESTIONS.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              className="h-8 rounded-full border border-input px-3 text-xs font-medium text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              onClick={() => {
-                setName(suggestion);
-                inputRef.current?.focus();
-              }}
-            >
+            <ToggleGroupItem key={suggestion} value={suggestion} className="text-xs">
               {suggestion}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
         <p id="passkey-name-help" className="text-[13px] text-muted-foreground">
           Only shown here. On your device the passkey is saved under {email || "your email address"}.
         </p>
@@ -153,7 +158,7 @@ function NameForm({
       </div>
 
       {adding ? (
-        <p className="rounded-[10px] border bg-background px-3.5 py-3 text-[13px] text-muted-foreground">
+        <p className="rounded-lg border bg-background px-3.5 py-3 text-[13px] text-muted-foreground">
           Next, your browser will ask you to confirm with Touch ID, your phone, or a security key.
         </p>
       ) : null}
@@ -233,7 +238,7 @@ export function LastPasskeyDialog({
   return (
     <Shell open={open} onClose={onClose}>
       <DialogHeader>
-        <span className="mb-2 flex size-10 items-center justify-center rounded-[10px] bg-(--amber-3) text-(--amber-11) max-sm:mx-auto">
+        <span className="mb-2 flex size-10 items-center justify-center rounded-lg bg-state-attention/15 text-state-attention max-sm:mx-auto">
           <TriangleAlert aria-hidden className="size-5" />
         </span>
         <DialogTitle>Add another passkey first</DialogTitle>

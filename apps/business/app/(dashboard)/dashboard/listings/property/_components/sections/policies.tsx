@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/field";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { savePolicies } from "../../_lib/actions";
@@ -173,28 +174,24 @@ function PoliciesFields({
         rate to a room.
       </p>
       <Field data-invalid={!!state.errors?.cancellationTier}>
-        <div role="radiogroup" aria-label="Cancellation policy" className="grid gap-3 sm:grid-cols-2">
+        <RadioGroup
+          name="cancellationTier"
+          aria-label="Cancellation policy"
+          defaultValue={property.cancellationTier}
+          disabled={pending}
+          onValueChange={markDirty}
+          className="sm:grid-cols-2"
+        >
           {BASE_TIERS.map((tier) => (
-            <label
+            <RadioGroupCard
               key={tier}
-              className="flex cursor-pointer flex-col gap-1.5 rounded-lg border p-4 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <input
-                  type="radio"
-                  name="cancellationTier"
-                  value={tier}
-                  defaultChecked={property.cancellationTier === tier}
-                  disabled={pending}
-                  onChange={markDirty}
-                  className="accent-primary"
-                />
-                {TIER_LABELS[tier]}
-              </span>
-              <span className="text-muted-foreground">{TIER_SUMMARIES[tier]}</span>
-            </label>
+              value={tier}
+              aria-invalid={!!state.errors?.cancellationTier}
+              title={TIER_LABELS[tier]}
+              description={TIER_SUMMARIES[tier]}
+            />
           ))}
-        </div>
+        </RadioGroup>
         <FieldDescription>
           Changes apply to new bookings only. Existing bookings keep the policy they were booked
           with.
