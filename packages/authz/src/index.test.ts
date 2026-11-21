@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import {
   CURRENT_PROPERTY_SQL,
   currentPropertySql,
@@ -14,6 +14,11 @@ import {
   userOwnsRoom,
 } from "./index";
 import type { SessionLike, ThreadRow } from "./index";
+
+const realDb = { ...(await import("@openbookings/db")) };
+afterAll(() => {
+  mock.module("@openbookings/db", () => realDb);
+});
 
 const sessionFor = (id: string, accountType = "business"): SessionLike => ({
   user: { id, account_type: accountType },
@@ -301,8 +306,7 @@ describe("getPropertyScopedDb", () => {
       query: async (_t: string, v: unknown[]) => (calls.push(v), []),
       queryOne: async (_t: string, v: unknown[]) => (calls.push(v), null),
     }));
-    const fresh = getPropertyScopedDb;
-    const db = fresh(sessionFor("host-a"), "prop-1");
+    const db = getPropertyScopedDb(sessionFor("host-a"), "prop-1");
     expect(db.ownerUserId).toBe("host-a");
     expect(db.propertyId).toBe("prop-1");
     await db.query("SELECT 1", ["x"]);
@@ -331,8 +335,7 @@ describe("currentPropertyId guard", () => {
     const queryOne = async (sql: string, values: unknown[] = []) => {
       seen.push({ sql, values });
       // The fake DB resolves to CURRENT only; a guard on another id matches nothing.
-      const guarded = values.find((v, i) => i >= 2 && typeof v === "string" && v.includes("-"));
-      return (guarded && guarded !== CURRENT ? null : { ok: true, legacy_owner: true, role: null, has_access: false }) as never;
+      return (values.includes(OTHER) ? null : { ok: true, legacy_owner: true, role: null, has_access: false }) as never;
     };
     return { seen, queryOne };
   };
