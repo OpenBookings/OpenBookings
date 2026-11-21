@@ -1,7 +1,7 @@
 "use client";
 
 import { usePostHog } from "@openbookings/analytics/client";
-import { BadgeCheck, ChevronsUpDown, LogOut, ShieldCheck } from "lucide-react";
+import { BadgeCheck, EllipsisVertical, LogOut, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -70,7 +70,7 @@ export function NavUser() {
                 <span className="truncate font-medium">{name || "—"}</span>
                 <span className="truncate text-xs">{email}</span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <EllipsisVertical className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
