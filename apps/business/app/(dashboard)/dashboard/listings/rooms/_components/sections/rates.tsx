@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,12 +105,11 @@ export function RatesSection({ data }: RoomSectionProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b px-6 py-5">
-        <h2 className="font-medium text-lg">Rates</h2>
-        <p className="text-muted-foreground text-sm">
-          What guests can book on this room, and on what terms. Each rate saves on its own.
-        </p>
-      </div>
+      <PageHeader
+        title="Rates"
+        description="What guests can book on this room, and on what terms. Each rate saves on its own."
+        className="border-b px-6 py-5"
+      />
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
         {activeCount === 0 && (

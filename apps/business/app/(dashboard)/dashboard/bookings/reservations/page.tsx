@@ -1,4 +1,5 @@
 import { PageHold } from "@/components/dashboard/page-loaders";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ReservationsView } from "@/components/dashboard/reservations-view";
@@ -13,6 +14,11 @@ export default async function ReservationsPage() {
 
   return (
     <PageHold id="reservations" fill>
+      <PageHeader
+        title="Reservations"
+        description="See who arrives, who leaves and who is staying with you."
+        className="shrink-0 px-4 pb-4 md:pb-6 lg:px-6"
+      />
       <Suspense>
         <ReservationsView reservations={reservations} buckets={bucketReservations(reservations)} />
       </Suspense>

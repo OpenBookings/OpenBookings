@@ -11,6 +11,7 @@ import {
   FieldSeparator,
 } from "@/components/ui/field";
 import { AGE_BANDS, AGE_RANGES } from "@openbookings/pricing";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
@@ -23,10 +24,6 @@ import type { SpaceValues } from "../../_lib/mutations";
 import type { RoomEditorData } from "../../_lib/types";
 import { Stepper } from "../stepper";
 import type { RoomSectionProps } from "./props";
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted-foreground text-xs uppercase tracking-wide">{children}</p>;
-}
 
 export function SpaceSection({ data, onDirtyChange }: RoomSectionProps) {
   const { room } = data;
@@ -136,7 +133,7 @@ function SpaceFields({
       </Field>
 
       <FieldSeparator />
-      <SectionHeading>Beds</SectionHeading>
+      <SectionLabel>Beds</SectionLabel>
 
       <Field data-invalid={bedsInvalid}>
         <div className="divide-y rounded-lg border">
@@ -172,7 +169,7 @@ function SpaceFields({
       </Field>
 
       <FieldSeparator />
-      <SectionHeading>Occupancy</SectionHeading>
+      <SectionLabel>Occupancy</SectionLabel>
 
       <Field orientation="horizontal" data-invalid={!!state.errors?.maxAdults}>
         <FieldContent>
@@ -282,7 +279,7 @@ function SpaceFields({
       )}
 
       <FieldSeparator />
-      <SectionHeading>Cots &amp; extra beds</SectionHeading>
+      <SectionLabel>Cots &amp; extra beds</SectionLabel>
       <p className="text-muted-foreground text-sm">
         Guests add these when they book and pay you for them at check-in. They aren&apos;t part of the
         online payment.
@@ -388,7 +385,7 @@ function SpaceFields({
       )}
 
       <FieldSeparator />
-      <SectionHeading>Inventory</SectionHeading>
+      <SectionLabel>Inventory</SectionLabel>
 
       <Field data-invalid={!!state.errors?.units}>
         <FieldLabel htmlFor="units">Number of units</FieldLabel>

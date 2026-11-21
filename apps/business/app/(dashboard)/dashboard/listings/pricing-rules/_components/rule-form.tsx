@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { discountLabel, type ModifierType } from "@openbookings/pricing";
+import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -152,18 +153,25 @@ export function RuleForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6 px-4 lg:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-semibold text-2xl tracking-tight">{rule ? `Edit ${noun}` : `Add ${noun}`}</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href={backHref}>Cancel</Link>
-          </Button>
-          <Button type="submit" disabled={pending}>
-            {pending && <Spinner />}
-            {`Save ${isDiscount ? "discount" : "adjustment"}`}
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title={rule ? `Edit ${noun}` : `Add ${noun}`}
+        description={
+          isDiscount
+            ? "A stay gets one discount, the biggest it qualifies for."
+            : "It changes the price of every night it matches, on the rate plans you pick."
+        }
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href={backHref}>Cancel</Link>
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending && <Spinner />}
+              {`Save ${isDiscount ? "discount" : "adjustment"}`}
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <p role="alert" className="rounded-lg border border-(--red-7) bg-(--red-3) px-4 py-3 text-(--red-11) text-sm">
@@ -430,7 +438,7 @@ export function RuleForm({
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3.5 rounded-xl border bg-card p-5">
-      <h2 className="font-semibold">{title}</h2>
+      <SectionHeader title={title} />
       {children}
     </section>
   );

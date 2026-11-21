@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/dashboard/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import Image from "next/image";
 import * as React from "react";
@@ -103,35 +104,39 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
 
   if (rooms.length === 0) {
     return (
-      <Empty className="flex-1">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <BedDoubleIcon />
-          </EmptyMedia>
-          <EmptyTitle>No room types yet</EmptyTitle>
-          <EmptyDescription>Add the rooms you sell, with their photos and rates.</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button size="sm" onClick={addRoom} disabled={creating}>
-            {creating ? <Spinner /> : <PlusIcon />}
-            Add room type
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <div className="flex flex-1 flex-col gap-4 px-4 lg:px-6">
+        <PageHeader title="Rooms" />
+        <Empty className="flex-1">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BedDoubleIcon />
+            </EmptyMedia>
+            <EmptyTitle>No room types yet</EmptyTitle>
+            <EmptyDescription>Add the rooms you sell, with their photos and rates.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" onClick={addRoom} disabled={creating}>
+              {creating ? <Spinner /> : <PlusIcon />}
+              Add room type
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4 px-4 lg:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-muted-foreground text-sm">
-          Guests see your rooms in this order. Drag a row to move it.
-        </p>
-        <Button size="sm" onClick={addRoom} disabled={creating}>
-          {creating ? <Spinner /> : <PlusIcon />}
-          Add room type
-        </Button>
-      </div>
+      <PageHeader
+        title="Rooms"
+        description="Guests see your rooms in this order. Drag a row to move it."
+        actions={
+          <Button size="sm" onClick={addRoom} disabled={creating}>
+            {creating ? <Spinner /> : <PlusIcon />}
+            Add room type
+          </Button>
+        }
+      />
 
       <div className="overflow-hidden rounded-lg border">
         <Table>

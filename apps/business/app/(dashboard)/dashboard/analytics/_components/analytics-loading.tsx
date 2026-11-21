@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { CalendarIcon, Download } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { PAGES, type PageId } from "@/lib/analytics/pages";
 import { amsterdamToday, parseCompareParam, parsePeriodParams } from "@/lib/analytics/period";
@@ -22,22 +23,23 @@ export function AnalyticsLoading({ page }: { page: PageId }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 lg:px-6">
-        <div className="min-w-0">
-          <h1 className="font-semibold text-lg">{meta.title}</h1>
-          <p className="text-muted-foreground text-sm">{meta.description}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" disabled tabIndex={-1}>
-            <CalendarIcon aria-hidden />
-            {summary}
-          </Button>
-          <Button variant="outline" size="sm" disabled tabIndex={-1}>
-            <Download aria-hidden />
-            Export CSV
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={meta.title}
+        description={meta.description}
+        className="px-4 lg:px-6"
+        actions={
+          <>
+            <Button variant="outline" size="sm" disabled tabIndex={-1}>
+              <CalendarIcon aria-hidden />
+              {summary}
+            </Button>
+            <Button variant="outline" size="sm" disabled tabIndex={-1}>
+              <Download aria-hidden />
+              Export CSV
+            </Button>
+          </>
+        }
+      />
       <LoaderStage>
         <AnalyticsLoader page={page} track />
       </LoaderStage>

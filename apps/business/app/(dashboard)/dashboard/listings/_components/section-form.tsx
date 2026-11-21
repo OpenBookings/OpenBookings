@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { AlertCircleIcon } from "lucide-react";
 import posthog from "posthog-js";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -107,10 +108,7 @@ export function SectionForm<T>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b px-6 py-5">
-        <h2 className="font-medium text-lg">{title}</h2>
-        <p className="text-muted-foreground text-sm">{description}</p>
-      </div>
+      <PageHeader title={title} description={description} className="border-b px-6 py-5" />
 
       {/* onSubmit, not `action`: React resets a form after its action, which would wipe
           fields that default from page data when the save comes back with errors. */}

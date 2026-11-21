@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react";
 import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
@@ -194,7 +195,7 @@ export function AmenityPicker({ amenities, selectedIds, disabled, onChange }: Am
           <section key={category} className="flex flex-col gap-2">
             {/* A single category filter already says which category this is. */}
             {(filter === ALL || filter === SELECTED || q) && (
-              <h4 className="text-muted-foreground text-xs uppercase tracking-wide">{category}</h4>
+              <SectionLabel as="h4">{category}</SectionLabel>
             )}
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((a) => {

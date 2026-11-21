@@ -1,4 +1,5 @@
 import { PageHold } from "@/components/dashboard/page-loaders";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ReviewsView } from "@/components/dashboard/reviews/reviews-view";
@@ -12,6 +13,11 @@ export default async function ReviewsPage() {
 
   return (
     <PageHold id="reviews" fill>
+      <PageHeader
+        title="Reviews"
+        description="Your guests' reviews show up here, and you can reply to each one."
+        className="shrink-0 px-4 pb-4 md:pb-6 lg:px-6"
+      />
       <Suspense>
         <ReviewsView reviews={reviews} />
       </Suspense>

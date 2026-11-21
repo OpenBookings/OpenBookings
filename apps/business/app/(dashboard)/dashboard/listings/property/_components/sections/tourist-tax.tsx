@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -55,21 +56,19 @@ export function TouristTaxSection({ data }: SectionProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-start justify-between gap-4 border-b px-6 py-5">
-        <div>
-          <h2 className="font-medium text-lg">Tourist tax</h2>
-          <p className="text-muted-foreground text-sm">
-            Added on top of your room prices. Guests see one all-in price, and OpenBookings never
-            takes commission on tourist tax. You pay it to your town.
-          </p>
-        </div>
-        {rules.length > 0 && (
-          <Button size="sm" onClick={() => setAdding(true)}>
-            <PlusIcon />
-            New rule
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Tourist tax"
+        description="Added on top of your room prices. Guests see one all-in price, and OpenBookings never takes commission on tourist tax. You pay it to your town."
+        actions={
+          rules.length > 0 ? (
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <PlusIcon />
+              New rule
+            </Button>
+          ) : null
+        }
+        className="border-b px-6 py-5"
+      />
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
         {rules.length === 0 ? (

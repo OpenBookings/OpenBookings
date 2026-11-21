@@ -13,8 +13,8 @@ interface PageProps {
 
 export default function RoomsPage({ searchParams }: PageProps) {
   return (
-    // No header of its own, like the Property page: the listings layout
-    // already names the section.
+    // No header bar of its own, like the Property page: the listings
+    // layout already names the section.
     <div className="flex min-h-0 flex-1 flex-col">
       <Suspense fallback={<PageLoading id="rooms" />}>
         <IndexContent searchParams={searchParams} />

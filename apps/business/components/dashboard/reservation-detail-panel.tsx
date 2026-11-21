@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
 import type { HostReservation } from "@/lib/reservations/shape";
@@ -69,7 +70,7 @@ function DetailSection({
 }) {
   return (
     <section className="flex flex-col">
-      <h3 className="text-foreground mb-4 border-b pb-2 text-xs font-semibold uppercase tracking-wide">{title}</h3>
+      <SectionLabel as="h3" className="mb-4 border-b pb-2 text-foreground">{title}</SectionLabel>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
   );
@@ -87,9 +88,7 @@ function StayTicket({ reservation }: { reservation: HostReservation }) {
   return (
     <section aria-label="Stay" className="rounded-lg border bg-muted">
       {countdown ? (
-        <p className="text-muted-foreground px-4 pt-3.5 text-[11px] font-semibold uppercase tracking-[0.14em]">
-          {countdown}
-        </p>
+        <SectionLabel className="px-4 pt-3.5">{countdown}</SectionLabel>
       ) : null}
       <div className={`grid grid-cols-[1fr_auto_1fr] items-start gap-3 px-4 pb-4 ${countdown ? "pt-2" : "pt-4"}`}>
         <div>

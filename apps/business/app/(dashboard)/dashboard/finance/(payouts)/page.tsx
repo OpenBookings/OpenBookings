@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { PageHold } from "@/components/dashboard/page-loaders";
 
 type PayoutStatus =
@@ -61,6 +62,11 @@ export default async function FinancePage() {
 
   return (
     <PageHold id="payouts">
+      <PageHeader
+        title="Payouts"
+        description="See whether Stripe is paying your guests' payments out to your bank."
+        className="px-4 lg:px-6"
+      />
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>

@@ -55,7 +55,7 @@ export default async function RatesAvailabilityPage({
   searchParams,
 }: PageProps) {
   return (
-    // No header of its own: the listings layout already puts the section name
+    // No header bar of its own: the listings layout already puts the section name
     // and search in a bar above this, and a second one only steals grid height.
     //
     // The negative bottom margin cancels that layout's bottom padding, which

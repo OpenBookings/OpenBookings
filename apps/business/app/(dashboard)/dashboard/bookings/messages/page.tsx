@@ -1,4 +1,5 @@
 import { PageHold } from "@/components/dashboard/page-loaders";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
 import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
@@ -50,6 +51,11 @@ export default async function MessagesPage() {
 
   return (
     <PageHold id="messages" fill>
+      <PageHeader
+        title="Messages"
+        description="Read and answer your guests' messages here."
+        className="shrink-0 px-4 pb-4 md:pb-6 lg:px-6"
+      />
       <MessagesView threads={threads} currentUserId={session.user.id} />
     </PageHold>
   );

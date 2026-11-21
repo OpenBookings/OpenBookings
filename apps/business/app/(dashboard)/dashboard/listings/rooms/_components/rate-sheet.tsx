@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -125,7 +126,7 @@ export function RateSheet(props: RateSheetProps) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{title}</h3>
+      <SectionLabel as="h3">{title}</SectionLabel>
       {children}
     </section>
   );

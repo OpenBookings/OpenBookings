@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Info, Minus, Slash } from "lucide-react";
 import { isPropertyScoped, type HostRole } from "@openbookings/authz/permissions";
 import { ABILITIES, ABILITY_GROUPS, ROLE_INFO, ROLE_ORDER, roleHas } from "@openbookings/authz/role-guide";
+import { SectionHeader, SectionLabel } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -30,16 +31,16 @@ export function RoleGuide({
   const yours = isRole(currentRole) ? currentRole : null;
   return (
     <TooltipProvider delayDuration={150}>
-      <section aria-labelledby="roles-heading" className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 id="roles-heading" className={inTab ? "sr-only" : "text-lg font-medium"}>
-            Roles
-          </h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Pick the role that matches the job. An owner already has everything a general manager has, so one
-            person running the hotel needs only the owner role.
-          </p>
-        </div>
+      <section aria-label="Roles" className="flex flex-col gap-4">
+        <SectionHeader
+          title={inTab ? <span className="sr-only">Roles</span> : "Roles"}
+          description={
+            <span className="block max-w-2xl">
+              Pick the role that matches the job. An owner already has everything a general manager has, so one
+              person running the hotel needs only the owner role.
+            </span>
+          }
+        />
         <RoleMatrix yours={yours} />
         <RolePicker yours={yours} />
       </section>
@@ -198,7 +199,7 @@ function RolePicker({ yours }: { yours: HostRole | null }) {
       </p>
       {ABILITY_GROUPS.map((group) => (
         <div key={group} className="flex flex-col gap-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</h4>
+          <SectionLabel as="h4">{group}</SectionLabel>
           <ul className="flex flex-col gap-1.5 text-sm">
             {ABILITIES.filter((a) => a.group === group).map((ability) => {
               const yes = roleHas(role, ability.permission);

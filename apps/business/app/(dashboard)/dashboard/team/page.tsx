@@ -1,6 +1,7 @@
 import { PageHold } from "@/components/dashboard/page-loaders";
 import { redirect } from "next/navigation";
 import { roleLabel } from "@openbookings/authz/role-guide";
+import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { getServerSession } from "@/lib/auth";
 import { loadTeam, stepUpFactors, teamScope } from "@/lib/team/server";
@@ -37,13 +38,11 @@ export default async function TeamPage() {
     );
   } else {
     body = (
-      <section className="flex flex-col gap-1 rounded-lg border p-4">
-        <h2 className="font-medium">
-          Your role at {scope.orgName}: {roleLabel(scope.role)}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Owners and general managers add people and change roles. Ask one of them if you need more access.
-        </p>
+      <section className="rounded-lg border p-4">
+        <SectionHeader
+          title={`Your role at ${scope.orgName}: ${roleLabel(scope.role)}`}
+          description="Owners and general managers add people and change roles. Ask one of them if you need more access."
+        />
       </section>
     );
   }
@@ -55,9 +54,19 @@ export default async function TeamPage() {
         <div className="@container/main flex min-h-0 flex-1 flex-col gap-2">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-6">
             <PageHold id="team">
-              <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-10">
-                {body}
-                {scope?.canManage ? null : <RoleGuide currentRole={scope?.role} />}
+              <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-6">
+                <PageHeader
+                  title="Team"
+                  description={
+                    scope?.canManage
+                      ? "Invite the people who help you run your property, and choose what each of them can do."
+                      : "See your own role and what each role on the team can do."
+                  }
+                />
+                <div className="flex flex-col gap-10">
+                  {body}
+                  {scope?.canManage ? null : <RoleGuide currentRole={scope?.role} />}
+                </div>
               </div>
             </PageHold>
           </div>

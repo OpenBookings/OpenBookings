@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import Link from "next/link";
@@ -160,9 +161,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {title}
-      </h3>
+      <SectionLabel as="h3">{title}</SectionLabel>
       {children}
     </section>
   );

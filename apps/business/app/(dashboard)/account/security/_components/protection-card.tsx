@@ -1,3 +1,4 @@
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CircleCheck, CircleDashed } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export function ProtectionCard({
 
         {completed.length > 0 ? (
           <div>
-            <p className="text-xs font-medium tracking-[0.04em] text-muted-foreground uppercase">Completed</p>
+            <SectionLabel>Completed</SectionLabel>
             <ul className="mt-1">
               {completed.map((task) => (
                 <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-sm">

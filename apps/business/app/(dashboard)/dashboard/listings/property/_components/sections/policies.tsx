@@ -12,6 +12,7 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
@@ -46,10 +47,6 @@ const FINE_PRINT_SUGGESTIONS = [
   "The name on the booking must match the guest checking in.",
   "Special requests are subject to availability.",
 ];
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted-foreground text-xs uppercase tracking-wide">{children}</p>;
-}
 
 export function PoliciesSection({ data, onDirtyChange }: SectionProps) {
   // Selects, switches and rows below hold their values in React state, which a
@@ -107,7 +104,7 @@ function PoliciesFields({
   return (
     <FieldGroup className="max-w-3xl">
       {/* ── Arrival & departure ─────────────────────────────────────────── */}
-      <SectionHeading>Arrival &amp; departure</SectionHeading>
+      <SectionLabel>Arrival &amp; departure</SectionLabel>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field data-invalid={!!state.errors?.checkInTime}>
@@ -168,7 +165,7 @@ function PoliciesFields({
 
       {/* ── Cancellation ────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Cancellation</SectionHeading>
+      <SectionLabel>Cancellation</SectionLabel>
 
       <p className="text-muted-foreground text-sm">
         One policy for all your refundable rates. Guests see the exact deadlines for their dates
@@ -207,7 +204,7 @@ function PoliciesFields({
 
       {/* ── Payment ─────────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Payment</SectionHeading>
+      <SectionLabel>Payment</SectionLabel>
 
       {/*
         Not a setting: every payment goes through the platform, so there is no
@@ -258,7 +255,7 @@ function PoliciesFields({
 
       {/* ── Other ───────────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Other</SectionHeading>
+      <SectionLabel>Other</SectionLabel>
 
       {/* Cots and extra beds are set per room (Rooms → Space); only this stays property-wide. */}
       <Field orientation="horizontal">

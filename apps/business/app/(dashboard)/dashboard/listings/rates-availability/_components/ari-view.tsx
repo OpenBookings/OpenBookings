@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Monitor } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
 import { AriDetailPanel } from "./ari-detail-panel";
@@ -221,6 +222,11 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
 
   return (
     <>
+      <PageHeader
+        title="Rates & availability"
+        description="Set what each room costs and how many you sell, night by night."
+        className="px-4 pb-4 lg:px-6"
+      />
       <div className="hidden min-h-0 flex-1 flex-col lg:flex">
         <AriToolbar
           startDate={data.dates[0] ?? startDate}

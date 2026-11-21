@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,36 +62,33 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
 
   return (
     <div className="flex flex-col gap-6 px-4 lg:px-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="max-w-2xl">
-          <h1 className="font-semibold text-2xl tracking-tight">Pricing rules</h1>
-          <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
-            Rules change the price of every night they match, on the rate plans you choose. They work on top of your
-            base rate and on prices you set for a single date.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="rules-plan-filter" className="text-muted-foreground text-sm">
-            Show rules for
-          </Label>
-          <Select value={filterPlan?.id ?? ALL} onValueChange={setFilter}>
-            <SelectTrigger id="rules-plan-filter" className="min-w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All rate plans</SelectItem>
-              {data.plans.map((plan) => (
-                <SelectItem key={plan.id} value={plan.id}>
-                  {plan.roomName} · {plan.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/listings/rates-availability">Open Rates &amp; availability</Link>
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title="Pricing rules"
+        description="Rules change the price of every night they match, on the rate plans you choose."
+        actions={
+          <>
+            <Label htmlFor="rules-plan-filter" className="text-muted-foreground text-sm">
+              Show rules for
+            </Label>
+            <Select value={filterPlan?.id ?? ALL} onValueChange={setFilter}>
+              <SelectTrigger id="rules-plan-filter" className="min-w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All rate plans</SelectItem>
+                {data.plans.map((plan) => (
+                  <SelectItem key={plan.id} value={plan.id}>
+                    {plan.roomName} · {plan.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/listings/rates-availability">Open Rates &amp; availability</Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-8">
@@ -142,21 +140,19 @@ function RulesSection({
 }) {
   const isDiscount = section === "discount";
   return (
-    <section aria-labelledby={`rules-${section}`} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id={`rules-${section}`} className="font-semibold text-lg">
-            {title}
-          </h2>
-          <p className="mt-1 text-muted-foreground text-sm">{description}</p>
-        </div>
-        <Button variant="outline" asChild>
-          <Link href={addHref}>
-            <Plus className="size-4" aria-hidden />
-            {addLabel}
-          </Link>
-        </Button>
-      </div>
+    <section aria-label={title} className="flex flex-col gap-3">
+      <SectionHeader
+        title={title}
+        description={description}
+        actions={
+          <Button variant="outline" asChild>
+            <Link href={addHref}>
+              <Plus className="size-4" aria-hidden />
+              {addLabel}
+            </Link>
+          </Button>
+        }
+      />
 
       {rules.length === 0 ? (
         <p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
@@ -257,10 +253,8 @@ function PriceBuildCard() {
     { title: "+ Extra guests", detail: "Never discounted" },
   ];
   return (
-    <section aria-labelledby="price-build" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
-      <h2 id="price-build" className="font-semibold">
-        How a guest&apos;s price is built
-      </h2>
+    <section aria-label="How a guest's price is built" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+      <SectionHeader title="How a guest's price is built" />
       <ol className="flex flex-col gap-3">
         {steps.map((step, i) => (
           <li key={step.title} className="grid grid-cols-[24px_1fr] items-start gap-2.5 text-sm">
