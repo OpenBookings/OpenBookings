@@ -15,6 +15,8 @@
 -- ob_app (0049) gets column-level SELECT and UPDATE only, like
 -- activeOrganizationId. Idempotent: safe to replay.
 
+SET lock_timeout = '5s';
+
 ALTER TABLE session
   ADD COLUMN IF NOT EXISTS "activePropertyId" uuid
   REFERENCES properties(id) ON DELETE SET NULL;
