@@ -10,6 +10,7 @@ import {
 } from "./permissions";
 
 export * from "./rates-confirmation";
+export * from "./current-property";
 
 export {
   ac,
@@ -41,9 +42,10 @@ export type SessionLike = {
 };
 
 type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
+type QueryFn = <T>(text: string, values?: unknown[]) => Promise<T[]>;
 
-/** Test seam: pass a fake queryOne. Defaults to the shared pg pool. */
-export type AuthzDeps = { queryOne?: QueryOneFn; testing?: boolean };
+/** Test seam: pass a fake query / queryOne. Both default to the shared pg pool. */
+export type AuthzDeps = { query?: QueryFn; queryOne?: QueryOneFn; testing?: boolean };
 
 function ownerId(session: SessionLike | null | undefined): string | null {
   const id = session?.user?.id;
