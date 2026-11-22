@@ -1,7 +1,7 @@
 import { getOrgScopedDb } from "@openbookings/authz";
 import { queryOne } from "@openbookings/db";
 import { activeOrgId } from "@/lib/active-org";
-import { canManageTeam } from "./rules";
+import { canManageTeamIn } from "./rules";
 
 type SessionWithUser = {
   user: { id: string; email: string; account_type?: string | null };
@@ -34,7 +34,7 @@ export async function teamScope(session: SessionWithUser | null | undefined): Pr
     orgId: db.organizationId,
     orgName: org?.name ?? "Your organisation",
     role: db.memberRole,
-    canManage: canManageTeam(db.memberRole),
+    canManage: canManageTeamIn(db.organizationId, db.memberRole),
     db,
   };
 }
