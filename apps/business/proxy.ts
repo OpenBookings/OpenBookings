@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessionForApp, sessionCookieNames } from "@openbookings/auth/server";
 import { readAuthEnv } from "@openbookings/auth/env";
+import { csrfRefusal } from "@openbookings/auth/same-origin";
 import { auth } from "@/lib/auth"; // from packages/auth
 import { getOnboardingFacts, wizardInProgress } from "@/lib/onboarding-facts";
 import { onboardingWallDecision } from "@/lib/onboarding-wall";
@@ -37,6 +38,14 @@ function redirectToLogin(request: NextRequest, withRedirectParam: boolean) {
 }
 
 export async function proxy(request: NextRequest) {
+  // Cookie-authenticated API writes must come from this app's own pages, not
+  // a sibling subdomain (SameSite=Lax lets those carry the session cookie).
+  const refused = csrfRefusal(request.method, request.nextUrl.pathname, request.headers);
+  if (refused) return refused;
+  // The rest of this proxy is page routing (sign-in redirect, onboarding
+  // wall, demo membership); API routes check their own session.
+  if (request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next();
+
   const rawSession = await auth.api.getSession({
     headers: await headers(),
   });
@@ -103,5 +112,10 @@ export const config = {
     // The Host Agreement is for signed-in hosts only. Its pages check the
     // session again themselves (app/legal/host-agreement/_lib/render.tsx).
     "/legal/:path*",
+    // API writes, for the CSRF check above. Not /api/auth (better-auth checks
+    // origins itself) and not /api/support: its multipart uploads (up to
+    // 5 x 10 MB) would be buffered and cut at the proxy's 10 MB body limit,
+    // so supportRoute runs the same check itself.
+    "/api/((?!auth/|support/).*)",
   ],
 };

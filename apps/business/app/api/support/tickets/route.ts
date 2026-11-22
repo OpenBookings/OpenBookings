@@ -4,7 +4,7 @@ import { createTicket } from "@/lib/support/server/service";
 
 /** Open a support ticket: multipart, because the first message can carry files. */
 export async function POST(request: Request) {
-  return supportRoute({ key: "support-create", max: 10, windowMs: 60 * 60 * 1000 }, async (scope) => {
+  return supportRoute(request, { key: "support-create", max: 10, windowMs: 60 * 60 * 1000 }, async (scope) => {
     const form = await readForm(request);
     const linkedType = formString(form, "linkedType");
     return createTicket(scope, {
