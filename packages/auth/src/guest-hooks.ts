@@ -24,14 +24,28 @@ export function isSessionFreshForPasskey(
   return now.getTime() - at < PASSKEY_SESSION_MAX_AGE_MS;
 }
 
-/** The refusal for a registration request on a stale session, or null to let it through. */
+/**
+ * The refusal for a registration request, or null to let it through.
+ *
+ * Two reasons to refuse. The email is unverified: the row may have been
+ * squatted on someone else's address, and when the real owner later proves it
+ * by magic link, Better Auth's cleanup removes the squatter's IdP links and
+ * sessions but not passkeys (GHSA-gv93-27wp-8wff). Or the session is stale
+ * (see `PASSKEY_SESSION_MAX_AGE_MS`).
+ */
 export function passkeyRegistrationRefusal(
   path: string,
-  sessionCreatedAt: Date | string | null | undefined,
+  session: { createdAt: Date | string | null | undefined; emailVerified: boolean | null | undefined },
   now: Date = new Date(),
-): { code: "REAUTH_REQUIRED"; message: string } | null {
+): { code: "REAUTH_REQUIRED" | "EMAIL_NOT_VERIFIED"; message: string } | null {
   if (!REGISTRATION_PATHS.has(path)) return null;
-  if (isSessionFreshForPasskey(sessionCreatedAt, now)) return null;
+  if (session.emailVerified !== true) {
+    return {
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Sign in with a link sent to your email address before adding a passkey.",
+    };
+  }
+  if (isSessionFreshForPasskey(session.createdAt, now)) return null;
   return { code: "REAUTH_REQUIRED", message: "For your security, sign in again to add a passkey." };
 }
 
@@ -40,7 +54,10 @@ export async function refuseStalePasskeyRegistration(ctx: HookContext): Promise<
   if (!REGISTRATION_PATHS.has(ctx.path)) return;
   const session = await getSessionFromCtx(ctx);
   if (!session) return;
-  const refusal = passkeyRegistrationRefusal(ctx.path, session.session.createdAt);
+  const refusal = passkeyRegistrationRefusal(ctx.path, {
+    createdAt: session.session.createdAt,
+    emailVerified: session.user.emailVerified,
+  });
   if (refusal) throw new APIError("FORBIDDEN", refusal);
 }
 

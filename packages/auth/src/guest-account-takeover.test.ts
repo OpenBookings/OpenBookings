@@ -113,3 +113,29 @@ describe("guest email verification (GHSA-j524-cj9r-hjxv)", () => {
     expect(w.user("new@example.test")?.emailVerified).toBe(true);
   });
 });
+
+describe("passkey registration on an unverified row (GHSA-gv93-27wp-8wff)", () => {
+  const dropCookieCache = (jar: { c: Map<string, string> }) => {
+    for (const k of [...jar.c.keys()]) if (k.endsWith(".session_data")) jar.c.delete(k);
+  };
+
+  test("a fresh session on an unverified row cannot start adding a passkey", async () => {
+    const w = world();
+    const jar = await w.signIn("victim@example.test");
+    // The squat: a session on a row whose email was never proven.
+    w.user("victim@example.test")!.emailVerified = false;
+    dropCookieCache(jar);
+
+    const res = await w.call(jar, "GET", "/passkey/generate-register-options");
+    expect(res.status).toBe(403);
+    expect(res.json?.code).toBe("EMAIL_NOT_VERIFIED");
+  });
+
+  test("a verified guest with a fresh session still can", async () => {
+    const w = world();
+    const jar = await w.signIn("guest@example.test");
+    const res = await w.call(jar, "GET", "/passkey/generate-register-options");
+    expect(res.status).toBe(200);
+    expect(res.json?.challenge).toBeString();
+  });
+});

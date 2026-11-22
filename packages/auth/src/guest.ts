@@ -51,7 +51,7 @@ function notConfigured(what: string): never {
  * Guests have no password and no step-up clock. Changing the sign-in email
  * is confirmed from the current inbox and then verified from the new one;
  * deleting the account is confirmed by an emailed link. Adding a passkey
- * needs a sign-in from the last 24 hours (guest-hooks.ts).
+ * needs a verified email and a sign-in from the last 24 hours (guest-hooks.ts).
  */
 export function createGuestAuth(config: GuestAuthConfig) {
   const pool = createAuthPool(config.databaseUrl);
@@ -132,6 +132,11 @@ export function createGuestAuth(config: GuestAuthConfig) {
           google: {
             clientId: config.googleClientId,
             clientSecret: config.googleClientSecret,
+            // No session for an email the provider has not verified: it could
+            // be someone else's address (GHSA-gv93-27wp-8wff). Safe only with
+            // sendOnSignUp: false above, or the refused sign-up would be sent
+            // a plain verification mail.
+            requireEmailVerification: true,
           },
         }
         : {}),
@@ -140,6 +145,11 @@ export function createGuestAuth(config: GuestAuthConfig) {
           apple: {
             clientId: config.appleClientId,
             clientSecret: config.appleClientSecret,
+            // No session for an email the provider has not verified: it could
+            // be someone else's address (GHSA-gv93-27wp-8wff). Safe only with
+            // sendOnSignUp: false above, or the refused sign-up would be sent
+            // a plain verification mail.
+            requireEmailVerification: true,
           },
         }
         : {}),

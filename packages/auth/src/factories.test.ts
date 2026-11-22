@@ -238,3 +238,26 @@ describe("guest email verification (GHSA-j524-cj9r-hjxv)", () => {
     await expect(before!()).rejects.toMatchObject({ statusCode: 403 });
   });
 });
+
+// Google and Apple may report an email they have not verified. Such a sign-up
+// must not get a session: with one it could add a passkey to a row squatted
+// on someone else's address, and the magic-link takeover cleanup does not
+// remove passkeys.
+describe("guest social providers (GHSA-gv93-27wp-8wff)", () => {
+  test("google and apple require a verified email before issuing a session", () => {
+    const guest = createGuestAuth({
+      ...base,
+      googleClientId: "g-id",
+      googleClientSecret: "g-secret",
+      appleClientId: "a-id",
+      appleClientSecret: "a-secret",
+    });
+    const providers = guest.options.socialProviders as Record<string, { requireEmailVerification?: boolean }>;
+    expect(Object.keys(providers).sort()).toEqual(["apple", "google"]);
+    expect(providers.google?.requireEmailVerification).toBe(true);
+    expect(providers.apple?.requireEmailVerification).toBe(true);
+    // Together with sendOnSignUp: false, an unverified OAuth sign-up gets
+    // neither a session nor a verification mail.
+    expect(guest.options.emailVerification?.sendOnSignUp).toBe(false);
+  });
+});
