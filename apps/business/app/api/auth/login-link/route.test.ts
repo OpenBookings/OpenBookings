@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { NextRequest } from "next/server";
 
 const sentTo: string[] = [];
+const analyticsCalls: string[] = [];
 
 mock.module("@/lib/auth", () => ({
   auth: {
@@ -14,7 +15,13 @@ mock.module("@/lib/auth", () => ({
 }));
 mock.module("@openbookings/db", () => ({ queryOne: async () => null }));
 mock.module("@openbookings/analytics/server", () => ({
-  getPostHogClient: () => ({ capture: () => {}, shutdown: async () => {} }),
+  getPostHogClient: () => {
+    analyticsCalls.push("getPostHogClient");
+    return {
+      capture: () => analyticsCalls.push("capture"),
+      shutdown: async () => {},
+    };
+  },
 }));
 
 const { POST } = await import("./route");
@@ -42,5 +49,14 @@ describe("login-link rate limits", () => {
     const res = await post("target@example.test", "203.0.113.50");
     expect(res.status).toBe(200);
     expect(sentTo).toContain("target@example.test");
+  });
+});
+
+describe("login-link analytics", () => {
+  it("sends nothing to PostHog from the server: the email is not shared without consent", async () => {
+    const res = await post("consent-check@example.test", "192.0.2.77");
+    expect(res.status).toBe(200);
+    expect(sentTo).toContain("consent-check@example.test");
+    expect(analyticsCalls).toEqual([]);
   });
 });

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { checkRateLimit, getClientIP } from "@/lib/rateLimit"
 import { queryOne } from "@openbookings/db"
-import { getPostHogClient } from "@openbookings/analytics/server"
 import { resolveCallbackURL } from "@openbookings/auth/callback-url"
 
 const APP_URL = process.env.NEXT_PUBLIC_WEB_URL || "https://openbookings.co"
@@ -80,18 +79,6 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[login-link] signInMagicLink failed:", err)
     return NextResponse.json({ error: "Failed to send email" }, { status: 500 })
-  }
-
-  try {
-    const posthog = getPostHogClient()
-    posthog.capture({
-      distinctId: normalizedEmail,
-      event: "magic_link_sent",
-      properties: { email: normalizedEmail },
-    })
-    await posthog.shutdown()
-  } catch {
-    // analytics must not affect response
   }
 
   return NextResponse.json({ success: true })
