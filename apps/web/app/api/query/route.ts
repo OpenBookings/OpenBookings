@@ -16,6 +16,7 @@ import { orderByAvailability, priceCandidates } from "./availability-order";
 import { pointBoundErrors } from "./search-bounds";
 import { priceSearchStays } from "./search-pricing";
 import { resolveSearchTarget } from "./search-target";
+import { checkRateLimit, getClientIP } from "@/lib/rateLimit";
 
 type SearchInput = StayInput & {
   lat: number;
@@ -62,9 +63,18 @@ function parseSearchParams(searchParams: URLSearchParams): { input: SearchInput 
  * there. Steady state is one indexed query; the generator's transaction and
  * lock only run for a new area. A failure is logged and the search goes on.
  */
-async function ensureDemoArea(i: { lat: number; lon: number; place: string | null }): Promise<void> {
+/** New demo areas one caller may create per hour. Searching existing areas is not limited. */
+const DEMO_AREAS_PER_IP_PER_HOUR = 5
+
+async function ensureDemoArea(
+  i: { lat: number; lon: number; place: string | null },
+  request: NextRequest,
+): Promise<void> {
   try {
     if (await hasDemoHotelsNear(getPool(), i)) return;
+    // Searches are anonymous: without this, one caller walking the map makes
+    // eight demo hotels at every stop.
+    if (!checkRateLimit(`demo-area:ip:${getClientIP(request)}`, DEMO_AREAS_PER_IP_PER_HOUR, 60 * 60 * 1000).allowed) return;
     await withTransaction((tx) => ensureDemoHotels(tx, i));
   } catch (err) {
     console.error("[search] demo hotels:", err instanceof Error ? err.message : err);
@@ -371,7 +381,7 @@ export async function GET(request: NextRequest) {
   }
 
   const testing = isTestingMode()
-  if (testing) await ensureDemoArea(input)
+  if (testing) await ensureDemoArea(input, request)
 
   let results
   try {
