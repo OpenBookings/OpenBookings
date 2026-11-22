@@ -4,34 +4,41 @@ import { BuildingIcon } from "lucide-react";
 import { query } from "@openbookings/db";
 import { propertyReadiness, readinessCopy, readinessEnforced } from "@openbookings/billing/readiness";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { PropertyEditor } from "./_components/property-editor";
 import { loadAmenityCatalog, loadEditorData } from "./_lib/query";
 
-interface PageProps {
-  searchParams: Promise<{ property?: string }>;
-}
-
-export default function PropertyPage({ searchParams }: PageProps) {
+export default function PropertyPage() {
   return (
     // No header of its own: the listings layout already renders the section
     // name above this, and a second one only steals pane height.
     <div className="flex min-h-0 flex-1 flex-col">
       <Suspense fallback={<PageLoading id="property" />}>
-        <EditorContent searchParams={searchParams} />
+        <EditorContent />
       </Suspense>
     </div>
   );
 }
 
-async function EditorContent({ searchParams }: PageProps) {
+async function EditorContent() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
-  const { property } = await searchParams;
+  const access = await pageAccess("property");
+  if (access.level === "none") {
+    return (
+      <PageHold id="property" fill>
+        <NoAccessPage navKey="property" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
   const [data, amenities] = await Promise.all([
-    loadEditorData(session, property),
+    loadEditorData(session, current?.propertyId ?? null),
     loadAmenityCatalog(),
   ]);
 
@@ -50,7 +57,9 @@ async function EditorContent({ searchParams }: PageProps) {
 
   return (
     <PageHold id="property" fill>
-      <PropertyEditor data={data} amenities={amenities} readiness={readiness} />
+      <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+        <PropertyEditor data={data} amenities={amenities} readiness={readiness} />
+      </EditAccessProvider>
     </PageHold>
   );
 }

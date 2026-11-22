@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Monitor } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { useEditAccess } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
@@ -76,6 +77,8 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
     !rates.confirmed && rates.canConfirm,
   );
   const draft = useAriDraft();
+  // View-only roles browse the grid and its details but stage nothing.
+  const { canEdit } = useEditAccess();
   const [publishing, setPublishing] = React.useState(false);
   const [range, setRange] = React.useState<RangeSelection | null>(null);
   /**
@@ -103,6 +106,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
     col: number,
     extend: boolean,
   ) => {
+    if (!canEdit) return;
     if (extend && anchor && anchor.planId === plan.id) {
       setRange({
         room,
@@ -217,6 +221,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
   // Panel routes into a modal: close the panel first so focus does not end up
   // trapped between two overlapping Radix dialogs.
   const openDialog = (kind: DialogState["kind"], prefill: EditPrefill = {}) => {
+    if (!canEdit) return;
     setSelection(null);
     setDialog({ kind, prefill });
   };
@@ -313,7 +318,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         onEditRestrictions={(prefill) => openDialog("restrictions", prefill)}
         onReopen={(prefill) => openDialog("reopen", prefill)}
         onEditBaseRate={(prefill) => openDialog("base-rate", prefill)}
-        onStage={draft.stage}
+        onStage={canEdit ? draft.stage : () => {}}
       />
 
       <RatesConfirmationDialog

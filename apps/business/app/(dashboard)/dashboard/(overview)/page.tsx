@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/dashboard/page-header";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { PageHold } from "@/components/dashboard/page-loaders";
 import { SectionCards } from "@/components/dashboard/section-cards";
 import { SiteHeader } from "@/components/dashboard/site-header";
@@ -8,6 +9,7 @@ import {
   mockReservations,
   type ReservationBuckets,
 } from "@/components/dashboard/mock-reservations";
+import { pageAccess } from "@/lib/page-access";
 
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 
@@ -59,7 +61,20 @@ function daySummary(buckets: ReservationBuckets): string {
   return `${capitalise(movement)} ${inHouse}`;
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const access = await pageAccess("overview");
+  if (access.level === "none") {
+    return (
+      <>
+        <SiteHeader title="Overview" />
+        <div className="flex min-h-0 flex-1 flex-col py-4 md:py-6">
+          <PageHold id="overview" fill>
+            <NoAccessPage navKey="overview" current={access.current} />
+          </PageHold>
+        </div>
+      </>
+    );
+  }
   const buckets = bucketReservations(mockReservations);
 
   return (

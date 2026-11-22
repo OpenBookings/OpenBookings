@@ -4,12 +4,23 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ReviewsView } from "@/components/dashboard/reviews/reviews-view";
 import { getServerSession } from "@/lib/auth";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { pageAccess } from "@/lib/page-access";
 import { loadHostReviews } from "@/lib/reviews/query";
 
 export default async function ReviewsPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  const reviews = await loadHostReviews(session);
+  const access = await pageAccess("reviews");
+  if (access.level === "none") {
+    return (
+      <PageHold id="reviews" fill>
+        <NoAccessPage navKey="reviews" current={access.current} />
+      </PageHold>
+    );
+  }
+  const { current } = access;
+  const reviews = await loadHostReviews(session, current?.propertyId ?? null);
 
   return (
     <PageHold id="reviews" fill>

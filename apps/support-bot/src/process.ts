@@ -1,4 +1,5 @@
 import {
+  findSupportTicketByConversation,
   getConversationCache,
   hasRepliedToEvent,
   markEventReplied,
@@ -125,6 +126,10 @@ export async function processConversation(
   );
   let outcome: AgentOutcome;
   try {
+    // The ticket's organization is a server-side record (never chat content).
+    // No ticket row means no org, and the host booking tools then find nothing.
+    const organizationId =
+      payload.audience === "host" ? ((await findSupportTicketByConversation(conversationId))?.organization_id ?? null) : null;
     outcome =
       payload.audience === "host"
         ? await runAgentLoop({
@@ -132,7 +137,7 @@ export async function processConversation(
             chat: deps.chat ?? mistralChat(HOST_AGENT),
             profile: HOST_AGENT,
             // Identity comes from the HMAC-verified contact, never the chat.
-            toolContext: { hostUserId: payload.hostUserId?.trim() || null },
+            toolContext: { hostUserId: payload.hostUserId?.trim() || null, organizationId },
             contextNote: payload.ticket ? hostTicketNote(payload.ticket) : undefined,
             onToolResult,
           })

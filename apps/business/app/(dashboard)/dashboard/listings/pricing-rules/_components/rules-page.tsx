@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -58,7 +59,6 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
   const newHref = (section: RuleSection) => {
     const next = new URLSearchParams({ section });
     if (filterPlan) next.set("plan", filterPlan.id);
-    if (params.get("property")) next.set("property", params.get("property")!);
     return `${PRICING_RULES_PATH}/new?${next.toString()}`;
   };
 
@@ -141,18 +141,28 @@ function RulesSection({
   data: PricingRulesData;
 }) {
   const isDiscount = section === "discount";
+  const { canEdit } = useEditAccess();
   return (
     <section aria-label={title} className="flex flex-col gap-3">
       <SectionHeader
         title={title}
         description={description}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={addHref}>
-              <Plus className="size-4" aria-hidden />
-              {addLabel}
-            </Link>
-          </Button>
+          canEdit ? (
+            <Button variant="outline" asChild>
+              <Link href={addHref}>
+                <Plus className="size-4" aria-hidden />
+                {addLabel}
+              </Link>
+            </Button>
+          ) : (
+            <ViewOnlyHint>
+              <Button variant="outline" disabled>
+                <Plus className="size-4" aria-hidden />
+                {addLabel}
+              </Button>
+            </ViewOnlyHint>
+          )
         }
       />
 
@@ -194,6 +204,7 @@ function RulesSection({
 function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRulesData; isDiscount: boolean }) {
   const [active, setActive] = React.useState(rule.active);
   const [busy, setBusy] = React.useState(false);
+  const { canEdit } = useEditAccess();
   // A refresh after the write hands down the saved state; it wins.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setActive(rule.active), [rule.active]);
@@ -229,17 +240,19 @@ function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRul
       <TableCell className="whitespace-normal text-muted-foreground">{scopeLabel(rule, data.plans)}</TableCell>
       {isDiscount && <TableCell className="text-muted-foreground">{guestLabel(rule)}</TableCell>}
       <TableCell>
-        <Switch
-          checked={active}
-          disabled={busy}
-          onCheckedChange={(on) => void toggle(on)}
-          aria-label={`${active ? "Turn off" : "Turn on"}: ${when}`}
-        />
+        <ViewOnlyHint>
+          <Switch
+            checked={active}
+            disabled={busy || !canEdit}
+            onCheckedChange={(on) => void toggle(on)}
+            aria-label={`${active ? "Turn off" : "Turn on"}: ${when}`}
+          />
+        </ViewOnlyHint>
       </TableCell>
       <TableCell>
         <Link
           href={href}
-          aria-label={`Edit: ${when}`}
+          aria-label={`${canEdit ? "Edit" : "View"}: ${when}`}
           className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <ChevronRight className="size-4" aria-hidden />

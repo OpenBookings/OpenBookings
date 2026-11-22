@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import { EditFieldset, useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -167,6 +168,7 @@ function RateForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const { canEdit } = useEditAccess();
   const [state, formAction, pending] = React.useActionState(saveRate, {
     values: initialValues(rate, roomId),
     errors: null,
@@ -230,6 +232,7 @@ function RateForm({
         ref={formRef}
         onSubmit={(event) => {
           event.preventDefault();
+          if (!canEdit) return;
           const data = new FormData(event.currentTarget);
           React.startTransition(() => formAction(data));
         }}
@@ -238,6 +241,10 @@ function RateForm({
         className="flex-1 space-y-5 overflow-y-auto px-4 pb-6"
       >
         <input type="hidden" name="ratePlanId" value={rate?.id ?? ""} />
+        {/* View-only roles see the rate, every field disabled. The form's
+            space-y does not reach through a display:contents fieldset, so it
+            spaces its own children. */}
+        <EditFieldset className="space-y-5">
         <input type="hidden" name="roomId" value={roomId} />
 
         {errorEntries.length > 0 && (
@@ -514,6 +521,7 @@ function RateForm({
             />
           </Field>
         </Section>
+        </EditFieldset>
       </form>
 
       {/* Pinned, like the R&A Sheet's actions. */}
@@ -521,10 +529,12 @@ function RateForm({
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" form="rate-form" disabled={pending}>
-          {pending && <Spinner />}
-          Save
-        </Button>
+        <ViewOnlyHint side="top">
+          <Button type="submit" size="sm" form="rate-form" disabled={pending || !canEdit}>
+            {pending && <Spinner />}
+            Save
+          </Button>
+        </ViewOnlyHint>
       </div>
     </>
   );

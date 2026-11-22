@@ -10,6 +10,7 @@ import {
 } from "./permissions";
 
 export * from "./rates-confirmation";
+export * from "./current-property";
 
 export {
   ac,
@@ -41,9 +42,31 @@ export type SessionLike = {
 };
 
 type QueryOneFn = <T>(text: string, values?: unknown[]) => Promise<T | null>;
+type QueryFn = <T>(text: string, values?: unknown[]) => Promise<T[]>;
 
-/** Test seam: pass a fake queryOne. Defaults to the shared pg pool. */
-export type AuthzDeps = { queryOne?: QueryOneFn; testing?: boolean };
+/** Test seam: pass a fake query / queryOne. Both default to the shared pg pool. */
+export type AuthzDeps = {
+  query?: QueryFn;
+  queryOne?: QueryOneFn;
+  testing?: boolean;
+  /**
+   * The hotel the console is currently showing. When set, the property a
+   * check resolves to must be this one, so a stale tab still showing hotel A
+   * cannot write to A after the user switched to B. Absent: no extra
+   * condition. Not a UUID: the check fails closed (false).
+   */
+  currentPropertyId?: string;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Extra SQL + param for deps.currentPropertyId, or null when it must fail closed. */
+function currentPropertyGuard(deps: AuthzDeps, paramIndex: number): { sql: string; params: string[] } | null {
+  const id = deps.currentPropertyId;
+  if (id === undefined) return { sql: "", params: [] };
+  if (typeof id !== "string" || !UUID_RE.test(id)) return null;
+  return { sql: ` AND p.id = $${paramIndex}::uuid`, params: [id] };
+}
 
 function ownerId(session: SessionLike | null | undefined): string | null {
   const id = session?.user?.id;
@@ -123,6 +146,15 @@ export function propertyReadAccessSql(userParam: string, testing: boolean = isTe
 }
 
 /**
+ * Read access to the one current property `p`: `$1` is the user, `$2` the
+ * property, the order getPropertyScopedDb binds them in.
+ */
+export function currentPropertySql(testing: boolean = isTestingMode()): string {
+  return `p.id = $2::uuid AND ${propertyReadAccessSql("$1", testing)}`;
+}
+export const CURRENT_PROPERTY_SQL = currentPropertySql();
+
+/**
  * Whether the signed-in user may do `permission` on one property — the
  * check for anything narrower than "edit the property", such as checking a
  * guest in or giving a goodwill refund. One query for the member's role in
@@ -141,6 +173,8 @@ export async function userCan(
 ): Promise<boolean> {
   const userId = ownerId(session);
   if (!userId || !propertyId) return false;
+  const guard = currentPropertyGuard(deps, 4);
+  if (!guard) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ legacy_owner: boolean; role: string | null; has_access: boolean }>(
     `SELECT (p.organization_id IS NULL AND p.owner_user_id = $2) AS legacy_owner,
@@ -152,8 +186,8 @@ export async function userCan(
      FROM properties p
      LEFT JOIN "member" m ON m."organizationId" = p.organization_id AND m."userId" = $2
        AND ($3::boolean OR m."organizationId" <> '${DEMO_ORG_ID}')
-     WHERE p.id = $1`,
-    [propertyId, userId, deps.testing ?? isTestingMode()],
+     WHERE p.id = $1${guard.sql}`,
+    [propertyId, userId, deps.testing ?? isTestingMode(), ...guard.params],
   );
   if (!row) return false;
   if (row.legacy_owner === true) return roleAllows("owner", permission, true);
@@ -167,11 +201,13 @@ export async function userOwnsProperty(
 ): Promise<boolean> {
   const userId = ownerId(session);
   if (!userId || !propertyId) return false;
+  const guard = currentPropertyGuard(deps, 3);
+  if (!guard) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
     `SELECT TRUE AS ok FROM properties p
-     WHERE p.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
-    [propertyId, userId],
+     WHERE p.id = $1 AND ${propertyEditAccessSql(deps.testing)}${guard.sql}`,
+    [propertyId, userId, ...guard.params],
   );
   return row?.ok === true;
 }
@@ -184,13 +220,15 @@ export async function userOwnsRoom(
 ): Promise<boolean> {
   const userId = ownerId(session);
   if (!userId || !roomId) return false;
+  const guard = currentPropertyGuard(deps, 3);
+  if (!guard) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
     `SELECT TRUE AS ok
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE r.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
-    [roomId, userId],
+     WHERE r.id = $1 AND ${propertyEditAccessSql(deps.testing)}${guard.sql}`,
+    [roomId, userId, ...guard.params],
   );
   return row?.ok === true;
 }
@@ -203,14 +241,16 @@ export async function userOwnsRatePlan(
 ): Promise<boolean> {
   const userId = ownerId(session);
   if (!userId || !ratePlanId) return false;
+  const guard = currentPropertyGuard(deps, 3);
+  if (!guard) return false;
   const queryOne = deps.queryOne ?? dbQueryOne;
   const row = await queryOne<{ ok: boolean }>(
     `SELECT TRUE AS ok
      FROM rate_plans rp
      JOIN rooms r      ON r.id = rp.room_id
      JOIN properties p ON p.id = r.property_id
-     WHERE rp.id = $1 AND ${propertyEditAccessSql(deps.testing)}`,
-    [ratePlanId, userId],
+     WHERE rp.id = $1 AND ${propertyEditAccessSql(deps.testing)}${guard.sql}`,
+    [ratePlanId, userId, ...guard.params],
   );
   return row?.ok === true;
 }
@@ -362,6 +402,33 @@ export function getHostScopedDb(session: SessionLike | null | undefined) {
     },
     queryOne<T = unknown>(text: string, values: unknown[] = []): Promise<T | null> {
       return dbQueryOne<T>(text, [userId, ...values]);
+    },
+  };
+}
+
+/**
+ * Like getHostScopedDb, but also binds the current hotel: `$1` = user id,
+ * `$2` = property id, caller values from `$3`. Queries use CURRENT_PROPERTY_SQL
+ * to stay on that hotel.
+ */
+export function getPropertyScopedDb(session: SessionLike | null | undefined, propertyId: string) {
+  const userId = ownerId(session);
+  if (!userId) throw new Error("getPropertyScopedDb requires an authenticated session");
+  if (session?.user?.account_type !== "business") {
+    throw new Error("getPropertyScopedDb requires a business account session");
+  }
+  if (typeof propertyId !== "string" || propertyId.length === 0) {
+    throw new Error("getPropertyScopedDb requires a property id");
+  }
+
+  return {
+    ownerUserId: userId,
+    propertyId,
+    query<T = unknown>(text: string, values: unknown[] = []): Promise<T[]> {
+      return dbQuery<T>(text, [userId, propertyId, ...values]);
+    },
+    queryOne<T = unknown>(text: string, values: unknown[] = []): Promise<T | null> {
+      return dbQueryOne<T>(text, [userId, propertyId, ...values]);
     },
   };
 }

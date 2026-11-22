@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -53,6 +54,7 @@ export function TouristTaxSection({ data }: SectionProps) {
   const { property, touristTax } = data;
   const { rules, commissionRate, today } = touristTax;
   const [adding, setAdding] = React.useState(false);
+  const { canEdit } = useEditAccess();
   const groups = groupRules(rules, today);
 
   return (
@@ -62,10 +64,12 @@ export function TouristTaxSection({ data }: SectionProps) {
         description="Added on top of your room prices. Guests see one all-in price, and OpenBookings never takes commission on tourist tax. You pay it to your town."
         actions={
           rules.length > 0 ? (
-            <Button size="sm" onClick={() => setAdding(true)}>
-              <PlusIcon />
-              New rule
-            </Button>
+            <ViewOnlyHint>
+              <Button size="sm" disabled={!canEdit} onClick={() => setAdding(true)}>
+                <PlusIcon />
+                New rule
+              </Button>
+            </ViewOnlyHint>
           ) : null
         }
         className="border-b px-6 py-5"
@@ -85,10 +89,12 @@ export function TouristTaxSection({ data }: SectionProps) {
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Button onClick={() => setAdding(true)}>
-                <PlusIcon />
-                Set up tourist tax
-              </Button>
+              <ViewOnlyHint>
+                <Button disabled={!canEdit} onClick={() => setAdding(true)}>
+                  <PlusIcon />
+                  Set up tourist tax
+                </Button>
+              </ViewOnlyHint>
             </EmptyContent>
           </Empty>
         ) : (
@@ -164,6 +170,7 @@ function RuleCard({
 }) {
   const [confirming, setConfirming] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
+  const { canEdit } = useEditAccess();
   // Same line the save path draws: no night has been charged under it yet.
   const deletable = rule.effectiveFrom >= today;
 
@@ -198,14 +205,17 @@ function RuleCard({
           </div>
         </div>
         {deletable && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Delete the rule starting ${longDate(rule.effectiveFrom)}`}
-            onClick={() => setConfirming(true)}
-          >
-            <Trash2Icon />
-          </Button>
+          <ViewOnlyHint>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!canEdit}
+              aria-label={`Delete the rule starting ${longDate(rule.effectiveFrom)}`}
+              onClick={() => setConfirming(true)}
+            >
+              <Trash2Icon />
+            </Button>
+          </ViewOnlyHint>
         )}
       </div>
 

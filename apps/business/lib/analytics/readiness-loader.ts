@@ -1,4 +1,4 @@
-import { propertyReadAccessSql } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL } from "@openbookings/authz";
 import { addDays } from "./period";
 import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "./readiness";
 import type { IsoDate } from "./types";
@@ -23,12 +23,13 @@ const DEFAULT_TIMEOUT_MS = 2_500;
 const DEFAULT_TTL_MS = 60_000;
 
 /**
- * The one place analytics reads real data, and the one place a property is
- * looked up. It is found from the signed-in user and never from the request.
+ * The one place analytics reads real data: the current hotel's readiness.
+ * The hotel is the session's current one (getCurrentProperty), re-checked
+ * here against the user's read access, and never taken from the request.
  *
  * Every host without bookings lands here on every analytics page, so the
- * answer is kept for a minute per host, and the payment provider is given a
- * deadline: a slow Stripe must not hold the page.
+ * answer is kept for a minute per host and hotel, and the payment provider is
+ * given a deadline: a slow Stripe must not hold the page.
  */
 export function createReadinessLoader(deps: ReadinessDeps) {
   const now = deps.now ?? Date.now;
@@ -55,17 +56,16 @@ export function createReadinessLoader(deps: ReadinessDeps) {
     }
   }
 
-  async function load(userId: string, today: IsoDate): Promise<ReadinessItem[]> {
+  async function load(userId: string, propertyId: string, today: IsoDate): Promise<ReadinessItem[]> {
+    // `$1` the user, `$2` the current hotel, as CURRENT_PROPERTY_SQL expects.
     const host = await deps.queryOne<HostRow>(
       `SELECT p.id,
               p.is_active,
               COALESCE(p.stripe_account_id, o.step_data->>'stripe_account_id') AS stripe_account_id
          FROM properties p
          LEFT JOIN host_onboarding o ON o.user_id = p.owner_user_id
-        WHERE ${propertyReadAccessSql("$1")}
-        ORDER BY p.created_at
-        LIMIT 1`,
-      [userId],
+        WHERE ${CURRENT_PROPERTY_SQL}`,
+      [userId, propertyId],
     );
     if (!host) return evaluateReadiness(NOT_STARTED);
 
@@ -115,12 +115,19 @@ export function createReadinessLoader(deps: ReadinessDeps) {
     });
   }
 
-  return async function getReadiness(userId: string, today: IsoDate): Promise<ReadinessItem[]> {
-    const hit = cache.get(userId);
+  return async function getReadiness(
+    userId: string,
+    propertyId: string | null,
+    today: IsoDate,
+  ): Promise<ReadinessItem[]> {
+    // No current hotel reads like a host with no property: everything to do.
+    if (!propertyId) return evaluateReadiness(NOT_STARTED);
+    const key = `${userId}|${propertyId}`;
+    const hit = cache.get(key);
     if (hit && hit.today === today && now() - hit.at < ttlMs) return hit.items;
-    const items = await load(userId, today);
+    const items = await load(userId, propertyId, today);
     // An answer we could not get is not an answer worth keeping.
-    if (items.every((item) => item.state !== "unknown")) cache.set(userId, { at: now(), today, items });
+    if (items.every((item) => item.state !== "unknown")) cache.set(key, { at: now(), today, items });
     return items;
   };
 }

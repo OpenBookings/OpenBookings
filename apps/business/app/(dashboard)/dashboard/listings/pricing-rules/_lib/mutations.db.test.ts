@@ -45,7 +45,7 @@ describeWithDb("pricing rule groups against Postgres", () => {
   /** Editable properties: the seeded one only. */
   const deps = (editable = [ids.propertyId]): RuleGroupDeps => ({
     tx: (fn) => fn({ query: async (text, values) => (await db.query(text, values)).rows }),
-    canEditProperty: async (_session, propertyId) => editable.includes(propertyId),
+    editAccess: async (_session, propertyId) => (editable.includes(propertyId) ? "ok" : "denied"),
     newId: () => crypto.randomUUID(),
   });
 

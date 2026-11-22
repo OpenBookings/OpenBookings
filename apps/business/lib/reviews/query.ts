@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { isTestingMode } from "@openbookings/mode";
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { currentPropertySql, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { nextReplyRole, type ReplyRole } from "@openbookings/pricing";
 import type { ReplyStatus, ReviewReply } from "@openbookings/db/reviews";
 import { needsReply, type HostReview } from "./shape";
@@ -36,8 +36,8 @@ type Row = {
 };
 
 /**
- * Published reviews and reviews being checked, at every property the
- * signed-in member can read, each with its public thread (published and
+ * Published reviews and reviews being checked, at the current hotel (`$1` the
+ * member, `$2` the hotel, bound by getPropertyScopedDb), each with its public thread (published and
  * held replies) and the time of the latest private reply. Hidden, removed
  * and deleted reviews are left out.
  */
@@ -57,7 +57,7 @@ const hostReviewsSql = (testing: boolean) => `
     FROM reviews rv
     JOIN properties p ON p.id = rv.property_id
    WHERE rv.status IN ('published', 'pending')
-     AND ${propertyReadAccessSql("$1", testing)}
+     AND ${currentPropertySql(testing)}
    ORDER BY COALESCE(rv.published_at, rv.created_at) DESC
    LIMIT ${LIMIT}`;
 
@@ -94,23 +94,30 @@ function toHostReview(row: Row): HostReview {
   };
 }
 
+type PropertyDb = Pick<ReturnType<typeof getPropertyScopedDb>, "query">;
+
+/** The current hotel's reviews; none without a current hotel. `db` is a seam for the DB-backed tests. */
 export async function loadHostReviews(
   session: SessionLike,
-  host: Pick<ReturnType<typeof getHostScopedDb>, "query"> = getHostScopedDb(session),
+  propertyId: string | null,
+  db?: PropertyDb,
   testing: boolean = isTestingMode(),
 ): Promise<HostReview[]> {
+  if (!propertyId) return [];
+  const host = db ?? getPropertyScopedDb(session, propertyId);
   const rows = await host.query<Row>(hostReviewsSql(testing));
   return rows.map(toHostReview);
 }
 
-/** For the sidebar badge. Never throws: a count isn't worth a broken dashboard. */
+/** For the sidebar badge, at the current hotel. Never throws: a count isn't worth a broken dashboard. */
 export async function countReviewsNeedingReply(
   session: SessionLike,
-  host?: Pick<ReturnType<typeof getHostScopedDb>, "query">,
+  propertyId: string | null,
+  db?: PropertyDb,
   testing: boolean = isTestingMode(),
 ): Promise<number> {
   try {
-    const list = await loadHostReviews(session, host ?? getHostScopedDb(session), testing);
+    const list = await loadHostReviews(session, propertyId, db, testing);
     return list.filter(needsReply).length;
   } catch (error) {
     Sentry.captureException(error, { tags: { area: "reviews", surface: "sidebar-count" } });

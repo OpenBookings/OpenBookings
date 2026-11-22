@@ -1,19 +1,16 @@
-import { getHostScopedDb, propertyReadAccessSql } from "@openbookings/authz";
 import { BreadcrumbLabelsProvider } from "@/components/dashboard/breadcrumb-labels";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { GetHelpButton } from "@/components/support/get-help-button";
-import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 
 /**
- * The host's listing, for the contextual "Get help". Same choice as the
- * editors and the sidebar brand: one property per host today, first by name.
+ * The listing for the contextual "Get help": the current hotel, the one the
+ * editors and the sidebar brand show. getCurrentProperty already checked the
+ * user can read it.
  */
 async function loadListing(): Promise<{ id: string; name: string } | null> {
-  const session = await getServerSession();
-  if (!session) return null;
-  return getHostScopedDb(session).queryOne<{ id: string; name: string }>(
-    `SELECT p.id::text AS id, p.name FROM properties p WHERE ${propertyReadAccessSql("$1")} ORDER BY p.name LIMIT 1`,
-  );
+  const current = await getCurrentProperty();
+  return current ? { id: current.propertyId, name: current.propertyName } : null;
 }
 
 export default async function ListingsLayout({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,4 @@
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import {
   discountLabel,
   isStayDiscount,
@@ -20,7 +20,8 @@ import { amountLabel, TRY_STAY_MAX_NIGHTS, whenLabel } from "./rule-model";
  * and each discount is priced on its own to show which one wins.
  */
 
-type HostDb = Pick<ReturnType<typeof getHostScopedDb>, "query" | "queryOne">;
+/** `$1` user, `$2` the current hotel; every query below joins back to it. */
+type PropertyDb = Pick<ReturnType<typeof getPropertyScopedDb>, "query" | "queryOne">;
 
 export type TryStayInput = { ratePlanId: string; arrival: string; nights: number; bookedOn: string };
 
@@ -44,39 +45,48 @@ export type TryStayResult =
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A rate plan of the current hotel. */
+const CURRENT_PLAN = `
+  SELECT 1 FROM rate_plans rp
+  JOIN rooms r      ON r.id = rp.room_id
+  JOIN properties p ON p.id = r.property_id
+  WHERE ${CURRENT_PROPERTY_SQL} AND rp.id = $3`;
+
 const PLAN_SQL = `
 SELECT rp.id::text AS id, rp.bar::float8 AS bar, r.base_occupancy, p.timezone
 FROM rate_plans rp
 JOIN rooms r      ON r.id = rp.room_id
 JOIN properties p ON p.id = r.property_id
-WHERE ${propertyReadAccessSql("$1")} AND rp.id = $2`;
+WHERE ${CURRENT_PROPERTY_SQL} AND rp.id = $3`;
 
 /** Each night's price before rules: the newest active date price, else the base rate. */
 const NIGHTS_SQL = `
 SELECT d.d::date::text AS date,
-       COALESCE(o.price_per_night, $3::numeric)::float8 AS base_price,
+       COALESCE(o.price_per_night, $4::numeric)::float8 AS base_price,
        (o.price_per_night IS NOT NULL) AS has_override
-FROM generate_series($4::date, $4::date + ($5::int - 1), interval '1 day') AS d(d)
+FROM generate_series($5::date, $5::date + ($6::int - 1), interval '1 day') AS d(d)
 LEFT JOIN LATERAL (
   SELECT price_per_night FROM rate_overrides
-  WHERE rate_plan_id = $2 AND start_date <= d.d AND end_date >= d.d AND is_active
+  WHERE rate_plan_id = $3 AND start_date <= d.d AND end_date >= d.d AND is_active
   ORDER BY priority DESC LIMIT 1
 ) o ON TRUE
-WHERE $1::text IS NOT NULL
+WHERE EXISTS (${CURRENT_PLAN})
 ORDER BY d.d`;
 
 const MODIFIERS_SQL = `
 SELECT type, adjustment_type, adjustment_value::float8 AS adjustment_value, trigger_condition, sort_order
 FROM rate_modifiers
-WHERE $1::text IS NOT NULL AND rate_plan_id = $2 AND is_active AND type <> 'extra_guest'
+WHERE EXISTS (${CURRENT_PLAN}) AND rate_plan_id = $3 AND is_active AND type <> 'extra_guest'
 ORDER BY sort_order, id`;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** `propertyId` is the current hotel; a plan of any other hotel is not found. */
 export async function priceTryStay(
   session: SessionLike,
+  propertyId: string | null,
   input: TryStayInput,
-  db: HostDb = getHostScopedDb(session),
+  db?: PropertyDb,
 ): Promise<TryStayResult> {
   const nights = Math.trunc(Number(input.nights));
   if (!ISO.test(input.arrival) || !ISO.test(input.bookedOn)) return { ok: false, error: "Pick the dates." };
@@ -85,19 +95,21 @@ export async function priceTryStay(
   }
   if (input.bookedOn > input.arrival) return { ok: false, error: "Booked on must be on or before arrival." };
 
-  const plan = await db.queryOne<{ id: string; bar: number; base_occupancy: number; timezone: string }>(PLAN_SQL, [
+  if (!propertyId) return { ok: false, error: "Rate plan not found" };
+  const scoped = db ?? getPropertyScopedDb(session, propertyId);
+  const plan = await scoped.queryOne<{ id: string; bar: number; base_occupancy: number; timezone: string }>(PLAN_SQL, [
     input.ratePlanId,
   ]);
   if (!plan) return { ok: false, error: "Rate plan not found" };
 
   const [nightRows, modifiers] = await Promise.all([
-    db.query<{ date: string; base_price: number; has_override: boolean }>(NIGHTS_SQL, [
+    scoped.query<{ date: string; base_price: number; has_override: boolean }>(NIGHTS_SQL, [
       plan.id,
       plan.bar,
       input.arrival,
       nights,
     ]),
-    db.query<Modifier>(MODIFIERS_SQL, [plan.id]),
+    scoped.query<Modifier>(MODIFIERS_SQL, [plan.id]),
   ]);
 
   const nightList: Night[] = nightRows.map((n) => ({

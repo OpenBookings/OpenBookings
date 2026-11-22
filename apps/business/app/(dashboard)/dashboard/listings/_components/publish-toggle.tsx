@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import posthog from "posthog-js";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,6 +36,7 @@ export function PublishToggle({
 }: PublishToggleProps) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
+  const { canEdit } = useEditAccess();
   const blocked = incomplete.length > 0;
 
   async function toggle(next: boolean) {
@@ -59,7 +61,7 @@ export function PublishToggle({
         id="publish"
         checked={published}
         // Never block taking a listing down, only putting one up.
-        disabled={pending || (blocked && !published)}
+        disabled={pending || !canEdit || (blocked && !published)}
         onCheckedChange={toggle}
       />
       <Label htmlFor="publish" className="font-normal text-sm">
@@ -68,6 +70,7 @@ export function PublishToggle({
     </div>
   );
 
+  if (!canEdit) return <ViewOnlyHint side="right">{control}</ViewOnlyHint>;
   if (!blocked || published) return control;
 
   return (

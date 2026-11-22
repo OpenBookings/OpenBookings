@@ -111,6 +111,22 @@ export function PageLoading({ id, title }: { id?: LoaderId; title?: string }) {
 }
 
 /**
+ * Covers the whole console while it switches hotel, so nothing of the old
+ * hotel stays on screen: "Switching to <hotel>", then the lines of the page
+ * the switch lands on (`to`).
+ */
+export function SwitchingLoader({ hotelName, to }: { hotelName: string; to: string }) {
+  const { label, lines } = LOADERS[loaderIdForPath(to)];
+  return (
+    <div className="fixed inset-0 z-50 bg-background">
+      <LoaderStage>
+        <PageLoader label={label} lines={lines} lead={`Switching to ${hotelName}`} />
+      </LoaderStage>
+    </div>
+  );
+}
+
+/**
  * The page content, held under the loader until it has been up for a full
  * second so it never flashes. `fill` for content that stretches to the
  * bottom of the pane (editors, grids, message threads).

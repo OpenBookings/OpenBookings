@@ -1,5 +1,5 @@
 import type { PropertyCancellationTier } from "@openbookings/pricing";
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { RATE_EXTRA_KEYS, type RateExtraKey } from "./constants";
 import { amenitiesFromLegacy, bedsFromLegacyLabel, normaliseBeds } from "./derive";
 import type {
@@ -11,9 +11,10 @@ import type {
 } from "./types";
 
 /**
- * The Rooms editor's read layer. Host-scoped through getHostScopedDb, exactly
- * like the Property editor and R&A: `$1` is always the verified owner id, and
- * no room or rate id from the URL reaches SQL without being joined back to it.
+ * The Rooms editor's read layer. Bound to the current hotel through
+ * getPropertyScopedDb, like the Property editor and R&A: `$1` is the user,
+ * `$2` the current hotel, and no room or rate id from the URL reaches SQL
+ * without being joined back to both.
  *
  * `size_sqm` is numeric and node-postgres hands numerics back as strings, so
  * it crosses into the domain through `num`. `bar` is never read as a price
@@ -23,11 +24,11 @@ import type {
 const num = (v: string | null): number | null => (v === null ? null : Number(v));
 
 /**
- * The host-scoped query pair: `$1` is bound to the verified owner id. Taken as
- * a parameter only so the DB-backed tests can run the loaders inside their own
- * transaction; callers leave it to the default.
+ * The property-scoped query pair: `$1` the user, `$2` the current hotel. Taken
+ * as a parameter only so the DB-backed tests can run the loaders inside their
+ * own transaction; callers leave it to the default.
  */
-type HostDb = Pick<ReturnType<typeof getHostScopedDb>, "query" | "queryOne">;
+type PropertyDb = Pick<ReturnType<typeof getPropertyScopedDb>, "query" | "queryOne">;
 
 function statusOf(row: { is_active: boolean; archived_at: string | null }): RoomStatus {
   if (row.archived_at) return "archived";
@@ -57,20 +58,16 @@ export interface RoomsIndexData {
   rooms: RoomListItem[];
 }
 
+/** The current hotel's rooms; null without a current hotel, like the Property page. */
 export async function loadRoomsIndex(
   session: SessionLike,
-  propertyId?: string,
-  host: HostDb = getHostScopedDb(session),
+  propertyId: string | null,
+  db?: PropertyDb,
 ): Promise<RoomsIndexData | null> {
-  // Same resolution as the Property page: the requested property if the host
-  // owns it, otherwise their first.
+  if (!propertyId) return null;
+  const host = db ?? getPropertyScopedDb(session, propertyId);
   const property = await host.queryOne<{ id: string; name: string }>(
-    `SELECT p.id, p.name FROM properties p
-     WHERE ${propertyReadAccessSql("$1")}
-       AND ($2::uuid IS NULL OR p.id = $2::uuid)
-     ORDER BY p.name
-     LIMIT 1`,
-    [propertyId ?? null],
+    `SELECT p.id, p.name FROM properties p WHERE ${CURRENT_PROPERTY_SQL}`,
   );
   if (!property) return null;
 
@@ -86,11 +83,9 @@ export async function loadRoomsIndex(
         WHERE rp.room_id = r.id AND rp.is_active AND rp.archived_at IS NULL) AS active_rates
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE ${propertyReadAccessSql("$1")}
-       AND p.id = $2
+     WHERE ${CURRENT_PROPERTY_SQL}
        AND r.archived_at IS NULL
      ORDER BY r.sort_order, r.name`,
-    [property.id],
   );
 
   return {
@@ -206,14 +201,17 @@ const RATE_COLUMNS = `
  * would multiply the room row by photos × rates.
  *
  * Returns null for an archived room as well as an unknown one: an archived
- * room is not editable, and saying so differently would confirm it exists.
+ * room is not editable, and saying so differently would confirm it exists. A
+ * room of another hotel than the current one is unknown too.
  */
 export async function loadRoomEditor(
   session: SessionLike,
+  propertyId: string | null,
   roomId: string,
-  host: HostDb = getHostScopedDb(session),
+  db?: PropertyDb,
 ): Promise<RoomEditorData | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(roomId)) return null;
+  if (!propertyId || !/^[0-9a-f-]{36}$/i.test(roomId)) return null;
+  const host = db ?? getPropertyScopedDb(session, propertyId);
 
   const room = await host.queryOne<RoomRow>(
     `SELECT
@@ -227,7 +225,7 @@ export async function loadRoomEditor(
        r.is_active, r.archived_at
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE ${propertyReadAccessSql("$1")} AND r.id = $2::uuid AND r.archived_at IS NULL`,
+     WHERE ${CURRENT_PROPERTY_SQL} AND r.id = $3::uuid AND r.archived_at IS NULL`,
     [roomId],
   );
   if (!room) return null;
@@ -246,7 +244,7 @@ export async function loadRoomEditor(
         WHERE ra.room_id = r.id) AS legacy_amenities
      FROM rooms r
      JOIN properties p ON p.id = r.property_id
-     WHERE ${propertyReadAccessSql("$1")} AND r.id = $2::uuid`,
+     WHERE ${CURRENT_PROPERTY_SQL} AND r.id = $3::uuid`,
     [room.id],
   );
 

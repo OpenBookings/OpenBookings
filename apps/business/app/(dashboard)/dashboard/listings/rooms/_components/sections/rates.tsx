@@ -27,6 +27,7 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -52,12 +53,13 @@ import type { RoomSectionProps } from "./props";
  * `?rate=new`, which makes it linkable and lets it survive a refresh.
  */
 export function RatesSection({ data }: RoomSectionProps) {
-  const { room, rates, property } = data;
+  const { room, rates } = data;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [notice, setNotice] = React.useState<string | null>(null);
   const [togglingId, setTogglingId] = React.useState<string | null>(null);
+  const { canEdit } = useEditAccess();
   const [archiving, setArchiving] = React.useState<RatePlanRecord | null>(null);
 
   const rateParam = searchParams.get("rate");
@@ -66,7 +68,7 @@ export function RatesSection({ data }: RoomSectionProps) {
   // room's, made up) opens nothing rather than an empty form.
   const sheetOpen = rateParam === "new" || sheetRate !== null;
 
-  const pricingHref = `/dashboard/listings/rates-availability?property=${property.id}`;
+  const pricingHref = `/dashboard/listings/rates-availability`;
 
   function setRateParam(value: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -139,10 +141,12 @@ export function RatesSection({ data }: RoomSectionProps) {
             Pricing is set in R&amp;A
             <ArrowRightIcon className="size-3.5" aria-hidden />
           </Link>
-          <Button size="sm" onClick={() => setRateParam("new")}>
-            <PlusIcon />
-            Add rate
-          </Button>
+          <ViewOnlyHint>
+            <Button size="sm" disabled={!canEdit} onClick={() => setRateParam("new")}>
+              <PlusIcon />
+              Add rate
+            </Button>
+          </ViewOnlyHint>
         </div>
 
         <div className="overflow-hidden rounded-xl border">
@@ -177,7 +181,7 @@ export function RatesSection({ data }: RoomSectionProps) {
                   const statusSwitch = (
                     <Switch
                       checked={rate.active}
-                      disabled={togglingId === rate.id || lockedOff}
+                      disabled={!canEdit || togglingId === rate.id || lockedOff}
                       onCheckedChange={(c) => toggle(rate, c)}
                       aria-label={`${rate.name} active`}
                     />
@@ -207,7 +211,9 @@ export function RatesSection({ data }: RoomSectionProps) {
                         {policy}
                       </TableCell>
                       <TableCell>
-                        {lockedOff ? (
+                        {!canEdit ? (
+                          <ViewOnlyHint>{statusSwitch}</ViewOnlyHint>
+                        ) : lockedOff ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex">{statusSwitch}</span>
@@ -228,14 +234,14 @@ export function RatesSection({ data }: RoomSectionProps) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onSelect={() => setRateParam(rate.id)}>
                               <PencilIcon />
-                              Edit
+                              {canEdit ? "Edit" : "View"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => void duplicate(rate)}>
+                            <DropdownMenuItem disabled={!canEdit} onSelect={() => void duplicate(rate)}>
                               <CopyIcon />
                               Duplicate
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onSelect={() => setArchiving(rate)}>
+                            <DropdownMenuItem variant="destructive" disabled={!canEdit} onSelect={() => setArchiving(rate)}>
                               <ArchiveIcon />
                               Archive
                             </DropdownMenuItem>

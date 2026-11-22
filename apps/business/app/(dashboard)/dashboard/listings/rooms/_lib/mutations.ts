@@ -6,6 +6,14 @@ import {
 } from "@openbookings/authz";
 import { query as dbQuery, queryOne as dbQueryOne, withTransaction } from "@openbookings/db";
 import type { z } from "zod";
+import {
+  currentPropertyPin,
+  getCurrentProperty,
+  pinnedAccess,
+  switchedReason,
+  type PinnedAccess,
+  type PropertyPin,
+} from "@/lib/current-property";
 import { purgePropertyPage, type PurgeTarget } from "@/lib/purge-property-page";
 import type { FormState } from "../../_lib/editor";
 import { canPublish } from "./completion";
@@ -26,7 +34,9 @@ import { refundableGuardError, type GuardRate } from "./refundable-guard";
  * The authorization rule is the one the Property editor and R&A follow: every
  * id in a request is attacker-controlled, so ownership goes through
  * @openbookings/authz on every call (org membership included), and a failed
- * check reads exactly like an id that does not exist.
+ * check reads exactly like an id that does not exist. Every check is pinned to
+ * the current hotel (`deps.pin`): a stale tab still showing another hotel is
+ * refused, with `reason: "property-switched"` where the result can carry it.
  */
 
 type Query = <T>(text: string, values?: unknown[]) => Promise<T[]>;
@@ -41,6 +51,8 @@ export interface MutationDeps {
   /** Drops the guest listing page's cache; must never throw. */
   purge: (target: PurgeTarget) => Promise<void>;
   loadRoom: (session: SessionLike, roomId: string) => Promise<RoomEditorData | null>;
+  /** The current hotel every ownership check is pinned to. */
+  pin: () => Promise<PropertyPin>;
 }
 
 const defaultDeps: MutationDeps = {
@@ -56,12 +68,19 @@ const defaultDeps: MutationDeps = {
       }),
     ),
   purge: (target) => purgePropertyPage(target),
-  loadRoom: loadRoomEditor,
+  loadRoom: async (session, roomId) => loadRoomEditor(session, (await getCurrentProperty())?.propertyId ?? null, roomId),
+  pin: currentPropertyPin,
 };
 
 export type Result<Extra = object> =
   | ({ ok: true } & Extra)
-  | { ok: false; error: string; code?: "future_bookings" | "last_active_rate" | "non_refundable" };
+  | {
+      ok: false;
+      error: string;
+      code?: "future_bookings" | "last_active_rate" | "non_refundable";
+      /** The target is on another hotel than the current one (a stale tab). */
+      reason?: "property-switched";
+    };
 
 /** Thrown, not returned, from the form actions — the same as the Property editor's authorize(). */
 export class NotFoundError extends Error {
@@ -90,14 +109,30 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
 
 const str = (formData: FormData, key: string) => String(formData.get(key) ?? "");
 
+/** userOwnsProperty / userOwnsRoom / userOwnsRatePlan, pinned to the current hotel. */
+async function ownsProperty(session: SessionLike, propertyId: string, deps: MutationDeps): Promise<PinnedAccess> {
+  if (!propertyId) return "denied";
+  return pinnedAccess(await deps.pin(), (pin) => userOwnsProperty(session, propertyId, { queryOne: deps.queryOne, ...pin }));
+}
+
+async function ownsRoom(session: SessionLike, roomId: string, deps: MutationDeps): Promise<PinnedAccess> {
+  if (!roomId) return "denied";
+  return pinnedAccess(await deps.pin(), (pin) => userOwnsRoom(session, roomId, { queryOne: deps.queryOne, ...pin }));
+}
+
+async function ownsRatePlan(session: SessionLike, ratePlanId: string, deps: MutationDeps): Promise<PinnedAccess> {
+  if (!ratePlanId) return "denied";
+  return pinnedAccess(await deps.pin(), (pin) =>
+    userOwnsRatePlan(session, ratePlanId, { queryOne: deps.queryOne, ...pin }),
+  );
+}
+
 async function requireRoom(
   session: SessionLike,
   roomId: string,
   deps: MutationDeps,
 ): Promise<{ id: string; is_active: boolean }> {
-  if (!roomId || !(await userOwnsRoom(session, roomId, { queryOne: deps.queryOne }))) {
-    throw new NotFoundError();
-  }
+  if ((await ownsRoom(session, roomId, deps)) !== "ok") throw new NotFoundError();
   // Archived rooms are read-only. Same refusal as an unknown id.
   const row = await deps.queryOne<{ id: string; is_active: boolean }>(
     `SELECT id, is_active FROM rooms WHERE id = $1 AND archived_at IS NULL`,
@@ -122,9 +157,8 @@ export async function createRoom(
   propertyId: string,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result<{ roomId: string }>> {
-  if (!propertyId || !(await userOwnsProperty(session, propertyId, { queryOne: deps.queryOne }))) {
-    return { ok: false, error: "Property not found" };
-  }
+  const access = await ownsProperty(session, propertyId, deps);
+  if (access !== "ok") return { ok: false, error: "Property not found", ...switchedReason(access) };
 
   const row = await deps.queryOne<{ id: string }>(
     `INSERT INTO rooms
@@ -164,9 +198,8 @@ export async function archiveRoom(
   roomId: string,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result> {
-  if (!roomId || !(await userOwnsRoom(session, roomId, { queryOne: deps.queryOne }))) {
-    return { ok: false, error: "Room type not found" };
-  }
+  const access = await ownsRoom(session, roomId, deps);
+  if (access !== "ok") return { ok: false, error: "Room type not found", ...switchedReason(access) };
 
   const upcoming = await futureRoomBookings(roomId, deps);
   if (upcoming > 0) {
@@ -197,9 +230,8 @@ export async function reorderRooms(
   orderedIds: string[],
   deps: MutationDeps = defaultDeps,
 ): Promise<Result> {
-  if (!propertyId || !(await userOwnsProperty(session, propertyId, { queryOne: deps.queryOne }))) {
-    return { ok: false, error: "Property not found" };
-  }
+  const access = await ownsProperty(session, propertyId, deps);
+  if (access !== "ok") return { ok: false, error: "Property not found", ...switchedReason(access) };
   const ids = [...new Set(orderedIds)];
   if (ids.length === 0 || ids.length !== orderedIds.length || ids.length > 500) {
     return { ok: false, error: "That order could not be saved." };
@@ -241,9 +273,8 @@ export async function setRoomPublished(
   published: boolean,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result> {
-  if (!roomId || !(await userOwnsRoom(session, roomId, { queryOne: deps.queryOne }))) {
-    return { ok: false, error: "Room type not found" };
-  }
+  const access = await ownsRoom(session, roomId, deps);
+  if (access !== "ok") return { ok: false, error: "Room type not found", ...switchedReason(access) };
 
   if (published) {
     const data = await deps.loadRoom(session, roomId);
@@ -480,17 +511,22 @@ interface PlanRow {
   room_published: boolean;
 }
 
-async function requirePlan(session: SessionLike, ratePlanId: string, deps: MutationDeps) {
-  if (!ratePlanId || !(await userOwnsRatePlan(session, ratePlanId, { queryOne: deps.queryOne }))) {
-    return null;
-  }
-  return deps.queryOne<PlanRow>(
+/** The plan, or null with why: `reason` is set when the plan is on another hotel than the current one. */
+async function requirePlan(
+  session: SessionLike,
+  ratePlanId: string,
+  deps: MutationDeps,
+): Promise<{ plan: PlanRow | null; reason?: "property-switched" }> {
+  const access = await ownsRatePlan(session, ratePlanId, deps);
+  if (access !== "ok") return { plan: null, ...switchedReason(access) };
+  const plan = await deps.queryOne<PlanRow>(
     `SELECT rp.id, rp.room_id, rp.is_active, rp.is_refundable, rp.bar::float8 AS bar,
             (rp.bar > 0) AS priced, r.is_active AS room_published
      FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id
      WHERE rp.id = $1 AND rp.archived_at IS NULL AND r.archived_at IS NULL`,
     [ratePlanId],
   );
+  return { plan };
 }
 
 /** Other active rates on the same room, excluding this one. */
@@ -603,7 +639,7 @@ export async function saveRate(
   // request learns nothing, not even which fields would have been wrong.
   let plan: PlanRow | null = null;
   if (ratePlanId) {
-    plan = await requirePlan(session, ratePlanId, deps);
+    plan = (await requirePlan(session, ratePlanId, deps)).plan;
     if (!plan) throw new NotFoundError();
   } else {
     await requireRoom(session, roomId, deps);
@@ -686,8 +722,8 @@ export async function setRateActive(
   active: boolean,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result> {
-  const plan = await requirePlan(session, ratePlanId, deps);
-  if (!plan) return { ok: false, error: "Rate not found" };
+  const { plan, reason } = await requirePlan(session, ratePlanId, deps);
+  if (!plan) return { ok: false, error: "Rate not found", ...(reason ? { reason } : {}) };
   if (plan.is_active === active) return { ok: true };
 
   const refusal = await statusChangeError(plan, active, deps);
@@ -711,8 +747,8 @@ export async function duplicateRate(
   ratePlanId: string,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result<{ ratePlanId: string }>> {
-  const plan = await requirePlan(session, ratePlanId, deps);
-  if (!plan) return { ok: false, error: "Rate not found" };
+  const { plan, reason } = await requirePlan(session, ratePlanId, deps);
+  if (!plan) return { ok: false, error: "Rate not found", ...(reason ? { reason } : {}) };
 
   const row = await deps.queryOne<{ id: string; name: string }>(
     `INSERT INTO rate_plans
@@ -750,8 +786,8 @@ export async function archiveRate(
   ratePlanId: string,
   deps: MutationDeps = defaultDeps,
 ): Promise<Result> {
-  const plan = await requirePlan(session, ratePlanId, deps);
-  if (!plan) return { ok: false, error: "Rate not found" };
+  const { plan, reason } = await requirePlan(session, ratePlanId, deps);
+  if (!plan) return { ok: false, error: "Rate not found", ...(reason ? { reason } : {}) };
 
   const upcoming = await deps.queryOne<{ n: number }>(
     `SELECT COUNT(DISTINCT b.id)::int AS n

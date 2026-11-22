@@ -6,6 +6,7 @@ import { query, queryOne, type Queryable } from "@openbookings/db";
 import { retrieveConnectAccount } from "@openbookings/stripe";
 import type { z } from "zod";
 import { getServerSession } from "@/lib/auth";
+import { currentPropertyPin } from "@/lib/current-property";
 import { purgePropertyPageBySlug } from "@/lib/purge-property-page";
 import { canPublish } from "./completion";
 import { publishBlocker } from "./publish-readiness";
@@ -23,12 +24,13 @@ import type { FormState } from "./types";
 /**
  * Ownership is checked on every write, through the authz package rather than
  * inline SQL. A property id arriving in a FormData field is attacker-controlled
- * like any other form value.
+ * like any other form value. The check is pinned to the current hotel, so a
+ * stale tab still showing another hotel cannot save to it.
  */
 async function authorize(propertyId: string) {
   const session = await getServerSession();
   if (!session) throw new Error("Unauthenticated");
-  if (!propertyId || !(await userOwnsProperty(session, propertyId))) {
+  if (!propertyId || !(await userOwnsProperty(session, propertyId, await currentPropertyPin()))) {
     // Deliberately not "forbidden": a host must not be able to probe which
     // property ids exist.
     throw new Error("Not found");

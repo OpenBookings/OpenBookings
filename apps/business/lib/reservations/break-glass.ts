@@ -3,6 +3,7 @@
 import { userCan } from "@openbookings/authz";
 import { query, queryOne } from "@openbookings/db";
 import { getServerSession } from "@/lib/auth";
+import { currentPropertyPin } from "@/lib/current-property";
 import { toGuestContact, type GuestContact, type GuestContactRow } from "./shape";
 
 /**
@@ -37,7 +38,8 @@ export async function breakGlass(bookingId: string): Promise<{ contact: GuestCon
   ).catch(() => null);
 
   // Out of scope and missing look the same.
-  if (!booking || !(await userCan(session, booking.hotel_id, { booking: ["read"] }))) {
+  // Pinned to the current hotel: a stale tab cannot open another hotel's guest details.
+  if (!booking || !(await userCan(session, booking.hotel_id, { booking: ["read"] }, await currentPropertyPin()))) {
     return { error: "Booking not found." };
   }
 

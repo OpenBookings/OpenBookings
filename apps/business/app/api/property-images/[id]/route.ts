@@ -1,4 +1,5 @@
 import { getServerSession } from "@/lib/auth";
+import { currentPropertyPin } from "@/lib/current-property";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty } from "@openbookings/authz";
 import { purgePropertyPage } from "@/lib/purge-property-page";
@@ -11,7 +12,8 @@ async function ownedImage(session: Parameters<typeof userOwnsProperty>[0], image
     [imageId],
   );
   if (!row) return null;
-  return (await userOwnsProperty(session, row.property_id)) ? row : null;
+  // Pinned to the current hotel: a stale tab cannot edit another hotel's photos.
+  return (await userOwnsProperty(session, row.property_id, await currentPropertyPin())) ? row : null;
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {

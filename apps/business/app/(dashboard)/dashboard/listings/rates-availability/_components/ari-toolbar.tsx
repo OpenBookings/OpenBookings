@@ -14,6 +14,7 @@ import {
   Undo2,
   UploadCloud,
 } from "lucide-react";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -98,6 +99,7 @@ export function AriToolbar({
   onPublish,
   onDiscard,
 }: AriToolbarProps) {
+  const { canEdit } = useEditAccess();
   const activeFilterCount = hiddenRoomIds.size + (issuesOnly ? 1 : 0);
 
   return (
@@ -293,26 +295,35 @@ export function AriToolbar({
             Pricing rules
           </Link>
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => onOpenDialog("availability")}
-        >
-          <CalendarCog className="size-4" />
-          Edit availability
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => onOpenDialog("restrictions")}
-        >
-          <PencilLine className="size-4" />
-          Edit restrictions
-        </Button>
-        <Button
-          onClick={() => onOpenDialog("rate-plan")}
-        >
-          <Plus className="size-4" />
-          Add rate plan
-        </Button>
+        <ViewOnlyHint>
+          <Button
+            variant="outline"
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("availability")}
+          >
+            <CalendarCog className="size-4" />
+            Edit availability
+          </Button>
+        </ViewOnlyHint>
+        <ViewOnlyHint>
+          <Button
+            variant="outline"
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("restrictions")}
+          >
+            <PencilLine className="size-4" />
+            Edit restrictions
+          </Button>
+        </ViewOnlyHint>
+        <ViewOnlyHint>
+          <Button
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("rate-plan")}
+          >
+            <Plus className="size-4" />
+            Add rate plan
+          </Button>
+        </ViewOnlyHint>
       </div>
     </div>
   );

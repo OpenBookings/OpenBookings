@@ -1,18 +1,17 @@
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import type { ModifierType } from "@openbookings/pricing";
 import type { PlanOption, RuleGroup } from "./rule-model";
 
 /**
- * The Pricing rules page's read layer. Host-scoped like R&A: `$1` is always
- * the verified user id, and every row is joined back to a property the user
- * can read.
+ * The Pricing rules page's read layer. Bound to the current hotel like R&A:
+ * `$1` is the user, `$2` the current hotel, and every row is joined back to
+ * it. `db` is a seam for the DB-backed tests.
  */
 
-type HostDb = Pick<ReturnType<typeof getHostScopedDb>, "query" | "queryOne">;
+type PropertyDb = Pick<ReturnType<typeof getPropertyScopedDb>, "query" | "queryOne">;
 
 export type PricingRulesData = {
   property: { id: string; name: string };
-  properties: { id: string; name: string }[];
   plans: PlanOption[];
   rules: RuleGroup[];
 };
@@ -30,10 +29,9 @@ type ModifierRow = {
   sort_order: number;
 };
 
-const PROPERTIES_SQL = `
+const PROPERTY_SQL = `
 SELECT p.id::text AS id, p.name FROM properties p
-WHERE ${propertyReadAccessSql("$1")}
-ORDER BY p.name`;
+WHERE ${CURRENT_PROPERTY_SQL}`;
 
 /** Rate plans that can carry a rule: not archived, on rooms that are not archived. */
 const PLANS_SQL = `
@@ -41,8 +39,7 @@ SELECT rp.id::text AS id, rp.name, rp.bar::float8 AS bar, r.id::text AS room_id,
 FROM rate_plans rp
 JOIN rooms r      ON r.id = rp.room_id
 JOIN properties p ON p.id = r.property_id
-WHERE ${propertyReadAccessSql("$1")}
-  AND p.id = $2
+WHERE ${CURRENT_PROPERTY_SQL}
   AND r.archived_at IS NULL
   AND rp.archived_at IS NULL
 ORDER BY r.sort_order NULLS LAST, r.name, rp.created_at, rp.name`;
@@ -55,8 +52,7 @@ FROM rate_modifiers m
 JOIN rate_plans rp ON rp.id = m.rate_plan_id
 JOIN rooms r       ON r.id = rp.room_id
 JOIN properties p  ON p.id = r.property_id
-WHERE ${propertyReadAccessSql("$1")}
-  AND p.id = $2
+WHERE ${CURRENT_PROPERTY_SQL}
   AND m.type <> 'extra_guest'
   AND r.archived_at IS NULL
   AND rp.archived_at IS NULL
@@ -91,23 +87,24 @@ export function groupRules(rows: ModifierRow[]): RuleGroup[] {
   return [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/** The current hotel's plans and rules; null without a current hotel. */
 export async function loadPricingRules(
   session: SessionLike,
-  propertyId?: string,
-  db: HostDb = getHostScopedDb(session),
+  propertyId: string | null,
+  db?: PropertyDb,
 ): Promise<PricingRulesData | null> {
-  const properties = await db.query<{ id: string; name: string }>(PROPERTIES_SQL);
-  if (properties.length === 0) return null;
-  const property = properties.find((p) => p.id === propertyId) ?? properties[0];
+  if (!propertyId) return null;
+  const scoped = db ?? getPropertyScopedDb(session, propertyId);
+  const property = await scoped.queryOne<{ id: string; name: string }>(PROPERTY_SQL);
+  if (!property) return null;
 
   const [plans, rows] = await Promise.all([
-    db.query<{ id: string; name: string; bar: number; room_id: string; room_name: string }>(PLANS_SQL, [property.id]),
-    db.query<ModifierRow>(MODIFIERS_SQL, [property.id]),
+    scoped.query<{ id: string; name: string; bar: number; room_id: string; room_name: string }>(PLANS_SQL),
+    scoped.query<ModifierRow>(MODIFIERS_SQL),
   ]);
 
   return {
     property,
-    properties,
     plans: plans.map((p) => ({ id: p.id, name: p.name, bar: Number(p.bar), roomId: p.room_id, roomName: p.room_name })),
     rules: groupRules(rows),
   };
@@ -119,19 +116,24 @@ FROM rate_modifiers m
 JOIN rate_plans rp ON rp.id = m.rate_plan_id
 JOIN rooms r       ON r.id = rp.room_id
 JOIN properties p  ON p.id = r.property_id
-WHERE ${propertyReadAccessSql("$1")} AND m.rule_group_id = $2
+WHERE ${CURRENT_PROPERTY_SQL} AND m.rule_group_id = $3
 LIMIT 1`;
 
-/** The page data for one rule's edit page; null for a rule the user can't read, or no such rule. */
+/**
+ * The page data for one rule's edit page; null for a rule the user can't
+ * read, a rule of another hotel than the current one, or no such rule.
+ */
 export async function loadRuleGroup(
   session: SessionLike,
+  propertyId: string | null,
   groupId: string,
-  db: HostDb = getHostScopedDb(session),
+  db?: PropertyDb,
 ): Promise<{ data: PricingRulesData; rule: RuleGroup } | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(groupId)) return null;
-  const owner = await db.queryOne<{ property_id: string }>(GROUP_PROPERTY_SQL, [groupId]);
+  if (!propertyId || !/^[0-9a-f-]{36}$/i.test(groupId)) return null;
+  const scoped = db ?? getPropertyScopedDb(session, propertyId);
+  const owner = await scoped.queryOne<{ property_id: string }>(GROUP_PROPERTY_SQL, [groupId]);
   if (!owner) return null;
-  const data = await loadPricingRules(session, owner.property_id, db);
+  const data = await loadPricingRules(session, propertyId, scoped);
   const rule = data?.rules.find((r) => r.id === groupId);
   return data && rule ? { data, rule } : null;
 }

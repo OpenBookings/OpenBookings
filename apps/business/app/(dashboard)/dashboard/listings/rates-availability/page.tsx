@@ -3,6 +3,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import {
   propertyHasOrganisation,
   propertyRatesConfirmed,
@@ -10,12 +13,7 @@ import {
 } from "@openbookings/authz";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { AriView } from "./_components/ari-view";
-import {
-  addDays,
-  loadAriGrid,
-  loadHostProperties,
-  toIsoDate,
-} from "./_lib/ari-query";
+import { addDays, loadAriGrid, toIsoDate } from "./_lib/ari-query";
 import { buildMockAriGrid } from "./_lib/mock-ari";
 import { STAY_LENGTHS } from "./_lib/types";
 
@@ -27,7 +25,6 @@ interface PageProps {
     start?: string;
     days?: string;
     stay?: string;
-    property?: string;
     demo?: string;
   }>;
 }
@@ -76,6 +73,9 @@ async function AriContent({ searchParams }: PageProps) {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
+  const access = await pageAccess("rates");
+  if (access.level === "none") return <NoAccessPage navKey="rates" current={access.current} />;
+
   const params = await searchParams;
   const { start, windowDays, stayLength } = parseParams(params);
 
@@ -98,15 +98,14 @@ async function AriContent({ searchParams }: PageProps) {
     );
   }
 
-  const properties = await loadHostProperties(session);
-  if (properties.length === 0) return <EmptyState />;
-
-  const property =
-    properties.find((p) => p.id === params.property) ?? properties[0];
+  // The current hotel, never one named in the URL.
+  const { current } = access;
+  if (!current) return <EmptyState />;
+  const propertyId = current.propertyId;
 
   const data = await loadAriGrid(
     session,
-    property.id,
+    propertyId,
     { start, end: addDays(start, windowDays - 1) },
     { stayLength },
   );
@@ -114,9 +113,9 @@ async function AriContent({ searchParams }: PageProps) {
   if (!data) return <EmptyState />;
 
   const [ratesConfirmed, canConfirmRates, hasOrganisation] = await Promise.all([
-    propertyRatesConfirmed(property.id),
-    userCanConfirmRates(session, property.id),
-    propertyHasOrganisation(property.id),
+    propertyRatesConfirmed(propertyId),
+    userCanConfirmRates(session, propertyId),
+    propertyHasOrganisation(propertyId),
   ]);
 
   // Keyed on the property alone: moving through weeks, ranges or stay lengths
@@ -124,13 +123,15 @@ async function AriContent({ searchParams }: PageProps) {
   // thrown away on every chevron press. Switching property is a different
   // dataset, so there a fresh shell is right.
   return (
-    <AriView
-      key={property.id}
-      data={data}
-      startDate={start}
-      windowDays={windowDays}
-      rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
-    />
+    <EditAccessProvider canEdit={access.level === "edit"} hotelName={current.propertyName}>
+      <AriView
+        key={propertyId}
+        data={data}
+        startDate={start}
+        windowDays={windowDays}
+        rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
+      />
+    </EditAccessProvider>
   );
 }
 

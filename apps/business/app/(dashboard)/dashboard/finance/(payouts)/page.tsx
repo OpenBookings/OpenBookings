@@ -1,9 +1,10 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import { redirect } from "next/navigation";
-import { queryOne } from "@openbookings/db";
-import { rolesWith } from "@openbookings/authz/permissions";
-import { retrieveConnectAccount } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
+import { pageAccess } from "@/lib/page-access";
+import { loadPayoutStatus } from "@/lib/finance/payout-status";
+import { activeOrgId } from "@/lib/active-org";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
 import {
   Card,
@@ -15,50 +16,20 @@ import {
 import { PageHeader } from "@/components/dashboard/page-header";
 import { PageHold } from "@/components/dashboard/page-loaders";
 
-type PayoutStatus =
-  | { state: "hidden" }
-  | { state: "none" }
-  | { state: "unavailable" }
-  | { state: "ok"; payoutsEnabled: boolean; requirementsDue: number };
-
-/**
- * Where the host's payouts stand, straight from Stripe. Read-only: no bank
- * details are fetched, shown or stored here. Those live in the host's own
- * Stripe Dashboard, behind Stripe's login.
- */
-async function loadPayoutStatus(userId: string): Promise<PayoutStatus> {
-  // Only roles that may see payouts (owner, general manager, back office).
-  // Someone else on the team sees that payouts are not theirs to view.
-  const row = await queryOne<{ stripe_account_id: string | null; member_elsewhere: boolean }>(
-    `SELECT COALESCE(
-       (SELECT op.stripe_account_id
-          FROM "member" m JOIN org_profile op ON op.organization_id = m."organizationId"
-         WHERE m."userId" = $1 AND m.role = ANY($2::text[]) AND op.stripe_account_id IS NOT NULL
-         ORDER BY m."createdAt" LIMIT 1),
-       (SELECT step_data->>'stripe_account_id' FROM host_onboarding WHERE user_id = $1)
-     ) AS stripe_account_id,
-     EXISTS (SELECT 1 FROM "member" m WHERE m."userId" = $1 AND m.role <> ALL($2::text[])) AS member_elsewhere`,
-    [userId, rolesWith({ payout: ["read"] })],
-  );
-  if (!row?.stripe_account_id) return row?.member_elsewhere ? { state: "hidden" } : { state: "none" };
-
-  try {
-    const account = await retrieveConnectAccount(row.stripe_account_id);
-    return {
-      state: "ok",
-      payoutsEnabled: account.payouts_enabled ?? false,
-      requirementsDue: account.requirements?.currently_due?.length ?? 0,
-    };
-  } catch {
-    // Stripe being unreachable must not take the page down.
-    return { state: "unavailable" };
-  }
-}
-
 export default async function FinancePage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  const payouts = await loadPayoutStatus(session.user.id);
+  const access = await pageAccess("payouts");
+  if (access.level === "none") {
+    return (
+      <PageHold id="payouts" fill>
+        <NoAccessPage navKey="payouts" current={access.current} />
+      </PageHold>
+    );
+  }
+  // With no current hotel, the role that decides is the one in the session's org.
+  const orgId = access.current ? null : await activeOrgId(session);
+  const payouts = await loadPayoutStatus(access.current, { userId: session.user.id, orgId });
 
   return (
     <PageHold id="payouts">

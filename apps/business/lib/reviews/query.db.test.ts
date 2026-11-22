@@ -24,8 +24,10 @@ describeWithDb("loadHostReviews against Postgres", () => {
   let propertyId: string;
 
   const session = (id: string): SessionLike => ({ user: { id, account_type: "business" } });
-  const hostDb = (s: SessionLike) => ({
-    query: async <T,>(sql: string, values: unknown[] = []) => (await db.query(sql, [s.user.id, ...values])).rows as T[],
+  /** getPropertyScopedDb's shape, bound to this transaction and the test property. */
+  const propertyDb = (s: SessionLike) => ({
+    query: async <T,>(sql: string, values: unknown[] = []) =>
+      (await db.query(sql, [s.user.id, propertyId, ...values])).rows as T[],
   });
   const one = async (sql: string, values: unknown[]) => (await db.query(sql, values)).rows[0] as { id: string };
 
@@ -106,7 +108,7 @@ describeWithDb("loadHostReviews against Postgres", () => {
       pending,
     ]);
 
-    const list = await loadHostReviews(session(owner), hostDb(session(owner)));
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
     const a = list.find((r) => r.id === published);
     const b = list.find((r) => r.id === pending);
     expect(a).toMatchObject({ status: "published", score: 6, propertyName: "Canal House", authorName: "Anna", nextRole: "host", privateReplyAt: null });
@@ -117,7 +119,7 @@ describeWithDb("loadHostReviews against Postgres", () => {
 
   test("a stranger sees nothing", async () => {
     await addReview("published");
-    expect(await loadHostReviews(session(stranger), hostDb(session(stranger)))).toEqual([]);
+    expect(await loadHostReviews(session(stranger), propertyId, propertyDb(session(stranger)))).toEqual([]);
   });
 
   test("a front-desk member without access to the property sees nothing", async () => {
@@ -129,13 +131,13 @@ describeWithDb("loadHostReviews against Postgres", () => {
       `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt") VALUES (gen_random_uuid()::text, $1, $2, 'frontdesk', NOW())`,
       [orgId, stranger],
     );
-    expect(await loadHostReviews(session(stranger), hostDb(session(stranger)), false)).toEqual([]);
+    expect(await loadHostReviews(session(stranger), propertyId, propertyDb(session(stranger)), false)).toEqual([]);
   });
 
   test("deleted and hidden reviews are left out", async () => {
     await addReview("deleted");
     await addReview("hidden");
-    expect(await loadHostReviews(session(owner), hostDb(session(owner)))).toEqual([]);
+    expect(await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)))).toEqual([]);
   });
 
   test("countReviewsNeedingReply counts the open ones", async () => {
@@ -147,6 +149,6 @@ describeWithDb("loadHostReviews against Postgres", () => {
       `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, published_at) VALUES ($1, 'host', $2, 'Thanks', 'published', NOW())`,
       [replied, owner],
     );
-    expect(await countReviewsNeedingReply(session(owner), hostDb(session(owner)))).toBe(2);
+    expect(await countReviewsNeedingReply(session(owner), propertyId, propertyDb(session(owner)))).toBe(2);
   });
 });
