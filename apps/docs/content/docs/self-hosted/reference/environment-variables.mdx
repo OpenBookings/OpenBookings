@@ -158,7 +158,7 @@ ROLE admin_reader;` (or `admin_writer`).
 | `MISTRAL_API_KEY` / `MISTRAL_MODEL` | yes | The language model. |
 | `CHATWOOT_BASE_URL` / `CHATWOOT_ACCOUNT_ID` | yes | The Chatwoot instance and account. |
 | `CHATWOOT_BOT_ACCESS_TOKEN` / `CHATWOOT_BOT_WEBHOOK_SECRET` | yes | The agent bot's token and webhook secret. |
-| `CHATWOOT_VERIFIED_INBOX_IDS` | no | Inboxes with mandatory identity validation, where a guest's email is trusted. |
+| `CHATWOOT_VERIFIED_INBOX_IDS` | no | Inboxes with mandatory identity validation. There the signed contact identifier must be the guest's user id, and the bot lists bookings by that account's own email (never the contact's). |
 | `SERVICE_BASE_URL` | yes | The bot's own public URL. |
 | `TASKS_INLINE` / `TASKS_AUTH_DISABLED` | local only | Run tasks in-process without a queue. Only accepted with a local `SERVICE_BASE_URL`. |
 | `QSTASH_URL` / `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | when deployed | Upstash QStash task queue. |

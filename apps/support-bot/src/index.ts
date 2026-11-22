@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { recordProcessedEvent } from '@openbookings/db'
-import { isVerifiedGuestIdentity } from './chatwoot/identity'
+import { findGuestEmailByUserId, recordProcessedEvent } from '@openbookings/db'
+import { resolveGuestIdentity } from './chatwoot/identity'
 import { verifyChatwootSignature } from './chatwoot/signature'
 import { assertRequiredEnv, env } from './env'
 import { processConversation } from './process'
@@ -107,24 +107,24 @@ app.post('/webhooks/chatwoot', async (c) => {
   // Identity for the whole turn, fixed here from the signed webhook body. Every
   // booking lookup downstream is scoped to this address; an anonymous contact
   // (null) can reach no booking data at all.
-  const guestEmail = isHostTicket
-    ? null
-    :
-    payload.sender?.email?.trim().toLowerCase() ||
-    payload.conversation?.meta?.sender?.email?.trim().toLowerCase() ||
-    null
-
-  // An email is only a claim unless Chatwoot verified it (see identity.ts).
-  // Unverified, the tools can still answer about a booking the visitor names by
-  // its reference, but will not list bookings by email.
-  const guestEmailVerified =
-    !isHostTicket &&
-    isVerifiedGuestIdentity({
-      guestEmail,
-      inboxId,
-      contactIdentifier: payload.sender?.identifier ?? payload.conversation?.meta?.sender?.identifier,
-      verifiedInboxIds: env.verifiedGuestInboxIds,
-    })
+  //
+  // The contact's email is only a claim. In a verified inbox the signed
+  // identifier is the guest's user id, and the email becomes that account's
+  // own address from our database (see identity.ts). Unverified, the tools can
+  // still answer about a booking the visitor names by its reference, but will
+  // not list bookings by email.
+  const { guestEmail, guestEmailVerified } = isHostTicket
+    ? { guestEmail: null, guestEmailVerified: false }
+    : await resolveGuestIdentity({
+        claimedEmail:
+          payload.sender?.email?.trim().toLowerCase() ||
+          payload.conversation?.meta?.sender?.email?.trim().toLowerCase() ||
+          null,
+        inboxId,
+        contactIdentifier: payload.sender?.identifier ?? payload.conversation?.meta?.sender?.identifier,
+        verifiedInboxIds: env.verifiedGuestInboxIds,
+        findGuestEmailByUserId,
+      })
 
   const eventId = `message_created:${payload.id}`
   trace('webhook', 'received', { eventId, conversationId, identified: guestEmail !== null, verified: guestEmailVerified })

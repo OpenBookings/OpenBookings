@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { createHmac } from "node:crypto";
-import { backfills, chatwootCalls, processedEvents, resetMocks, supportTickets } from "./testing/mocks";
+import { backfills, chatwootCalls, guestUsers, processedEvents, resetMocks, supportTickets } from "./testing/mocks";
 import type { ProcessConversationPayload } from "./tasks";
 
 /**
@@ -109,19 +109,52 @@ describe("POST /webhooks/chatwoot", () => {
   });
 
   describe("guest identity verification", () => {
-    const withIdentifier = (inbox_id: number, identifier: string | null = "user-123") =>
-      messageBody({ sender: { email: "guest@example.com", identifier }, conversation: { id: 77, inbox_id } });
+    // The signed Chatwoot identifier is the guest's user id. Only the HMAC
+    // over that id is enforced, so the email has to come from our own record
+    // of that user, never from the contact.
+    const withIdentifier = (inbox_id: number, identifier: string | null = "user-123", email: string | null = "guest@example.com") =>
+      messageBody({ sender: { email, identifier }, conversation: { id: 77, inbox_id } });
+
+    beforeEach(() => {
+      guestUsers.set("user-123", "guest@example.com");
+    });
 
     it("an email is unverified by default: no inbox is trusted until configured", async () => {
       await post(withIdentifier(5));
       expect(enqueued[0]?.guestEmailVerified).toBe(false);
     });
 
-    it("verified only in a configured inbox AND with a signed-in contact identifier", async () => {
+    it("verified only in a configured inbox AND with an identifier naming a guest account", async () => {
       process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5, 9";
       await post(withIdentifier(5));
       await post(messageBody({ id: 4243, sender: { email: "guest@example.com", identifier: "user-123" }, conversation: { id: 77, inbox_id: 9 } }));
-      expect(enqueued.map((e) => e.guestEmailVerified)).toEqual([true, true]);
+      expect(enqueued.map((e) => [e.guestEmail, e.guestEmailVerified])).toEqual([
+        ["guest@example.com", true],
+        ["guest@example.com", true],
+      ]);
+    });
+
+    it("the account's email wins over a different email on the contact", async () => {
+      // Attacker signs in as themselves (identifier user-123) but sets the
+      // contact email to the victim's. The tools must stay on user-123's stays.
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(withIdentifier(5, "user-123", "victim@example.com"));
+      expect(enqueued[0]?.guestEmail).toBe("guest@example.com");
+      expect(enqueued[0]?.guestEmailVerified).toBe(true);
+    });
+
+    it("verified with the account's email even when the contact has none", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(withIdentifier(5, "user-123", null));
+      expect(enqueued[0]?.guestEmail).toBe("guest@example.com");
+      expect(enqueued[0]?.guestEmailVerified).toBe(true);
+    });
+
+    it("an identifier that names no guest account is unverified", async () => {
+      process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
+      await post(withIdentifier(5, "user-unknown", "victim@example.com"));
+      expect(enqueued[0]?.guestEmail).toBe("victim@example.com");
+      expect(enqueued[0]?.guestEmailVerified).toBe(false);
     });
 
     it("a visitor-typed email in a verified inbox (no identifier) is still unverified", async () => {
@@ -137,9 +170,10 @@ describe("POST /webhooks/chatwoot", () => {
       expect(enqueued[0]?.guestEmailVerified).toBe(false);
     });
 
-    it("no email, nothing to verify", async () => {
+    it("no identifier and no email, nothing to verify", async () => {
       process.env.CHATWOOT_VERIFIED_INBOX_IDS = "5";
-      await post(messageBody({ sender: { email: null, identifier: "user-123" }, conversation: { id: 77, inbox_id: 5 } }));
+      await post(messageBody({ sender: { email: null }, conversation: { id: 77, inbox_id: 5 } }));
+      expect(enqueued[0]?.guestEmail).toBeNull();
       expect(enqueued[0]?.guestEmailVerified).toBe(false);
     });
   });
