@@ -9,7 +9,16 @@ await mockModules(import.meta.dir, {
   "next/server": () => ({ after: (task: () => unknown) => void task() }),
   "next/cache": () => ({ revalidatePath: () => {} }),
   "@sentry/nextjs": () => ({ captureException: () => {} }),
-  "@openbookings/authz": () => ({ userCan: async () => true }),
+  "@openbookings/authz": () => ({
+    userCan: async () => true,
+    // The booking's hotel (h1) is the session's current one, already stored.
+    resolveCurrentProperty: async () => ({
+      current: { propertyId: "h1", organizationId: "o1" },
+      stored: { activePropertyId: "h1", activeOrganizationId: "o1" },
+    }),
+    listSwitchableProperties: async () => [],
+    setCurrentProperty: async () => null,
+  }),
   "@openbookings/db": () => ({ queryOne: async () => ({ hotel_id: "h1" }) }),
   "@openbookings/db/booking-lifecycle": () => ({
     cancelRooms: async () => lifecycle,
@@ -30,7 +39,7 @@ await mockModules(import.meta.dir, {
       captured.push(args);
     },
   }),
-  "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" } }) }),
+  "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" }, session: { id: "s1" } }) }),
   "@/lib/mailing/booking-mail": () => ({
     sendCancellation: async () => {},
     sendRefundMail: async (...args: unknown[]) => {

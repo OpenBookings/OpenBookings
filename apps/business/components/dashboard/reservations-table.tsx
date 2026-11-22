@@ -34,7 +34,7 @@ export function ReservationsTable({
   onSelect?: (reservation: MockReservation) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-xl border">
       <Table>
         <TableHeader className="bg-muted">
           <TableRow>

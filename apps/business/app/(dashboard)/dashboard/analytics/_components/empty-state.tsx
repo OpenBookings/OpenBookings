@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { CalendarClock, CircleDashed, FilterX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Empty,
   EmptyContent,
@@ -90,7 +91,7 @@ export function NeverBookedCover({
       </div>
       {/* Reaches into the gap above and below: a blur that stops at the first line of text slices it. */}
       <div className="-my-4 z-10 flex justify-center bg-background/40 px-4 backdrop-blur-sm md:-my-6">
-        <section className="mt-20 w-full max-w-md self-start rounded-xl border bg-card shadow-sm md:mt-22">
+        <Card className="mt-20 w-full max-w-md gap-0 self-start py-0 md:mt-22">
           <EmptyState
             variant={variant}
             headline="Got a booking? Your data will show up here!"
@@ -101,7 +102,7 @@ export function NeverBookedCover({
             }
             action={next ? { label: next.action, href: next.href } : null}
           />
-        </section>
+        </Card>
       </div>
     </div>
   );
@@ -110,13 +111,13 @@ export function NeverBookedCover({
 /** For a host with bookings, none of them in the period on screen. */
 export function FilteredPanel({ action }: { action: EmptyAction | null }) {
   return (
-    <section className="rounded-xl border bg-card">
+    <Card className="gap-0 py-0">
       <EmptyState
         variant="filtered"
         headline="No bookings in this period"
         body={action ? "Try a wider date range." : "Try a different date range."}
         action={action}
       />
-    </section>
+    </Card>
   );
 }

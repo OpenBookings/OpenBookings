@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { CountBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReservationsTable } from "@/components/dashboard/reservations-table";
 import type {
@@ -50,9 +50,7 @@ export function ReservationsTabs({
         {tabs.map((tab) => (
           <TabsTrigger key={tab.value} value={tab.value}>
             {tab.label}
-            <Badge variant="secondary" className="ml-1.5 px-1.5">
-              {tab.reservations.length}
-            </Badge>
+            <CountBadge>{tab.reservations.length}</CountBadge>
           </TabsTrigger>
         ))}
       </TabsList>

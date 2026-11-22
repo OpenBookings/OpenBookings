@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { formatMessageTimestamp } from "@/lib/format";
 import { needsReply, type HostReview } from "@/lib/reviews/shape";
@@ -8,13 +9,11 @@ import { byline, SCORE_CHIP, stayMonthLabel } from "./labels";
 function Trailing({ review }: { review: HostReview }) {
   if (review.status === "pending") {
     return (
-      <span className="shrink-0 rounded-full bg-(--amber-3) px-2 py-px text-[11px] whitespace-nowrap text-(--amber-11)">
-        Being checked
-      </span>
+      <StatusBadge tone="attention">Being checked</StatusBadge>
     );
   }
   if (needsReply(review)) {
-    return <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="Waiting for a reply" />;
+    return <span className="size-2 shrink-0 rounded-full bg-state-attention" aria-label="Waiting for a reply" />;
   }
   const replied = review.replies.some((r) => r.role === "host");
   const label = replied ? "Replied" : review.privateReplyAt ? "Replied privately" : review.skippedAt ? "No reply" : null;

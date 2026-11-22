@@ -1,5 +1,7 @@
 "use client";
 
+import { SectionLabel } from "@/components/dashboard/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import Link from "next/link";
 import { Ban, CalendarCog, Lock, PencilLine, Percent, Tag, Undo2 } from "lucide-react";
@@ -10,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { EditFieldset, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -95,6 +98,8 @@ export function AriDetailPanel({
         className="w-full gap-0 sm:max-w-[380px]"
         onInteractOutside={(event) => event.preventDefault()}
       >
+        {/* View-only roles read the details; staging and edit buttons are disabled. */}
+        <EditFieldset>
         {selection?.kind === "availability" && (
           <AvailabilityDetail
             room={selection.room}
@@ -117,6 +122,7 @@ export function AriDetailPanel({
             onStage={onStage}
           />
         )}
+        </EditFieldset>
       </SheetContent>
     </Sheet>
   );
@@ -159,9 +165,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2">
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {title}
-      </h3>
+      <SectionLabel as="h3">{title}</SectionLabel>
       {children}
     </section>
   );
@@ -249,48 +253,52 @@ function AvailabilityDetail({
         {/* The room type's own switch lives here rather than on a rate plan
             row, because that is where the decision belongs: closing a room
             type is one act that every plan under it inherits. */}
-        <Button
-          variant={cell.closure ? "default" : "outline"}
-          className="w-full"
-          onClick={() =>
-            onStage([
-              {
-                kind: "roomClosure",
-                roomId: room.id,
-                date: cell.date,
-                closed: !cell.closure,
-                note: null,
-              },
-            ])
-          }
-        >
-          {cell.closure ? (
-            <>
-              <Undo2 className="size-4" />
-              Reopen the room type
-            </>
-          ) : (
-            <>
-              <Lock className="size-4" />
-              Close the room type
-            </>
-          )}
-        </Button>
+        <ViewOnlyHint className="flex w-full">
+          <Button
+            variant={cell.closure ? "default" : "outline"}
+            className="w-full"
+            onClick={() =>
+              onStage([
+                {
+                  kind: "roomClosure",
+                  roomId: room.id,
+                  date: cell.date,
+                  closed: !cell.closure,
+                  note: null,
+                },
+              ])
+            }
+          >
+            {cell.closure ? (
+              <>
+                <Undo2 className="size-4" />
+                Reopen the room type
+              </>
+            ) : (
+              <>
+                <Lock className="size-4" />
+                Close the room type
+              </>
+            )}
+          </Button>
+        </ViewOnlyHint>
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() =>
-            onEditAvailability({
-              roomId: room.id,
-              startDate: cell.date,
-              endDate: cell.date,
-            })
-          }
-        >
-          <CalendarCog className="size-4" />
-          Edit availability
-        </Button>
+        <ViewOnlyHint className="flex w-full">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() =>
+              onEditAvailability({
+                roomId: room.id,
+                startDate: cell.date,
+                endDate: cell.date,
+              })
+            }
+          >
+            <CalendarCog className="size-4" />
+            Edit availability
+          </Button>
+        </ViewOnlyHint>
       </Body>
     </>
   );
@@ -408,79 +416,87 @@ function RateDetail({
           not scroll away from the evidence for it. */}
       <div className="space-y-2 border-t bg-(--ari-group) p-4">
         {run.state === "sold_out" && (
-          <Button
-            className="w-full"
-            onClick={() =>
-              onEditAvailability({ roomId: room.id, ...range })
-            }
-          >
-            <CalendarCog className="size-4" />
-            Fix availability
-          </Button>
+          <ViewOnlyHint className="flex w-full">
+            <Button
+              className="w-full"
+              onClick={() =>
+                onEditAvailability({ roomId: room.id, ...range })
+              }
+            >
+              <CalendarCog className="size-4" />
+              Fix availability
+            </Button>
+          </ViewOnlyHint>
         )}
 
         {/* Room closures are lifted on the room type, never here. Offering
             "reopen" on a rate plan whose room is shut would stage an edit
             that changes nothing a guest can see. */}
         {run.state === "room_closed" && (
-          <Button
-            className="w-full"
-            onClick={() =>
-              onStage(
-                dates.map((date) => ({
-                  kind: "roomClosure",
-                  roomId: room.id,
-                  date,
-                  closed: false,
-                  note: null,
-                })),
-              )
-            }
-          >
-            <Undo2 className="size-4" />
-            Reopen the room type
-          </Button>
+          <ViewOnlyHint className="flex w-full">
+            <Button
+              className="w-full"
+              onClick={() =>
+                onStage(
+                  dates.map((date) => ({
+                    kind: "roomClosure",
+                    roomId: room.id,
+                    date,
+                    closed: false,
+                    note: null,
+                  })),
+                )
+              }
+            >
+              <Undo2 className="size-4" />
+              Reopen the room type
+            </Button>
+          </ViewOnlyHint>
         )}
 
         {run.state === "closed" && (
-          <Button
-            className="w-full"
-            onClick={() =>
-              onStage(
-                dates.map((date) => ({
-                  kind: "closure",
-                  ratePlanId: plan.id,
-                  date,
-                  closed: false,
-                  note: null,
-                })),
-              )
-            }
-          >
-            <Undo2 className="size-4" />
-            Reopen {dateCount(dates)}
-          </Button>
+          <ViewOnlyHint className="flex w-full">
+            <Button
+              className="w-full"
+              onClick={() =>
+                onStage(
+                  dates.map((date) => ({
+                    kind: "closure",
+                    ratePlanId: plan.id,
+                    date,
+                    closed: false,
+                    note: null,
+                  })),
+                )
+              }
+            >
+              <Undo2 className="size-4" />
+              Reopen {dateCount(dates)}
+            </Button>
+          </ViewOnlyHint>
         )}
 
         {first.bookable && (
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() =>
-              onStage(
-                dates.map((date) => ({
-                  kind: "closure",
-                  ratePlanId: plan.id,
-                  date,
-                  closed: true,
-                  note: null,
-                })),
-              )
-            }
-          >
-            <Ban className="size-4" />
-            Close {dateCount(dates)}
-          </Button>
+          <ViewOnlyHint className="flex w-full">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() =>
+                onStage(
+                  dates.map((date) => ({
+                    kind: "closure",
+                    ratePlanId: plan.id,
+                    date,
+                    closed: true,
+                    note: null,
+                  })),
+                )
+              }
+            >
+              <Ban className="size-4" />
+              Close {dateCount(dates)}
+            </Button>
+          </ViewOnlyHint>
         )}
 
         <StagePriceForm
@@ -496,32 +512,38 @@ function RateDetail({
             only the visible slice would leave the rest shut without saying
             so. This routes to the form that can take the whole range. */}
         {!first.bookable && extendsBeyond(first, dates) && (
-          <Button
-            variant="ghost"
-            className="w-full text-muted-foreground text-xs"
-            onClick={() => onReopen({ ratePlanId: plan.id, ...range })}
-          >
-            This rule runs past these dates — reopen a longer range
-          </Button>
+          <ViewOnlyHint className="flex w-full">
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground text-xs"
+              onClick={() => onReopen({ ratePlanId: plan.id, ...range })}
+            >
+              This rule runs past these dates — reopen a longer range
+            </Button>
+          </ViewOnlyHint>
         )}
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
-        >
-          <Tag className="size-4" />
-          {plan.bar === 0 ? "Set base rate" : "Edit base rate"}
-        </Button>
+        <ViewOnlyHint className="flex w-full">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
+          >
+            <Tag className="size-4" />
+            {plan.bar === 0 ? "Set base rate" : "Edit base rate"}
+          </Button>
+        </ViewOnlyHint>
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => onEditRestrictions({ ratePlanId: plan.id, ...range })}
-        >
-          <PencilLine className="size-4" />
-          Edit restrictions
-        </Button>
+        <ViewOnlyHint className="flex w-full">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => onEditRestrictions({ ratePlanId: plan.id, ...range })}
+          >
+            <PencilLine className="size-4" />
+            Edit restrictions
+          </Button>
+        </ViewOnlyHint>
 
         {/* Rules are set for the whole property on their own page; this
             opens it filtered to the plan the host is looking at. */}
@@ -549,9 +571,7 @@ function StatusPill({ run, cell }: { run: CellRun; cell: RateCell }) {
   if (cell.bookable) {
     const restriction = chipLabel(cell.reasons);
     return (
-      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-(--ari-bookable-bg) px-2 py-0.5 font-medium text-(--ari-bookable-fg) text-xs">
-        {restriction ? `Bookable · ${restriction}` : "Bookable"}
-      </span>
+      <StatusBadge tone="positive">{restriction ? `Bookable · ${restriction}` : "Bookable"}</StatusBadge>
     );
   }
 
@@ -894,7 +914,7 @@ function StagePriceForm({
   const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className="space-y-2 rounded-lg border p-3">
       <Label htmlFor="ari-price" className="text-xs">
         Set price for {dateCount(dates)}
       </Label>
@@ -912,25 +932,29 @@ function StagePriceForm({
             setValue("");
           }}
         />
-        <Button
-          disabled={!valid}
-          onClick={() => {
-            stagePrice(Math.round(parsed));
-            setValue("");
-          }}
-        >
-          Stage
-        </Button>
+        <ViewOnlyHint>
+          <Button
+            disabled={!valid}
+            onClick={() => {
+              stagePrice(Math.round(parsed));
+              setValue("");
+            }}
+          >
+            Stage
+          </Button>
+        </ViewOnlyHint>
       </div>
       {cell.hasOverride && (
-        <Button
-          variant="ghost"
-          className="w-full justify-start px-2 text-muted-foreground text-xs"
-          onClick={() => stagePrice(null)}
-        >
-          Clear the override and go back to the plan rate of{" "}
-          {formatMoney(plan.bar, currency)}
-        </Button>
+        <ViewOnlyHint className="flex w-full">
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-2 text-muted-foreground text-xs"
+            onClick={() => stagePrice(null)}
+          >
+            Clear the override and go back to the plan rate of{" "}
+            {formatMoney(plan.bar, currency)}
+          </Button>
+        </ViewOnlyHint>
       )}
     </div>
   );

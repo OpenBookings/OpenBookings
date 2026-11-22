@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
 import { currentSupportScope } from "@/lib/support/server/bootstrap";
@@ -20,6 +21,11 @@ export default function SupportPage({ searchParams }: PageProps) {
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4 md:gap-6 md:py-6">
             <Suspense fallback={<PageLoading id="support" />}>
               <PageHold id="support">
+                <PageHeader
+                  title="Support"
+                  description="Ask us about bookings, payouts or your listing, and follow each ticket here."
+                  className="px-4 lg:px-6"
+                />
                 <Tickets searchParams={searchParams} />
               </PageHold>
             </Suspense>

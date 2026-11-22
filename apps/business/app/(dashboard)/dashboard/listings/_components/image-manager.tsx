@@ -25,6 +25,7 @@ import {
   AttachmentMedia,
 } from "@/components/ui/attachment";
 import { Button } from "@/components/ui/button";
+import { EditFieldset, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -78,8 +79,19 @@ interface ImageManagerProps {
  * Uploads run presign → PUT → confirm. The Attachment component's `state` prop
  * takes exactly that lifecycle, so a row in flight looks in flight and a failed
  * row keeps a retry instead of disappearing.
+ *
+ * View-only roles see the photos with every upload, move and remove control
+ * disabled (EditFieldset); nothing in here is read-only help.
  */
-export function ImageManager({
+export function ImageManager(props: ImageManagerProps) {
+  return (
+    <EditFieldset>
+      <ImageManagerBody {...props} />
+    </EditFieldset>
+  );
+}
+
+function ImageManagerBody({
   target,
   images,
   showAltText = false,
@@ -397,15 +409,17 @@ export function ImageManager({
             <ImageIcon />
           </AttachmentMedia>
           <AttachmentContent>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-            >
-              <UploadCloudIcon />
-              Add
-            </Button>
+            <ViewOnlyHint>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+              >
+                <UploadCloudIcon />
+                Add
+              </Button>
+            </ViewOnlyHint>
           </AttachmentContent>
         </Attachment>
       </AttachmentGroup>

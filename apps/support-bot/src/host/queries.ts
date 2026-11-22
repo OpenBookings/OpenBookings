@@ -108,29 +108,40 @@ export type HostBookingMatch =
   | { kind: "ambiguous" };
 
 /** Find one of the host's bookings by reference (full or short). */
-export async function findHostBooking(userId: string, reference: string): Promise<HostBookingMatch> {
+export async function findHostBooking(
+  userId: string,
+  organizationId: string | null,
+  reference: string,
+): Promise<HostBookingMatch> {
   const ref = normalizeBookingReference(reference);
-  if (!ref || !userId) return { kind: "none" };
+  if (!ref || !userId || !organizationId) return { kind: "none" };
   const rows = await query<HostBooking>(
     `${SELECT}
-     WHERE b.id::text LIKE $2 || '%' AND ${propertyReadAccessSql("$1")}
+     WHERE b.id::text LIKE $2 || '%' AND ${propertyReadAccessSql("$1")} AND p.organization_id = $3
      ORDER BY b.created_at DESC
      LIMIT 2`,
-    [userId, ref],
+    [userId, ref, organizationId],
   );
   if (rows.length === 0) return { kind: "none" };
   if (rows.length > 1) return { kind: "ambiguous" };
   return { kind: "found", booking: rows[0]! };
 }
 
-/** The host's most recent bookings across the properties they can read. */
-export async function listHostBookings(userId: string, limit = 5): Promise<HostBooking[]> {
-  if (!userId) return [];
+/**
+ * The host's most recent bookings across the properties they can read, inside
+ * the ticket's organization only (a host in two orgs never sees both at once).
+ */
+export async function listHostBookings(
+  userId: string,
+  organizationId: string | null,
+  limit = 5,
+): Promise<HostBooking[]> {
+  if (!userId || !organizationId) return [];
   return query<HostBooking>(
     `${SELECT}
-     WHERE ${propertyReadAccessSql("$1")}
+     WHERE ${propertyReadAccessSql("$1")} AND p.organization_id = $3
      ORDER BY b.created_at DESC
      LIMIT $2`,
-    [userId, limit],
+    [userId, limit, organizationId],
   );
 }

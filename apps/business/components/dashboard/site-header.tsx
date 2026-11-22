@@ -79,7 +79,7 @@ export function SiteHeader({ title, actions }: { title: string; actions?: React.
           type="button"
           onClick={() => setCommandOpen(true)}
           className={cn(
-            "flex w-full max-w-64 items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-muted-foreground text-sm shadow-xs transition-colors hover:bg-accent dark:bg-input/30",
+            "flex w-full max-w-64 items-center gap-2 rounded-lg border bg-accent px-3 py-1.5 text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
             !actions && "ml-auto",
           )}
         >

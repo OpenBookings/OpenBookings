@@ -255,8 +255,8 @@ Two modes. Both already exist in the tree. Each app maps its surfaces to one.
 | Source of truth | `apps/web/DESIGN.md` §Surfaces / §Colour | `apps/business/app/globals.css` tokens |
 | Colour | white-alpha over imagery | semantic tokens (`bg-card`, `text-muted-foreground`) |
 | Depth | `backdrop-blur` + translucency + `shadow-2xl` | flat fills, 1px `border-border`, `shadow-xs` at most |
-| Radius | `rounded-xl` / `rounded-2xl` | `rounded-md` / `rounded-lg` |
-| Type | Gloock display over Libre Franklin body | Libre Franklin throughout, no display serif |
+| Radius | `rounded-xl` / `rounded-2xl` | controls `rounded-lg` (10px), surfaces `rounded-xl` (14px), pills only for badges |
+| Type | Gloock display over Libre Franklin body | Libre Franklin throughout; Gloock only for the page title (`PageHeader`) |
 | Density | generous, one decision per view | tight, tabular, many rows in view |
 
 Measured radius usage confirms the split is already real: web skews `rounded-xl` (30) / `rounded-2xl` (18); business skews `rounded-md` (51) / `rounded-lg` (31) with only 5 × `rounded-2xl`.
@@ -320,13 +320,40 @@ This is where `.impeccable.md`'s principles apply, restated as enforceable rules
 4. **Anxiety reduction at high-stakes moments** → legal signing and Stripe steps get visible save state, undo paths, and unambiguous commit feedback. Graph edge: `Anxiety Reduction at High-Stakes Moments` --`rationale_for`--> `Stripe Bank Details / Legal Signing Onboarding Step`.
 5. **Business-grade polish** → no generic-admin defaults; every surface deliberate.
 
-**Colour:** semantic tokens only. Raw `bg-white/*`, `bg-black/*`, `border-white/*` and hardcoded `[#hex]` are not permitted on Console surfaces. Today this rule already holds at 0 violations across `app/(dashboard)`, `components/dashboard`, and `apps/web/app/checkout`.
+**Colour:** semantic tokens only. Raw `bg-white/*`, `bg-black/*`, `border-white/*`, Tailwind palette colours (`amber-500`, …) and hardcoded `[#hex]` are not permitted on Console surfaces. `lib/console-consistency.test.ts` enforces this for `app/(dashboard)`, `components/dashboard` and `components/support`.
 
 **Depth:** flat fills plus 1px `border-border`. `shadow-xs` on raised inputs; `shadow-sm` on popovers and cards; nothing heavier.
 
 **Overlays:** Radix — `components/ui/dialog.tsx` and `components/ui/sheet.tsx`. The `backdrop-blur-sm` on `dialog.tsx:42` is a functional scrim and stays. This is the resolution of tension **T4**: `FocusOverlay` is the Glass overlay, Radix Dialog/Sheet is the Console overlay. They are not competitors and neither app should carry both.
 
 **Density:** `size="xs"` / `size="icon-xs"` on `button.tsx` exist for toolbar and grid contexts. Promote both to the shared primitive (§5).
+
+### 3.3.1 The console refresh (approved 2026-11-21)
+
+Concept: https://claude.ai/artifact/NdXXjBkPeUEVmYv5bVRN1z · Figma moodboard `zqOb9X4skHnAei7BUxz2XS`. The look is the "Bolder" variant with no purple in the interface chrome.
+
+| Token | Value | Role |
+|---|---|---|
+| `--surface-frame` | `oklch(11.5% 0.004 290)` | sidebar and the frame around the canvas |
+| `--surface-canvas` = `--background` | `oklch(15% 0.004 290)` | the page |
+| `--surface-raised` = `--card` | `oklch(18.5% 0.005 290)` | cards, table heads, grid cells |
+| `--surface-overlay` = `--popover` | `oklch(21% 0.006 290)` | popovers, sheets, dialogs |
+| `--line` / `--line-strong` = `--border` / `--input` | white 8% / 14% | hairlines that read on every surface |
+| `--primary` | `--mk-paper` on `--mk-ink` | the one main action per view, same as the marketing CTA |
+| `--ring` | white 55% | focus; never a hue |
+| `--state-positive` | `--spectrum-mint` | good, live, paid, confirmed, "on" switches |
+| `--state-attention` | `--spectrum-amber` | needs a decision |
+| `--state-onsite` | `--spectrum-sky` | the guest is on the property |
+| `--state-stopped` | `--spectrum-coral` | cancelled, closed, no-show |
+| `--state-adjusted` | `--spectrum-lilac` | a price changed by a rule. **The only purple in the console**, rates and pricing screens only |
+
+Rules:
+
+1. **One component per job.** States are `StatusBadge` (tinted pill + dot, ≤ 15% tint); tab counts are `CountBadge`; page titles are `PageHeader`, section titles `SectionHeader`, eyebrows `SectionLabel`; "pick one" is `RadioGroupCard`; filters are `Tabs`/`ToggleGroup`; notices are `Alert`; empty states are `Empty`; panels are `Card`.
+2. **Colour marks state or "now", never decoration.** Allowed tints: status pills, the overview's KPI icon tiles, Alert backgrounds. The rates grid's today column is paper. A faint spectrum hairline tops the overview strip.
+3. **No purple chrome.** Selection, active nav, links and focus are neutral (brighter surface, white ring, plain underline).
+4. **Shapes:** things you press or type into are `rounded-lg` (10px), things that hold content are `rounded-xl` (14px), the inset canvas `rounded-2xl`. Arbitrary `rounded-[Npx]` is a defect.
+5. **Destructive actions are calm:** a tinted danger button, never the loudest thing on the page.
 
 ### 3.4 Rules that apply in both modes
 

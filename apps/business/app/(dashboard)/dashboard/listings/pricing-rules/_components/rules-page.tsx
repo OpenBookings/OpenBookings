@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -55,42 +59,38 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
   const newHref = (section: RuleSection) => {
     const next = new URLSearchParams({ section });
     if (filterPlan) next.set("plan", filterPlan.id);
-    if (params.get("property")) next.set("property", params.get("property")!);
     return `${PRICING_RULES_PATH}/new?${next.toString()}`;
   };
 
   return (
     <div className="flex flex-col gap-6 px-4 lg:px-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="max-w-2xl">
-          <h1 className="font-semibold text-2xl tracking-tight">Pricing rules</h1>
-          <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
-            Rules change the price of every night they match, on the rate plans you choose. They work on top of your
-            base rate and on prices you set for a single date.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="rules-plan-filter" className="text-muted-foreground text-sm">
-            Show rules for
-          </Label>
-          <Select value={filterPlan?.id ?? ALL} onValueChange={setFilter}>
-            <SelectTrigger id="rules-plan-filter" className="min-w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All rate plans</SelectItem>
-              {data.plans.map((plan) => (
-                <SelectItem key={plan.id} value={plan.id}>
-                  {plan.roomName} · {plan.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/listings/rates-availability">Open Rates &amp; availability</Link>
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        title="Pricing rules"
+        description="Rules change the price of every night they match, on the rate plans you choose."
+        actions={
+          <>
+            <Label htmlFor="rules-plan-filter" className="text-muted-foreground text-sm">
+              Show rules for
+            </Label>
+            <Select value={filterPlan?.id ?? ALL} onValueChange={setFilter}>
+              <SelectTrigger id="rules-plan-filter" className="min-w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All rate plans</SelectItem>
+                {data.plans.map((plan) => (
+                  <SelectItem key={plan.id} value={plan.id}>
+                    {plan.roomName} · {plan.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/listings/rates-availability">Open Rates &amp; availability</Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-8">
@@ -141,31 +141,41 @@ function RulesSection({
   data: PricingRulesData;
 }) {
   const isDiscount = section === "discount";
+  const { canEdit } = useEditAccess();
   return (
-    <section aria-labelledby={`rules-${section}`} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id={`rules-${section}`} className="font-semibold text-lg">
-            {title}
-          </h2>
-          <p className="mt-1 text-muted-foreground text-sm">{description}</p>
-        </div>
-        <Button variant="outline" asChild>
-          <Link href={addHref}>
-            <Plus className="size-4" aria-hidden />
-            {addLabel}
-          </Link>
-        </Button>
-      </div>
+    <section aria-label={title} className="flex flex-col gap-3">
+      <SectionHeader
+        title={title}
+        description={description}
+        actions={
+          canEdit ? (
+            <Button variant="outline" asChild>
+              <Link href={addHref}>
+                <Plus className="size-4" aria-hidden />
+                {addLabel}
+              </Link>
+            </Button>
+          ) : (
+            <ViewOnlyHint>
+              <Button variant="outline" disabled>
+                <Plus className="size-4" aria-hidden />
+                {addLabel}
+              </Button>
+            </ViewOnlyHint>
+          )
+        }
+      />
 
       {rules.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
-          {isDiscount
-            ? "No discounts yet. Guests pay the full price for every stay."
-            : "No price adjustments yet. Every night sells at its own price."}
-        </p>
+        <Empty className="gap-0 border p-6 md:p-6">
+          <EmptyDescription>
+            {isDiscount
+              ? "No discounts yet. Guests pay the full price for every stay."
+              : "No price adjustments yet. Every night sells at its own price."}
+          </EmptyDescription>
+        </Empty>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-hidden rounded-xl border">
           <Table className={isDiscount ? "min-w-[760px]" : "min-w-[620px]"}>
             <TableHeader className="bg-muted">
               <TableRow>
@@ -194,6 +204,7 @@ function RulesSection({
 function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRulesData; isDiscount: boolean }) {
   const [active, setActive] = React.useState(rule.active);
   const [busy, setBusy] = React.useState(false);
+  const { canEdit } = useEditAccess();
   // A refresh after the write hands down the saved state; it wins.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setActive(rule.active), [rule.active]);
@@ -229,17 +240,19 @@ function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRul
       <TableCell className="whitespace-normal text-muted-foreground">{scopeLabel(rule, data.plans)}</TableCell>
       {isDiscount && <TableCell className="text-muted-foreground">{guestLabel(rule)}</TableCell>}
       <TableCell>
-        <Switch
-          checked={active}
-          disabled={busy}
-          onCheckedChange={(on) => void toggle(on)}
-          aria-label={`${active ? "Turn off" : "Turn on"}: ${when}`}
-        />
+        <ViewOnlyHint>
+          <Switch
+            checked={active}
+            disabled={busy || !canEdit}
+            onCheckedChange={(on) => void toggle(on)}
+            aria-label={`${active ? "Turn off" : "Turn on"}: ${when}`}
+          />
+        </ViewOnlyHint>
       </TableCell>
       <TableCell>
         <Link
           href={href}
-          aria-label={`Edit: ${when}`}
+          aria-label={`${canEdit ? "Edit" : "View"}: ${when}`}
           className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <ChevronRight className="size-4" aria-hidden />
@@ -257,10 +270,8 @@ function PriceBuildCard() {
     { title: "+ Extra guests", detail: "Never discounted" },
   ];
   return (
-    <section aria-labelledby="price-build" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
-      <h2 id="price-build" className="font-semibold">
-        How a guest&apos;s price is built
-      </h2>
+    <Card role="region" aria-label="How a guest's price is built" className="gap-3 p-5">
+      <SectionHeader title="How a guest's price is built" />
       <ol className="flex flex-col gap-3">
         {steps.map((step, i) => (
           <li key={step.title} className="grid grid-cols-[24px_1fr] items-start gap-2.5 text-sm">
@@ -278,6 +289,6 @@ function PriceBuildCard() {
         ))}
       </ol>
       <p className="border-t pt-3 text-sm">= What the guest pays, with tourist tax from your tourist tax rules on top.</p>
-    </section>
+    </Card>
   );
 }

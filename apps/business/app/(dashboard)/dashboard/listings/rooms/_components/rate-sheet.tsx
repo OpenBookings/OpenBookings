@@ -15,7 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import { EditFieldset, useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -29,6 +31,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupText, InputGroupTextarea } from "@/components/ui/input-group";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -125,7 +128,7 @@ export function RateSheet(props: RateSheetProps) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{title}</h3>
+      <SectionLabel as="h3">{title}</SectionLabel>
       {children}
     </section>
   );
@@ -165,6 +168,7 @@ function RateForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const { canEdit } = useEditAccess();
   const [state, formAction, pending] = React.useActionState(saveRate, {
     values: initialValues(rate, roomId),
     errors: null,
@@ -228,6 +232,7 @@ function RateForm({
         ref={formRef}
         onSubmit={(event) => {
           event.preventDefault();
+          if (!canEdit) return;
           const data = new FormData(event.currentTarget);
           React.startTransition(() => formAction(data));
         }}
@@ -236,6 +241,10 @@ function RateForm({
         className="flex-1 space-y-5 overflow-y-auto px-4 pb-6"
       >
         <input type="hidden" name="ratePlanId" value={rate?.id ?? ""} />
+        {/* View-only roles see the rate, every field disabled. The form's
+            space-y does not reach through a display:contents fieldset, so it
+            spaces its own children. */}
+        <EditFieldset className="space-y-5">
         <input type="hidden" name="roomId" value={roomId} />
 
         {errorEntries.length > 0 && (
@@ -436,37 +445,33 @@ function RateForm({
         <Section title="Cancellation">
           <Field data-invalid={!!err("refundable")}>
             <FieldLabel>Cancellation</FieldLabel>
-            <div role="radiogroup" aria-label="Cancellation" className="grid gap-2">
+            <RadioGroup
+              name="refundable"
+              aria-label="Cancellation"
+              value={refundable}
+              disabled={pending}
+              onValueChange={(value) => {
+                setRefundable(value);
+                markDirty();
+              }}
+              className="gap-2"
+            >
               {(
                 [
                   ["true", `Refundable — follows your property's policy (${TIER_LABELS[propertyTier]})`, TIER_SUMMARIES[propertyTier]],
                   ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Must be at least 10% cheaper than a refundable rate on this room.`],
                 ] as const
               ).map(([value, label, summary]) => (
-                <label
+                <RadioGroupCard
                   key={value}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                >
-                  <input
-                    type="radio"
-                    name="refundable"
-                    value={value}
-                    data-field="refundable"
-                    checked={refundable === value}
-                    disabled={pending}
-                    onChange={() => {
-                      setRefundable(value);
-                      markDirty();
-                    }}
-                    className="mt-0.5 accent-primary"
-                  />
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">{label}</span>
-                    <span className="text-muted-foreground">{summary}</span>
-                  </span>
-                </label>
+                  value={value}
+                  data-field="refundable"
+                  aria-invalid={!!err("refundable")}
+                  title={label}
+                  description={summary}
+                />
               ))}
-            </div>
+            </RadioGroup>
             {err("refundable") && <FieldError>{err("refundable")}</FieldError>}
           </Field>
         </Section>
@@ -516,6 +521,7 @@ function RateForm({
             />
           </Field>
         </Section>
+        </EditFieldset>
       </form>
 
       {/* Pinned, like the R&A Sheet's actions. */}
@@ -523,10 +529,12 @@ function RateForm({
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" form="rate-form" disabled={pending}>
-          {pending && <Spinner />}
-          Save
-        </Button>
+        <ViewOnlyHint side="top">
+          <Button type="submit" size="sm" form="rate-form" disabled={pending || !canEdit}>
+            {pending && <Spinner />}
+            Save
+          </Button>
+        </ViewOnlyHint>
       </div>
     </>
   );

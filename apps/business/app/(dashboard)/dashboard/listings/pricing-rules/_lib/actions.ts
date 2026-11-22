@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import {
   deleteRuleGroup,
@@ -50,5 +51,7 @@ export async function deleteRuleGroupAction(groupId: string): Promise<RuleGroupR
 }
 
 export async function tryStayAction(input: TryStayInput): Promise<TryStayResult> {
-  return priceTryStay(await requireSession(), input);
+  // Priced on the current hotel only: a plan of any other hotel is not found.
+  const session = await requireSession();
+  return priceTryStay(session, (await getCurrentProperty())?.propertyId ?? null, input);
 }

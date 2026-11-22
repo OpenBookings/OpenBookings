@@ -63,12 +63,12 @@ const statusLabels: Record<MockReservationStatus, string> = {
 };
 
 const statusDotClasses: Record<MockReservationStatus, string> = {
-  confirmed: "bg-emerald-500",
-  checked_in: "bg-blue-500",
+  confirmed: "bg-state-positive",
+  checked_in: "bg-state-onsite",
   checked_out: "bg-muted-foreground",
-  pending: "bg-amber-500",
+  pending: "bg-state-attention",
   cancelled: "bg-muted-foreground",
-  no_show: "bg-red-500",
+  no_show: "bg-state-stopped",
 };
 
 type CommandMenu02Props = {

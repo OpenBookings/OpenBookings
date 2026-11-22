@@ -6,80 +6,118 @@
 :root {
   color-scheme: dark;
   /*
-   * Dark theme — Twenty CRM baseline (see twenty-dark-theme.md).
-   * Gray scale is Radix gray dark (P3, perceptually tuned — non-monotonic
-   * steps are intentional). Hex values in comments are the ≈ sRGB equivalents.
+   * Console (host dashboard) — "the console, in our own light".
+   * Concept: https://claude.ai/artifact/NdXXjBkPeUEVmYv5bVRN1z (approved 2026-11-21).
+   *
+   * Neutrals sit at hue 290 with almost no chroma, the same family as the
+   * marketing site's --mk-* tokens, so the tool, the guest site and the
+   * marketing page share one palette. Borders are white hairlines rather than
+   * solid greys, so they read on every surface they cross.
    */
-  --gray-1: color(display-p3 0.09 0.09 0.09); /* #171717 */
-  --gray-2: color(display-p3 0.106 0.106 0.106); /* #1B1B1B */
-  --gray-3: color(display-p3 0.098 0.098 0.098); /* #191919 */
-  --gray-4: color(display-p3 0.114 0.114 0.114); /* #1D1D1D */
-  --gray-5: color(display-p3 0.133 0.133 0.133); /* #222222 */
-  --gray-6: color(display-p3 0.282 0.282 0.282); /* #484848 */
-  --gray-7: color(display-p3 0.298 0.298 0.298); /* #4C4C4C */
-  --gray-8: color(display-p3 0.4 0.4 0.4); /* #666666 */
-  --gray-9: color(display-p3 0.506 0.506 0.506); /* #818181 */
-  --gray-10: color(display-p3 0.482 0.482 0.482); /* #7B7B7B */
-  --gray-11: color(display-p3 0.702 0.702 0.702); /* #B3B3B3 */
-  --gray-12: color(display-p3 0.922 0.922 0.922); /* #EBEBEB */
+  --surface-frame: oklch(11.5% 0.004 290); /* sidebar, around the canvas */
+  --surface-canvas: oklch(15% 0.004 290); /* the page */
+  --surface-raised: oklch(18.5% 0.005 290); /* cards, table heads, grid cells */
+  --surface-overlay: oklch(21% 0.006 290); /* popovers, sheets, dialogs */
+  --line: oklch(100% 0 0 / 0.08);
+  --line-strong: oklch(100% 0 0 / 0.14);
+
+  /*
+   * Gray scale, kept under its Radix names because feature code reads
+   * --gray-N directly. Same steps as before, moved onto the hue-290 neutrals.
+   */
+  --gray-1: var(--surface-canvas);
+  --gray-2: var(--surface-raised);
+  --gray-3: oklch(17% 0.004 290);
+  --gray-4: var(--surface-raised);
+  --gray-5: var(--surface-overlay);
+  --gray-6: oklch(38% 0.006 290);
+  --gray-7: oklch(40% 0.006 290);
+  --gray-8: oklch(51% 0.007 290);
+  --gray-9: oklch(60% 0.008 290);
+  --gray-10: oklch(58% 0.008 290);
+  --gray-11: oklch(72% 0.008 290);
+  --gray-12: oklch(95% 0.006 95);
 
   /* Alpha grays (white-alpha) — hover/active surfaces */
-  --gray-a1: color(display-p3 1 1 1 / 0.031);
-  --gray-a2: color(display-p3 1 1 1 / 0.059);
-  --gray-a5: color(display-p3 1 1 1 / 0.102);
-  --gray-a7: color(display-p3 1 1 1 / 0.141);
+  --gray-a1: oklch(100% 0 0 / 0.03);
+  --gray-a2: oklch(100% 0 0 / 0.05);
+  --gray-a5: oklch(100% 0 0 / 0.09);
+  --gray-a7: oklch(100% 0 0 / 0.14);
 
-  /* Accent — Radix indigoDark (Twenty accent) */
-  --accent-3: color(display-p3 0.105 0.141 0.275); /* #182449 */
-  --accent-7: color(display-p3 0.245 0.309 0.575); /* #3A4F97 */
-  --accent-9: color(display-p3 0.276 0.384 0.837); /* #3E63DD */
-  --accent-11: color(display-p3 0.63 0.69 1); /* #9EB1FF */
+  /*
+   * The old indigo accent scale, neutralised. Nothing in the console is
+   * indigo any more: emphasis is paper (the marketing CTA), selection is a
+   * brighter neutral. Kept as names so older call sites keep resolving.
+   */
+  --accent-3: oklch(100% 0 0 / 0.07);
+  --accent-7: oklch(100% 0 0 / 0.28);
+  --accent-9: var(--mk-paper);
+  --accent-11: var(--gray-12);
 
-  /* Status — Radix greenDark / amberDark (steps 3 surface, 11 text) */
-  --green-3: #132d21;
-  --green-11: #3dd68c;
-  --amber-3: #302008;
-  --amber-11: #ffca16;
+  /*
+   * State — one mapping for the whole console, on the logo's pastel
+   * spectrum. Colour sits in a dot or a tint (≤ 16%), never a solid fill,
+   * and a word always says the same thing.
+   *   positive  = good, live, paid, confirmed     (mint)
+   *   attention = needs a decision                (amber)
+   *   onsite    = the guest is on the property    (sky)
+   *   stopped   = cancelled, closed, no-show      (coral)
+   *   adjusted  = changed by a rule (prices only) (lilac, nowhere else)
+   */
+  --state-positive: var(--spectrum-mint);
+  --state-attention: var(--spectrum-amber);
+  --state-onsite: var(--spectrum-sky);
+  --state-stopped: var(--spectrum-coral);
+  --state-adjusted: var(--spectrum-lilac);
+  --state-neutral: var(--gray-11);
+
+  /* Radix green/amber names, kept for older call sites, now on the spectrum. */
+  --green-3: color-mix(in oklch, var(--state-positive) 15%, transparent);
+  --green-11: var(--state-positive);
+  --amber-3: color-mix(in oklch, var(--state-attention) 15%, transparent);
+  --amber-11: var(--state-attention);
 
   /* Danger — Radix redDark */
   --red-3: color(display-p3 0.211 0.081 0.099); /* #3B1219 */
   --red-5: color(display-p3 0.348 0.11 0.142); /* #611623 */
-  --red-9: color(display-p3 0.83 0.329 0.324); /* #E5484D */
+  --red-9: oklch(66% 0.17 22);
   --red-11: #ff9592;
 
   /* Semantic tokens */
-  --background: var(--gray-1);
+  --background: var(--surface-canvas);
   --foreground: var(--gray-12);
-  --card: var(--gray-2);
+  --card: var(--surface-raised);
   --card-foreground: var(--gray-12);
-  --popover: var(--gray-2);
+  --popover: var(--surface-overlay);
   --popover-foreground: var(--gray-12);
-  --primary: var(--accent-9);
-  --primary-foreground: #ffffff;
-  --secondary: var(--gray-5);
+  /* The one main action per view: paper fill, ink text, like the marketing CTA. */
+  --primary: var(--mk-paper);
+  --primary-foreground: var(--mk-ink);
+  --secondary: oklch(23% 0.006 290);
   --secondary-foreground: var(--gray-12);
-  --muted: var(--gray-4);
+  --muted: var(--surface-raised);
   --muted-foreground: var(--gray-11);
   --accent: var(--gray-a2);
   --accent-foreground: var(--gray-12);
   --destructive: var(--red-9);
   --destructive-foreground: #ffffff;
-  --border: var(--gray-5);
-  --input: var(--gray-6);
-  --ring: var(--accent-7);
-  --chart-1: var(--accent-9);
-  --chart-2: oklch(0.4598 0.1177 262.6626);
-  --chart-3: oklch(0.6475 0.1187 235.0233);
-  --chart-4: oklch(0.8327 0.1203 195.0908);
-  --chart-5: oklch(0.8724 0.1256 169.0628);
-  --sidebar: var(--gray-2);
+  --border: var(--line);
+  --input: var(--line-strong);
+  /* Focus is a soft white ring, never a hue. */
+  --ring: oklch(100% 0 0 / 0.55);
+  --chart-1: var(--spectrum-sky);
+  --chart-2: var(--spectrum-mint);
+  --chart-3: var(--spectrum-amber);
+  --chart-4: var(--spectrum-coral);
+  --chart-5: var(--gray-9);
+  --sidebar: var(--surface-frame);
   --sidebar-foreground: var(--gray-11);
-  --sidebar-primary: var(--accent-9);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: var(--gray-a2);
+  --sidebar-primary: var(--mk-paper);
+  --sidebar-primary-foreground: var(--mk-ink);
+  --sidebar-accent: oklch(100% 0 0 / 0.09);
   --sidebar-accent-foreground: var(--gray-12);
-  --sidebar-border: var(--gray-5);
-  --sidebar-ring: var(--accent-7);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--ring);
   /* OpenBookings brand colors */
   --ob-brand: oklch(62% 0.21 268);
   --ob-brand-light: oklch(67% 0.20 268);
@@ -125,44 +163,45 @@
    * so a state cannot drift between a cell, its bar, the detail sheet and the
    * legend that explains them.
    */
-  --ari-group: #262626;
-  --ari-cell: #222222;
-  --ari-border: #2e2e2e;
-  --ari-border-strong: #3a3a3a;
+  --ari-group: oklch(20% 0.005 290);
+  --ari-cell: var(--surface-raised);
+  --ari-border: var(--line);
+  --ari-border-strong: var(--line-strong);
 
   /* Availability bar. The number stays foreground; the bar carries the level. */
-  --ari-avail-ok: #3fae6e;
-  --ari-avail-low: #e8853a;
+  --ari-avail-ok: var(--state-positive);
+  --ari-avail-low: var(--state-attention);
 
   /* A price moved by an override or a modifier. */
-  --ari-adjusted-bg: #2a2342;
-  --ari-adjusted-fg: #b9a6ff;
+  --ari-adjusted-bg: color-mix(in oklch, var(--state-adjusted) 15%, transparent);
+  --ari-adjusted-fg: color-mix(in oklch, var(--state-adjusted) 82%, white);
 
   /* Still bookable, just constrained — min/max stay, CTA/CTD. */
-  --ari-restricted-bg: #3a2a14;
-  --ari-restricted-fg: #f0a54a;
+  --ari-restricted-bg: color-mix(in oklch, var(--state-attention) 15%, transparent);
+  --ari-restricted-fg: color-mix(in oklch, var(--state-attention) 82%, white);
 
   /* Closed by a person. Never used for sold out, which nobody chose. */
-  --ari-stopsell-bg: #3a1d1d;
-  --ari-stopsell-border: #5c2a2a;
-  --ari-stopsell-fg: #ff8a80;
+  --ari-stopsell-bg: color-mix(in oklch, var(--state-stopped) 15%, transparent);
+  --ari-stopsell-border: color-mix(in oklch, var(--state-stopped) 32%, transparent);
+  --ari-stopsell-fg: color-mix(in oklch, var(--state-stopped) 82%, white);
 
   /* Nothing left to sell. Grey, because it is arithmetic rather than a decision. */
-  --ari-soldout-chip: #333333;
-  --ari-soldout-fg: #c4c4c4;
+  --ari-soldout-chip: oklch(100% 0 0 / 0.09);
+  --ari-soldout-fg: var(--gray-11);
 
   /* The room type is shut. Hatched, so it reads apart from sold out in greyscale. */
-  --ari-closed-hatch-a: #242424;
-  --ari-closed-hatch-b: #2c2c2c;
+  --ari-closed-hatch-a: oklch(17% 0.004 290);
+  --ari-closed-hatch-b: oklch(21% 0.005 290);
 
   /* Refundable tag, and the sheet's "bookable" pill. */
-  --ari-bookable-bg: #173024;
-  --ari-bookable-fg: #6fd69a;
+  --ari-bookable-bg: color-mix(in oklch, var(--state-positive) 15%, transparent);
+  --ari-bookable-fg: color-mix(in oklch, var(--state-positive) 82%, white);
 
   --font-sans: Libre Franklin, ui-sans-serif, sans-serif, system-ui;
   --font-serif: var(--font-gloock), serif;
   --font-mono: monospace;
-  --radius: 0.5rem;
+  /* Controls 10px (the marketing button), surfaces 14px, pills only for badges. */
+  --radius: 0.625rem;
   /* Shadows — Twenty dark theme set */
   --shadow-color: rgba(0, 0, 0, 0.6);
   --shadow-2xs: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 4px rgba(0, 0, 0, 0.08);
@@ -208,6 +247,22 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Console surfaces */
+  --color-surface-frame: var(--surface-frame);
+  --color-surface-canvas: var(--surface-canvas);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* Console state */
+  --color-state-positive: var(--state-positive);
+  --color-state-attention: var(--state-attention);
+  --color-state-onsite: var(--state-onsite);
+  --color-state-stopped: var(--state-stopped);
+  --color-state-adjusted: var(--state-adjusted);
+  --color-state-neutral: var(--state-neutral);
 
   /* OpenBookings brand */
   --color-ob-brand: var(--ob-brand);

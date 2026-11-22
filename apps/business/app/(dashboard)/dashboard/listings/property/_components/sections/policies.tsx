@@ -12,7 +12,9 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field";
+import { SectionLabel } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupCard } from "@/components/ui/radio-group";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { savePolicies } from "../../_lib/actions";
@@ -46,10 +48,6 @@ const FINE_PRINT_SUGGESTIONS = [
   "The name on the booking must match the guest checking in.",
   "Special requests are subject to availability.",
 ];
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted-foreground text-xs uppercase tracking-wide">{children}</p>;
-}
 
 export function PoliciesSection({ data, onDirtyChange }: SectionProps) {
   // Selects, switches and rows below hold their values in React state, which a
@@ -107,7 +105,7 @@ function PoliciesFields({
   return (
     <FieldGroup className="max-w-3xl">
       {/* ── Arrival & departure ─────────────────────────────────────────── */}
-      <SectionHeading>Arrival &amp; departure</SectionHeading>
+      <SectionLabel>Arrival &amp; departure</SectionLabel>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field data-invalid={!!state.errors?.checkInTime}>
@@ -168,7 +166,7 @@ function PoliciesFields({
 
       {/* ── Cancellation ────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Cancellation</SectionHeading>
+      <SectionLabel>Cancellation</SectionLabel>
 
       <p className="text-muted-foreground text-sm">
         One policy for all your refundable rates. Guests see the exact deadlines for their dates
@@ -176,28 +174,24 @@ function PoliciesFields({
         rate to a room.
       </p>
       <Field data-invalid={!!state.errors?.cancellationTier}>
-        <div role="radiogroup" aria-label="Cancellation policy" className="grid gap-3 sm:grid-cols-2">
+        <RadioGroup
+          name="cancellationTier"
+          aria-label="Cancellation policy"
+          defaultValue={property.cancellationTier}
+          disabled={pending}
+          onValueChange={markDirty}
+          className="sm:grid-cols-2"
+        >
           {BASE_TIERS.map((tier) => (
-            <label
+            <RadioGroupCard
               key={tier}
-              className="flex cursor-pointer flex-col gap-1.5 rounded-lg border p-4 text-sm transition-colors hover:bg-muted/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <input
-                  type="radio"
-                  name="cancellationTier"
-                  value={tier}
-                  defaultChecked={property.cancellationTier === tier}
-                  disabled={pending}
-                  onChange={markDirty}
-                  className="accent-primary"
-                />
-                {TIER_LABELS[tier]}
-              </span>
-              <span className="text-muted-foreground">{TIER_SUMMARIES[tier]}</span>
-            </label>
+              value={tier}
+              aria-invalid={!!state.errors?.cancellationTier}
+              title={TIER_LABELS[tier]}
+              description={TIER_SUMMARIES[tier]}
+            />
           ))}
-        </div>
+        </RadioGroup>
         <FieldDescription>
           Changes apply to new bookings only. Existing bookings keep the policy they were booked
           with.
@@ -207,7 +201,7 @@ function PoliciesFields({
 
       {/* ── Payment ─────────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Payment</SectionHeading>
+      <SectionLabel>Payment</SectionLabel>
 
       {/*
         Not a setting: every payment goes through the platform, so there is no
@@ -237,7 +231,7 @@ function PoliciesFields({
         {methods.map((m) => (
           <input key={m} type="hidden" name="paymentMethods" value={m} />
         ))}
-        <div className="divide-y rounded-lg border">
+        <div className="divide-y overflow-hidden rounded-xl border">
           {PAYMENT_METHODS.map((m) => (
             <Field key={m} orientation="horizontal" className="px-4 py-3">
               <FieldLabel htmlFor={`method-${m}`} className="font-normal">
@@ -258,7 +252,7 @@ function PoliciesFields({
 
       {/* ── Other ───────────────────────────────────────────────────────── */}
       <FieldSeparator />
-      <SectionHeading>Other</SectionHeading>
+      <SectionLabel>Other</SectionLabel>
 
       {/* Cots and extra beds are set per room (Rooms → Space); only this stays property-wide. */}
       <Field orientation="horizontal">

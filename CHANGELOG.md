@@ -20,6 +20,9 @@ contain breaking changes, which are listed under **Changed** or **Removed**.
 - `EMAIL_TRANSPORT=console`, which prints outgoing emails (sign-in links included) to the terminal
   instead of sending them, so the apps run locally without an email provider.
 - Self-hosting documentation, organised as tutorials, how-to guides, reference and explanation.
+- Business console: one login can work across several hotels, also in different organisations.
+  Pick the hotel from the sidebar; every page and save stays on that hotel, menu items your role
+  can't open are greyed out, and a tab left on another hotel tells you. Needs migration `0055`.
 
 ### Changed
 

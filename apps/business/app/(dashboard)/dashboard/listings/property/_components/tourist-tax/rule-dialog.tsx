@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
@@ -212,9 +213,9 @@ export function RuleDialog({
             <div className="flex flex-col gap-3">
               <Label>Charges</Label>
               {charges.length === 0 && (
-                <p className="rounded-lg border border-dashed p-4 text-muted-foreground text-sm">
-                  No charges: guests pay no tourist tax from this date.
-                </p>
+                <Empty className="gap-0 border p-4 md:p-4">
+                  <EmptyDescription>No charges: guests pay no tourist tax from this date.</EmptyDescription>
+                </Empty>
               )}
               {charges.map((c, i) => (
                 <ChargeEditor

@@ -1,5 +1,8 @@
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
+import { SectionLabel } from "@/components/dashboard/page-header";
+import { AlertDescription } from "@/components/ui/alert";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CircleCheck, CircleDashed } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { Protection, ProtectionTaskId } from "@/lib/security-tasks";
 import { formatSecurityTimestamp } from "@/lib/security-timestamp";
@@ -26,30 +29,30 @@ export function ProtectionCard({
 
       <div className="flex flex-col gap-4 px-6 pb-6">
         {openTask ? (
-          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-(--amber-11)/25 bg-(--amber-3) p-4">
-            <div className="flex min-w-0 flex-1 basis-56 items-start gap-4">
-              <CircleDashed aria-hidden className="mt-0.5 size-5 shrink-0 text-(--amber-11)" />
-              <div className="min-w-0">
+          <AttentionAlert role="status" className="gap-x-4 p-4">
+            <CircleDashed aria-hidden />
+            <div className="col-start-2 flex flex-wrap items-center gap-4">
+              <div className="min-w-0 flex-1 basis-56">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   {openTask.title}
-                  <Badge className="bg-(--accent-3) text-(--accent-11)">Recommended</Badge>
+                  <StatusBadge tone="attention">Recommended</StatusBadge>
                 </p>
-                <p className="mt-1 text-[13px] text-muted-foreground">{openTask.description}</p>
+                <AlertDescription className="mt-1 text-[13px]">{openTask.description}</AlertDescription>
               </div>
+              <PendingButton className="max-sm:w-full" onClick={() => onAction(openTask.id)}>
+                {openTask.action}
+              </PendingButton>
             </div>
-            <PendingButton className="max-sm:w-full" onClick={() => onAction(openTask.id)}>
-              {openTask.action}
-            </PendingButton>
-          </div>
+          </AttentionAlert>
         ) : null}
 
         {completed.length > 0 ? (
           <div>
-            <p className="text-xs font-medium tracking-[0.04em] text-muted-foreground uppercase">Completed</p>
+            <SectionLabel>Completed</SectionLabel>
             <ul className="mt-1">
               {completed.map((task) => (
                 <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-sm">
-                  <CircleCheck aria-hidden className="size-4 shrink-0 text-(--green-11)" />
+                  <CircleCheck aria-hidden className="size-4 shrink-0 text-state-positive" />
                   <span className="text-muted-foreground">{task.label}</span>
                   <span className="ml-auto text-[13px] text-muted-foreground">
                     {task.note ?? formatSecurityTimestamp(task.at)}

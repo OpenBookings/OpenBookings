@@ -28,22 +28,40 @@ const rule = {
   maxNights: null,
 };
 
-function fakeDeps() {
+function fakeDeps(current: string = PROPERTY) {
   const statements: string[] = [];
   const deps: TouristTaxDeps = {
     queryOne: async <T,>(sql: string, values: unknown[] = []): Promise<T | null> => {
       statements.push(sql);
       if (/SELECT TRUE AS ok/.test(sql)) {
-        const [id, userId] = values as [string, string];
-        return (id === PROPERTY && userId === OWNER ? { ok: true } : null) as T | null;
+        // A third value is the current-hotel pin.
+        const [id, userId, pin] = values as [string, string, string | undefined];
+        const onCurrent = pin === undefined || pin === id;
+        return (id === PROPERTY && userId === OWNER && onCurrent ? { ok: true } : null) as T | null;
       }
       if (/RETURNING/.test(sql)) return { id: RULE } as T;
       return null;
     },
+    pin: async () => ({ currentPropertyId: current }),
   };
   const writes = () => statements.filter((s) => /^\s*(INSERT|UPDATE|DELETE)/i.test(s));
   return { deps, writes };
 }
+
+describe("a stale tab still showing a hotel the owner switched away from", () => {
+  test("is refused, and nothing is written", async () => {
+    const { deps, writes } = fakeDeps("44444444-4444-4444-4444-444444444444");
+    await expect(addTouristTaxRule(session(OWNER), PROPERTY, rule, deps)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(deleteTouristTaxRule(session(OWNER), PROPERTY, RULE, deps)).rejects.toBeInstanceOf(NotFoundError);
+    expect(writes()).toEqual([]);
+  });
+
+  test("no current hotel refuses too", async () => {
+    const { deps, writes } = fakeDeps("");
+    await expect(addTouristTaxRule(session(OWNER), PROPERTY, rule, deps)).rejects.toBeInstanceOf(NotFoundError);
+    expect(writes()).toEqual([]);
+  });
+});
 
 describe("a host who does not own the property", () => {
   const stranger = session(STRANGER);

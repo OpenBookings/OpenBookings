@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { recheckVatId, saveBillingDetails, type BillingFormState } from "../actions";
 
 export type BillingFormValues = {
@@ -138,24 +139,23 @@ export function BillingDetailsForm({
             <Field name="city" label="City" defaultValue={values.city} error={err.city} readOnly={ro} required />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="countryCode">Country</Label>
-              <select
-                id="countryCode"
+              <Select
                 name="countryCode"
-                defaultValue={values.countryCode}
+                defaultValue={values.countryCode || undefined}
                 disabled={ro}
                 required
-                aria-invalid={err.countryCode ? true : undefined}
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <option value="" disabled>
-                  Choose a country
-                </option>
-                {countries.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="countryCode" className="w-full" aria-invalid={err.countryCode ? true : undefined}>
+                  <SelectValue placeholder="Choose a country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {err.countryCode ? <p className="text-sm text-destructive">{err.countryCode}</p> : null}
             </div>
             <Field

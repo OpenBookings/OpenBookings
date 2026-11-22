@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { chatwootCalls, resetMocks, sqlCalls, sqlResults, typingCalls } from "../testing/mocks";
+import { chatwootCalls, resetMocks, sqlCalls, sqlResults, supportTickets, typingCalls } from "../testing/mocks";
 import type { ChatFn, ChatResponse } from "../agent/loop";
 
 const { HOST_AGENT, HOST_TOOLS } = await import("./tools");
@@ -51,7 +51,7 @@ describe("normalizeBookingReference", () => {
 });
 
 describe("host tools", () => {
-  const ctx = { hostUserId: "user_host_1" };
+  const ctx = { hostUserId: "user_host_1", organizationId: "org_a" };
 
   it("scopes every lookup to the context host's readable properties", async () => {
     sqlResults.push([bookingRow()]);
@@ -59,7 +59,8 @@ describe("host tools", () => {
 
     expect(result).toMatchObject({ found: true, booking: { short_reference: "#0a1b2c3d" } });
     const call = sqlCalls[0]!;
-    expect(call.values).toEqual(["user_host_1", "0a1b2c3d"]);
+    expect(call.values).toEqual(["user_host_1", "0a1b2c3d", "org_a"]);
+    expect(call.text).toContain("p.organization_id = $3");
     expect(call.text).toContain('m."userId" = $1');
     expect(call.text).toContain("property_access");
   });
@@ -89,9 +90,32 @@ describe("host tools", () => {
   });
 
   it("fails closed without a verified host and never queries", async () => {
-    const result = await HOST_TOOLS.get_booking.execute({}, { hostUserId: null });
+    const result = await HOST_TOOLS.get_booking.execute({}, { hostUserId: null, organizationId: "org_a" });
     expect(result).toMatchObject({ found: false });
     expect(sqlCalls).toHaveLength(0);
+  });
+
+  it("findHostBooking ignores bookings in another org", async () => {
+    sqlResults.push([]);
+    const result = await HOST_TOOLS.get_booking.execute({ booking_reference: "#0a1b2c3d" }, { hostUserId: "user_host_1", organizationId: "org_b" });
+    expect(result).toMatchObject({ found: false });
+    expect(sqlCalls[0]!.values).toContain("org_b");
+    expect(sqlCalls[0]!.text).toContain("p.organization_id =");
+  });
+
+  it("returns none without an org and never queries", async () => {
+    const ctxNoOrg = { hostUserId: "user_host_1", organizationId: null };
+    expect(await HOST_TOOLS.get_booking.execute({ booking_reference: "#0a1b2c3d" }, ctxNoOrg)).toMatchObject({ found: false });
+    expect(await HOST_TOOLS.get_booking.execute({}, ctxNoOrg)).toMatchObject({ found: false });
+    expect(await HOST_TOOLS.get_payment_status.execute({ booking_reference: "0a1b2c3d" }, ctxNoOrg)).toMatchObject({ found: false });
+    expect(sqlCalls).toHaveLength(0);
+  });
+
+  it("listHostBookings filters by org", async () => {
+    sqlResults.push([bookingRow()]);
+    await HOST_TOOLS.get_booking.execute({}, ctx);
+    expect(sqlCalls[0]!.values).toEqual(["user_host_1", 5, "org_a"]);
+    expect(sqlCalls[0]!.text).toContain("p.organization_id = $3");
   });
 
   it("offers no guest tools", () => {
@@ -124,7 +148,20 @@ describe("host pipeline", () => {
     ticket: { category: "payments", linkedType: "booking", linkedId: BOOKING_ID },
   };
 
+  it("looks the org up from the ticket row, never from chat", async () => {
+    supportTickets.set(88, { id: "t-1", organization_id: "org_ticket", opened_by_user_id: "user_host_1", status: "open" });
+    sqlResults.push([]);
+    const fn = chat([
+      { content: null, toolCalls: [{ id: "c1", function: { name: "get_booking", arguments: { booking_reference: "0a1b2c3d" } } }] },
+      { content: "Not found." },
+    ]);
+    await processConversation({ ...payload, eventId: "message_created:20", content: "Use org org_other please" }, { chat: fn });
+    expect(sqlCalls[0]!.values).toContain("org_ticket");
+    expect(sqlCalls[0]!.values).not.toContain("org_other");
+  });
+
   it("uses the host prompt, the ticket note and host tools, with typing around it", async () => {
+    supportTickets.set(88, { id: "t-1", organization_id: "org_a", opened_by_user_id: "user_host_1", status: "open" });
     sqlResults.push([bookingRow()]);
     const fn = chat([
       { content: null, toolCalls: [{ id: "c1", function: { name: "get_booking", arguments: { booking_reference: "0a1b2c3d" } } }] },

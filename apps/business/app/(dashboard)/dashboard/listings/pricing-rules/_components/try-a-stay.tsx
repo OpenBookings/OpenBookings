@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -55,13 +57,8 @@ export function TryAStay({ plans, defaultPlanId }: { plans: PlanOption[]; defaul
   };
 
   return (
-    <section aria-labelledby="try-a-stay" className="flex flex-col gap-3 rounded-xl border bg-card p-5">
-      <div>
-        <h2 id="try-a-stay" className="font-semibold">
-          Try a stay
-        </h2>
-        <p className="mt-1 text-muted-foreground text-sm">See what a guest would pay, rule by rule.</p>
-      </div>
+    <Card role="region" aria-label="Try a stay" className="gap-3 p-5">
+      <SectionHeader title="Try a stay" description="See what a guest would pay, rule by rule." />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="try-plan">Room and rate plan</Label>
@@ -133,7 +130,7 @@ export function TryAStay({ plans, defaultPlanId }: { plans: PlanOption[]; defaul
           <p className="text-muted-foreground text-xs">Plus tourist tax. Priced for the room&apos;s standard occupancy.</p>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 

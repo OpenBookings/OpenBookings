@@ -19,6 +19,7 @@ import { captureOutcome } from "@openbookings/mailing/tracking";
 import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { getServerSession } from "@/lib/auth";
+import { currentPropertyPin, pinnedAccess, switchedReason, type PinnedAccess } from "@/lib/current-property";
 import { goodwillAmount } from "./goodwill-amount";
 import { sendCancellation, sendRefundMail } from "@/lib/mailing/booking-mail";
 import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
@@ -26,8 +27,8 @@ import { ACTION_PERMISSION, RETRY_REFUND_PERMISSION } from "./permissions";
 /**
  * The host's booking actions. Each one re-checks, on the server, that the
  * signed-in member's role allows that action at the booking's property (see
- * ./permissions.ts): the booking id comes from the client and is trusted for
- * nothing else. What may happen and how much is refunded is decided in
+ * ./permissions.ts), and that the property is the current hotel: the booking
+ * id comes from the client and is trusted for nothing else. What may happen and how much is refunded is decided in
  * @openbookings/db/booking-lifecycle.
  */
 
@@ -41,7 +42,9 @@ const deps: LifecycleDeps = {
     Sentry.captureException(error, { tags: { area: "refunds" }, extra: context }),
 };
 
-async function hostFor(bookingId: string, permission: Permission) {
+type HostActor = { kind: "host"; userId: string };
+
+async function hostAccess(bookingId: string, permission: Permission): Promise<HostActor | { refused: PinnedAccess }> {
   const session = await getServerSession();
   if (!session) throw new Error("Unauthenticated");
   const booking = await queryOne<{ hotel_id: string }>(
@@ -49,17 +52,26 @@ async function hostFor(bookingId: string, permission: Permission) {
     [bookingId],
   ).catch(() => null);
   // Out of scope and missing look the same: not_found either way.
-  if (!booking || !(await userCan(session, booking.hotel_id, permission))) return null;
-  return { kind: "host" as const, userId: session.user.id };
+  if (!booking) return { refused: "denied" };
+  const access = await pinnedAccess(await currentPropertyPin(), (pin) =>
+    userCan(session, booking.hotel_id, permission, pin),
+  );
+  return access === "ok" ? { kind: "host", userId: session.user.id } : { refused: access };
+}
+
+async function hostFor(bookingId: string, permission: Permission): Promise<HostActor | null> {
+  const access = await hostAccess(bookingId, permission);
+  return "refused" in access ? null : access;
 }
 
 async function run(
   bookingId: string,
   permission: Permission,
-  act: (actor: { kind: "host"; userId: string }) => Promise<LifecycleResult>,
-) {
-  const actor = await hostFor(bookingId, permission);
-  if (!actor) return { ok: false, error: "not_found" } satisfies LifecycleResult;
+  act: (actor: HostActor) => Promise<LifecycleResult>,
+): Promise<LifecycleResult | { ok: false; error: "not_found"; reason?: "property-switched" }> {
+  const actor = await hostAccess(bookingId, permission);
+  // A booking at another hotel than the current one also says so (a stale tab).
+  if ("refused" in actor) return { ok: false, error: "not_found", ...switchedReason(actor.refused) };
   const result = await act(actor);
   revalidatePath(RESERVATIONS);
   return result;

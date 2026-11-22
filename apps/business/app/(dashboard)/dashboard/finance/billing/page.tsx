@@ -4,14 +4,25 @@ import { getBillingProfile } from "@openbookings/billing/profiles";
 import { countryNameOf } from "@openbookings/billing/render/document";
 import { EU_COUNTRY_CODES, vatTreatmentFor } from "@openbookings/billing/vat";
 import { getServerSession } from "@/lib/auth";
+import { pageAccess } from "@/lib/page-access";
+import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { billingAccess } from "@/lib/billing/scope";
 import { listInvoices, organizationReadiness, upcomingInvoice } from "@/lib/billing/queries";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { PageHold } from "@/components/dashboard/page-loaders";
 import { BillingDetailsForm, type VatStatus } from "./_components/billing-details-form";
 import { InvoiceList } from "./_components/invoice-list";
 import { ReadinessChecklist } from "./_components/readiness-checklist";
 import { UpcomingInvoiceCard } from "./_components/upcoming-invoice";
+
+const HEADER = (
+  <PageHeader
+    title="Billing"
+    description="Your monthly commission invoices from OpenBookings, and the details we put on them."
+    className="px-4 lg:px-6"
+  />
+);
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -25,11 +36,21 @@ export default async function BillingPage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
 
+  const access = await pageAccess("billing");
+  if (access.level === "none") {
+    return (
+      <PageHold id="billing" fill>
+        <NoAccessPage navKey="billing" current={access.current} />
+      </PageHold>
+    );
+  }
+
   // Access is decided here on every request, not by the layout.
   const scope = await billingAccess(session, { billing: ["read"] });
   if (!scope) {
     return (
       <PageHold id="billing">
+        {HEADER}
         <div className="px-4 lg:px-6">
           <Card>
             <CardContent className="text-sm text-muted-foreground">
@@ -78,6 +99,7 @@ export default async function BillingPage() {
 
   return (
     <PageHold id="billing">
+      {HEADER}
       <div className="flex flex-col gap-4 px-4 md:gap-6 lg:px-6">
         <UpcomingInvoiceCard upcoming={upcoming} />
         <InvoiceList invoices={invoices} />

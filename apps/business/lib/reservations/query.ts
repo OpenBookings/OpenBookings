@@ -1,5 +1,5 @@
 import { isTestingMode } from "@openbookings/mode";
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { currentPropertySql, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { toHostReservation, type HostReservation, type HostReservationRow } from "./shape";
 import { actionsForViewer, viewerCanRetryRefunds } from "./permissions";
 
@@ -7,10 +7,10 @@ import { actionsForViewer, viewerCanRetryRefunds } from "./permissions";
 const PAST_DAYS = 30;
 
 /**
- * Every paid booking at the properties this host can read, from a month ago
- * onwards. Pending rows are checkout intents, not bookings, and are left out.
+ * Every paid booking at the current hotel, from a month ago onwards. Pending
+ * rows are checkout intents, not bookings, and are left out.
  *
- * `$1` is the host (getHostScopedDb binds it).
+ * `$1` is the host, `$2` the current hotel (getPropertyScopedDb binds both).
  */
 const hostReservationsSql = (testing: boolean = isTestingMode()) => `
   SELECT
@@ -81,18 +81,22 @@ const hostReservationsSql = (testing: boolean = isTestingMode()) => `
   FROM bookings b
   JOIN properties p ON p.id = b.hotel_id
   LEFT JOIN "user" u ON u.id = b.user_id
-  WHERE ${propertyReadAccessSql("$1", testing)}
+  WHERE ${currentPropertySql(testing)}
     AND b.status <> 'pending'
     AND b.check_out_date >= CURRENT_DATE - ${PAST_DAYS}
   ORDER BY b.check_in_date, b.created_at
 `;
 
+/** The current hotel's bookings; none without a current hotel. `db` is a seam for the DB-backed tests. */
 export async function loadHostReservations(
   session: SessionLike,
-  host: Pick<ReturnType<typeof getHostScopedDb>, "query"> = getHostScopedDb(session),
+  propertyId: string | null,
+  db?: Pick<ReturnType<typeof getPropertyScopedDb>, "query">,
   now: Date = new Date(),
   testing: boolean = isTestingMode(),
 ): Promise<HostReservation[]> {
+  if (!propertyId) return [];
+  const host = db ?? getPropertyScopedDb(session, propertyId);
   const rows = await host.query<HostReservationRow & { viewer_role: string | null; viewer_has_access: boolean }>(
     hostReservationsSql(testing),
   );

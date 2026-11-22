@@ -1,5 +1,6 @@
 import { userOwnsProperty, type SessionLike } from "@openbookings/authz";
 import { queryOne as dbQueryOne } from "@openbookings/db";
+import { currentPropertyPin, type PropertyPin } from "@/lib/current-property";
 import { touristTaxRuleSchema } from "./tourist-tax-schema";
 
 /**
@@ -23,9 +24,11 @@ type QueryOne = <T>(text: string, values?: unknown[]) => Promise<T | null>;
 
 export interface TouristTaxDeps {
   queryOne: QueryOne;
+  /** The current hotel the ownership check is pinned to. */
+  pin: () => Promise<PropertyPin>;
 }
 
-const defaultDeps: TouristTaxDeps = { queryOne: dbQueryOne };
+const defaultDeps: TouristTaxDeps = { queryOne: dbQueryOne, pin: currentPropertyPin };
 
 export type Result<Extra = object> = ({ ok: true } & Extra) | { ok: false; error: string };
 
@@ -39,7 +42,8 @@ export class NotFoundError extends Error {
 const PROPERTY_TODAY = `(now() AT TIME ZONE p.timezone)::date`;
 
 async function requireProperty(session: SessionLike, propertyId: string, deps: TouristTaxDeps) {
-  if (!propertyId || !(await userOwnsProperty(session, propertyId, { queryOne: deps.queryOne }))) {
+  // Pinned: a stale tab still showing another hotel than the current one is refused.
+  if (!propertyId || !(await userOwnsProperty(session, propertyId, { queryOne: deps.queryOne, ...(await deps.pin()) }))) {
     throw new NotFoundError();
   }
 }

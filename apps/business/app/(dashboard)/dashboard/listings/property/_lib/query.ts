@@ -1,5 +1,5 @@
 import type { PropertyCancellationTier } from "@openbookings/pricing";
-import { getHostScopedDb, propertyReadAccessSql, type SessionLike } from "@openbookings/authz";
+import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { query as dbQuery } from "@openbookings/db";
 import type {
   HighlightRecord,
@@ -80,11 +80,21 @@ interface CollectionsRow {
   tourist_tax_rules: TouristTaxRuleRecord[] | null;
 }
 
+/** `$1` user, `$2` the current hotel (getPropertyScopedDb's binding). */
+type PropertyDb = Pick<ReturnType<typeof getPropertyScopedDb>, "query" | "queryOne">;
+
+/**
+ * The current hotel's editor data. `propertyId` is the current hotel
+ * (getCurrentProperty); null, or a hotel the user cannot read, is "no
+ * property". `db` is a seam for the DB-backed tests.
+ */
 export async function loadEditorData(
   session: SessionLike,
-  propertyId?: string,
+  propertyId: string | null,
+  db?: PropertyDb,
 ): Promise<PropertyEditorData | null> {
-  const host = getHostScopedDb(session);
+  if (!propertyId) return null;
+  const host = db ?? getPropertyScopedDb(session, propertyId);
 
   const property = await host.queryOne<PropertyRow>(
     `SELECT
@@ -108,11 +118,7 @@ export async function loadEditorData(
        (now() AT TIME ZONE p.timezone)::date::text AS today
      FROM properties p
      LEFT JOIN property_content c ON c.property_id = p.id
-     WHERE ${propertyReadAccessSql("$1")}
-       AND ($2::uuid IS NULL OR p.id = $2::uuid)
-     ORDER BY p.name
-     LIMIT 1`,
-    [propertyId ?? null],
+     WHERE ${CURRENT_PROPERTY_SQL}`,
   );
 
   if (!property) return null;
@@ -138,8 +144,7 @@ export async function loadEditorData(
         ) ORDER BY t.effective_from), '[]'::json)
         FROM tourist_tax_rules t WHERE t.property_id = p.id) AS tourist_tax_rules
      FROM properties p
-     WHERE ${propertyReadAccessSql("$1")} AND p.id = $2::uuid`,
-    [property.id],
+     WHERE ${CURRENT_PROPERTY_SQL}`,
   );
 
   const record: PropertyRecord = {

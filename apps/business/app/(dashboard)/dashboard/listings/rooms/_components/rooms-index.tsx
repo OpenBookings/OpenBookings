@@ -1,5 +1,8 @@
 "use client";
 
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import Image from "next/image";
 import * as React from "react";
 import Link from "next/link";
@@ -27,7 +30,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -61,6 +63,7 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
   const [creating, setCreating] = React.useState(false);
   const [dragId, setDragId] = React.useState<string | null>(null);
   const [archiving, setArchiving] = React.useState<RoomListItem | null>(null);
+  const { canEdit } = useEditAccess();
 
   // A refresh after any write hands down a new list; it wins over local order.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -103,37 +106,47 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
 
   if (rooms.length === 0) {
     return (
-      <Empty className="flex-1">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <BedDoubleIcon />
-          </EmptyMedia>
-          <EmptyTitle>No room types yet</EmptyTitle>
-          <EmptyDescription>Add the rooms you sell, with their photos and rates.</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button size="sm" onClick={addRoom} disabled={creating}>
-            {creating ? <Spinner /> : <PlusIcon />}
-            Add room type
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <div className="flex flex-1 flex-col gap-4 px-4 lg:px-6">
+        <PageHeader title="Rooms" />
+        <Empty className="flex-1">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BedDoubleIcon />
+            </EmptyMedia>
+            <EmptyTitle>No room types yet</EmptyTitle>
+            <EmptyDescription>Add the rooms you sell, with their photos and rates.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <ViewOnlyHint>
+              <Button size="sm" onClick={addRoom} disabled={creating || !canEdit}>
+                {creating ? <Spinner /> : <PlusIcon />}
+                Add room type
+              </Button>
+            </ViewOnlyHint>
+          </EmptyContent>
+        </Empty>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4 px-4 lg:px-6">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-muted-foreground text-sm">
-          Guests see your rooms in this order. Drag a row to move it.
-        </p>
-        <Button size="sm" onClick={addRoom} disabled={creating}>
-          {creating ? <Spinner /> : <PlusIcon />}
-          Add room type
-        </Button>
-      </div>
+      <PageHeader
+        title="Rooms"
+        description={
+          canEdit ? "Guests see your rooms in this order. Drag a row to move it." : "Guests see your rooms in this order."
+        }
+        actions={
+          <ViewOnlyHint>
+            <Button size="sm" onClick={addRoom} disabled={creating || !canEdit}>
+              {creating ? <Spinner /> : <PlusIcon />}
+              Add room type
+            </Button>
+          </ViewOnlyHint>
+        }
+      />
 
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>
@@ -153,7 +166,7 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
             {rooms.map((room, index) => (
               <TableRow
                 key={room.id}
-                draggable
+                draggable={canEdit}
                 onDragStart={(e) => {
                   setDragId(room.id);
                   e.dataTransfer.effectAllowed = "move";
@@ -180,7 +193,7 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                 className={cn(dragId === room.id && "opacity-50")}
               >
                 <TableCell className="text-muted-foreground">
-                  <GripVerticalIcon className="size-4 cursor-grab" aria-hidden />
+                  {canEdit ? <GripVerticalIcon className="size-4 cursor-grab" aria-hidden /> : null}
                 </TableCell>
                 <TableCell>
                   <Link
@@ -205,9 +218,9 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                 <TableCell className="text-right tabular-nums">{room.units}</TableCell>
                 <TableCell className="text-right tabular-nums">{room.activeRates}</TableCell>
                 <TableCell>
-                  <Badge variant={room.status === "published" ? "secondary" : "outline"}>
+                  <StatusBadge tone={room.status === "published" ? "positive" : "neutral"}>
                     {room.status === "published" ? "Published" : "Draft"}
-                  </Badge>
+                  </StatusBadge>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -219,21 +232,21 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onSelect={() => router.push(roomHref(room.id))}>
                         <PencilIcon />
-                        Edit
+                        {canEdit ? "Edit" : "View"}
                       </DropdownMenuItem>
-                      <DropdownMenuItem disabled={index === 0} onSelect={() => move(index, index - 1)}>
+                      <DropdownMenuItem disabled={!canEdit || index === 0} onSelect={() => move(index, index - 1)}>
                         <ArrowUpIcon />
                         Move up
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={index === rooms.length - 1}
+                        disabled={!canEdit || index === rooms.length - 1}
                         onSelect={() => move(index, index + 1)}
                       >
                         <ArrowDownIcon />
                         Move down
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive" onSelect={() => setArchiving(room)}>
+                      <DropdownMenuItem variant="destructive" disabled={!canEdit} onSelect={() => setArchiving(room)}>
                         <ArchiveIcon />
                         Archive
                       </DropdownMenuItem>

@@ -59,10 +59,10 @@ describeWithDb("Rooms editor against Postgres", () => {
   const many = async <T,>(sql: string, values: unknown[] = []) =>
     (await db.query(sql, values)).rows as T[];
 
-  /** getHostScopedDb's shape, bound to this transaction. */
-  const hostDb = (s: SessionLike) => ({
-    query: <T,>(sql: string, values: unknown[] = []) => many<T>(sql, [s.user.id, ...values]),
-    queryOne: <T,>(sql: string, values: unknown[] = []) => one<T>(sql, [s.user.id, ...values]),
+  /** getPropertyScopedDb's shape, bound to this transaction and the test property. */
+  const propertyDb = (s: SessionLike) => ({
+    query: <T,>(sql: string, values: unknown[] = []) => many<T>(sql, [s.user.id, propertyId, ...values]),
+    queryOne: <T,>(sql: string, values: unknown[] = []) => one<T>(sql, [s.user.id, propertyId, ...values]),
   });
 
   beforeAll(async () => {
@@ -84,7 +84,9 @@ describeWithDb("Rooms editor against Postgres", () => {
         }
       },
       purge: async () => {},
-      loadRoom: (s, id) => loadRoomEditor(s, id, hostDb(s)),
+      loadRoom: (s, id) => loadRoomEditor(s, propertyId, id, propertyDb(s)),
+      // Read at call time: each test makes its own property, current in this "tab".
+      pin: async () => ({ currentPropertyId: propertyId }),
     };
   });
 
@@ -222,8 +224,8 @@ describeWithDb("Rooms editor against Postgres", () => {
 
   test("an org admin who is not the legacy owner sees the property in the dashboard loaders", async () => {
     // These used to filter on owner_user_id, so only the founder saw anything.
-    expect((await loadRoomsIndex(session(orgAdmin), propertyId, hostDb(session(orgAdmin))))?.property.id).toBe(propertyId);
-    expect((await loadRoomEditor(session(orgAdmin), roomId, hostDb(session(orgAdmin))))?.room.id).toBe(roomId);
+    expect((await loadRoomsIndex(session(orgAdmin), propertyId, propertyDb(session(orgAdmin))))?.property.id).toBe(propertyId);
+    expect((await loadRoomEditor(session(orgAdmin), propertyId, roomId, propertyDb(session(orgAdmin))))?.room.id).toBe(roomId);
   });
 
   test("a founder removed from the organisation keeps nothing, though owner_user_id still names them", async () => {
@@ -234,14 +236,14 @@ describeWithDb("Rooms editor against Postgres", () => {
       m.saveRoomIdentity(session(owner), form({ roomId, name: "Still mine", description: "x".repeat(50) }), deps),
     ).rejects.toBeInstanceOf(m.NotFoundError);
     expect((await m.setRateActive(session(owner), pricedRate, false, deps)).ok).toBe(false);
-    expect(await loadRoomEditor(session(owner), roomId, hostDb(session(owner)))).toBeNull();
-    expect(await loadRoomsIndex(session(owner), propertyId, hostDb(session(owner)))).toBeNull();
+    expect(await loadRoomEditor(session(owner), propertyId, roomId, propertyDb(session(owner)))).toBeNull();
+    expect(await loadRoomsIndex(session(owner), propertyId, propertyDb(session(owner)))).toBeNull();
     expect((await one<{ name: string }>(`SELECT name FROM rooms WHERE id = $1`, [roomId]))!.name).toBe("Deluxe King");
   });
 
   test("the loaders return nothing for another host's room", async () => {
-    expect(await loadRoomEditor(session(stranger), roomId, hostDb(session(stranger)))).toBeNull();
-    expect(await loadRoomsIndex(session(stranger), propertyId, hostDb(session(stranger)))).toBeNull();
+    expect(await loadRoomEditor(session(stranger), propertyId, roomId, propertyDb(session(stranger)))).toBeNull();
+    expect(await loadRoomsIndex(session(stranger), propertyId, propertyDb(session(stranger)))).toBeNull();
   });
 
   // ── Space and the units floor ───────────────────────────────────────
@@ -294,8 +296,8 @@ describeWithDb("Rooms editor against Postgres", () => {
     expect(row!.archived_at).not.toBeNull();
     expect(row!.is_active).toBe(false);
     // Archived rooms leave the editor and the index.
-    expect(await loadRoomEditor(session(owner), roomId, hostDb(session(owner)))).toBeNull();
-    expect((await loadRoomsIndex(session(owner), propertyId, hostDb(session(owner))))!.rooms).toHaveLength(0);
+    expect(await loadRoomEditor(session(owner), propertyId, roomId, propertyDb(session(owner)))).toBeNull();
+    expect((await loadRoomsIndex(session(owner), propertyId, propertyDb(session(owner))))!.rooms).toHaveLength(0);
   });
 
   test("a rate with an upcoming booking cannot be archived", async () => {
@@ -488,7 +490,7 @@ describeWithDb("Rooms editor against Postgres", () => {
   test("a new room is a draft at the end of the list", async () => {
     const result = await m.createRoom(session(owner), propertyId, deps);
     expect(result.ok).toBe(true);
-    const index = await loadRoomsIndex(session(owner), propertyId, hostDb(session(owner)));
+    const index = await loadRoomsIndex(session(owner), propertyId, propertyDb(session(owner)));
     expect(index!.rooms.map((r) => r.status)).toEqual(["draft", "draft"]);
     expect(index!.rooms.at(-1)!.name).toBe("New room type");
   });
@@ -528,7 +530,7 @@ describeWithDb("Rooms editor against Postgres", () => {
       `INSERT INTO room_amenities (room_id, amenity_id) SELECT $1, id FROM amenities WHERE label = 'Bathtub'`,
       [roomId],
     );
-    const data = await loadRoomEditor(session(owner), roomId, hostDb(session(owner)));
+    const data = await loadRoomEditor(session(owner), propertyId, roomId, propertyDb(session(owner)));
     expect(data!.room.amenityKeys).toEqual(["bathtub"]);
     expect(data!.room.featuredAmenityKeys).toEqual(["bathtub"]);
   });

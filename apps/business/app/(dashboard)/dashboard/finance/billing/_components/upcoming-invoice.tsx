@@ -2,6 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import { formatEuro } from "@openbookings/billing/money";
 import { formatDay, formatMonth, formatStay } from "@openbookings/billing/render/document";
 import type { UpcomingInvoice } from "@/lib/billing/queries";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,17 +28,17 @@ export function UpcomingInvoiceCard({ upcoming }: { upcoming: UpcomingInvoice })
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
         {blockers.length > 0 ? (
-          <div role="alert" className="flex gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-            <div className="flex flex-col gap-1">
-              <p className="font-medium">This invoice can&apos;t be issued yet</p>
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden />
+            <AlertTitle>This invoice can&apos;t be issued yet</AlertTitle>
+            <AlertDescription>
               <ul className="list-disc pl-4 text-muted-foreground">
                 {blockers.map((b) => (
                   <li key={b}>{b}</li>
                 ))}
               </ul>
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {treatment ? <p className="text-muted-foreground">{treatment.label}</p> : null}

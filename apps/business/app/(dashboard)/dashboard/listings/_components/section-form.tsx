@@ -4,6 +4,8 @@ import * as React from "react";
 import { toast } from "sonner";
 import { AlertCircleIcon } from "lucide-react";
 import posthog from "posthog-js";
+import { EditFieldset, useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -46,6 +48,21 @@ interface SectionFormProps<T> {
  * components from drifting apart, which is the failure mode this wrapper exists
  * to prevent.
  */
+/**
+ * The element to focus for a field name. A RadioGroup submits through a
+ * hidden input, so focus its checked radio (or the first one) instead.
+ */
+function fieldElement(form: HTMLFormElement | null, name: string): HTMLElement | null {
+  const el = form?.querySelector<HTMLElement>(`[name="${name}"]`) ?? null;
+  const group = el?.getAttribute("aria-hidden") === "true" ? el.closest<HTMLElement>('[role="radiogroup"]') : null;
+  if (!group) return el;
+  return (
+    group.querySelector<HTMLElement>('[role="radio"][data-state="checked"]') ??
+    group.querySelector<HTMLElement>('[role="radio"]') ??
+    el
+  );
+}
+
 export function SectionForm<T>({
   sectionId,
   title,
@@ -65,6 +82,7 @@ export function SectionForm<T>({
     success: false,
   });
   const [dirty, setDirty] = React.useState(false);
+  const { canEdit } = useEditAccess();
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const errorEntries = Object.entries(state.errors ?? {}).filter(
@@ -88,13 +106,13 @@ export function SectionForm<T>({
   React.useEffect(() => {
     if (errorEntries.length === 0) return;
     const first = errorEntries[0][0];
-    const el = formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`);
+    const el = fieldElement(formRef.current, first);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [state.errors]);
 
   function focusField(name: string) {
-    const el = formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`);
+    const el = fieldElement(formRef.current, name);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }
@@ -107,10 +125,7 @@ export function SectionForm<T>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b px-6 py-5">
-        <h2 className="font-medium text-lg">{title}</h2>
-        <p className="text-muted-foreground text-sm">{description}</p>
-      </div>
+      <PageHeader title={title} description={description} className="border-b px-6 py-5" />
 
       {/* onSubmit, not `action`: React resets a form after its action, which would wipe
           fields that default from page data when the save comes back with errors. */}
@@ -118,6 +133,7 @@ export function SectionForm<T>({
         ref={formRef}
         onSubmit={(event) => {
           event.preventDefault();
+          if (!canEdit) return;
           const data = new FormData(event.currentTarget);
           React.startTransition(() => formAction(data));
         }}
@@ -139,13 +155,14 @@ export function SectionForm<T>({
               <ul className="flex flex-col gap-1">
                 {errorEntries.map(([name, messages]) => (
                   <li key={name}>
-                    <button
+                    <Button
                       type="button"
+                      variant="link"
                       onClick={() => focusField(name)}
-                      className="text-left underline underline-offset-2 hover:no-underline"
+                      className="h-auto whitespace-normal p-0 text-left font-normal text-destructive underline underline-offset-2 hover:no-underline"
                     >
                       {messages![0]}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -153,7 +170,8 @@ export function SectionForm<T>({
           </Alert>
         )}
 
-        {children(state, pending, markDirty)}
+        {/* View-only roles see the fields, disabled. */}
+        <EditFieldset>{children(state, pending, markDirty)}</EditFieldset>
       </form>
 
       <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
@@ -175,10 +193,12 @@ export function SectionForm<T>({
           >
             Discard
           </Button>
-          <Button type="submit" size="sm" form={`section-${sectionId}`} disabled={pending}>
-            {pending && <Spinner />}
-            Save changes
-          </Button>
+          <ViewOnlyHint side="top">
+            <Button type="submit" size="sm" form={`section-${sectionId}`} disabled={pending || !canEdit}>
+              {pending && <Spinner />}
+              Save changes
+            </Button>
+          </ViewOnlyHint>
         </div>
       </div>
     </div>

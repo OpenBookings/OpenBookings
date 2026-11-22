@@ -26,7 +26,7 @@ export function DateStrip({ cells }: { cells: DayCell[] }) {
             >
               <span
                 className={cn(
-                  "relative block h-10 w-full overflow-hidden rounded-[1px] bg-muted",
+                  "relative block h-10 w-full overflow-hidden rounded-xs bg-muted",
                   cell.available === 0 && "opacity-40",
                 )}
               >

@@ -14,6 +14,7 @@ import {
   Undo2,
   UploadCloud,
 } from "lucide-react";
+import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -98,6 +99,7 @@ export function AriToolbar({
   onPublish,
   onDiscard,
 }: AriToolbarProps) {
+  const { canEdit } = useEditAccess();
   const activeFilterCount = hiddenRoomIds.size + (issuesOnly ? 1 : 0);
 
   return (
@@ -149,7 +151,7 @@ export function AriToolbar({
         value={String(windowDays)}
         onValueChange={(v) => onWindowChange(Number(v))}
       >
-        <SelectTrigger className="w-40 rounded-full" aria-label="Date range">
+        <SelectTrigger className="w-40" aria-label="Date range">
           <CalendarDays className="size-4 text-muted-foreground" />
           <SelectValue />
         </SelectTrigger>
@@ -167,7 +169,7 @@ export function AriToolbar({
         onValueChange={(v) => onStayLengthChange(Number(v))}
       >
         <SelectTrigger
-          className="w-44 rounded-full"
+          className="w-44"
           aria-label="Show rates for stay length"
         >
           <SelectValue />
@@ -183,7 +185,7 @@ export function AriToolbar({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="rounded-full">
+          <Button variant="outline">
             <Filter className="size-4" />
             Filter
             {activeFilterCount > 0 && (
@@ -235,7 +237,7 @@ export function AriToolbar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 rounded-full"
+                className="size-8"
                 onClick={onClearFilters}
                 aria-label={`Clear ${activeFilterCount} filter${
                   activeFilterCount === 1 ? "" : "s"
@@ -271,7 +273,6 @@ export function AriToolbar({
             </span>
             <Button
               variant="outline"
-              className="rounded-full"
               onClick={onDiscard}
               disabled={publishing}
             >
@@ -279,7 +280,6 @@ export function AriToolbar({
               Discard
             </Button>
             <Button
-              className="rounded-full"
               onClick={onPublish}
               disabled={publishing}
             >
@@ -289,35 +289,41 @@ export function AriToolbar({
             <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           </>
         )}
-        <Button variant="outline" className="rounded-full" asChild>
+        <Button variant="outline" asChild>
           <Link href="/dashboard/listings/pricing-rules">
             <Percent className="size-4" />
             Pricing rules
           </Link>
         </Button>
-        <Button
-          variant="outline"
-          className="rounded-full"
-          onClick={() => onOpenDialog("availability")}
-        >
-          <CalendarCog className="size-4" />
-          Edit availability
-        </Button>
-        <Button
-          variant="outline"
-          className="rounded-full"
-          onClick={() => onOpenDialog("restrictions")}
-        >
-          <PencilLine className="size-4" />
-          Edit restrictions
-        </Button>
-        <Button
-          className="rounded-full"
-          onClick={() => onOpenDialog("rate-plan")}
-        >
-          <Plus className="size-4" />
-          Add rate plan
-        </Button>
+        <ViewOnlyHint>
+          <Button
+            variant="outline"
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("availability")}
+          >
+            <CalendarCog className="size-4" />
+            Edit availability
+          </Button>
+        </ViewOnlyHint>
+        <ViewOnlyHint>
+          <Button
+            variant="outline"
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("restrictions")}
+          >
+            <PencilLine className="size-4" />
+            Edit restrictions
+          </Button>
+        </ViewOnlyHint>
+        <ViewOnlyHint>
+          <Button
+            disabled={!canEdit}
+            onClick={() => onOpenDialog("rate-plan")}
+          >
+            <Plus className="size-4" />
+            Add rate plan
+          </Button>
+        </ViewOnlyHint>
       </div>
     </div>
   );

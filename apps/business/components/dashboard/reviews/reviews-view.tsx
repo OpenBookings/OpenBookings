@@ -1,10 +1,10 @@
 "use client";
 
+import { CountBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Star } from "lucide-react";
 import { REVIEW_BANDS, type ReviewBand } from "@openbookings/pricing";
-import { Badge } from "@/components/ui/badge";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -113,9 +113,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
               <TabsTrigger key={t.value} value={t.value} className="flex-1 sm:flex-none">
                 <span className="sm:hidden">{t.short}</span>
                 <span className="hidden sm:inline">{t.label}</span>
-                <Badge variant="secondary" className="ml-1.5 px-1.5">
-                  {counts[t.value]}
-                </Badge>
+                <CountBadge>{counts[t.value]}</CountBadge>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -165,7 +163,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
       </div>
 
       <div className="flex min-h-0 flex-1 items-start px-4 lg:items-stretch lg:px-6">
-        <div className="max-h-full min-w-0 flex-1 overflow-y-auto rounded-lg border lg:max-w-sm lg:self-start">
+        <div className="max-h-full min-w-0 flex-1 overflow-y-auto rounded-xl border lg:max-w-sm lg:self-start">
           <ReviewsList
             reviews={list}
             selectedId={selected?.id ?? null}
@@ -178,7 +176,7 @@ export function ReviewsView({ reviews }: { reviews: HostReview[] }) {
           {selected && isDesktop ? (
             <ReviewDetail key={selected.id} review={selected} />
           ) : (
-            <div className="flex flex-1 items-center justify-center rounded-lg border p-6 text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center rounded-xl border p-6 text-sm text-muted-foreground">
               Select a review to read it.
             </div>
           )}

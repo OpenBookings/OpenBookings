@@ -7,6 +7,7 @@ import { getOnboardingFacts, wizardInProgress } from "@/lib/onboarding-facts";
 import { onboardingWallDecision } from "@/lib/onboarding-wall";
 import { headers } from "next/headers";
 import { withTransaction } from "@openbookings/db";
+import { propertyLinkRedirect } from "@/lib/property-link";
 import { ensureDemoMembership, isTestingMode } from "@openbookings/demo";
 
 const env = readAuthEnv();
@@ -77,6 +78,13 @@ export async function proxy(request: NextRequest) {
     });
     if (decision !== "allow") {
       return NextResponse.redirect(new URL(decision, request.url));
+    }
+    // `?property=<id>` deep links: switch the session's hotel (if the user can
+    // read it), then drop the param. A refused id changes nothing.
+    const sessionId = session.session.id;
+    if (typeof sessionId === "string" && sessionId) {
+      const clean = await propertyLinkRedirect(request.nextUrl, { userId: session.user.id, sessionId }, {}, request.headers);
+      if (clean) return NextResponse.redirect(clean);
     }
   }
 

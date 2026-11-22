@@ -1,3 +1,4 @@
+import { StatusBadge } from "@/components/ui/status-badge";
 import * as React from "react";
 import { KeyRound, Laptop } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -78,7 +79,7 @@ function Row({
 }) {
   return (
     <li className="flex flex-wrap items-center gap-4 px-5 py-4">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-secondary text-muted-foreground">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
         {icon}
       </span>
       <div className="min-w-0 flex-1 basis-40">
@@ -240,10 +241,7 @@ export function SessionsSection({
                   name={describeDevice(session.userAgent)}
                   chip={
                     current ? (
-                      <Badge className="bg-(--green-3) text-(--green-11)">
-                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                        This device
-                      </Badge>
+                      <StatusBadge tone="positive">This device</StatusBadge>
                     ) : null
                   }
                   meta={signedIn ? `Signed in ${signedIn}` : "Signed in earlier"}

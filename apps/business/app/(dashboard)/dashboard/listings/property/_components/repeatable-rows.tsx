@@ -117,16 +117,18 @@ export function RepeatableRows({
           <p className="text-muted-foreground text-xs">Common lines</p>
           <div className="flex flex-wrap gap-1.5">
             {remaining.map((s) => (
-              <button
+              <Button
                 key={s}
                 type="button"
+                variant="outline"
+                size="xs"
                 disabled={disabled}
                 onClick={() => addSuggestion(s)}
-                className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-left text-muted-foreground text-xs transition-colors hover:border-solid hover:text-foreground disabled:opacity-50"
+                className="h-auto min-h-6 whitespace-normal py-1 text-left font-normal text-muted-foreground hover:text-foreground"
               >
-                <PlusIcon className="size-3 shrink-0" />
+                <PlusIcon />
                 {s}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

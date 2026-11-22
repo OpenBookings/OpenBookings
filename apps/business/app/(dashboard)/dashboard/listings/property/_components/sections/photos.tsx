@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleAlertIcon } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { sectionStatus } from "../../_lib/completion";
 import { ImageManager } from "../../../_components/image-manager";
@@ -22,12 +23,11 @@ export function PhotosSection({ data }: SectionProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b px-6 py-5">
-        <h2 className="font-medium text-lg">Photos</h2>
-        <p className="text-muted-foreground text-sm">
-          Changes here save as soon as each upload finishes.
-        </p>
-      </div>
+      <PageHeader
+        title="Photos"
+        description="Changes here save as soon as each upload finishes."
+        className="border-b px-6 py-5"
+      />
 
       <div className="flex flex-1 flex-col overflow-y-auto px-8 py-8">
         {!status.complete && (

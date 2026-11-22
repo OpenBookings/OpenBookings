@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { describeDevice } from "@/lib/device";
 import { Card } from "@/components/ui/card";
 import { InlineLoader } from "@/components/dashboard/inline-loader";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { useStepUp } from "@/components/security/step-up-dialog";
 import { rememberPasskey } from "@/lib/passkey-hint";
 import { isPasskeyPromptCancelled, passkeyErrorMessage } from "@/lib/passkey-errors";
@@ -219,12 +220,7 @@ export function SecurityPanel() {
     <>
       {stepUpDialog}
 
-      <header>
-        <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] sm:text-[28px]">Security</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your passkeys, and the devices signed in to your account.
-        </p>
-      </header>
+      <PageHeader title="Security" description="Your passkeys, and the devices signed in to your account." />
 
       {loading ? (
         <Card className="p-6">

@@ -4,6 +4,9 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Monitor } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { useEditAccess } from "@/components/dashboard/edit-access";
+import { Button } from "@/components/ui/button";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
 import { AriDetailPanel } from "./ari-detail-panel";
@@ -74,6 +77,8 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
     !rates.confirmed && rates.canConfirm,
   );
   const draft = useAriDraft();
+  // View-only roles browse the grid and its details but stage nothing.
+  const { canEdit } = useEditAccess();
   const [publishing, setPublishing] = React.useState(false);
   const [range, setRange] = React.useState<RangeSelection | null>(null);
   /**
@@ -101,6 +106,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
     col: number,
     extend: boolean,
   ) => {
+    if (!canEdit) return;
     if (extend && anchor && anchor.planId === plan.id) {
       setRange({
         room,
@@ -215,12 +221,18 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
   // Panel routes into a modal: close the panel first so focus does not end up
   // trapped between two overlapping Radix dialogs.
   const openDialog = (kind: DialogState["kind"], prefill: EditPrefill = {}) => {
+    if (!canEdit) return;
     setSelection(null);
     setDialog({ kind, prefill });
   };
 
   return (
     <>
+      <PageHeader
+        title="Rates & availability"
+        description="Set what each room costs and how many you sell, night by night."
+        className="px-4 pb-4 lg:px-6"
+      />
       <div className="hidden min-h-0 flex-1 flex-col lg:flex">
         <AriToolbar
           startDate={data.dates[0] ?? startDate}
@@ -262,13 +274,14 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
               <>
                 Prices are locked until your organisation confirms that its
                 rates include VAT.{" "}
-                <button
+                <Button
                   type="button"
-                  className="underline underline-offset-2"
+                  variant="link"
+                  className="h-auto p-0 text-xs text-foreground underline underline-offset-2 hover:no-underline"
                   onClick={() => setConfirmOpen(true)}
                 >
                   Review
-                </button>
+                </Button>
               </>
             )}
           </p>
@@ -305,7 +318,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         onEditRestrictions={(prefill) => openDialog("restrictions", prefill)}
         onReopen={(prefill) => openDialog("reopen", prefill)}
         onEditBaseRate={(prefill) => openDialog("base-rate", prefill)}
-        onStage={draft.stage}
+        onStage={canEdit ? draft.stage : () => {}}
       />
 
       <RatesConfirmationDialog

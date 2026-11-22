@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { BuildingIcon, CheckIcon, MapPinIcon, PencilIcon, SearchIcon, XIcon } from "lucide-react";
+import { BuildingIcon, CheckIcon, MapPinIcon, PencilIcon, SearchIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { AlertDescription } from "@/components/ui/alert";
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -224,14 +226,15 @@ export function AddressFinder({ initial, disabled, errors, onPick, onEdit, onMod
           <SearchResults search={search} onPick={pick} disabled={disabled} />
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-            <button
+            <Button
               type="button"
-              className="text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground"
+              variant="link"
+              className="h-auto p-0 font-normal text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground"
               onClick={() => setMode("edit")}
               disabled={disabled}
             >
               Cannot find it? Enter the address yourself
-            </button>
+            </Button>
             {hasAddress(address) && (
               <Button type="button" variant="ghost" size="sm" onClick={() => setMode("view")} disabled={disabled}>
                 Keep current address
@@ -244,10 +247,15 @@ export function AddressFinder({ initial, disabled, errors, onPick, onEdit, onMod
       {mode === "edit" && (
         <div className="flex flex-col gap-3 rounded-lg border p-4">
           {missing.length > 0 && (
-            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm">
-              We filled in what we could{pickedName ? ` for ${pickedName}` : ""}. Add the{" "}
-              {missing.map((m) => LINE_LABELS[m]).join(" and ")} below.
-            </p>
+            <AttentionAlert role="status">
+              <TriangleAlertIcon />
+              <AlertDescription className="text-foreground">
+                <p>
+                  We filled in what we could{pickedName ? ` for ${pickedName}` : ""}. Add the{" "}
+                  {missing.map((m) => LINE_LABELS[m]).join(" and ")} below.
+                </p>
+              </AlertDescription>
+            </AttentionAlert>
           )}
 
           <AddressLine
@@ -377,7 +385,7 @@ function AddressLine({
         autoComplete={autoComplete}
         disabled={disabled}
         aria-invalid={!!error}
-        className={cn(highlight && "border-amber-500 ring-2 ring-amber-500/30")}
+        className={cn(highlight && "border-state-attention ring-[3px] ring-state-attention/30")}
       />
       {error && <FieldError>{error}</FieldError>}
     </div>
@@ -434,8 +442,8 @@ function SearchResults({
               disabled={disabled}
               onClick={() => onPick(c)}
               className={cn(
-                "group flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition-colors",
-                "hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                "group flex w-full items-center gap-3 rounded-lg border bg-background px-3.5 py-3 text-left text-sm outline-none transition-colors",
+                "hover:bg-accent focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
               )}
             >
               <BuildingIcon className="size-4 shrink-0 text-muted-foreground" />
