@@ -141,4 +141,16 @@ describe("navKeyForPath", () => {
       expect(navKeyForPath(path)).toBeNull();
     },
   );
+
+  test("trailing slashes are trimmed", () => {
+    expect(navKeyForPath("/dashboard/team///")).toBe("team");
+    expect(navKeyForPath("///")).toBeNull();
+  });
+
+  test("a long run of slashes stays linear (no polynomial regex)", () => {
+    const hostile = `/dashboard${"/".repeat(200_000)}x`;
+    const started = performance.now();
+    expect(navKeyForPath(hostile)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(100);
+  });
 });

@@ -115,7 +115,11 @@ const BY_PATH: ReadonlyArray<readonly [string, NavKey]> = [
 
 /** The menu key a console path belongs to (sub-pages count as their parent), or null. */
 export function navKeyForPath(pathname: string): NavKey | null {
-  const path = pathname.split(/[?#]/, 1)[0]!.replace(/\/+$/, "") || "/";
+  const bare = pathname.split(/[?#]/, 1)[0]!;
+  // Trim trailing slashes by hand: /\/+$/ is quadratic on long runs of "/" (CodeQL js/polynomial-redos).
+  let end = bare.length;
+  while (end > 0 && bare.charCodeAt(end - 1) === 47 /* "/" */) end--;
+  const path = bare.slice(0, end) || "/";
   for (const [prefix, key] of BY_PATH) {
     if (key === "overview" ? path === prefix : path === prefix || path.startsWith(`${prefix}/`)) return key;
   }
