@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { EditFieldset, ViewOnlyHint } from "@/components/dashboard/edit-access";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { uploadHeaders } from "@/lib/upload-headers";
 import { cn } from "@/lib/utils";
 import type { ImageGroup } from "../property/_lib/types";
 
@@ -133,7 +134,8 @@ function ImageManagerBody({
 
       const put = await fetch(uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type },
+        // Content-Type is signed into the URL, so it must match what presign got.
+        headers: uploadHeaders(file.type),
         body: file,
       });
       if (!put.ok) throw new Error("upload failed");
