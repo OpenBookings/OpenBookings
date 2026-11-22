@@ -3,7 +3,9 @@ import { NextRequest } from "next/server";
 // Not next/experimental/testing/server: importing it patches console in a way
 // that breaks console.error for every test file that runs after this one.
 // Next compiles matchers with this same (untyped) path-to-regexp build.
-const { pathToRegexp } = require("next/dist/compiled/path-to-regexp") as { pathToRegexp: (source: string) => RegExp };
+// @ts-expect-error Next ships this build without type declarations.
+import { pathToRegexp as compileMatcher } from "next/dist/compiled/path-to-regexp";
+const pathToRegexp = compileMatcher as (source: string) => RegExp;
 import { mockModules } from "@/lib/mock-modules";
 
 const calls: string[] = [];
