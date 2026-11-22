@@ -9,6 +9,7 @@ import {
   accountTypeHooksForPool,
   advancedConfig,
   createAuthPool,
+  MAGIC_LINK_SEND_PATH,
   magicLinkOptions,
   sharedSessionOptions,
   userAdditionalFields,
@@ -137,5 +138,10 @@ export function createGuestAuth(config: GuestAuthConfig) {
         : {}),
     },
     trustedOrigins: config.trustedOrigins ?? [],
+    // Sign-in links are asked for through apps/web/app/api/auth/login-link,
+    // which caps mails per address and per IP and refuses business accounts,
+    // then calls auth.api.signInMagicLink server-side. The raw route skipped
+    // all of that (GHSA-84r6-cr7m-cvh3). /magic-link/verify stays reachable.
+    disabledPaths: [MAGIC_LINK_SEND_PATH],
   });
 }

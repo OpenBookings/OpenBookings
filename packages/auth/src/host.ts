@@ -10,6 +10,7 @@ import {
   accountTypeHooksForPool,
   advancedConfig,
   createAuthPool,
+  MAGIC_LINK_SEND_PATH,
   magicLinkOptions,
   sessionVerificationStamp,
   sharedSessionOptions,
@@ -468,7 +469,13 @@ export function createHostAuth(config: HostAuthConfig) {
     // /organization/leave is disabled too: it deletes the membership without
     // running the organizationHooks (owner sync, thread host move, session
     // revocation), and no UI uses it.
-    disabledPaths: ["/admin/impersonate-user", "/organization/leave"],
+    //
+    // /sign-in/magic-link: sign-in links are asked for through
+    // apps/business/app/api/auth/login-link, which caps mails per address and
+    // per IP and refuses guest accounts, then calls auth.api.signInMagicLink
+    // server-side. The raw route skipped all of that (GHSA-84r6-cr7m-cvh3).
+    // /magic-link/verify, the link itself, stays reachable.
+    disabledPaths: ["/admin/impersonate-user", "/organization/leave", MAGIC_LINK_SEND_PATH],
   });
 }
 

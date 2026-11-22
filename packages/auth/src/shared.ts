@@ -524,6 +524,14 @@ export function sessionVerificationStamp(
   return session.impersonatedBy ? session : { ...session, lastVerifiedAt: now };
 }
 
+/**
+ * The magic-link plugin's "send me a link" route. Both instances disable it
+ * over HTTP (disabledPaths): the apps' login-link routes are the only way in,
+ * and they call `auth.api.signInMagicLink`, which does not go through the
+ * router and so is not affected.
+ */
+export const MAGIC_LINK_SEND_PATH = "/sign-in/magic-link";
+
 export function magicLinkOptions(config: BaseAuthConfig) {
   return {
     sendMagicLink: async ({ email, url }: { email: string; url: string }) => {
