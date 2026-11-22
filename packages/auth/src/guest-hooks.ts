@@ -44,6 +44,24 @@ export async function refuseStalePasskeyRegistration(ctx: HookContext): Promise<
   if (refusal) throw new APIError("FORBIDDEN", refusal);
 }
 
+/**
+ * `emailVerification.beforeEmailVerification` for the guest instance.
+ *
+ * Better Auth calls it only on the plain /verify-email branch: a token for an
+ * address that is not yet verified, which flips the row to verified. Guests
+ * never need that: the magic link proves the address itself (and clears
+ * access gained before the proof), and changing email runs through the
+ * change-email tokens, which take another branch that does not call this.
+ * Left open, it verified a row someone else had squatted without removing the
+ * squatter's IdP link, sessions or passkeys (GHSA-j524-cj9r-hjxv).
+ */
+export async function refusePlainEmailVerification(): Promise<never> {
+  throw new APIError("FORBIDDEN", {
+    code: "EMAIL_VERIFICATION_DISABLED",
+    message: "This link can no longer be used. Sign in with a link from the sign-in page instead.",
+  });
+}
+
 /** Whether an endpoint's result is a failure. After-hooks also run for failed requests. */
 export function endpointFailed(returned: unknown): boolean {
   if (returned instanceof Error) return true;

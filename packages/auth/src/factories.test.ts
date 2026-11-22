@@ -207,3 +207,34 @@ describe("raw magic-link endpoint (GHSA-84r6-cr7m-cvh3)", () => {
     expect(sent).toEqual(["guest@example.test"]);
   });
 });
+
+// No guest flow asks Better Auth for a plain "verify your email" mail: the
+// login-link route proves the address by itself, and changing email uses the
+// change-email tokens. The no-session /send-verification-email mailed such a
+// link for any unverified row, and opening it marked a squatted row verified
+// while the squatter's IdP link, sessions and passkeys stayed.
+describe("guest email verification (GHSA-j524-cj9r-hjxv)", () => {
+  test("POST /send-verification-email is not reachable over HTTP", async () => {
+    const guest = createGuestAuth(base);
+    expect(guest.options.disabledPaths).toContain("/send-verification-email");
+    const res = await guest.handler(
+      new Request(`${base.baseURL}/api/auth/send-verification-email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base.baseURL },
+        body: JSON.stringify({ email: "victim@example.test" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("signing up never sends a plain verification mail", () => {
+    expect(createGuestAuth(base).options.emailVerification?.sendOnSignUp).toBe(false);
+  });
+
+  test("the plain unverified-to-verified promotion is refused", async () => {
+    // Better Auth passes the user; the refusal does not depend on who it is.
+    const before = createGuestAuth(base).options.emailVerification?.beforeEmailVerification;
+    expect(typeof before).toBe("function");
+    await expect(before!()).rejects.toMatchObject({ statusCode: 403 });
+  });
+});

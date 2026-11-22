@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { magicLink } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
-import { endpointFailed, refuseStalePasskeyRegistration } from "./guest-hooks";
+import { endpointFailed, refusePlainEmailVerification, refuseStalePasskeyRegistration } from "./guest-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import {
   accountLinkingOptions,
@@ -83,11 +83,18 @@ export function createGuestAuth(config: GuestAuthConfig) {
         },
       },
     },
+    // Only the change-email flow sends verification mail (to the new
+    // address). Nothing else may: no mail on sign-up (an OAuth sign-up with an
+    // unverified email would otherwise get one), the no-session resend route
+    // is disabled below, and the plain verify-email promotion is refused
+    // (GHSA-j524-cj9r-hjxv).
     emailVerification: {
       sendVerificationEmail: async ({ user, url }) => {
         if (!config.sendVerificationEmail) notConfigured("sendVerificationEmail");
         await config.sendVerificationEmail({ email: user.email, url });
       },
+      sendOnSignUp: false,
+      beforeEmailVerification: refusePlainEmailVerification,
       expiresIn: 60 * 60,
     },
     session: sharedSessionOptions,
@@ -142,6 +149,10 @@ export function createGuestAuth(config: GuestAuthConfig) {
     // which caps mails per address and per IP and refuses business accounts,
     // then calls auth.api.signInMagicLink server-side. The raw route skipped
     // all of that (GHSA-84r6-cr7m-cvh3). /magic-link/verify stays reachable.
-    disabledPaths: [MAGIC_LINK_SEND_PATH],
+    //
+    // /send-verification-email: with no session it mailed a verify link for
+    // any unverified row, including one someone else had squatted; no guest
+    // flow uses it (GHSA-j524-cj9r-hjxv).
+    disabledPaths: [MAGIC_LINK_SEND_PATH, "/send-verification-email"],
   });
 }
