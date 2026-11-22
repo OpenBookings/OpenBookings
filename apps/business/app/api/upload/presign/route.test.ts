@@ -13,7 +13,7 @@ const s3 = new S3Client({
 await mockModules(
   import.meta.dir,
   {
-    "@/lib/auth": () => ({ getServerSession: async () => ({ user: { id: "host-1" }, session: { id: "s1" } }) }),
+    "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" }, session: { id: "s1" } }) }),
     "@/lib/s3": () => ({ getS3: () => s3, getBucketName: () => "media" }),
   },
   ["@/lib/auth"],
