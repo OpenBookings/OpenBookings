@@ -15,6 +15,7 @@ import {
   userAdditionalFields,
   type BaseAuthConfig,
 } from "./shared";
+import { GUEST_MAGIC_LINK_CONFIRM_PATH, magicLinkConfirmTarget } from "./magic-link-confirm";
 
 export type GuestAuthConfig = BaseAuthConfig & {
   googleClientId?: string;
@@ -103,6 +104,16 @@ export function createGuestAuth(config: GuestAuthConfig) {
     databaseHooks: accountTypeHooksForPool(pool, "private"),
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // A magic link opened from outside the app stops at the confirm page
+        // first (magic-link-confirm.ts, GHSA-574j-vjcf-364v).
+        const confirm = magicLinkConfirmTarget(
+          ctx.path,
+          ctx.request?.url,
+          ctx.headers?.get("sec-fetch-site"),
+          GUEST_MAGIC_LINK_CONFIRM_PATH,
+          ctx.context.baseURL,
+        );
+        if (confirm) throw ctx.redirect(confirm);
         await refuseStalePasskeyRegistration(ctx);
         // The browser offers the passkey under the guest's email.
         return passkeyAccountName(ctx);

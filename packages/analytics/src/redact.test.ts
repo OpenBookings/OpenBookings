@@ -48,6 +48,30 @@ describe("redactUrl", () => {
   });
 });
 
+describe("redactUrl: sign-in link tokens", () => {
+  test("the magic-link verify URL and the confirm pages lose their token", () => {
+    expect(redactUrl(`${ORIGIN}/api/auth/magic-link/verify?token=${TOKEN}&callbackURL=%2Faccount`)).toBe(
+      `${ORIGIN}/api/auth/magic-link/verify?token=[token]&callbackURL=%2Faccount`,
+    );
+    expect(redactUrl(`${ORIGIN}/auth/confirm?callbackURL=%2Faccount&token=${TOKEN}`)).toBe(
+      `${ORIGIN}/auth/confirm?callbackURL=%2Faccount&token=[token]`,
+    );
+    expect(redactUrl(`/login/confirm?token=${TOKEN}#x`)).toBe("/login/confirm?token=[token]#x");
+  });
+
+  test("a token nested in an encoded callback is covered too", () => {
+    expect(redactUrl(`/x?next=%2Fauth%2Fconfirm%3Ftoken%3D${TOKEN}%26a%3D1`)).toBe(
+      "/x?next=%2Fauth%2Fconfirm%3Ftoken%3D[token]%26a%3D1",
+    );
+  });
+
+  test("other parameters are left alone", () => {
+    for (const url of [`${ORIGIN}/search?tokens=2`, `${ORIGIN}/x?mytoken=abc`, `${ORIGIN}/x?token=`]) {
+      expect(redactUrl(url)).toBe(url);
+    }
+  });
+});
+
 describe("redactDeep", () => {
   test("a PostHog $pageview carries no token in any URL property", () => {
     const event = {

@@ -22,6 +22,7 @@ import { createStepUpHooks } from "./step-up-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import { refuseLastPasskeyRemoval } from "./last-passkey";
 import { reassignPropertiesFromFormerOwner } from "./owner-sync";
+import { HOST_MAGIC_LINK_CONFIRM_PATH, magicLinkConfirmTarget } from "./magic-link-confirm";
 
 export type { SignInLocation } from "./location";
 
@@ -300,6 +301,16 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // A magic link opened from outside the app stops at the confirm page
+        // first (magic-link-confirm.ts, GHSA-574j-vjcf-364v).
+        const confirm = magicLinkConfirmTarget(
+          ctx.path,
+          ctx.request?.url,
+          ctx.headers?.get("sec-fetch-site"),
+          HOST_MAGIC_LINK_CONFIRM_PATH,
+          ctx.context.baseURL,
+        );
+        if (confirm) throw ctx.redirect(confirm);
         // First: the demo organisation's member list is not for hosts to read.
         // The session is looked up only when the request names no organisation
         // (Better Auth then falls back to the active one).

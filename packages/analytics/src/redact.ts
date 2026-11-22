@@ -1,5 +1,6 @@
 /**
- * Keeps bearer tokens that live in page URLs out of telemetry.
+ * Keeps bearer tokens that live in page URLs out of telemetry: review links
+ * and sign-in link tokens (`?token=`).
  *
  * The emailed review link is /review/<token> (and /review/<token>/stop), and
  * the token alone lets whoever holds it post the guest's review. Browsers put
@@ -17,8 +18,13 @@
 // idempotent; the route /bookings/<ref>/review has nothing after "review".
 const REVIEW_TOKEN = /(\/|%2F)review(\/|%2F)[A-Za-z0-9_-]+/gi;
 
+// A `token` query parameter, plain or percent-encoded inside another URL: the
+// magic-link verify URL and its confirm pages (/auth/confirm, /login/confirm)
+// carry a single-use sign-in token there.
+const TOKEN_PARAM = /([?&]|%3F|%26)token(=|%3D)[^&#\s"'%]+/gi;
+
 export function redactUrl(value: string): string {
-  return value.replace(REVIEW_TOKEN, "$1review$2[token]");
+  return value.replace(REVIEW_TOKEN, "$1review$2[token]").replace(TOKEN_PARAM, "$1token$2[token]");
 }
 
 // Payloads are small JSON-ish trees; anything deeper is not ours to walk.
