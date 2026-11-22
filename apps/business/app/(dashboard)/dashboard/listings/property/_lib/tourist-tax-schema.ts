@@ -11,6 +11,15 @@ import type { TouristTaxCharge, TouristTaxRule } from "@openbookings/pricing";
 
 export const MAX_CHARGES = 8;
 
+/**
+ * Upper bounds per charge. The highest EU tourist taxes are around 12.5% of
+ * the room price (Amsterdam) and around €16 per person per night (Paris
+ * palaces). Commission is taken on the room price only, so an unbounded tax
+ * would let a host move booking value out of the commission base.
+ */
+export const MAX_TAX_PERCENT = 25;
+export const MAX_TAX_FIXED = 25;
+
 const twoDecimals = (v: number) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6;
 
 const charge = z
@@ -30,11 +39,19 @@ const charge = z
       .nullish(),
   })
   .superRefine((c, ctx) => {
-    if (c.kind === "percent" && c.amount > 100) {
-      ctx.addIssue({ code: "custom", path: ["amount"], message: "A percentage cannot be more than 100." });
+    if (c.kind === "percent" && c.amount > MAX_TAX_PERCENT) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: `A tourist tax percentage cannot be more than ${MAX_TAX_PERCENT}%.`,
+      });
     }
-    if (c.kind === "fixed" && c.amount > 1000) {
-      ctx.addIssue({ code: "custom", path: ["amount"], message: "An amount cannot be more than €1,000." });
+    if (c.kind === "fixed" && c.amount > MAX_TAX_FIXED) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: `A tourist tax amount cannot be more than €${MAX_TAX_FIXED}.`,
+      });
     }
   })
   // The calculator ignores the settings that do not belong to a kind; clearing
