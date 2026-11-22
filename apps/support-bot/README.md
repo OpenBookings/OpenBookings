@@ -85,7 +85,8 @@ CHATWOOT_BOT_WEBHOOK_SECRET         # Settings → Bots → your bot → Webhook
 SERVICE_BASE_URL                    # public URL of this service (QStash task target)
 REFUND_ESCALATION_THRESHOLD_EUR     # optional, default 250
 CHATWOOT_VERIFIED_INBOX_IDS         # optional, e.g. "3,7": guest inboxes with "Enforce user identity validation" (HMAC) ON.
-                                    # Only there is a contact's email trusted enough to list their bookings by it.
+                                    # There the signed contact identifier MUST be the guest's OpenBookings user id: the
+                                    # bot lists bookings by that account's own (verified) email, never the contact's email.
                                     # Empty (default): the bot needs an explicit booking reference everywhere.
 TASKS_AUTH_DISABLED=true            # local dev only: skip task auth on /tasks/*. Ignored (and boot fails) unless SERVICE_BASE_URL is localhost
 

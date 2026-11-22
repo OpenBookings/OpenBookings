@@ -183,6 +183,25 @@ export async function findReservationsByGuestEmail(
   );
 }
 
+/**
+ * The account email of the guest whose user id is `userId`, or null when no
+ * private (guest) account with that id has a verified email.
+ *
+ * The support bot uses this to turn a Chatwoot contact identifier (which
+ * Chatwoot only accepts with our server's HMAC, and which for guests must be
+ * the user id) into the email it scopes booking lookups by. The email on the
+ * Chatwoot contact itself is not covered by that signature and is never used
+ * for this. Host (business) accounts and unverified emails are excluded.
+ */
+export async function findGuestEmailByUserId(userId: string): Promise<string | null> {
+  const rows = await query<{ email: string }>(
+    `SELECT email FROM "user"
+     WHERE id = $1 AND account_type = 'private' AND "emailVerified" = true`,
+    [userId],
+  );
+  return rows[0]?.email ?? null;
+}
+
 /** processed_events helpers — webhook idempotency for the support bot. */
 
 /**

@@ -9,7 +9,9 @@
     "./client/guest": "./src/client/guest.ts",
     "./client/host": "./src/client/host.ts",
     "./callback-url": "./src/callbackUrl.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./same-origin": "./src/same-origin.ts",
+    "./magic-link-confirm": "./src/magic-link-confirm.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",

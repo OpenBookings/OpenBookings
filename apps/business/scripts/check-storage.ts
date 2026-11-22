@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { R2_REGION, S3_ENDPOINT, getBucketName, getS3, publicUrl } from "../lib/s3";
+import { presignUpload } from "../lib/upload-headers";
 
 const required = [
   "R2_ENDPOINT",
@@ -51,7 +52,8 @@ console.log("✓ credentials valid, bucket reachable");
 const uploadUrl = await getSignedUrl(
   s3,
   new PutObjectCommand({ Bucket, Key: key, ContentType: "image/png" }),
-  { expiresIn: 600 },
+  // Signed the way /api/upload/presign signs, so this exercises the real URL.
+  presignUpload,
 );
 console.log("✓ presigned PUT minted");
 

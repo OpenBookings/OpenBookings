@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { touristTaxShare } from "./tourist-tax-share";
 import {
   loadStayAvailability,
   roomReasons,
@@ -571,6 +572,18 @@ export async function priceSelection(
   });
   const roomsTotal = round2(rooms.reduce((sum, r) => sum + r.stayTotal, 0));
   const touristTaxTotal = round2(rooms.reduce((sum, r) => sum + r.touristTax, 0));
+
+  const taxShare = touristTaxShare(roomsTotal, touristTaxTotal);
+  if (taxShare !== "ok") {
+    Sentry.captureMessage("tourist tax out of proportion to the room price", {
+      level: taxShare === "refuse" ? "error" : "warning",
+      tags: { area: "booking" },
+      extra: { propertyId: property.id, roomsTotal, touristTaxTotal },
+    });
+  }
+  if (taxShare === "refuse") {
+    return { ok: false, error: "unavailable", detail: "tourist tax is higher than the room price" };
+  }
 
   // The fee is VAT-inclusive; its net/VAT split is fixed here, from the host's
   // billing profile. No profile yet: the split stays empty rather than refusing

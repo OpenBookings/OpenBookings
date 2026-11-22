@@ -21,7 +21,7 @@ import {
   type MealPlan,
 } from "./factories";
 import { ensureDemoOrganisation } from "./organisation";
-import { nearestEuPlace } from "./places";
+import { demoCityLabel, isNearEu, nearestEuPlace } from "./places";
 import { areaKey, seededRng, type Rng } from "./random";
 import { DEMO_SCENARIOS, SCENARIOS, nonRefundableBar, type ScenarioSpec } from "./scenarios";
 
@@ -30,6 +30,11 @@ const NEAR_METERS = 25_000;
 /** Hotels are scattered up to this far from the searched point. */
 const SPREAD_METERS = 2_800;
 const METERS_PER_DEGREE = 111_320;
+/**
+ * No new areas past this many demo hotels (eight per area). Searches are
+ * anonymous, so this bounds what a caller walking the map can create.
+ */
+export const MAX_DEMO_PROPERTIES = 4_000;
 
 /**
  * Demo hotels are committed and never refreshed, so a dated rule must not run
@@ -67,6 +72,11 @@ export async function hasDemoHotelsNear(db: Queryable, i: { lat: number; lon: nu
   return (rows[0] as { near: boolean }).near;
 }
 
+async function demoPropertyCount(db: Queryable): Promise<number> {
+  const { rows } = await db.query(`SELECT count(*)::int AS n FROM properties WHERE is_demo`);
+  return (rows[0] as { n: number }).n;
+}
+
 /**
  * Must run inside a transaction: the area's advisory lock is transaction
  * scoped, and it is what stops two concurrent first searches from both
@@ -78,16 +88,18 @@ export async function ensureDemoHotels(
   i: { lat: number; lon: number; place?: string | null },
 ): Promise<{ created: boolean; propertyIds: string[] }> {
   if (!Number.isFinite(i.lat) || !Number.isFinite(i.lon)) throw new RangeError(`Invalid point ${i.lat}, ${i.lon}`);
+  if (!isNearEu(i.lat, i.lon)) return { created: false, propertyIds: [] };
   if (await hasDemoHotelsNear(tx, i)) return { created: false, propertyIds: [] };
 
   const key = areaKey(i.lat, i.lon);
   await tx.query(`SELECT pg_advisory_xact_lock(hashtext('demo:' || $1))`, [key]);
   // Whoever held the lock before us may just have created them.
   if (await hasDemoHotelsNear(tx, i)) return { created: false, propertyIds: [] };
+  if ((await demoPropertyCount(tx)) >= MAX_DEMO_PROPERTIES) return { created: false, propertyIds: [] };
 
   const organizationId = await ensureDemoOrganisation(tx);
   const eu = nearestEuPlace(i.lat, i.lon);
-  const city = i.place?.split(",")[0]?.trim().slice(0, 100) || eu.capital;
+  const city = demoCityLabel(i.place, eu.capital);
   const { rows } = await tx.query(`SELECT (CURRENT_DATE - 1)::text AS yesterday`);
   const ctaRange = { startDate: (rows[0] as { yesterday: string }).yesterday, endDate: OPEN_END };
 

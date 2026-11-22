@@ -48,3 +48,38 @@ export function nearestEuPlace(lat: number, lon: number): EuPlace {
   }
   return best;
 }
+
+/**
+ * How far a searched point may be from the nearest EU capital and still get
+ * demo hotels. Wide enough for the outermost regions (Las Palmas is about
+ * 1,750 km from Madrid), tight enough that the rest of the world gets none.
+ */
+const NEAR_EU_KM = 1_800;
+const EARTH_RADIUS_KM = 6_371;
+
+function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLon = (bLon - aLon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Whether a point is close enough to the EU for demo hotels. */
+export function isNearEu(lat: number, lon: number): boolean {
+  return EU_PLACES.some((p) => distanceKm(lat, lon, p.lat, p.lon) <= NEAR_EU_KM);
+}
+
+/** Letters, marks, spaces, dots, apostrophes and hyphens: what a place name is made of. */
+const PLACE_NAME = /^[\p{L}\p{M}’'][\p{L}\p{M} .'’-]{0,59}$/u;
+
+/**
+ * The city label for a demo hotel. The searched text comes from an anonymous
+ * caller, so only something that looks like a place name is kept (the part
+ * before the first comma); anything else, such as a phone number or a web
+ * address, gets the capital instead.
+ */
+export function demoCityLabel(place: string | null | undefined, fallback: string): string {
+  const first = place?.split(",")[0]?.trim() ?? "";
+  return PLACE_NAME.test(first) ? first : fallback;
+}

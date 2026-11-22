@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
 import { createGuestAuth } from "./guest";
 import { createHostAuth } from "./host";
 
@@ -121,7 +123,11 @@ describe("host admin plugin exposure", () => {
 
   test("it is still callable server-side, which is how impersonateWithAudit uses it", () => {
     expect(typeof host().api.impersonateUser).toBe("function");
-    expect(host().options.disabledPaths).toEqual(["/admin/impersonate-user", "/organization/leave"]);
+    expect(host().options.disabledPaths).toEqual([
+      "/admin/impersonate-user",
+      "/organization/leave",
+      "/sign-in/magic-link",
+    ]);
   });
 
   test("organization/leave is not reachable over HTTP", async () => {
@@ -147,5 +153,111 @@ describe("host organization plugin", () => {
       | undefined;
     expect(org).toBeDefined();
     expect(org?.options?.allowUserToCreateOrganization).toBe(false);
+  });
+});
+
+// The login-link routes in apps/web and apps/business are the only way to ask
+// for a sign-in link: they cap mails per address and per IP and refuse the
+// other portal's accounts. The plugin's own POST /sign-in/magic-link does none
+// of that, so it is switched off over HTTP; the routes call it server-side.
+describe("raw magic-link endpoint (GHSA-84r6-cr7m-cvh3)", () => {
+  const instances = {
+    guest: () => createGuestAuth(base),
+    host: () => createHostAuth({ ...base, cookiePrefix: "ob-host" }),
+  };
+
+  for (const [name, make] of Object.entries(instances)) {
+    test(`${name}: POST /sign-in/magic-link is not reachable over HTTP`, async () => {
+      const auth = make();
+      expect(auth.options.disabledPaths).toContain("/sign-in/magic-link");
+      for (const path of ["/api/auth/sign-in/magic-link", "/api/auth/sign-in/magic-link/"]) {
+        const res = await auth.handler(
+          new Request(`${base.baseURL}${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", origin: base.baseURL },
+            body: JSON.stringify({ email: "victim@example.test" }),
+          }),
+        );
+        expect(res.status).toBe(404);
+      }
+    });
+  }
+
+  test("the server-side call the login-link routes use still sends the link", async () => {
+    const sent: string[] = [];
+    const guest = createGuestAuth({ ...base, sendMagicLink: async (email) => void sent.push(email) });
+    // The real guest options on an in-memory database. The account-type hooks
+    // query Postgres and play no part in sending a link, so they are left out.
+    const onMemory = betterAuth({
+      ...guest.options,
+      database: memoryAdapter({ user: [], session: [], account: [], verification: [], passkey: [] }),
+      databaseHooks: undefined,
+    });
+
+    const http = await onMemory.handler(
+      new Request(`${base.baseURL}/api/auth/sign-in/magic-link`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base.baseURL },
+        body: JSON.stringify({ email: "over-http@example.test" }),
+      }),
+    );
+    expect(http.status).toBe(404);
+
+    await onMemory.api.signInMagicLink({ body: { email: "guest@example.test" }, headers: new Headers() });
+    expect(sent).toEqual(["guest@example.test"]);
+  });
+});
+
+// No guest flow asks Better Auth for a plain "verify your email" mail: the
+// login-link route proves the address by itself, and changing email uses the
+// change-email tokens. The no-session /send-verification-email mailed such a
+// link for any unverified row, and opening it marked a squatted row verified
+// while the squatter's IdP link, sessions and passkeys stayed.
+describe("guest email verification (GHSA-j524-cj9r-hjxv)", () => {
+  test("POST /send-verification-email is not reachable over HTTP", async () => {
+    const guest = createGuestAuth(base);
+    expect(guest.options.disabledPaths).toContain("/send-verification-email");
+    const res = await guest.handler(
+      new Request(`${base.baseURL}/api/auth/send-verification-email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: base.baseURL },
+        body: JSON.stringify({ email: "victim@example.test" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("signing up never sends a plain verification mail", () => {
+    expect(createGuestAuth(base).options.emailVerification?.sendOnSignUp).toBe(false);
+  });
+
+  test("the plain unverified-to-verified promotion is refused", async () => {
+    // Better Auth passes the user; the refusal does not depend on who it is.
+    const before = createGuestAuth(base).options.emailVerification?.beforeEmailVerification;
+    expect(typeof before).toBe("function");
+    await expect(before!()).rejects.toMatchObject({ statusCode: 403 });
+  });
+});
+
+// Google and Apple may report an email they have not verified. Such a sign-up
+// must not get a session: with one it could add a passkey to a row squatted
+// on someone else's address, and the magic-link takeover cleanup does not
+// remove passkeys.
+describe("guest social providers (GHSA-gv93-27wp-8wff)", () => {
+  test("google and apple require a verified email before issuing a session", () => {
+    const guest = createGuestAuth({
+      ...base,
+      googleClientId: "g-id",
+      googleClientSecret: "g-secret",
+      appleClientId: "a-id",
+      appleClientSecret: "a-secret",
+    });
+    const providers = guest.options.socialProviders as Record<string, { requireEmailVerification?: boolean }>;
+    expect(Object.keys(providers).sort()).toEqual(["apple", "google"]);
+    expect(providers.google?.requireEmailVerification).toBe(true);
+    expect(providers.apple?.requireEmailVerification).toBe(true);
+    // Together with sendOnSignUp: false, an unverified OAuth sign-up gets
+    // neither a session nor a verification mail.
+    expect(guest.options.emailVerification?.sendOnSignUp).toBe(false);
   });
 });

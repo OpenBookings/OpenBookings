@@ -115,6 +115,18 @@ describeWithDb("demo hotels", () => {
     // Two full generations against a remote database: about 15 s each.
   }, 60_000);
 
+  test("no demo hotels for a point outside the EU", async () => {
+    const sydney = { lat: -33.87, lon: 151.21, place: "Sydney" };
+    expect(await ensureDemoHotels(db, sydney)).toEqual({ created: false, propertyIds: [] });
+    expect(await hasDemoHotelsNear(db, sydney)).toBe(false);
+  });
+
+  test("a searched text that isn't a place name is not used as the city", async () => {
+    const { propertyIds } = await ensureDemoHotels(db, { ...LISBON, place: "CALL +31 600 000 000" });
+    const { rows } = await db.query(`SELECT DISTINCT city FROM properties WHERE id = ANY($1::uuid[])`, [propertyIds]);
+    expect(rows.map((r) => r.city)).toEqual(["Lisbon"]);
+  }, 60_000);
+
   test("each scenario answers search the way it is meant to", async () => {
     const { propertyIds } = await ensureDemoHotels(db, LISBON);
     const ids = await scenarioIds(propertyIds);

@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { sentryRedaction } from "@openbookings/analytics/redact";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -11,4 +12,7 @@ Sentry.init({
   environment: process.env.NODE_ENV,
   tracesSampleRate: 1,
   debug: false,
+  // Sign-in links carry a single-use token in their query (?token=). Strip it
+  // from request URLs, breadcrumbs and span attributes before sending.
+  ...sentryRedaction,
 });

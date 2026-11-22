@@ -55,8 +55,9 @@ export type UploadedObject = { contentLength?: number | null; contentType?: stri
 
 /**
  * Judge what is actually in the bucket, not what the browser claimed. The
- * signed Content-Length pins the size at presign time, but the type header is
- * not part of what R2 verifies, so a .png key can hold anything: check it here.
+ * presigned URL signs both Content-Length and Content-Type (lib/upload-headers.ts),
+ * so R2 should already have refused anything else; this is the second line, and
+ * /api/upload/confirm deletes an object that fails it.
  */
 export function uploadedObjectProblem(head: UploadedObject): string | null {
   const size = head.contentLength;

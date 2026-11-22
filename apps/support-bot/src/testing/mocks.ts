@@ -29,6 +29,12 @@ export const processedEvents = new Map<string, { repliedAt: boolean }>();
 const contextCache = new Map<number, CachedTurn[]>();
 /** In-memory stand-in for the bookings a reservation lookup can reach, by reference. */
 export const reservations = new Map<string, FakeReservation>();
+/**
+ * In-memory stand-in for the guest rows findGuestEmailByUserId can reach:
+ * user id -> account email. Only private (guest) accounts with a verified
+ * email belong here; anything else the real query does not return.
+ */
+export const guestUsers = new Map<string, string>();
 /** Every write the pipeline made to Chatwoot, in order. */
 export const chatwootCalls: ChatwootCall[] = [];
 /** Typing indicator toggles, kept apart so call-order assertions above stay readable. */
@@ -60,6 +66,7 @@ export function resetMocks(): void {
   processedEvents.clear();
   contextCache.clear();
   reservations.clear();
+  guestUsers.clear();
   chatwootCalls.length = 0;
   typingCalls.length = 0;
   sqlCalls.length = 0;
@@ -195,6 +202,7 @@ mock.module("@openbookings/db", () => ({
     const fake = reservations.get(bookingReference.trim());
     return fake ? reservationRow(fake) : null;
   },
+  findGuestEmailByUserId: async (userId: string) => guestUsers.get(userId) ?? null,
   findReservationsByGuestEmail: async (guestEmail: string) => {
     const wanted = guestEmail.trim().toLowerCase();
     return [...reservations.values()]

@@ -10,6 +10,7 @@ import {
   accountTypeHooksForPool,
   advancedConfig,
   createAuthPool,
+  MAGIC_LINK_SEND_PATH,
   magicLinkOptions,
   sessionVerificationStamp,
   sharedSessionOptions,
@@ -21,6 +22,7 @@ import { createStepUpHooks } from "./step-up-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import { refuseLastPasskeyRemoval } from "./last-passkey";
 import { reassignPropertiesFromFormerOwner } from "./owner-sync";
+import { HOST_MAGIC_LINK_CONFIRM_PATH, magicLinkConfirmTarget } from "./magic-link-confirm";
 
 export type { SignInLocation } from "./location";
 
@@ -299,6 +301,16 @@ export function createHostAuth(config: HostAuthConfig) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // A magic link opened from outside the app stops at the confirm page
+        // first (magic-link-confirm.ts, GHSA-574j-vjcf-364v).
+        const confirm = magicLinkConfirmTarget(
+          ctx.path,
+          ctx.request?.url,
+          ctx.headers?.get("sec-fetch-site"),
+          HOST_MAGIC_LINK_CONFIRM_PATH,
+          ctx.context.baseURL,
+        );
+        if (confirm) throw ctx.redirect(confirm);
         // First: the demo organisation's member list is not for hosts to read.
         // The session is looked up only when the request names no organisation
         // (Better Auth then falls back to the active one).
@@ -468,7 +480,13 @@ export function createHostAuth(config: HostAuthConfig) {
     // /organization/leave is disabled too: it deletes the membership without
     // running the organizationHooks (owner sync, thread host move, session
     // revocation), and no UI uses it.
-    disabledPaths: ["/admin/impersonate-user", "/organization/leave"],
+    //
+    // /sign-in/magic-link: sign-in links are asked for through
+    // apps/business/app/api/auth/login-link, which caps mails per address and
+    // per IP and refuses guest accounts, then calls auth.api.signInMagicLink
+    // server-side. The raw route skipped all of that (GHSA-84r6-cr7m-cvh3).
+    // /magic-link/verify, the link itself, stays reachable.
+    disabledPaths: ["/admin/impersonate-user", "/organization/leave", MAGIC_LINK_SEND_PATH],
   });
 }
 

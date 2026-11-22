@@ -1,6 +1,5 @@
 /**
- * Whether the email on a Chatwoot contact is one we can treat as proof of who
- * is typing.
+ * Who is typing in a guest conversation, as far as we can prove it.
  *
  * The webhook body carries an email for any contact, but it does not say how
  * that email got there. On a live-chat inbox it may be whatever the visitor
@@ -12,24 +11,40 @@
  * identifier with HMAC, and an inbox set to *mandatory* refuses `setUser`
  * calls without a valid hash. The webhook does not report that setting, so it
  * is configuration here (CHATWOOT_VERIFIED_INBOX_IDS: the inboxes where an
- * admin has turned that on). An email counts as verified only when BOTH hold:
+ * admin has turned that on).
+ *
+ * The HMAC covers the identifier only, not the email on the contact: a
+ * visitor signed in as themselves can still set the contact's email to
+ * someone else's. So the contact email is never trusted. In a verified inbox
+ * the identifier MUST be the guest's OpenBookings user id, and the email the
+ * tools use is that user's own account email, read from our database. The
+ * identity is verified only when:
  *
  *  - the conversation is in one of those inboxes, and
- *  - the contact has an `identifier`, which in such an inbox can only have been
- *    set by a correctly signed `setUser` from our server.
+ *  - the contact has an identifier, and
+ *  - that identifier is the id of a guest (private) account with a verified
+ *    email.
  *
- * Empty by default, so nothing is verified until someone enables it
- * deliberately (fail closed).
+ * Anything else falls back to the contact's email as an unverified claim.
+ * The inbox list is empty by default, so nothing is verified until someone
+ * enables it deliberately (fail closed).
  */
-export function isVerifiedGuestIdentity(i: {
-  guestEmail: string | null;
+export async function resolveGuestIdentity(i: {
+  /** The email on the Chatwoot contact: a claim, never proof. */
+  claimedEmail: string | null;
   inboxId: number | undefined;
   contactIdentifier: string | null | undefined;
   verifiedInboxIds: readonly number[];
-}): boolean {
-  if (!i.guestEmail) return false;
-  if (typeof i.inboxId !== "number" || !i.verifiedInboxIds.includes(i.inboxId)) return false;
-  return Boolean(i.contactIdentifier?.trim());
+  /** The verified account email of the guest user with this id, or null. */
+  findGuestEmailByUserId: (userId: string) => Promise<string | null>;
+}): Promise<{ guestEmail: string | null; guestEmailVerified: boolean }> {
+  const unverified = { guestEmail: i.claimedEmail, guestEmailVerified: false };
+  if (typeof i.inboxId !== "number" || !i.verifiedInboxIds.includes(i.inboxId)) return unverified;
+  const userId = i.contactIdentifier?.trim();
+  if (!userId) return unverified;
+  const accountEmail = (await i.findGuestEmailByUserId(userId))?.trim().toLowerCase();
+  if (!accountEmail) return unverified;
+  return { guestEmail: accountEmail, guestEmailVerified: true };
 }
 
 /** Parses a comma-separated list of positive inbox ids; throws on anything else. */

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { canManageTeam, checkAssignment, checkTarget } from "./rules";
+import { DEMO_ORG_ID } from "@openbookings/mode";
+import { canManageTeam, canManageTeamIn, checkAssignment, checkTarget } from "./rules";
 
 const props = ["p1", "p2"];
 
@@ -13,6 +14,17 @@ describe("canManageTeam", () => {
     for (const role of ["manager", "reservations", "frontdesk", "finance", "", null, "superuser"]) {
       expect(canManageTeam(role)).toBe(false);
     }
+  });
+});
+
+describe("canManageTeamIn", () => {
+  test("an owner manages their own organisation's team", () => {
+    expect(canManageTeamIn("org-1", "owner")).toBe(true);
+  });
+
+  test("nobody manages the shared demo organisation, owners included", () => {
+    expect(canManageTeamIn(DEMO_ORG_ID, "owner")).toBe(false);
+    expect(canManageTeamIn(DEMO_ORG_ID, "admin")).toBe(false);
   });
 });
 

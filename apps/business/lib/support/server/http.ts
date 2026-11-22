@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfRefusal } from "@openbookings/auth/same-origin";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { currentSupportScope } from "./bootstrap";
 import { SupportError } from "./service";
@@ -10,9 +11,14 @@ import type { SupportScope } from "./tickets";
  * actions: `{ ok: true, data }` or `{ ok: false, error }` with a safe message.
  */
 export async function supportRoute<T>(
+  request: Request,
   limit: { key: string; max: number; windowMs: number },
   fn: (scope: SupportScope) => Promise<T>,
-): Promise<NextResponse> {
+): Promise<Response> {
+  // The CSRF check proxy.ts runs for the other API routes; these are left out
+  // of its matcher so their large multipart bodies are not buffered there.
+  const refused = csrfRefusal(request.method, new URL(request.url).pathname, request.headers);
+  if (refused) return refused;
   const scope = await currentSupportScope();
   if (!scope) return NextResponse.json({ ok: false, error: "Support isn't available right now." }, { status: 404 });
   const check = checkRateLimit(`${limit.key}:${scope.userId}`, limit.max, limit.windowMs);

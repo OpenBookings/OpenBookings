@@ -19,9 +19,19 @@ export function decimal(cents: bigint): string {
   return `${negative ? "-" : ""}${abs / 100n}.${String(abs % 100n).padStart(2, "0")}`;
 }
 
-/** Quotes a field only when it holds the separator, a quote or a line break. */
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
+/**
+ * Quotes a field when it holds the separator, a quote or a line break, and
+ * puts a `'` before text a spreadsheet would read as a formula (a leading
+ * `=`, `+`, `-`, `@`, tab or CR). Host-entered text such as a billing legal
+ * name ends up in the staff reports, so it must stay data. Plain numbers like
+ * `-4.05` are left alone.
+ */
 export function field(value: string): string {
-  return /[;"\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const safe = FORMULA_START.test(value) && !PLAIN_NUMBER.test(value) ? `'${value}` : value;
+  return /[;"\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 /**

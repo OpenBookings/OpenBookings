@@ -42,9 +42,21 @@ describe("touristTaxRuleSchema", () => {
     );
   });
 
-  test("rejects a percentage above 100", () => {
-    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: 120 }] })).toContain(
-      "A percentage cannot be more than 100.",
+  test("accepts the highest real tourist taxes: 25% and €25", () => {
+    const at = (i: 0 | 1, amount: number) => ({ ...valid, charges: [{ ...valid.charges[i], amount }] });
+    expect(touristTaxRuleSchema.safeParse(at(0, 25)).success).toBe(true);
+    expect(touristTaxRuleSchema.safeParse(at(1, 25)).success).toBe(true);
+  });
+
+  test("rejects a percentage above 25", () => {
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: 25.01 }] })).toContain(
+      "A tourist tax percentage cannot be more than 25%.",
+    );
+  });
+
+  test("rejects a fixed amount above €25", () => {
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: 25.01 }] })).toContain(
+      "A tourist tax amount cannot be more than €25.",
     );
   });
 

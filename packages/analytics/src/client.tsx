@@ -17,6 +17,7 @@ import { useState, useEffect, useRef, useContext, useCallback, createContext, cr
 import { CONSENT_TTL_MS, adoptExpiry, loadConsent, newConsentUuid, saveConsent, type ConsentState } from './consent-device'
 import { CONSENT_VERSION, consentEventType, type ConsentEvent } from './consent-events'
 import { enqueueConsentEvent, flushConsentOutbox, type FlushResult, type OutboxDeps } from './consent-outbox'
+import { redactDeep } from './redact'
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const RELEASE_SHA = process.env.NEXT_PUBLIC_RELEASE_SHA
@@ -303,6 +304,10 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         maskAllInputs: true,
         maskTextSelector: '*',
       },
+      // Emailed links carry bearer tokens in the path (/review/<token>). Strip
+      // them from every URL-ish property ($current_url, $pathname, $referrer,
+      // $initial_*, replay meta) before anything leaves the browser.
+      before_send: redactDeep,
     })
     // Tag every event with the image it came from, so a spike can be pinned to
     // a release. Registered rather than passed per-capture: this is a super

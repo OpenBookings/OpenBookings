@@ -1,5 +1,6 @@
 import { isHostRole, isPropertyScoped, type HostRole } from "@openbookings/authz/permissions";
 import { assignableRoles } from "@openbookings/authz/role-guide";
+import { DEMO_ORG_ID } from "@openbookings/mode";
 
 /**
  * The Team page's rules, as pure functions so they can be tested without a
@@ -26,6 +27,15 @@ export const TEAM_ERRORS: Record<TeamError, string> = {
 /** Owners and general managers manage the team. */
 export function canManageTeam(role: string | null | undefined): boolean {
   return !!role && assignableRoles(role).length > 0;
+}
+
+/**
+ * canManageTeam for a given organisation. Nobody manages the shared demo
+ * organisation: in testing mode every host is an owner there, so its member
+ * list would show every other host's name and e-mail.
+ */
+export function canManageTeamIn(orgId: string, role: string | null | undefined): boolean {
+  return orgId !== DEMO_ORG_ID && canManageTeam(role);
 }
 
 /**

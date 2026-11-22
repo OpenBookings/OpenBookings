@@ -6,7 +6,8 @@
     "./client": "./src/client.tsx",
     "./server": "./src/server.ts",
     "./consent-route": "./src/consent-route.ts",
-    "./consent-events": "./src/consent-events.ts"
+    "./consent-events": "./src/consent-events.ts",
+    "./redact": "./src/redact.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -5,6 +5,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { ALLOWED_TYPES, MAX_UPLOAD_BYTES, buildUploadKey, validUploadSize } from "@/lib/upload-policy";
+import { presignUpload } from "@/lib/upload-headers";
 
 export async function POST(req: Request) {
   const session = await getServerSession();
@@ -46,9 +47,10 @@ export async function POST(req: Request) {
   const key = buildUploadKey(session.user.id, contentType, randomUUID());
   if (!key) return NextResponse.json({ error: "Invalid content type" }, { status: 400 });
 
-  // Note ContentType is NOT among the signed headers (only host and
-  // content-length are), so the type is not enforced here: /api/upload/confirm
-  // checks what actually landed in the bucket.
+  // Content-Type is signed too (see lib/upload-headers.ts), so the PUT has to
+  // store exactly this allowed image type: a text/html body under this URL is
+  // rejected by R2 instead of landing on the public media domain.
+  // /api/upload/confirm still checks what actually landed in the bucket.
   const uploadUrl = await getSignedUrl(
     getS3(),
     new PutObjectCommand({
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
       ContentType: contentType,
       ContentLength: size,
     }),
-    { expiresIn: 600 },
+    presignUpload,
   );
 
   return NextResponse.json({ uploadUrl, key });

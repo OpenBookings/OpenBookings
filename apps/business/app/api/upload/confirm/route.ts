@@ -3,7 +3,7 @@ import { currentPropertyPin } from "@/lib/current-property";
 import { query, queryOne } from "@openbookings/db";
 import { userOwnsProperty, userOwnsRoom } from "@openbookings/authz";
 import { getBucketName, getS3, publicUrl } from "@/lib/s3";
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { uploadKeyBelongsTo, uploadedObjectProblem } from "@/lib/upload-policy";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import { NextResponse } from "next/server";
@@ -55,6 +55,11 @@ export async function POST(req: Request) {
   }
   const problem = uploadedObjectProblem({ contentLength: head.ContentLength, contentType: head.ContentType });
   if (problem) {
+    // uploads/ is publicly served from the media domain, so a refused object
+    // must not stay there: delete it rather than leave it readable.
+    await getS3()
+      .send(new DeleteObjectCommand({ Bucket: getBucketName(), Key: key }))
+      .catch((err) => console.error("upload/confirm: could not delete a refused object", key, err));
     return NextResponse.json({ error: problem }, { status: 400 });
   }
 
