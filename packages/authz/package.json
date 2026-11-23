@@ -17,7 +17,7 @@
   "dependencies": {
     "@openbookings/db": "workspace:*",
     "@openbookings/mode": "workspace:*",
-    "better-auth": "1.7.22"
+    "better-auth": "1.7.27"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
