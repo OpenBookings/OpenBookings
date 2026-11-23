@@ -77,6 +77,9 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF p_hotel IS NULL OR p_months IS NULL THEN RETURN; END IF;
+  -- A property delete cascades to its rooms and bookings, whose triggers run
+  -- after the property row is gone; the FK on the tables below would abort it.
+  IF NOT EXISTS (SELECT 1 FROM properties WHERE id = p_hotel) THEN RETURN; END IF;
   INSERT INTO analytics_month_generation (hotel_id, month, generation)
   SELECT p_hotel, m, 1 FROM (SELECT DISTINCT unnest(p_months) AS m) t WHERE m IS NOT NULL
   ON CONFLICT (hotel_id, month)
