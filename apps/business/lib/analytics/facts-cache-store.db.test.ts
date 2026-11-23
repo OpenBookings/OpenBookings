@@ -42,7 +42,7 @@ function run(text: string, values: unknown[]) {
   return result;
 }
 
-const { loadWindowFacts } = await import("./facts-query");
+const { loadWindowFacts, loadNames } = await import("./facts-query");
 const { createMonthStore } = await import("./facts-cache-store");
 const { assembleFacts } = await import("./facts-cache");
 
@@ -77,12 +77,13 @@ describeWithDb("analytics month cache store", () => {
 
   test("round trip equals live load for a finished month", async () => {
     const hotel = await seed();
-    const deps = { store: createMonthStore(), loadLive: loadWindowFacts };
+    const deps = { store: createMonthStore(), loadLive: loadWindowFacts, loadNames };
     const first = await assembleFacts(hotel.propertyId, MARCH, "2031-06-15", deps);
     const stored = await db.query(`SELECT count(*)::int AS n FROM analytics_month_cache WHERE hotel_id = $1`, [hotel.propertyId]);
     expect(stored.rows[0].n).toBe(1);
     const second = await assembleFacts(hotel.propertyId, MARCH, "2031-06-15", {
       store: deps.store,
+      loadNames,
       loadLive: async () => {
         throw new Error("must be served from the cache");
       },

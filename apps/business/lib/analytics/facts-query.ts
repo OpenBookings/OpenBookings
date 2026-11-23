@@ -39,6 +39,42 @@ interface ReservationSql {
 const iso = (v: Date | string): string => new Date(v).toISOString();
 const isoOrNull = (v: Date | string | null): string | null => (v === null ? null : iso(v));
 
+interface RoomRow {
+  id: string;
+  name: string;
+  total_units: number;
+  created_on: IsoDate;
+  archived_on: IsoDate | null;
+}
+
+function queryRooms(propertyId: string) {
+  return query<RoomRow>(
+    `SELECT id, name, total_units,
+            (created_at AT TIME ZONE '${AMS}')::date::text AS created_on,
+            (archived_at AT TIME ZONE '${AMS}')::date::text AS archived_on
+       FROM rooms WHERE property_id = $1`,
+    [propertyId],
+  );
+}
+
+function queryRatePlans(propertyId: string) {
+  return query<{ id: string; name: string }>(
+    `SELECT rp.id, rp.name FROM rate_plans rp JOIN rooms ro ON ro.id = rp.room_id WHERE ro.property_id = $1`,
+    [propertyId],
+  );
+}
+
+/** Current room type and rate plan names. Never cached: renames fire no cache trigger. */
+export async function loadNames(
+  propertyId: string,
+): Promise<{ roomTypeNames: Record<string, string>; ratePlanNames: Record<string, string> }> {
+  const [rooms, ratePlans] = await Promise.all([queryRooms(propertyId), queryRatePlans(propertyId)]);
+  return {
+    roomTypeNames: Object.fromEntries(rooms.map((r) => [r.id, r.name])),
+    ratePlanNames: Object.fromEntries(ratePlans.map((p) => [p.id, p.name])),
+  };
+}
+
 export async function loadWindowFacts(propertyId: string, window: DateRange): Promise<Facts> {
   const [reservationRows, rooms, ratePlans] = await Promise.all([
     query<ReservationSql>(
@@ -59,17 +95,8 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
           OR (x.check_in::date <= $3::date AND x.check_out::date > $2::date)`,
       [propertyId, window.from, window.to],
     ),
-    query<{ id: string; name: string; total_units: number; created_on: IsoDate; archived_on: IsoDate | null }>(
-      `SELECT id, name, total_units,
-              (created_at AT TIME ZONE '${AMS}')::date::text AS created_on,
-              (archived_at AT TIME ZONE '${AMS}')::date::text AS archived_on
-         FROM rooms WHERE property_id = $1`,
-      [propertyId],
-    ),
-    query<{ id: string; name: string }>(
-      `SELECT rp.id, rp.name FROM rate_plans rp JOIN rooms ro ON ro.id = rp.room_id WHERE ro.property_id = $1`,
-      [propertyId],
-    ),
+    queryRooms(propertyId),
+    queryRatePlans(propertyId),
   ]);
 
   const bookingIds = [...new Set(reservationRows.map((r) => r.booking_id))];

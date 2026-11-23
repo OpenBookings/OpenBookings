@@ -8,7 +8,7 @@
  * hotel-wide generation all still match. A build reads both generations before
  * loading and the store refuses the write if either has moved since.
  */
-import { loadWindowFacts } from "./facts-query";
+import { loadNames, loadWindowFacts } from "./facts-query";
 import { createMonthStore } from "./facts-cache-store";
 import { amsterdamToday, endOfMonth, startOfMonth, type DateRange } from "./period";
 import type { BookingFact, Facts, InventoryFact, IsoDate, SoldNight } from "./types";
@@ -34,12 +34,32 @@ export interface MonthStore {
 interface Deps {
   store: MonthStore;
   loadLive: (propertyId: string, window: DateRange) => Promise<Facts>;
+  /** Names are always read live: a rename fires no cache trigger. */
+  loadNames: (propertyId: string) => Promise<{ roomTypeNames: Record<string, string>; ratePlanNames: Record<string, string> }>;
 }
 
-/** Nothing guest-level is ever stored, whatever the loader returns. */
-function stripGuestFields(facts: Facts): Facts {
+const BUILD_CONCURRENCY = 3;
+
+/** Run `fn` over `items`, at most `limit` at a time, results in order. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/** Nothing guest-level, and no names, are ever stored, whatever the loader returns. */
+function stripForStorage(facts: Facts): Facts {
   return {
     ...facts,
+    roomTypeNames: {},
+    ratePlanNames: {},
     bookings: facts.bookings.map((b) => ({
       ...b,
       guestKey: "",
@@ -78,10 +98,9 @@ export async function assembleFacts(
 
   const monthWindow = (m: IsoDate): DateRange => ({ from: m, to: endOfMonth(m) });
 
-  const [built, tail] = await Promise.all([
-    Promise.all(
-      missing.map(async (m) => {
-        const facts = stripGuestFields(await deps.loadLive(propertyId, monthWindow(m)));
+  const [built, tail, names] = await Promise.all([
+    mapLimit(missing, BUILD_CONCURRENCY, async (m) => {
+        const facts = stripForStorage(await deps.loadLive(propertyId, monthWindow(m)));
         try {
           await deps.store.write(propertyId, m, { month: gens!.months.get(m) ?? 0, hotel: gens!.hotel }, facts);
         } catch (error) {
@@ -89,14 +108,14 @@ export async function assembleFacts(
           console.error("analytics month cache write failed", error);
         }
         return [m, facts] as const;
-      }),
-    ),
+    }),
     Promise.all(
       live.map(async (m) => [m, await deps.loadLive(propertyId, {
         from: m < window.from ? window.from : m,
         to: endOfMonth(m) > window.to ? window.to : endOfMonth(m),
       })] as const),
     ),
+    deps.loadNames(propertyId),
   ]);
 
   // Oldest month first, live months last, so the live copy of a booking wins.
@@ -109,14 +128,10 @@ export async function assembleFacts(
   const bookings = new Map<string, BookingFact>();
   const nights = new Map<string, SoldNight>();
   const inventory = new Map<string, InventoryFact>();
-  const roomTypeNames: Record<string, string> = {};
-  const ratePlanNames: Record<string, string> = {};
   for (const f of ordered) {
     for (const b of f.bookings) bookings.set(b.id, b);
     for (const n of f.nights) nights.set(`${n.bookingId}|${n.date}`, n);
     for (const i of f.inventory) inventory.set(`${i.roomId}|${i.date}`, i);
-    Object.assign(roomTypeNames, f.roomTypeNames);
-    Object.assign(ratePlanNames, f.ratePlanNames);
   }
 
   const inWindow = (d: IsoDate) => d >= window.from && d <= window.to;
@@ -127,8 +142,8 @@ export async function assembleFacts(
     ),
     nights: [...nights.values()].filter((n) => inWindow(n.date)),
     inventory: [...inventory.values()].filter((i) => inWindow(i.date)),
-    roomTypeNames,
-    ratePlanNames,
+    roomTypeNames: names.roomTypeNames,
+    ratePlanNames: names.ratePlanNames,
   };
 }
 
@@ -137,5 +152,6 @@ export async function loadFacts(propertyId: string, window: DateRange, today: Is
   return assembleFacts(propertyId, window, today, {
     store: createMonthStore(),
     loadLive: loadWindowFacts,
+    loadNames,
   });
 }

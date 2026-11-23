@@ -4,6 +4,7 @@ import type { DateRange } from "./period";
 import type { BookingFact, Facts, IsoDate } from "./types";
 
 const HOTEL = "hotel-1";
+const loadNames = async () => ({ roomTypeNames: { r1: "Room" }, ratePlanNames: { p1: "Plan" } });
 
 function booking(id: string, checkIn: IsoDate, checkOut: IsoDate, createdAt: string, extra: Partial<BookingFact> = {}): BookingFact {
   return {
@@ -67,10 +68,10 @@ describe("assembleFacts", () => {
   test("finished months come from the store, current month is always live", async () => {
     const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z"), booking("c", "2031-06-10", "2031-06-11", "2031-06-01T10:00:00Z")]);
     const m = memoryStore();
-    await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(live.calls).toHaveLength(3);
     live.calls.length = 0;
-    const second = await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    const second = await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(live.calls).toEqual([window("2031-06-01", "2031-06-30")]);
     expect(second.bookings.map((b) => b.id).sort()).toEqual(["a", "c"]);
     expect(m.writes.sort()).toEqual(["2031-04-01", "2031-05-01"]);
@@ -81,7 +82,7 @@ describe("assembleFacts", () => {
     m.gens.set("2031-04-01", 3);
     m.state.hotel = 7;
     const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z")]);
-    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(live.calls).toHaveLength(1);
     expect(m.rows.get("2031-04-01")?.generation).toBe(3);
     expect(m.rows.get("2031-04-01")?.hotel).toBe(7);
@@ -94,7 +95,7 @@ describe("assembleFacts", () => {
       m.gens.set("2031-04-01", 1); // a change lands while the build runs
       return live.loadLive(p, w);
     };
-    const result = await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: racing });
+    const result = await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: racing, loadNames });
     expect(result.bookings).toHaveLength(1); // this call still answers with what it built
     expect(m.rows.size).toBe(0);
     expect((await m.store.read(HOTEL, ["2031-04-01"])).size).toBe(0);
@@ -107,7 +108,7 @@ describe("assembleFacts", () => {
       m.state.hotel = 1;
       return live.loadLive(p, w);
     };
-    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: racing });
+    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: racing, loadNames });
     expect(m.rows.size).toBe(0);
   });
 
@@ -120,7 +121,7 @@ describe("assembleFacts", () => {
       version: FACTS_CACHE_VERSION, generation: 0, hotel: 0,
       facts: { bookings: [{ ...spanning, status: "confirmed", netRevenueCents: 1 }], nights: ["2031-05-30", "2031-05-31"].map((date) => ({ date, roomId: "r1", ratePlanId: "p1", bookingId: "s", revenueCents: 100 })), inventory: [], roomTypeNames: {}, ratePlanNames: {} },
     });
-    const result = await assembleFacts(HOTEL, window("2031-05-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    const result = await assembleFacts(HOTEL, window("2031-05-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(result.bookings).toHaveLength(1);
     expect(result.bookings[0].netRevenueCents).toBe(400);
     const keys = result.nights.map((n) => `${n.bookingId}${n.date}`);
@@ -131,7 +132,7 @@ describe("assembleFacts", () => {
   test("result is clipped to the window", async () => {
     const m = memoryStore();
     const live = fakeLive([booking("a", "2031-04-05", "2031-04-06", "2031-04-01T10:00:00Z"), booking("b", "2031-04-25", "2031-04-26", "2031-04-20T10:00:00Z")]);
-    const result = await assembleFacts(HOTEL, window("2031-04-15", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    const result = await assembleFacts(HOTEL, window("2031-04-15", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(result.bookings.map((b) => b.id)).toEqual(["b"]);
     expect(result.nights.map((n) => n.bookingId)).toEqual(["b"]);
     expect(result.inventory.every((i) => i.date >= "2031-04-15" && i.date <= "2031-04-30")).toBe(true);
@@ -140,7 +141,7 @@ describe("assembleFacts", () => {
   test("facts written to the store carry no guest fields", async () => {
     const m = memoryStore();
     const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z")]);
-    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     const stored = m.rows.get("2031-04-01")!.facts.bookings[0];
     expect(stored).toMatchObject({ guestKey: "", guestCountry: "", adults: 0, children: 0, hasGuestDetails: false });
     expect(JSON.stringify(m.rows.get("2031-04-01"))).not.toContain("g-secret");
@@ -150,17 +151,42 @@ describe("assembleFacts", () => {
     const m = memoryStore();
     const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z")]);
     m.rows.set("2031-04-01", { version: FACTS_CACHE_VERSION - 1, generation: 0, hotel: 0, facts: { bookings: [], nights: [], inventory: [], roomTypeNames: {}, ratePlanNames: {} } });
-    const result = await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive });
+    const result = await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(live.calls).toHaveLength(1);
     expect(result.bookings).toHaveLength(1);
   });
 
-  test("names come from the live tail, and a window wholly in the past has no live call", async () => {
+  test("names are always live: a rename shows although every month is cached", async () => {
     const m = memoryStore();
-    const live = fakeLive([], { r1: "Live room" });
-    const past = await assembleFacts(HOTEL, window("2031-04-01", "2031-04-30"), TODAY, { store: m.store, loadLive: live.loadLive });
-    expect(past.roomTypeNames).toEqual({ r1: "Live room" }); // from the last built slice when no live tail
-    const mixed = await assembleFacts(HOTEL, window("2031-05-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive });
-    expect(mixed.roomTypeNames).toEqual({ r1: "Live room" });
+    const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z")]);
+    const w = window("2031-04-01", "2031-04-30");
+    await assembleFacts(HOTEL, w, TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
+    expect(m.rows.get("2031-04-01")!.facts.roomTypeNames).toEqual({});
+    expect(m.rows.get("2031-04-01")!.facts.ratePlanNames).toEqual({});
+    live.calls.length = 0;
+    const renamed = await assembleFacts(HOTEL, w, TODAY, {
+      store: m.store,
+      loadLive: live.loadLive,
+      loadNames: async () => ({ roomTypeNames: { r1: "Renamed" }, ratePlanNames: { p1: "New plan" } }),
+    });
+    expect(live.calls).toHaveLength(0);
+    expect(renamed.roomTypeNames).toEqual({ r1: "Renamed" });
+    expect(renamed.ratePlanNames).toEqual({ p1: "New plan" });
+  });
+
+  test("a cold cache builds at most 3 months at a time", async () => {
+    const m = memoryStore();
+    let running = 0;
+    let peak = 0;
+    const loadLive = async (): Promise<Facts> => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return { bookings: [], nights: [], inventory: [], roomTypeNames: {}, ratePlanNames: {} };
+    };
+    await assembleFacts(HOTEL, window("2030-06-01", "2031-05-31"), TODAY, { store: m.store, loadLive, loadNames });
+    expect(m.rows.size).toBe(12);
+    expect(peak).toBe(3);
   });
 });
