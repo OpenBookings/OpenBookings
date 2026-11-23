@@ -1,4 +1,5 @@
 import { propertyReadAccessSql } from "@openbookings/authz";
+import { parseBookingReference } from "@openbookings/db/booking-reference";
 import { BOOKING_CENTS_COLUMNS, query, ROOM_CENTS_JSON, ROOM_POLICY_JSON, type SupportRoomPolicy } from "@openbookings/db";
 
 /**
@@ -90,16 +91,12 @@ const SELECT = `
 `;
 
 /**
- * A booking reference as hosts write it: the full UUID, or its first 8+
- * characters (the short `#a1b2c3d4` form the business app shows), with or
- * without the `#`. Returns the lowercased prefix, or null when it can't be
- * a booking id at all.
+ * A booking reference as hosts write it: `OB-B7B0-2A1C`, the old `#b7b02a1c`,
+ * or the full UUID. Returns the lowercase 8-character prefix or full UUID, or
+ * null when it can't be a booking reference.
  */
 export function normalizeBookingReference(raw: string): string | null {
-  const ref = raw.trim().replace(/^#/, "").toLowerCase();
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref)) return ref;
-  if (/^[0-9a-f]{8}(-[0-9a-f]{0,4})?$/.test(ref)) return ref;
-  return null;
+  return parseBookingReference(raw);
 }
 
 export type HostBookingMatch =

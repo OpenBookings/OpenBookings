@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import { upsertBillingProfile } from "../profiles";
 import {
@@ -141,7 +142,7 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       billing_entity_id: orgId,
       property_id: propertyId,
       booking_id: bookingId,
-      booking_ref: bookingId.slice(0, 8).toUpperCase(),
+      booking_ref: bookingReference(bookingId),
       stay_start: "2100-11-20",
       stay_end: "2100-11-22",
       stripe_account_id: account,
@@ -325,7 +326,7 @@ describeWithDb("commission ledger ingestion against Postgres", () => {
       billing_entity_id: orgId,
       property_id: propertyId,
       booking_id: bookingId,
-      booking_ref: bookingId.slice(0, 8).toUpperCase(),
+      booking_ref: bookingReference(bookingId),
       stay_start: "2100-11-20",
       stay_end: "2100-11-22",
       stripe_application_fee_id: f.id,

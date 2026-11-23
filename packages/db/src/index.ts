@@ -9,6 +9,7 @@ export * from "./support-tickets";
 export * from "./consent";
 export * from "./booking-events";
 export * from "./outside-refunds";
+export * from "./booking-reference";
 export type { VatTreatment } from "./billing-types";
 export { sql } from "drizzle-orm";
 

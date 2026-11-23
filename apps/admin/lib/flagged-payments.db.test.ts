@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { loadBookingEvents, recordOutsideRefund } from "@openbookings/db";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import { bookingRef, loadFlaggedPayments, resolvePaymentFlag, resolvePaymentFlagFromForm } from "./flagged-payments";
@@ -95,7 +96,7 @@ describeWithDb("flagged payments against Postgres", () => {
     expect(refund.stripeAccountId).toBe(account);
     expect(refund.reason).toBe("requested_by_customer");
     expect(refund.resolvedAt).toBeNull();
-    expect(bookingRef(bookingId)).toBe(bookingId.slice(0, 8).toUpperCase());
+    expect(bookingRef(bookingId)).toBe(bookingReference(bookingId));
   });
 
   test("resolving writes one audit row with the flag's dedupe key, and a second resolve writes none", async () => {

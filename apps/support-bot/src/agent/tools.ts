@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import {
   findReservationByReference,
   findReservationsByGuestEmail,
@@ -57,13 +58,14 @@ const NO_VERIFIED_GUEST = {
 
 /**
  * Listing by email alone is refused when the email is unverified: anyone can
- * type another guest's address into a chat box. A booking reference is a UUID
- * only the booker and their confirmation email know, so naming one is the
- * second factor.
+ * type another guest's address into a chat box. The full booking UUID is
+ * known only to the booker (their booking link), so naming it is the second
+ * factor. The short OB-XXXX-XXXX reference is not enough for that (see
+ * findOwnedReservation).
  */
 const NEEDS_BOOKING_REFERENCE = {
   found: false,
-  note: "This conversation's email address is not verified, so bookings cannot be listed from it. Ask the guest for the booking reference from their confirmation email and look it up with booking_reference, or call escalate_to_human so an agent can verify them.",
+  note: "This conversation's email address is not verified, so bookings cannot be listed from it. Until it is, a booking can only be looked up by its full booking ID (a UUID, from the guest's booking link), not the short OB- booking reference; otherwise call escalate_to_human so an agent can verify them.",
 } as const;
 
 /**
@@ -84,6 +86,8 @@ function identifiedGuest(ctx: ToolContext): string | null {
   return email ? email : null;
 }
 
+const FULL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Resolve a reference to a booking the context guest actually owns, or null.
  * The single choke point every reference-taking tool goes through.
@@ -91,7 +95,15 @@ function identifiedGuest(ctx: ToolContext): string | null {
 async function findOwnedReservation(
   bookingReference: string,
   guestEmail: string,
+  ctx: ToolContext,
 ): Promise<SupportReservation | null> {
+  // With an unverified email the reference is the second factor, so only the
+  // full booking UUID counts: the short OB-XXXX-XXXX is printed on emails,
+  // invoices and at the hotel, and is far easier to come by or guess.
+  if (!ctx.guestEmailVerified && !FULL_UUID_RE.test(bookingReference.trim())) {
+    trace("tools", "refused a short reference on an unverified email");
+    return null;
+  }
   const r = await findReservationByReference(bookingReference);
   if (!r) return null;
   if (!guestOwns(r, guestEmail)) {
@@ -105,7 +117,7 @@ async function findOwnedReservation(
 
 function reservationView(r: SupportReservation) {
   return {
-    booking_reference: r.booking_id,
+    booking_reference: bookingReference(r.booking_id),
     status: r.status,
     check_in_date: r.check_in_date,
     check_out_date: r.check_out_date,
@@ -138,7 +150,7 @@ const getReservationArgs = z.object({
   booking_reference: z
     .string()
     .describe(
-      "The booking reference from the guest's confirmation (a UUID). Omit to list the guest's recent bookings.",
+      "The booking reference from the guest's confirmation, e.g. OB-B7B0-2A1C. Omit to list the guest's recent bookings.",
     )
     .optional(),
 });
@@ -151,7 +163,7 @@ const getPaymentStatusArgs = z.object({
 });
 
 const getCancellationPolicyArgs = z.object({
-  booking_reference: z.string().describe("The booking reference (a UUID)."),
+  booking_reference: z.string().describe("The booking reference, e.g. OB-B7B0-2A1C."),
 });
 
 const escalateArgs = z.object({
@@ -176,7 +188,7 @@ export const TOOLS = {
       const guestEmail = identifiedGuest(ctx);
       if (!guestEmail) return NO_VERIFIED_GUEST;
       if (args.booking_reference) {
-        const r = await findOwnedReservation(args.booking_reference, guestEmail);
+        const r = await findOwnedReservation(args.booking_reference, guestEmail, ctx);
         return r ? reservationView(r) : NO_MATCHING_BOOKING;
       }
       if (!ctx.guestEmailVerified) {
@@ -196,7 +208,7 @@ export const TOOLS = {
     execute: async (args: z.infer<typeof getPaymentStatusArgs>, ctx: ToolContext) => {
       const guestEmail = identifiedGuest(ctx);
       if (!guestEmail) return NO_VERIFIED_GUEST;
-      const r = await findOwnedReservation(args.booking_reference, guestEmail);
+      const r = await findOwnedReservation(args.booking_reference, guestEmail, ctx);
       if (!r) return NO_MATCHING_BOOKING;
       if (!r.stripe_payment_intent_id || !r.stripe_account_id) {
         return { found: false, note: "This booking has no payment on record yet." };
@@ -212,10 +224,10 @@ export const TOOLS = {
     execute: async (args: z.infer<typeof getCancellationPolicyArgs>, ctx: ToolContext) => {
       const guestEmail = identifiedGuest(ctx);
       if (!guestEmail) return NO_VERIFIED_GUEST;
-      const r = await findOwnedReservation(args.booking_reference, guestEmail);
+      const r = await findOwnedReservation(args.booking_reference, guestEmail, ctx);
       if (!r) return NO_MATCHING_BOOKING;
       return {
-        booking_reference: r.booking_id,
+        booking_reference: bookingReference(r.booking_id),
         check_in_date: r.check_in_date,
         check_out_date: r.check_out_date,
         status: r.status,

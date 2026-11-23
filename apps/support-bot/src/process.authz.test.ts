@@ -14,6 +14,8 @@ import type { ChatFn, ChatResponse } from "./agent/loop";
  */
 
 const VICTIM_REF = "11111111-1111-1111-1111-111111111111";
+/** How the bot shows VICTIM_REF. */
+const VICTIM_OB = "OB-1111-1111";
 const VICTIM_EMAIL = "victim@example.com";
 const ATTACKER_EMAIL = "attacker@example.com";
 
@@ -74,6 +76,7 @@ describe("unauthorized booking lookup", () => {
 
     expect(everythingWritten()).not.toContain("Test Villa");
     expect(everythingWritten()).not.toContain(VICTIM_REF);
+    expect(everythingWritten()).not.toContain(VICTIM_OB);
   });
 
   it("does not disclose another guest's booking when the model has the reference", async () => {
@@ -121,16 +124,18 @@ describe("unauthorized booking lookup", () => {
       await processConversation(LIST_ALL(flag, 9010 + i), { chat });
       const shownToModel = JSON.stringify(seen.at(-1));
       expect(shownToModel).not.toContain(VICTIM_REF);
+      expect(shownToModel).not.toContain(VICTIM_OB);
       expect(shownToModel).not.toContain("Test Villa");
       expect(shownToModel).toContain("booking reference");
       expect(everythingWritten()).not.toContain(VICTIM_REF);
+    expect(everythingWritten()).not.toContain(VICTIM_OB);
     }
   });
 
   it("lists the same bookings once Chatwoot has verified the email", async () => {
     const { chat, seen } = recordingChat(script());
     await processConversation(LIST_ALL(true, 9020), { chat });
-    expect(JSON.stringify(seen.at(-1))).toContain(VICTIM_REF);
+    expect(JSON.stringify(seen.at(-1))).toContain(VICTIM_OB);
   });
 
   it("discloses nothing when the contact is anonymous, even about a real booking", async () => {

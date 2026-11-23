@@ -11,6 +11,7 @@ import {
   type NightValue,
 } from "@openbookings/pricing";
 import { roomPaid } from "@openbookings/db/booking-lifecycle";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { buildHostTimeline, type HostTimeline } from "./timeline";
 import type { ReservationStatus, ReservationSummary } from "@/components/dashboard/reservation-types";
 
@@ -215,7 +216,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
   const names = [...new Set(rooms.map((r) => r.roomName))];
   return {
     id: row.booking_id,
-    reference: row.booking_id.slice(0, 8).toUpperCase(),
+    reference: bookingReference(row.booking_id),
     guestName: row.guest_name ?? "Guest",
     roomName: names.join(" + "),
     checkInDate: row.check_in_date,
