@@ -261,4 +261,66 @@ describeWithDb("analytics month cache invalidation", () => {
     expect((await generations(propertyId))["2031-01"]).toBe(0);
     expect((await generations(propertyId))["0001-01"]).toBe(1);
   });
+
+  test("a room moved to another hotel touches both hotels", async () => {
+    const a = await bookedHotel();
+    const b = await bookedHotel();
+    await fillCache(a.propertyId, ["2031-01", "2031-02"]);
+    await fillCache(b.propertyId, ["2031-01", "2031-02"]);
+    await db.query(`UPDATE rooms SET property_id = $2 WHERE id = $1`, [a.roomId, b.propertyId]);
+    expect(await cachedMonths(a.propertyId)).toEqual([]);
+    expect(await cachedMonths(b.propertyId)).toEqual([]);
+  });
+
+  test("updates to columns analytics does not read leave the cache alone", async () => {
+    const { propertyId, bookingId, roomId } = await bookedHotel();
+    const orgId = `test-org-${crypto.randomUUID()}`;
+    await db.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Test Org', $1, now())`, [orgId]);
+    const entry = (
+      await db.query(
+        `INSERT INTO commission_entries
+           (kind, billing_entity_id, property_id, booking_id, booking_ref, stay_start, stay_end, stripe_account_id, stripe_application_fee_id, base_amount,
+            commission_net, vat_rate_bp, vat_amount, gross_amount, vat_treatment, currency, occurred_at, disposition)
+         VALUES ('fee', $1, $2, $3, 'REF', '2031-02-27', '2031-03-02', 'acct_test', $4, 20000, 744, 2100, 156, 900, 'NL_DOMESTIC', 'eur', '2031-11-01T10:00:00Z', 'booked')
+         RETURNING id`,
+        [orgId, propertyId, bookingId, `fee_${crypto.randomUUID()}`],
+      )
+    ).rows[0].id as string;
+    const run = (
+      await db.query(`INSERT INTO invoice_runs (period_start, step, status) VALUES ('2031-11-01', 'draft', 'running') RETURNING id`)
+    ).rows[0].id as string;
+    const invoice = (
+      await db.query(
+        `INSERT INTO invoices (run_id, billing_entity_id, period_start, period_end, doc_type, status, vat_treatment, vat_rate_bp,
+           net_total, vat_total, gross_total, vat_collected, vat_rounding_diff, seller, buyer)
+         VALUES ($1, $2, '2031-10-01', '2031-11-01', 'invoice', 'draft', 'NL_DOMESTIC', 2100, 744, 156, 900, 156, 0, '{}'::jsonb, '{}'::jsonb)
+         RETURNING id`,
+        [run, orgId],
+      )
+    ).rows[0].id as string;
+    await db.query(`INSERT INTO room_inventory (room_id, date, blocked_rooms) VALUES ($1, '2031-02-10', 1)`, [roomId]);
+    await fillCache(propertyId, ["2031-01", "2031-02", "2031-03"]);
+
+    await db.query(`UPDATE bookings SET guest_notes = 'late arrival', updated_at = now() WHERE id = $1`, [bookingId]);
+    await db.query(`UPDATE reservations SET adults = 1 WHERE booking_id = $1`, [bookingId]);
+    await db.query(`UPDATE commission_entries SET invoice_id = $2 WHERE id = $1`, [entry, invoice]);
+    await db.query(`UPDATE rooms SET name = 'Renamed' WHERE id = $1`, [roomId]);
+
+    expect(await cachedMonths(propertyId)).toEqual(["2031-01", "2031-02", "2031-03"]);
+    expect(Object.values(await generations(propertyId)).every((n) => n === 0)).toBe(true);
+  });
+
+  test("a refund going from pending to succeeded clears the booking months", async () => {
+    const { propertyId, bookingId } = await bookedHotel();
+    const refund = (
+      await db.query(
+        `INSERT INTO refunds (booking_id, reason, source, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
+         VALUES ($1, 'goodwill', 'openbookings', 50, 0, 50, 'pending', $2) RETURNING id`,
+        [bookingId, `k-${crypto.randomUUID()}`],
+      )
+    ).rows[0].id as string;
+    await fillCache(propertyId, ["2031-01", "2031-02", "2031-03", "2031-04"]);
+    await db.query(`UPDATE refunds SET status = 'succeeded' WHERE id = $1`, [refund]);
+    expect(await cachedMonths(propertyId)).toEqual(["2031-04"]);
+  });
 });

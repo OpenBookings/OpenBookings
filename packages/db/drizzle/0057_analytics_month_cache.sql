@@ -20,10 +20,10 @@
 -- booking (reservations, refunds, commission entries) follow the booking;
 -- commission entries without a booking (booking_id NULL) touch nothing.
 -- room_inventory touches the month of its date; a change to a room's units,
--- creation or archiving moves occupancy in every month, so it touches the
--- whole hotel.
+-- creation, archiving or hotel moves occupancy in every month, so it touches
+-- the whole hotel.
 --
--- Hotel-wide changes (a room's units, creation or archiving) cannot
+-- Hotel-wide changes (a room's units, creation, archiving or hotel) cannot
 -- name the months they move, and a month that was never cached has no
 -- generation row to bump. So analytics_touch_hotel bumps a sentinel row of
 -- analytics_month_generation with month = '0001-01-01' (and only that row). The contract for
@@ -32,6 +32,12 @@
 -- stores them as `generation` (the month generation) and `hotel_generation`
 -- (the sentinel generation) at build time. A build may be stored, and a cached
 -- row served, only when both still equal the values read before the build.
+--
+-- UPDATE triggers fire only for the columns the analytics loader reads
+-- (apps/business/lib/analytics/facts-query.ts); a change to anything else
+-- (notes, updated_at, an invoice number on a commission entry, …) cannot move
+-- a figure. INSERT and DELETE always fire. Keep the column lists in step with
+-- the loader's SQL.
 --
 -- Lock order: a multi-month bump locks generation rows in month order, so two
 -- writers touching overlapping months queue instead of deadlocking. A
@@ -229,27 +235,36 @@ $$;
 
 DROP TRIGGER IF EXISTS analytics_cache_bookings ON bookings;
 CREATE TRIGGER analytics_cache_bookings
-  AFTER INSERT OR UPDATE OR DELETE ON bookings
+  AFTER INSERT OR DELETE OR UPDATE OF
+    hotel_id, status, check_in_date, check_out_date, confirmed_at, created_at, cancelled_at,
+    departed_early_on, commission_cents
+  ON bookings
   FOR EACH ROW EXECUTE FUNCTION app.analytics_bookings_changed();
 
 DROP TRIGGER IF EXISTS analytics_cache_reservations ON reservations;
 CREATE TRIGGER analytics_cache_reservations
-  AFTER INSERT OR UPDATE OR DELETE ON reservations
+  AFTER INSERT OR DELETE OR UPDATE OF
+    id, booking_id, created_at, total_nights, cancelled_at, room_id, rate_plan_id, price_per_night,
+    nights, vat_split
+  ON reservations
   FOR EACH ROW EXECUTE FUNCTION app.analytics_booking_child_changed();
 
 DROP TRIGGER IF EXISTS analytics_cache_refunds ON refunds;
 CREATE TRIGGER analytics_cache_refunds
-  AFTER INSERT OR UPDATE OR DELETE ON refunds
+  AFTER INSERT OR DELETE OR UPDATE OF booking_id, reservation_id, accommodation_amount, status
+  ON refunds
   FOR EACH ROW EXECUTE FUNCTION app.analytics_booking_child_changed();
 
 DROP TRIGGER IF EXISTS analytics_cache_commission_entries ON commission_entries;
 CREATE TRIGGER analytics_cache_commission_entries
-  AFTER INSERT OR UPDATE OR DELETE ON commission_entries
+  AFTER INSERT OR DELETE OR UPDATE OF booking_id, kind, gross_amount
+  ON commission_entries
   FOR EACH ROW EXECUTE FUNCTION app.analytics_booking_child_changed();
 
 DROP TRIGGER IF EXISTS analytics_cache_room_inventory ON room_inventory;
 CREATE TRIGGER analytics_cache_room_inventory
-  AFTER INSERT OR UPDATE OR DELETE ON room_inventory
+  AFTER INSERT OR DELETE OR UPDATE OF room_id, date, total_rooms, available_override, blocked_rooms
+  ON room_inventory
   FOR EACH ROW EXECUTE FUNCTION app.analytics_room_inventory_changed();
 
 DROP TRIGGER IF EXISTS analytics_cache_rooms_insert_delete ON rooms;
@@ -259,7 +274,7 @@ CREATE TRIGGER analytics_cache_rooms_insert_delete
 
 DROP TRIGGER IF EXISTS analytics_cache_rooms_update ON rooms;
 CREATE TRIGGER analytics_cache_rooms_update
-  AFTER UPDATE OF total_units, created_at, archived_at ON rooms
+  AFTER UPDATE OF property_id, total_units, created_at, archived_at ON rooms
   FOR EACH ROW EXECUTE FUNCTION app.analytics_rooms_changed();
 
 -- ---------------------------------------------------------------------------
