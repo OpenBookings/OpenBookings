@@ -127,6 +127,11 @@ describeWithDb("analytics month cache invalidation", () => {
           )
         ).rows[0]?.generation ?? 0,
       );
+    // Seeding a room already touched the hotel; start from 0.
+    await db.query(`UPDATE analytics_month_generation SET generation = 0 WHERE month = '0001-01-01' AND hotel_id IN ($1, $2)`, [
+      a.propertyId,
+      b.propertyId,
+    ]);
     expect(await sentinel(a.propertyId)).toBe(0);
 
     await db.query(`UPDATE rooms SET total_units = 9 WHERE id = $1`, [a.roomId]);
