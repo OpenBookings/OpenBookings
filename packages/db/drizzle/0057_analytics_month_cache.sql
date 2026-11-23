@@ -33,6 +33,11 @@
 -- (the sentinel generation) at build time. A build may be stored, and a cached
 -- row served, only when both still equal the values read before the build.
 --
+-- booking_intents / booking_intent_rooms (where a reservation's discount comes
+-- from) have no trigger: they are written in the booking's own transaction,
+-- before or with the booking rows whose triggers already touch its months, and
+-- never change afterwards.
+--
 -- UPDATE triggers fire only for the columns the analytics loader reads
 -- (apps/business/lib/analytics/facts-query.ts); a change to anything else
 -- (notes, updated_at, an invoice number on a commission entry, …) cannot move
@@ -127,7 +132,8 @@ $$;
 CREATE OR REPLACE FUNCTION app.analytics_booking_months(
   p_confirmed_at timestamptz, p_created_at timestamptz, p_check_in date, p_check_out date
 ) RETURNS date[]
-LANGUAGE sql IMMUTABLE
+-- STABLE, not IMMUTABLE: AT TIME ZONE reads the time zone database.
+LANGUAGE sql STABLE
 SET search_path = pg_catalog, public
 AS $$
   SELECT ARRAY(

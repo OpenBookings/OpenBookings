@@ -323,4 +323,11 @@ describeWithDb("analytics month cache invalidation", () => {
     await db.query(`UPDATE refunds SET status = 'succeeded' WHERE id = $1`, [refund]);
     expect(await cachedMonths(propertyId)).toEqual(["2031-04"]);
   });
+
+  test("the booking-months helper is STABLE: it reads the time zone database", async () => {
+    const { rows } = await db.query(
+      `SELECT provolatile FROM pg_proc WHERE oid = 'app.analytics_booking_months(timestamptz, timestamptz, date, date)'::regprocedure`,
+    );
+    expect(rows[0].provolatile).toBe("s");
+  });
 });
