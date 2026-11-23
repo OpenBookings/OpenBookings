@@ -86,3 +86,33 @@ describe("deriveGuests", () => {
     expect(ok(view.medianPartySize).value).toBeNull();
   });
 });
+
+describe("deriveGuests guest window", () => {
+  test("facts without guest details are left out of every guest widget", () => {
+    const f = facts([
+      ...from("NL", 6),
+      ...from("", 20, { hasGuestDetails: false, guestKey: "", adults: 0, children: 0 }),
+    ]);
+    const view = deriveGuests(ctx(f, SEPT));
+    expect(ok(view.countries)).toEqual([{ key: "NL", label: "Netherlands", value: 6, sharePct: 100 }]);
+    expect(view.countries).toMatchObject({ ok: true, sample: 6 });
+  });
+
+  test("a guest whose earlier stay has no guest details counts as new", () => {
+    const early = booking({ guestKey: "g1", checkIn: "2026-01-10", checkOut: "2026-01-12", createdAt: "2026-01-01T10:00:00Z", hasGuestDetails: false });
+    const later = booking({ guestKey: "g1", checkIn: "2026-09-10", checkOut: "2026-09-12", createdAt: "2026-09-01T10:00:00Z" });
+    const view = deriveGuests(ctx(facts([early, later]), SEPT));
+    expect(ok(view.returning).value).toBe(0);
+  });
+
+  test("windowStart is reported", () => {
+    const f = facts(from("NL", 6));
+    expect(deriveGuests({ ...ctx(f, SEPT), guestWindowStart: "2024-11-23" }).windowStart).toBe("2024-11-23");
+    expect(deriveGuests(ctx(f, SEPT)).windowStart).toBeNull();
+  });
+
+  test("an unknown country is labelled Unknown", () => {
+    const f = facts([...from("ZZ", 6), ...from("NL", 6)]);
+    expect(ok(deriveGuests(ctx(f, SEPT)).countries).map((r) => r.label).sort()).toEqual(["Netherlands", "Unknown"]);
+  });
+});

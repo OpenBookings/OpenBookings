@@ -22,6 +22,7 @@ export function booking(over: Partial<BookingFact> = {}): BookingFact {
     children: 0,
     guestKey: `guest-${counter}`,
     guestCountry: "NL",
+    hasGuestDetails: true,
     roomId: "standard",
     ratePlanId: "flex",
     cancellationFeeCents: 0,

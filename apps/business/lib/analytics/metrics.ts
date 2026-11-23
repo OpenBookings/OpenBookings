@@ -112,6 +112,11 @@ export function earliestFactDate(facts: Facts): IsoDate | null {
   return earliest;
 }
 
+/** The hotel's first booking date: the context's when given, else the earliest in the facts. */
+export function earliestBooking(ctx: { facts: Facts; earliestBooking?: IsoDate | null }): IsoDate | null {
+  return ctx.earliestBooking === undefined ? earliestFactDate(ctx.facts) : ctx.earliestBooking;
+}
+
 export function groupSum<T>(rows: T[], key: (row: T) => string, value: (row: T) => number) {
   const groups = new Map<string, number>();
   for (const row of rows) groups.set(key(row), (groups.get(key(row)) ?? 0) + value(row));

@@ -1491,3 +1491,39 @@ export const commissionEntries = pgTable(
     index("commission_entries_booking_idx").on(table.bookingId),
   ],
 );
+
+/**
+ * One computed month of analytics facts per hotel (0057). Emptied by triggers
+ * whenever a booking, refund, commission entry, inventory row or room that
+ * feeds the month changes; `generation` is the value of
+ * `analytics_month_generation` the build started from.
+ */
+export const analyticsMonthCache = pgTable(
+  "analytics_month_cache",
+  {
+    hotelId: uuid("hotel_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    version: integer("version").notNull(),
+    generation: bigint("generation", { mode: "bigint" }).notNull(),
+    /** The hotel sentinel generation (`analytics_month_generation` month 0001-01-01) at build time. */
+    hotelGeneration: bigint("hotel_generation", { mode: "bigint" }).notNull().default(sql`0`),
+    facts: jsonb("facts").notNull(),
+    builtAt: timestamp("built_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.hotelId, table.month] })],
+);
+
+/** Bumped by the same triggers on every touch of a month, so a build that started before a change is not stored (0057). */
+export const analyticsMonthGeneration = pgTable(
+  "analytics_month_generation",
+  {
+    hotelId: uuid("hotel_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    generation: bigint("generation", { mode: "bigint" }).notNull().default(sql`0`),
+  },
+  (table) => [primaryKey({ columns: [table.hotelId, table.month] })],
+);

@@ -4,7 +4,11 @@ import type { CompareMode, DateRange, Period } from "./period";
 /** Calendar date, `YYYY-MM-DD`. Every date in this module is one of these. */
 export type IsoDate = string;
 
-/** ISO 8601 instant. Booking creation and cancellation carry a time. */
+/**
+ * ISO 8601 instant. Booking creation and cancellation carry a time. Real facts
+ * carry the Amsterdam offset (`…T00:30:00.000+01:00`), so the first ten
+ * characters are always the host's calendar date.
+ */
 type IsoInstant = string;
 
 // ─────────────────────────────────────────────
@@ -28,6 +32,8 @@ export interface BookingFact {
   guestKey: string;
   /** ISO-3166-1 alpha-2. */
   guestCountry: string;
+  /** False when guest fields are outside the guest window or stripped for the cache. */
+  hasGuestDetails: boolean;
   roomId: string;
   ratePlanId: string;
   /** Net room revenue per night, one entry per night. Sums to netRevenueCents. */
@@ -214,6 +220,8 @@ export interface PricingView {
 }
 
 export interface GuestsView {
+  /** First booking date guest details cover; null when they cover all history (demo). */
+  windowStart: IsoDate | null;
   returning: Widget<StatValue>;
   medianPartySize: Widget<StatValue>;
   countries: Widget<Share[]>;
@@ -232,6 +240,13 @@ export interface DeriveContext {
   comparison: DateRange | null;
   today: IsoDate;
   granularity: Granularity;
+  /** First booking date with guest details; absent or null means all history. */
+  guestWindowStart?: IsoDate | null;
+  /**
+   * The hotel's first booking date over its whole history, not just the loaded
+   * window. Absent: taken from the facts (demo and direct derivation calls).
+   */
+  earliestBooking?: IsoDate | null;
 }
 
 export interface PageViews {
