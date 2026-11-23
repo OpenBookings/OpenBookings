@@ -11,8 +11,8 @@ import { availability, responseLine, waitEstimate, type InboxHours } from "./wor
 const BOOKING = "0a1b2c3d-1111-4222-8333-444455556666";
 
 describe("references", () => {
-  test("short booking ref is # plus the first 8 characters", () => {
-    expect(shortBookingRef(BOOKING.toUpperCase())).toBe("#0a1b2c3d");
+  test("booking ref is the OB reference", () => {
+    expect(shortBookingRef(BOOKING)).toBe("OB-0A1B-2C3D");
     expect(ticketRef(1234)).toBe("#1234");
     expect(isUuid(BOOKING)).toBe(true);
     expect(isUuid("RES-1041")).toBe(false);

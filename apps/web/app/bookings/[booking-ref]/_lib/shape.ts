@@ -7,6 +7,7 @@ import {
   type NightValue,
 } from '@openbookings/pricing';
 import { buildTimeline, formatWhen, type Timeline } from './timeline';
+import { bookingReference } from '@openbookings/db/booking-reference';
 
 /** One row of the guest booking query (load.ts). Timestamps arrive as ISO text. */
 export type GuestBookingRow = {
@@ -125,7 +126,7 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
 
   return {
     id: row.booking_id,
-    reference: row.booking_id.slice(0, 8).toUpperCase(),
+    reference: bookingReference(row.booking_id),
     propertyName: row.property_name,
     city: row.city,
     checkInDate: row.check_in_date,

@@ -37,7 +37,8 @@ function bookingRow(overrides: Record<string, unknown> = {}) {
 beforeEach(resetMocks);
 
 describe("normalizeBookingReference", () => {
-  it("accepts the full UUID and the short #prefix form", () => {
+  it("accepts the OB reference, the full UUID and the old #prefix form", () => {
+    expect(normalizeBookingReference("OB-0A1B-2C3D")).toBe("0a1b2c3d");
     expect(normalizeBookingReference(BOOKING_ID.toUpperCase())).toBe(BOOKING_ID);
     expect(normalizeBookingReference("#0A1B2C3D")).toBe("0a1b2c3d");
     expect(normalizeBookingReference(" 0a1b2c3d ")).toBe("0a1b2c3d");
@@ -57,7 +58,7 @@ describe("host tools", () => {
     sqlResults.push([bookingRow()]);
     const result = await HOST_TOOLS.get_booking.execute({ booking_reference: "#0a1b2c3d" }, ctx);
 
-    expect(result).toMatchObject({ found: true, booking: { short_reference: "#0a1b2c3d" } });
+    expect(result).toMatchObject({ found: true, booking: { booking_reference: "OB-0A1B-2C3D" } });
     const call = sqlCalls[0]!;
     expect(call.values).toEqual(["user_host_1", "0a1b2c3d", "org_a"]);
     expect(call.text).toContain("p.organization_id = $3");

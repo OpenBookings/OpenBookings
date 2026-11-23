@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { TriangleAlertIcon, X } from "lucide-react";
 import { reviewBand } from "@openbookings/pricing";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import type { ReviewReply } from "@openbookings/db/reviews";
 import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
   const report = () =>
     support?.openIntake({
       category: "bookings",
-      linked: { type: "booking", id: review.bookingId, label: `Booking #${review.bookingId.slice(0, 8)}`, detail: `Review by ${review.authorName}` },
+      linked: { type: "booking", id: review.bookingId, label: `Booking ${bookingReference(review.bookingId)}`, detail: `Review by ${review.authorName}` },
       locked: true,
     });
 

@@ -1,5 +1,6 @@
 import type { CancellationTier } from "@openbookings/pricing";
 import { query } from "./index";
+import { bookingReferenceMatchSql, parseBookingReference } from "./booking-reference";
 
 /**
  * Reservation lookups for the support bot (apps/support-bot). These return
@@ -102,8 +103,6 @@ export const ROOM_CENTS_JSON = `
   )::bigint,
   'pay_at_property_cents', round(r.pay_at_property_amount * 100)::bigint`;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const RESERVATION_SELECT = `
   SELECT
     b.id::text AS booking_id,
@@ -149,17 +148,17 @@ const RESERVATION_SELECT = `
 `;
 
 /**
- * Look up a booking by its reference (the booking id guests receive in their
- * confirmation). Returns null when the reference is not a valid uuid or no
- * booking matches.
+ * Look up a booking by its reference: the `OB-B7B0-2A1C` guests see, its old
+ * 8-character form, or the full booking id. Returns null when the input can't
+ * be a reference or no booking matches.
  */
 export async function findReservationByReference(
   bookingReference: string,
 ): Promise<SupportReservation | null> {
-  const ref = bookingReference.trim();
-  if (!UUID_RE.test(ref)) return null;
+  const ref = parseBookingReference(bookingReference);
+  if (!ref) return null;
   const rows = await query<SupportReservation>(
-    `${RESERVATION_SELECT} WHERE b.id = $1`,
+    `${RESERVATION_SELECT} WHERE ${bookingReferenceMatchSql("b.id", "$1")}`,
     [ref],
   );
   return rows[0] ?? null;
