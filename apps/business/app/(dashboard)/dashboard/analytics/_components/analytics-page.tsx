@@ -12,7 +12,9 @@ import {
 import { getReadiness } from "@/lib/analytics/readiness-query";
 import { evaluateReadiness, NOT_STARTED, type ReadinessItem } from "@/lib/analytics/readiness";
 import type { AnyPageData, PageData } from "@/lib/analytics/types";
+import { realFactsSource } from "@/lib/analytics/real-source";
 import { getServerSession } from "@/lib/auth";
+import { getCurrentProperty } from "@/lib/current-property";
 import { pageAccess } from "@/lib/page-access";
 import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { AnalyticsBody } from "./analytics-body";
@@ -67,12 +69,13 @@ export async function AnalyticsPage<P extends PageId>({
   const demo = isDemoParam(params.demo);
   const period = parsePeriodParams(params, today);
 
-  const data = await getPageData(page, {
-    period,
-    compare: parseCompareParam(params.compare),
-    today,
-    demo,
-  });
+  // The hotel comes from the session, here and nowhere else.
+  const current = await getCurrentProperty();
+  const data = await getPageData(
+    page,
+    { period, compare: parseCompareParam(params.compare), today, demo },
+    current ? realFactsSource(current.propertyId) : undefined,
+  );
   const meta = PAGES[page];
 
   const neverBooked = !data.hasAnyBookings;

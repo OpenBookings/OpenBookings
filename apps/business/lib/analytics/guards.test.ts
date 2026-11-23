@@ -38,7 +38,7 @@ describe("analytics guards", () => {
    */
   test("no property identifier outside the readiness query", async () => {
     expect(
-      await offenders(/propertyId|property_id|params\.property\b|["']property["']/, ["readiness-query.ts", "readiness-loader.ts", "readiness-loader.test.ts", "facts-query.ts", "facts-query.db.test.ts", "facts-cache.ts", "facts-cache.test.ts", "facts-cache-store.ts", "facts-cache-store.db.test.ts", "guest-details.ts", "guest-details.db.test.ts"]),
+      await offenders(/propertyId|property_id|params\.property\b|["']property["']/, ["readiness-query.ts", "readiness-loader.ts", "readiness-loader.test.ts", "facts-query.ts", "facts-query.db.test.ts", "facts-cache.ts", "facts-cache.test.ts", "facts-cache-store.ts", "facts-cache-store.db.test.ts", "guest-details.ts", "guest-details.db.test.ts", "real-source.ts", "real-source.test.ts", "analytics-page.tsx"]),
     ).toEqual([]);
   });
 
