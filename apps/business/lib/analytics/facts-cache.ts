@@ -82,6 +82,34 @@ function monthsBetween(from: IsoDate, to: IsoDate): IsoDate[] {
   return out;
 }
 
+/** Months grouped into runs of consecutive months, in order. */
+function consecutiveRuns(months: IsoDate[]): IsoDate[][] {
+  const runs: IsoDate[][] = [];
+  for (const m of months) {
+    const run = runs[runs.length - 1];
+    if (run && monthsBetween(run[run.length - 1], m).length === 2) run.push(m);
+    else runs.push([m]);
+  }
+  return runs;
+}
+
+/**
+ * The live loader's window rule applied in memory: bookings made in the window
+ * (Amsterdam booking date) or with a night in it; nights and capacity by date.
+ * A month sliced from a longer load is exactly what loading that month gives.
+ */
+function sliceToWindow(facts: Facts, window: DateRange): Facts {
+  const inWindow = (d: IsoDate) => d >= window.from && d <= window.to;
+  return {
+    ...facts,
+    bookings: facts.bookings.filter(
+      (b) => inWindow(bookingDate(b)) || (b.checkIn <= window.to && b.checkOut > window.from),
+    ),
+    nights: facts.nights.filter((n) => inWindow(n.date)),
+    inventory: facts.inventory.filter((i) => inWindow(i.date)),
+  };
+}
+
 export async function assembleFacts(
   propertyId: string,
   window: DateRange,
@@ -99,31 +127,41 @@ export async function assembleFacts(
 
   const monthWindow = (m: IsoDate): DateRange => ({ from: m, to: endOfMonth(m) });
 
-  const [built, tail, names] = await Promise.all([
-    mapLimit(missing, BUILD_CONCURRENCY, async (m) => {
-        const facts = stripForStorage(await deps.loadLive(propertyId, monthWindow(m)));
-        try {
-          await deps.store.write(propertyId, m, { month: gens!.months.get(m) ?? 0, hotel: gens!.hotel }, facts);
-        } catch (error) {
-          // The cache is an optimisation: a failed write must not fail the page.
-          console.error("analytics month cache write failed", error);
-        }
-        return [m, facts] as const;
+  // One ranged load per run of consecutive missing months, sliced into months
+  // in memory: a cold five-year view is a handful of queries, not 60 builds.
+  const runs = consecutiveRuns(missing);
+  const [builtRuns, tail, names] = await Promise.all([
+    mapLimit(runs, BUILD_CONCURRENCY, async (run) => {
+      const loaded = stripForStorage(
+        await deps.loadLive(propertyId, { from: run[0], to: endOfMonth(run[run.length - 1]) }),
+      );
+      return Promise.all(
+        run.map(async (m) => {
+          const facts = sliceToWindow(loaded, monthWindow(m));
+          try {
+            // Written with the generations read before the load: a change since is refused.
+            await deps.store.write(propertyId, m, { month: gens!.months.get(m) ?? 0, hotel: gens!.hotel }, facts);
+          } catch (error) {
+            // The cache is an optimisation: a failed write must not fail the page.
+            console.error("analytics month cache write failed", error);
+          }
+          return [m, facts] as const;
+        }),
+      );
     }),
-    Promise.all(
-      live.map(async (m) => [m, await deps.loadLive(propertyId, {
-        from: m < window.from ? window.from : m,
-        to: endOfMonth(m) > window.to ? window.to : endOfMonth(m),
-      })] as const),
-    ),
+    // The live months always run from the current month to the window's end: one load.
+    live.length === 0
+      ? Promise.resolve(null)
+      : deps.loadLive(propertyId, { from: live[0] < window.from ? window.from : live[0], to: window.to }),
     deps.loadNames(propertyId),
   ]);
+  const built = builtRuns.flat();
 
   // Oldest month first, live months last, so the live copy of a booking wins.
   const slices = new Map<IsoDate, Facts>();
   for (const [m, f] of cached) slices.set(m, f);
   for (const [m, f] of built) slices.set(m, f);
-  for (const [m, f] of tail) slices.set(m, f);
+  if (tail) slices.set(live[0], tail);
   const ordered = [...slices.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, f]) => f);
 
   const bookings = new Map<string, BookingFact>();
@@ -135,16 +173,14 @@ export async function assembleFacts(
     for (const i of f.inventory) inventory.set(`${i.roomId}|${i.date}`, i);
   }
 
-  const inWindow = (d: IsoDate) => d >= window.from && d <= window.to;
-  return {
-    bookings: [...bookings.values()].filter(
-      (b) => inWindow(bookingDate(b)) || (b.checkIn <= window.to && b.checkOut > window.from),
-    ),
-    nights: [...nights.values()].filter((n) => inWindow(n.date)),
-    inventory: [...inventory.values()].filter((i) => inWindow(i.date)),
+  const merged: Facts = {
+    bookings: [...bookings.values()],
+    nights: [...nights.values()],
+    inventory: [...inventory.values()],
     roomTypeNames: names.roomTypeNames,
     ratePlanNames: names.ratePlanNames,
   };
+  return sliceToWindow(merged, window);
 }
 
 /** The production wiring: Postgres store and the live loader. */

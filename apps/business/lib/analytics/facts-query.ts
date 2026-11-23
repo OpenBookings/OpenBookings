@@ -87,23 +87,23 @@ export async function loadNames(
 export async function loadWindowFacts(propertyId: string, window: DateRange): Promise<Facts> {
   const [reservationRows, rooms, ratePlans] = await Promise.all([
     query<ReservationSql>(
-      `SELECT * FROM (
-         SELECT r.id AS reservation_id, r.booking_id,
-                (row_number() OVER (PARTITION BY r.booking_id ORDER BY r.created_at, r.id) - 1) AS sort_index,
-                b.status::text AS booking_status,
-                coalesce(b.confirmed_at, b.created_at) AS booked_ts,
-                ${amsInstant("coalesce(b.confirmed_at, b.created_at)")} AS booked_at,
-                b.check_in_date::text AS check_in, b.check_out_date::text AS check_out,
-                r.total_nights, b.departed_early_on::text AS departed_early_on,
-                ${amsInstant("r.cancelled_at")} AS reservation_cancelled_at,
-                ${amsInstant("b.cancelled_at")} AS booking_cancelled_at,
-                r.room_id, r.rate_plan_id, r.price_per_night, r.nights, r.vat_split
-           FROM reservations r
-           JOIN bookings b ON b.id = r.booking_id
-          WHERE b.hotel_id = $1 AND b.status <> 'pending'
-       ) x
-       WHERE (x.booked_ts AT TIME ZONE '${AMS}')::date BETWEEN $2::date AND $3::date
-          OR (x.check_in::date <= $3::date AND x.check_out::date > $2::date)`,
+      // The window filter reads booking columns only, so it keeps or drops a
+      // booking with all its reservations: sort_index still counts every
+      // non-pending reservation of a booking that qualifies.
+      `SELECT r.id AS reservation_id, r.booking_id,
+              (row_number() OVER (PARTITION BY r.booking_id ORDER BY r.created_at, r.id) - 1) AS sort_index,
+              b.status::text AS booking_status,
+              ${amsInstant("coalesce(b.confirmed_at, b.created_at)")} AS booked_at,
+              b.check_in_date::text AS check_in, b.check_out_date::text AS check_out,
+              r.total_nights, b.departed_early_on::text AS departed_early_on,
+              ${amsInstant("r.cancelled_at")} AS reservation_cancelled_at,
+              ${amsInstant("b.cancelled_at")} AS booking_cancelled_at,
+              r.room_id, r.rate_plan_id, r.price_per_night, r.nights, r.vat_split
+         FROM reservations r
+         JOIN bookings b ON b.id = r.booking_id
+        WHERE b.hotel_id = $1 AND b.status <> 'pending'
+          AND ((coalesce(b.confirmed_at, b.created_at) AT TIME ZONE '${AMS}')::date BETWEEN $2::date AND $3::date
+               OR (b.check_in_date <= $3::date AND b.check_out_date > $2::date))`,
       [propertyId, window.from, window.to],
     ),
     queryRooms(propertyId),

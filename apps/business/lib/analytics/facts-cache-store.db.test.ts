@@ -135,4 +135,60 @@ describeWithDb("analytics month cache store", () => {
       expect({ pass, ids: jan.bookings.map((b) => b.id) }).toEqual({ pass, ids: [] });
     }
   });
+
+  test("a multi-month window, cold and then warm, equals one live load of the same window", async () => {
+    const hotel = await seed(); // booked 1 Mar, staying 10–12 Mar
+    const book = async (checkIn: string, nights: number, confirmedAt: string, rooms = 1) => {
+      const made = await seedBooking(db, hotel, { checkIn, nights, rooms, userId: await seedGuest(db) });
+      await db.query(`UPDATE bookings SET status = 'confirmed', confirmed_at = $2::timestamptz WHERE id = $1`, [
+        made.bookingId,
+        confirmedAt,
+      ]);
+      return made;
+    };
+    await book("2031-01-30", 4, "2030-12-20T10:00:00Z"); // made before the window, stays across Jan/Feb
+    await book("2031-05-02", 2, "2031-01-31T23:30:00Z"); // made 00:30 on 1 Feb Amsterdam, stays after the window
+    const pair = await book("2031-02-27", 3, "2031-02-10T09:00:00Z", 2); // two rooms, across Feb/Mar
+    await db.query(
+      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
+       VALUES ($1, NULL, 'goodwill', 75, 0, 75, 'succeeded', $2)`,
+      [pair.bookingId, `t-${crypto.randomUUID()}`],
+    );
+    await db.query(`UPDATE reservations SET cancelled_at = '2031-02-20T10:00:00Z' WHERE id = $1`, [pair.reservationIds[1]]);
+    const noShow = await book("2031-03-20", 2, "2031-03-01T10:00:00Z");
+    await db.query(`UPDATE bookings SET status = 'no_show' WHERE id = $1`, [noShow.bookingId]);
+    const early = await book("2031-04-10", 4, "2031-03-15T10:00:00Z"); // runs into the live month
+    await db.query(`UPDATE bookings SET departed_early_on = '2031-04-11' WHERE id = $1`, [early.bookingId]);
+    await db.query(`INSERT INTO room_inventory (room_id, date, total_rooms, blocked_rooms) VALUES ($1, '2031-03-15', 7, 2)`, [
+      hotel.roomId,
+    ]);
+
+    const WINDOW = { from: "2031-01-01", to: "2031-04-30" };
+    const TODAY = "2031-04-15";
+    const sorted = (f: Awaited<ReturnType<typeof loadWindowFacts>>) => ({
+      ...f,
+      bookings: [...f.bookings].sort((a, b) => a.id.localeCompare(b.id)),
+      nights: [...f.nights].sort((a, b) => `${a.bookingId}${a.date}`.localeCompare(`${b.bookingId}${b.date}`)),
+      inventory: [...f.inventory].sort((a, b) => `${a.roomId}${a.date}`.localeCompare(`${b.roomId}${b.date}`)),
+    });
+    const live = sorted(await loadWindowFacts(hotel.propertyId, WINDOW));
+    expect(live.bookings.length).toBe(7);
+
+    const deps = { store: createMonthStore(), loadLive: loadWindowFacts, loadNames };
+    const cold = await assembleFacts(hotel.propertyId, WINDOW, TODAY, deps);
+    const stored = await db.query(`SELECT to_char(month, 'YYYY-MM') AS m FROM analytics_month_cache WHERE hotel_id = $1 ORDER BY month`, [
+      hotel.propertyId,
+    ]);
+    expect(stored.rows.map((r) => r.m)).toEqual(["2031-01", "2031-02", "2031-03"]);
+    expect(sorted(cold)).toEqual(live);
+
+    const warm = await assembleFacts(hotel.propertyId, WINDOW, TODAY, {
+      ...deps,
+      loadLive: async (p, w) => {
+        if (w.from < "2031-04-01") throw new Error("finished months must come from the cache");
+        return loadWindowFacts(p, w);
+      },
+    });
+    expect(sorted(warm)).toEqual(live);
+  });
 });

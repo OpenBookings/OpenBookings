@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { assembleFacts, FACTS_CACHE_VERSION, type MonthStore } from "./facts-cache";
-import type { DateRange } from "./period";
+import { enumerateDates, type DateRange } from "./period";
 import type { BookingFact, Facts, IsoDate } from "./types";
 
 const HOTEL = "hotel-1";
@@ -29,7 +29,8 @@ function fakeLive(all: BookingFact[], names = { r1: "Room" }) {
         return { date: d, roomId: b.roomId, ratePlanId: b.ratePlanId, bookingId: b.id, revenueCents: 100 };
       }),
     ).filter((n) => n.date >= w.from && n.date <= w.to);
-    const inventory = [{ date: w.from, roomId: "r1", unitsTotal: 5, unitsOutOfOrder: 0 }];
+    // Capacity for every date of the window, as the real loader gives it.
+    const inventory = enumerateDates(w.from, w.to).map((date) => ({ date, roomId: "r1", unitsTotal: 5, unitsOutOfOrder: 0 }));
     return { bookings, nights, inventory, roomTypeNames: names, ratePlanNames: { p1: `plan-${w.from}` } };
   };
   return { loadLive, calls };
@@ -69,7 +70,8 @@ describe("assembleFacts", () => {
     const live = fakeLive([booking("a", "2031-04-10", "2031-04-11", "2031-04-01T10:00:00Z"), booking("c", "2031-06-10", "2031-06-11", "2031-06-01T10:00:00Z")]);
     const m = memoryStore();
     await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
-    expect(live.calls).toHaveLength(3);
+    // April and May are one run of finished months: one ranged load, then June live.
+    expect(live.calls).toEqual([window("2031-04-01", "2031-05-31"), window("2031-06-01", "2031-06-30")]);
     live.calls.length = 0;
     const second = await assembleFacts(HOTEL, window("2031-04-01", "2031-06-30"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
     expect(live.calls).toEqual([window("2031-06-01", "2031-06-30")]);
@@ -174,19 +176,55 @@ describe("assembleFacts", () => {
     expect(renamed.ratePlanNames).toEqual({ p1: "New plan" });
   });
 
-  test("a cold cache builds at most 3 months at a time", async () => {
+  test("a cold cache loads each run of missing months once, at most 3 runs at a time", async () => {
     const m = memoryStore();
+    // Every other month already cached: twelve months, six separate runs.
+    const empty: Facts = { bookings: [], inventory: [], nights: [], roomTypeNames: {}, ratePlanNames: {} };
+    for (const month of ["2030-07-01", "2030-09-01", "2030-11-01", "2031-01-01", "2031-03-01", "2031-05-01"]) {
+      m.rows.set(month, { version: FACTS_CACHE_VERSION, generation: 0, hotel: 0, facts: empty });
+    }
     let running = 0;
     let peak = 0;
-    const loadLive = async (): Promise<Facts> => {
+    const calls: DateRange[] = [];
+    const loadLive = async (_p: string, w: DateRange): Promise<Facts> => {
+      calls.push(w);
       running++;
       peak = Math.max(peak, running);
       await new Promise((r) => setTimeout(r, 5));
       running--;
-      return { bookings: [], nights: [], inventory: [], roomTypeNames: {}, ratePlanNames: {} };
+      return empty;
     };
     await assembleFacts(HOTEL, window("2030-06-01", "2031-05-31"), TODAY, { store: m.store, loadLive, loadNames });
     expect(m.rows.size).toBe(12);
+    expect(calls).toHaveLength(6);
     expect(peak).toBe(3);
+  });
+
+  test("a cold five-year view is one load per run, not one per month", async () => {
+    const m = memoryStore();
+    const live = fakeLive([]);
+    await assembleFacts(HOTEL, window("2026-07-01", "2031-06-15"), TODAY, { store: m.store, loadLive: live.loadLive, loadNames });
+    expect(live.calls).toEqual([window("2026-07-01", "2031-05-31"), window("2031-06-01", "2031-06-15")]);
+    expect(m.rows.size).toBe(59);
+  });
+
+  test("each month sliced from a ranged load is what loading that month alone gives", async () => {
+    const all = [
+      booking("a", "2031-01-30", "2031-02-02", "2030-12-20T10:00:00Z", { nights: 3, nightlyNetCents: [100, 100, 100] }),
+      booking("b", "2031-03-10", "2031-03-11", "2031-01-31T23:59:00+01:00"),
+      booking("c", "2031-04-28", "2031-05-03", "2031-02-01T00:30:00+01:00", { nights: 5, nightlyNetCents: [100, 100, 100, 100, 100] }),
+    ];
+    const ranged = memoryStore();
+    const live = fakeLive(all);
+    await assembleFacts(HOTEL, window("2031-01-01", "2031-04-30"), TODAY, { store: ranged.store, loadLive: live.loadLive, loadNames });
+    expect(live.calls).toEqual([window("2031-01-01", "2031-04-30")]);
+    for (const month of ["2031-01-01", "2031-02-01", "2031-03-01", "2031-04-01"]) {
+      const alone = memoryStore();
+      const one = fakeLive(all);
+      const to = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+      await assembleFacts(HOTEL, window(month, to), TODAY, { store: alone.store, loadLive: one.loadLive, loadNames });
+      const sort = (f: Facts) => ({ ...f, bookings: [...f.bookings].sort((x, y) => x.id.localeCompare(y.id)) });
+      expect({ month, facts: sort(ranged.rows.get(month)!.facts) }).toEqual({ month, facts: sort(alone.rows.get(month)!.facts) });
+    }
   });
 });
