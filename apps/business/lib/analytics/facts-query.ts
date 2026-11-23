@@ -210,7 +210,9 @@ function toReservationRows(
   };
 
   return rows.map((r) => {
-    const nightsJson = (r.nights ?? []).map((n) => ({ date: n.date, price: Number(n.price) }));
+    // `|| 0`: an unreadable price must not become NaN, which JSON stores as
+    // null, so a cached month would differ from the same month read live.
+    const nightsJson = (r.nights ?? []).map((n) => ({ date: n.date, price: Number(n.price) || 0 }));
     const pricePerNight = Number(r.price_per_night);
     const roomsTotalCents =
       nightsJson.length > 0

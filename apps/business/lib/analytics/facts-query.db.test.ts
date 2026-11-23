@@ -352,4 +352,16 @@ describeWithDb("live analytics facts", () => {
     expect(byId.get(whole.reservationIds[0])!.cancelledAt!.slice(0, 10)).toBe("2031-03-01");
     expect(byId.get(single.reservationIds[0])!.cancelledAt!.slice(0, 10)).toBe("2031-07-01");
   });
+
+  test("a night without a readable price counts as 0, never NaN, so cached JSON and live agree", async () => {
+    const a = await seedProperty(db);
+    const made = await booked(a, "2031-03-10", 2, "2031-03-01");
+    await db.query(`UPDATE reservations SET nights = $2::jsonb WHERE booking_id = $1`, [
+      made.bookingId,
+      JSON.stringify([{ date: "2031-03-10", price: 100 }, { date: "2031-03-11", price: "n/a" }]),
+    ]);
+    const facts = await loadWindowFacts(a.propertyId, { from: "2031-03-01", to: "2031-03-31" });
+    expect(facts.bookings[0].nightlyNetCents).toEqual([10_000, 0]);
+    expect(JSON.parse(JSON.stringify(facts))).toEqual(facts);
+  });
 });

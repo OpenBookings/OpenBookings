@@ -8,6 +8,7 @@
  * hotel-wide generation all still match. A build reads both generations before
  * loading and the store refuses the write if either has moved since.
  */
+import * as Sentry from "@sentry/nextjs";
 import { loadNames, loadWindowFacts } from "./facts-query";
 import { createMonthStore } from "./facts-cache-store";
 import { bookingDate } from "./metrics";
@@ -144,6 +145,7 @@ export async function assembleFacts(
           } catch (error) {
             // The cache is an optimisation: a failed write must not fail the page.
             console.error("analytics month cache write failed", error);
+            Sentry.captureException(error, { tags: { area: "analytics", surface: "month-cache", phase: "write" } });
           }
           return [m, facts] as const;
         }),
