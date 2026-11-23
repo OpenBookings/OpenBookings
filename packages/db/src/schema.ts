@@ -1504,6 +1504,8 @@ export const analyticsMonthCache = pgTable(
     month: date("month").notNull(),
     version: integer("version").notNull(),
     generation: bigint("generation", { mode: "bigint" }).notNull(),
+    /** The hotel sentinel generation (`analytics_month_generation` month 0001-01-01) at build time. */
+    hotelGeneration: bigint("hotel_generation", { mode: "bigint" }).notNull().default(sql`0`),
     facts: jsonb("facts").notNull(),
     builtAt: timestamp("built_at", { withTimezone: true }).notNull().defaultNow(),
   },

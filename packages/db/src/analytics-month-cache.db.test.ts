@@ -115,6 +115,26 @@ describeWithDb("analytics month cache invalidation", () => {
     expect((await generations(a.propertyId))["2031-03"]).toBe(1);
   });
 
+  test("rooms change bumps the hotel sentinel generation", async () => {
+    const a = await bookedHotel();
+    const b = await bookedHotel();
+    const sentinel = async (hotel: string) =>
+      Number(
+        (
+          await db.query(
+            `SELECT generation FROM analytics_month_generation WHERE hotel_id = $1 AND month = '0001-01-01'`,
+            [hotel],
+          )
+        ).rows[0]?.generation ?? 0,
+      );
+    expect(await sentinel(a.propertyId)).toBe(0);
+
+    await db.query(`UPDATE rooms SET total_units = 9 WHERE id = $1`, [a.roomId]);
+
+    expect(await sentinel(a.propertyId)).toBe(1);
+    expect(await sentinel(b.propertyId)).toBe(0);
+  });
+
   test("another hotel's cache is untouched by a booking change", async () => {
     const a = await bookedHotel();
     const b = await bookedHotel();

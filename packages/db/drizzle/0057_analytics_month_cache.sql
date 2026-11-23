@@ -23,6 +23,16 @@
 -- creation or archiving moves occupancy in every month, so it touches the
 -- whole hotel.
 --
+-- Hotel-wide changes (a room's units, creation or archiving) cannot name the
+-- months they move, and a month that was never cached has no generation row
+-- to bump. So analytics_touch_hotel also bumps a sentinel row of
+-- analytics_month_generation with month = '0001-01-01'. The contract for
+-- readers and builders: before a build, read BOTH the month's generation and
+-- the hotel's sentinel generation (0 when the row is absent). The cache row
+-- stores them as `generation` (the month generation) and `hotel_generation`
+-- (the sentinel generation) at build time. A build may be stored, and a cached
+-- row served, only when both still equal the values read before the build.
+--
 -- The trigger functions are SECURITY DEFINER: a guest cancelling their own
 -- booking must still be able to empty the host's cache, which the guest's role
 -- may not otherwise read or write. They keep a pinned search_path.
@@ -40,6 +50,7 @@ CREATE TABLE IF NOT EXISTS analytics_month_cache (
   month      date        NOT NULL,
   version    integer     NOT NULL,
   generation bigint      NOT NULL,
+  hotel_generation bigint NOT NULL DEFAULT 0,
   facts      jsonb       NOT NULL,
   built_at   timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (hotel_id, month)
@@ -51,6 +62,8 @@ CREATE TABLE IF NOT EXISTS analytics_month_generation (
   generation bigint NOT NULL DEFAULT 0,
   PRIMARY KEY (hotel_id, month)
 );
+
+ALTER TABLE analytics_month_cache ADD COLUMN IF NOT EXISTS hotel_generation bigint NOT NULL DEFAULT 0;
 
 -- ---------------------------------------------------------------------------
 -- Touch functions
@@ -84,7 +97,7 @@ AS $$
   );
 $$;
 
--- Every month the hotel has a cache row or a generation for.
+-- Every month the hotel has a cache row or a generation for, and the hotel sentinel.
 CREATE OR REPLACE FUNCTION app.analytics_touch_hotel(p_hotel uuid) RETURNS void
 LANGUAGE sql SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -95,6 +108,8 @@ AS $$
       SELECT month FROM analytics_month_generation WHERE hotel_id = p_hotel
       UNION
       SELECT month FROM analytics_month_cache WHERE hotel_id = p_hotel
+      UNION
+      SELECT date '0001-01-01'
     )
   );
 $$;
