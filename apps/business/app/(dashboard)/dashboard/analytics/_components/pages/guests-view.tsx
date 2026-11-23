@@ -24,7 +24,7 @@ export function GuestsPageView({ data }: { data: PageData<"guests"> }) {
           label="Returning guests"
           widget={view.returning}
           format={(value) => formatPercent(value, 0)}
-          info="Share of bookings from guests who had stayed with you before, measured across all your history."
+          info="A guest counts as returning if they stayed with you before, within the last 24 months."
         />
         <Stat
           label="Median party size"
