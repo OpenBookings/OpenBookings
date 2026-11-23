@@ -8,6 +8,7 @@ import {
   type SplitError,
 } from "@openbookings/db";
 import { PAYMENT_FLAG_ACTIONS } from "@openbookings/stripe";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { UUID_RE } from "./search";
 
 /**
@@ -66,7 +67,7 @@ const SOURCE = {
 } as const;
 
 /** The booking reference guests and hosts see. */
-export const bookingRef = (bookingId: string) => bookingId.slice(0, 8).toUpperCase();
+export const bookingRef = bookingReference;
 
 type Row = {
   id: string;

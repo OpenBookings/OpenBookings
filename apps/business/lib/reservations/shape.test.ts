@@ -52,7 +52,7 @@ describe("toHostReservation", () => {
 
   test("a confirmed booking ahead: its rooms, policy and what the host can do", () => {
     const r = toHostReservation(row(), NOW);
-    expect(r.reference).toBe("B0000000");
+    expect(r.reference).toBe("OB-B000-0000");
     expect(r.roomName).toBe("Deluxe + Suite");
     expect(r.totalAmount).toBe(412);
     expect(r.actions).toEqual(["cancel", "goodwill_refund"]);

@@ -37,7 +37,7 @@ const NOW = new Date("2031-11-01T10:00:00Z");
 describe("toGuestBooking", () => {
   test("a confirmed booking: each room's policy, and it can be cancelled", () => {
     const b = toGuestBooking(row(), NOW);
-    expect(b.reference).toBe("B0000000");
+    expect(b.reference).toBe("OB-B000-0000");
     expect(b.canCancel).toBe(true);
     expect(b.rooms).toHaveLength(2);
     expect(b.rooms[0]).toMatchObject({ tierLabel: "Flex", paid: 376, cancelledAt: null });

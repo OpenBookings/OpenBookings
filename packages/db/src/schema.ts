@@ -630,7 +630,9 @@ export const roomClosures = pgTable(
 export const bookings = pgTable(
   "bookings",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    // app.new_booking_id() (0056): a UUID whose first 8 characters no other
+    // booking has, so `OB-XXXX-XXXX` (booking-reference.ts) is unique.
+    id: uuid("id").default(sql`app.new_booking_id()`).primaryKey(),
     hotelId: uuid("hotel_id")
       .notNull()
       .references(() => properties.id),
@@ -677,6 +679,7 @@ export const bookings = pgTable(
     index("idx_bookings_stripe_pi").on(table.stripePaymentIntentId),
     index("idx_bookings_user_id").on(table.userId),
     index("idx_bookings_check_out").on(table.checkOutDate),
+    uniqueIndex("bookings_reference_key").on(sql`left(${table.id}::text, 8)`),
   ],
 );
 

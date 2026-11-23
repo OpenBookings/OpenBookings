@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import type { trackMail } from "./tracking";
 import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, sendRefundIssued, type SendDeps } from "./booking-send";
@@ -96,7 +97,7 @@ describeWithDb("booking emails against Postgres", () => {
     expect(guestMail).toContain("€400.00");
     expect(guestMail).toContain("€12.00");
     expect(guestMail).toContain("€412.00");
-    expect(guestMail).toContain(bookingId.slice(0, 8).toUpperCase());
+    expect(guestMail).toContain(bookingReference(bookingId));
     expect(guestMail).toContain("Test &lt;Hotels&gt; BV");
     expect(guestMail).toContain("NL001");
     expect(guestMail.toLowerCase()).not.toContain("commission");

@@ -13,6 +13,8 @@ const ANONYMOUS: ToolContext = { guestEmail: null, guestEmailVerified: false };
 
 const OWN_REF = "11111111-1111-1111-1111-111111111111";
 const OTHER_REF = "22222222-2222-2222-2222-222222222222";
+/** What the bot shows for OWN_REF. */
+const OWN_OB = "OB-1111-1111";
 
 beforeEach(() => {
   resetMocks();
@@ -70,7 +72,7 @@ describe("amounts", () => {
 describe("tool authorization", () => {
   it("returns the guest's own booking by reference", async () => {
     const result = await executeTool("get_reservation", { booking_reference: OWN_REF }, GUEST);
-    expect(result).toMatchObject({ ok: true, result: { booking_reference: OWN_REF } });
+    expect(result).toMatchObject({ ok: true, result: { booking_reference: OWN_OB } });
   });
 
   it("does not return another guest's booking by reference", async () => {
@@ -99,7 +101,7 @@ describe("tool authorization", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       const bookings = (result.result as { bookings?: Array<{ booking_reference: string }> }).bookings;
-      expect(bookings?.map((b) => b.booking_reference)).toEqual([OWN_REF]);
+      expect(bookings?.map((b) => b.booking_reference)).toEqual([OWN_OB]);
     }
   });
 
@@ -136,7 +138,7 @@ describe("tool authorization", () => {
     const mixedCase = await executeTool("get_reservation", { booking_reference: OWN_REF }, GUEST);
 
     expect(result.ok).toBe(true);
-    expect(mixedCase).toMatchObject({ ok: true, result: { booking_reference: OWN_REF } });
+    expect(mixedCase).toMatchObject({ ok: true, result: { booking_reference: OWN_OB } });
   });
 
   it("treats a booking with no guest email on record as owned by nobody", async () => {
@@ -185,17 +187,28 @@ describe("get_reservation with an unverified email", () => {
     const text = JSON.stringify(result.ok && result.result);
     expect(text).toContain("booking reference");
     expect(text).not.toContain(OWN_REF);
+    expect(text).not.toContain(OWN_OB);
   });
 
   it("still lists them when Chatwoot verified the email", async () => {
     const result = await executeTool("get_reservation", {}, GUEST);
     expect(result.ok && (result.result as { found: boolean }).found).toBe(true);
-    expect(JSON.stringify(result.ok && result.result)).toContain(OWN_REF);
+    expect(JSON.stringify(result.ok && result.result)).toContain(OWN_OB);
   });
 
   it("answers about a booking named by reference when the email matches", async () => {
     const result = await executeTool("get_reservation", { booking_reference: OWN_REF }, UNVERIFIED);
-    expect(result).toMatchObject({ ok: true, result: { booking_reference: OWN_REF } });
+    expect(result).toMatchObject({ ok: true, result: { booking_reference: OWN_OB } });
+  });
+
+  it("refuses the short OB reference until the email is verified", async () => {
+    reservations.set("OB-1111-1111", { bookingId: OWN_REF, guestEmail: "guest@example.com" });
+    for (const tool of ["get_reservation", "get_payment_status", "get_cancellation_policy"] as const) {
+      const result = await executeTool(tool, { booking_reference: OWN_OB }, UNVERIFIED);
+      expect(result.ok && result.result).toMatchObject({ found: false });
+    }
+    const verified = await executeTool("get_reservation", { booking_reference: OWN_OB }, GUEST);
+    expect(verified).toMatchObject({ ok: true, result: { booking_reference: OWN_OB } });
   });
 
   it("does not answer about someone else's booking by reference, verified or not", async () => {

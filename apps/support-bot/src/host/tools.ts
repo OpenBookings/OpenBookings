@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { getPaymentSummary } from "@openbookings/stripe";
 import type { AgentProfile } from "../agent/loop";
 import { buildToolSchemas, escalateArgs, runTool, type ToolDefinition } from "../agent/tools";
@@ -43,8 +44,7 @@ const NO_VERIFIED_HOST = {
 
 function bookingView(b: HostBooking) {
   return {
-    booking_reference: b.booking_id,
-    short_reference: `#${b.booking_id.slice(0, 8)}`,
+    booking_reference: bookingReference(b.booking_id),
     status: b.status,
     check_in_date: b.check_in_date,
     check_out_date: b.check_out_date,
@@ -76,11 +76,11 @@ const getBookingArgs = z.object({
   booking_reference: z
     .string()
     .optional()
-    .describe("The booking reference: the full UUID or its first 8 characters (with or without #). Omit to list recent bookings."),
+    .describe("The booking reference, e.g. OB-B7B0-2A1C (the full booking UUID also works). Omit to list recent bookings."),
 });
 
 const bookingRefArgs = z.object({
-  booking_reference: z.string().describe("The booking reference: the full UUID or its first 8 characters."),
+  booking_reference: z.string().describe("The booking reference, e.g. OB-B7B0-2A1C (the full booking UUID also works)."),
 });
 
 export const HOST_TOOLS = {

@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { CalendarDays, ChevronRight, Hotel, Star } from "lucide-react";
 import { query } from "@openbookings/db";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { getServerSession } from "@/lib/auth";
 import { todayInEurope } from "@/lib/account/deletion";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +73,7 @@ function BookingCard({ booking, review }: { booking: GuestBookingListRow; review
             </p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
               {plural(booking.rooms, "room", "rooms")} · {plural(booking.guests, "guest", "guests")} ·{" "}
-              {euros.format(booking.total_paid)} · Ref {booking.booking_id.slice(0, 8).toUpperCase()}
+              {euros.format(booking.total_paid)} · {bookingReference(booking.booking_id)}
             </p>
           </div>
           {review ? (

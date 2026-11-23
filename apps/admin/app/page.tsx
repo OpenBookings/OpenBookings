@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,7 +90,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <TableRow key={r.id}>
                 <TableCell>
                   <Link href={`/bookings/${r.id}`} className="font-mono underline">
-                    {r.id.slice(0, 8)}
+                    {bookingReference(r.id)}
                   </Link>
                 </TableCell>
                 <TableCell>

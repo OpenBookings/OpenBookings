@@ -1,4 +1,5 @@
 import type { Queryable } from "@openbookings/db";
+import { parseBookingReference } from "@openbookings/db/booking-reference";
 
 export type QueryKind = "empty" | "uuid" | "id_prefix" | "payment_intent" | "email" | "text";
 
@@ -8,6 +9,10 @@ export function classifyQuery(q: string): { kind: QueryKind; value: string } {
   const value = q.trim();
   if (!value) return { kind: "empty", value };
   if (UUID_RE.test(value)) return { kind: "uuid", value };
+  if (/^ob/i.test(value)) {
+    const ref = parseBookingReference(value);
+    if (ref) return { kind: "id_prefix", value: ref };
+  }
   if (/^[0-9a-f-]{8,35}$/i.test(value)) return { kind: "id_prefix", value: value.toLowerCase() };
   if (value.startsWith("pi_")) return { kind: "payment_intent", value };
   if (value.includes("@")) return { kind: "email", value };
