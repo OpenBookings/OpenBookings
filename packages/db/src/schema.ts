@@ -630,7 +630,9 @@ export const roomClosures = pgTable(
 export const bookings = pgTable(
   "bookings",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    // app.new_booking_id() (0056): a UUID whose first 8 characters no other
+    // booking has, so `OB-XXXX-XXXX` (booking-reference.ts) is unique.
+    id: uuid("id").default(sql`app.new_booking_id()`).primaryKey(),
     hotelId: uuid("hotel_id")
       .notNull()
       .references(() => properties.id),
@@ -677,6 +679,7 @@ export const bookings = pgTable(
     index("idx_bookings_stripe_pi").on(table.stripePaymentIntentId),
     index("idx_bookings_user_id").on(table.userId),
     index("idx_bookings_check_out").on(table.checkOutDate),
+    uniqueIndex("bookings_reference_key").on(sql`left(${table.id}::text, 8)`),
   ],
 );
 
@@ -1487,4 +1490,40 @@ export const commissionEntries = pgTable(
     index("commission_entries_invoice_idx").on(table.invoiceId),
     index("commission_entries_booking_idx").on(table.bookingId),
   ],
+);
+
+/**
+ * One computed month of analytics facts per hotel (0057). Emptied by triggers
+ * whenever a booking, refund, commission entry, inventory row or room that
+ * feeds the month changes; `generation` is the value of
+ * `analytics_month_generation` the build started from.
+ */
+export const analyticsMonthCache = pgTable(
+  "analytics_month_cache",
+  {
+    hotelId: uuid("hotel_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    version: integer("version").notNull(),
+    generation: bigint("generation", { mode: "bigint" }).notNull(),
+    /** The hotel sentinel generation (`analytics_month_generation` month 0001-01-01) at build time. */
+    hotelGeneration: bigint("hotel_generation", { mode: "bigint" }).notNull().default(sql`0`),
+    facts: jsonb("facts").notNull(),
+    builtAt: timestamp("built_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.hotelId, table.month] })],
+);
+
+/** Bumped by the same triggers on every touch of a month, so a build that started before a change is not stored (0057). */
+export const analyticsMonthGeneration = pgTable(
+  "analytics_month_generation",
+  {
+    hotelId: uuid("hotel_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    generation: bigint("generation", { mode: "bigint" }).notNull().default(sql`0`),
+  },
+  (table) => [primaryKey({ columns: [table.hotelId, table.month] })],
 );

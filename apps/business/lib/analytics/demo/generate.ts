@@ -206,6 +206,7 @@ function drawBooking(
     children,
     guestKey: `demo-guest-${guestIndex}`,
     guestCountry: countryOf(hotel, guestIndex),
+    hasGuestDetails: true,
     roomId: plan.roomId,
     ratePlanId: plan.id,
     nightlyNetCents,

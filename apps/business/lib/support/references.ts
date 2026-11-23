@@ -1,14 +1,15 @@
 /**
  * How support refers to things.
  *
- * Booking references are a placeholder until bookings get a real
- * host-facing reference: `#` plus the first 8 characters of the booking
- * UUID, always shown with the full UUID underneath or on hover. The support
- * bot accepts either form.
+ * Booking references are `OB-XXXX-XXXX` (see @openbookings/db/booking-reference),
+ * unique per booking. The support bot accepts that, the old 8-character form
+ * and the full UUID.
  *
  * Ticket references are Chatwoot's conversation display id (`#1234`), which
  * is also what the support team searches for in Chatwoot.
  */
+
+import { bookingReference } from "@openbookings/db/booking-reference";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,7 +18,7 @@ export function isUuid(value: string | null | undefined): value is string {
 }
 
 export function shortBookingRef(bookingId: string): string {
-  return `#${bookingId.slice(0, 8).toLowerCase()}`;
+  return bookingReference(bookingId);
 }
 
 export function ticketRef(conversationId: number): string {

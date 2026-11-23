@@ -1,4 +1,5 @@
 import { getPool } from "@openbookings/db";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { getEmailClient } from "./client";
 import { sender } from "./senders";
@@ -194,9 +195,6 @@ const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
     nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
     touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amount: Number(t.amount) })),
   }));
-
-/** The short reference the guest's booking page shows. */
-const bookingReference = (bookingId: string) => bookingId.slice(0, 8).toUpperCase();
 
 /** The guest's confirmation and the host's new-booking notice. */
 export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {}): Promise<void> {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { getPageData, isDemoParam } from "./get-analytics";
+import { factsWindow, getPageData, isDemoParam } from "./get-analytics";
+import { guestWindow } from "./guest-details";
+import { addDays } from "./period";
 import { PAGE_IDS } from "./pages";
 import { resolvePeriod } from "./period";
 import type { Widget } from "./types";
@@ -92,5 +94,57 @@ describe("getPageData", () => {
     const data = await getPageData("revenue", query({ compare: "none" }));
     expect(data.comparison).toBeNull();
     expect(value(data.view.revenue).delta).toBeNull();
+  });
+});
+
+describe("factsWindow", () => {
+  test("covers period, comparison, 90 days ahead, and guest window only on guests", () => {
+    const period = custom("2026-08-01", "2026-08-31");
+    const base = factsWindow("revenue", query({ period, compare: "last-year" }));
+    expect(base.from <= "2025-08-01").toBe(true);
+    expect(base.to).toBe(addDays(TODAY, 90));
+    const guests = factsWindow("guests", query({ period, compare: "none" }));
+    expect(guests.from).toBe(guestWindow(TODAY).from);
+    expect(factsWindow("booking-patterns", query({ period, compare: "none" })).from).toBe("2026-07-01"); // the previous period
+  });
+
+  test("revenue reaches back to year to date, and last year's when comparing", () => {
+    const period = custom("2026-08-01", "2026-08-31");
+    expect(factsWindow("revenue", query({ period, compare: "none" })).from).toBe("2026-01-01");
+    expect(factsWindow("revenue", query({ period, compare: "previous" })).from).toBe("2025-01-01");
+  });
+
+  test("occupancy reaches back a year of weeks for pace", () => {
+    const period = custom("2026-08-01", "2026-08-31");
+    expect(factsWindow("occupancy", query({ period, compare: "none" })).from).toBe(addDays(TODAY, -364));
+  });
+});
+
+describe("getPageData with a source", () => {
+  const empty = { bookings: [], inventory: [], nights: [], roomTypeNames: {}, ratePlanNames: {} };
+  test("never-booked uses whole-hotel facts", async () => {
+    const data = await getPageData("revenue", query({ demo: false }), async () => ({
+      facts: empty, earliest: "2024-01-01", hasAnyBookings: true, guestWindowStart: null,
+    }));
+    expect(data.hasAnyBookings).toBe(true);
+    expect(data.periodHasBookings).toBe(false);
+  });
+  test("last-year comparison uses the source's earliest date", async () => {
+    const src = (earliest: string | null) => async () => ({
+      facts: empty, earliest, hasAnyBookings: true, guestWindowStart: null,
+    });
+    const yes = await getPageData("revenue", query({ demo: false, compare: "last-year" }), src("2024-01-01"));
+    expect(yes.canCompareLastYear).toBe(true);
+    const no = await getPageData("revenue", query({ demo: false, compare: "last-year" }), src("2026-09-01"));
+    expect(no.canCompareLastYear).toBe(false);
+  });
+  test("demo ignores the source", async () => {
+    let called = false;
+    const data = await getPageData("revenue", query(), async () => {
+      called = true;
+      return { facts: empty, earliest: null, hasAnyBookings: false, guestWindowStart: null };
+    });
+    expect(called).toBe(false);
+    expect(data.hasAnyBookings).toBe(true);
   });
 });

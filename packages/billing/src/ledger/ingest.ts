@@ -1,4 +1,5 @@
 import type { Queryable } from "@openbookings/db";
+import { bookingReference } from "@openbookings/db/booking-reference";
 import { getBillingProfile } from "../profiles";
 import { NonEuCountryError, splitInclusive, splitRefund, vatRateBp, vatTreatmentFor, type VatTreatment } from "../vat";
 import { billingEntityForAccount, resolvePayment, type PaymentResolution } from "./resolve";
@@ -248,7 +249,7 @@ export async function recordApplicationFee(
       propertyId: b.propertyId,
       bookingId: b.id,
       bookingIntentId: b.intentId,
-      bookingRef: b.id.slice(0, 8).toUpperCase(),
+      bookingRef: bookingReference(b.id),
       stayStart: b.checkIn,
       stayEnd: b.checkOut,
       base: b.roomsTotalCents,

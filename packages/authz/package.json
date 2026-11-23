@@ -17,11 +17,11 @@
   "dependencies": {
     "@openbookings/db": "workspace:*",
     "@openbookings/mode": "workspace:*",
-    "better-auth": "1.7.22"
+    "better-auth": "1.7.27"
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
-    "@types/bun": "^1.3.14",
+    "@types/bun": "^1.4.5",
     "@types/pg": "^8.23.1",
     "pg": "^8.23.1",
     "typescript": "^5.9.3"
