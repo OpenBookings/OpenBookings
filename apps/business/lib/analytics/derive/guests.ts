@@ -14,7 +14,8 @@ const GROUP_LABELS: Record<GroupType, string> = {
 
 const regionNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
 
-function countryName(code: string): string {
+export function countryName(code: string): string {
+  if (code === "ZZ") return "Unknown";
   try {
     return regionNames.of(code) ?? code;
   } catch {
@@ -82,14 +83,16 @@ export function deriveGuests(ctx: DeriveContext): GuestsView {
   const { facts, period, comparison } = ctx;
 
   // One population for every figure on the page: kept bookings made in the period.
-  const kept = keptBookings(bookingsCreatedIn(facts.bookings, period));
-  const prevKept = comparison ? keptBookings(bookingsCreatedIn(facts.bookings, comparison)) : null;
+  // Facts outside the guest window carry neutral guest fields and are left out of every figure.
+  const withDetails = (rows: BookingFact[]) => rows.filter((b) => b.hasGuestDetails);
+  const kept = withDetails(keptBookings(bookingsCreatedIn(facts.bookings, period)));
+  const prevKept = comparison ? withDetails(keptBookings(bookingsCreatedIn(facts.bookings, comparison))) : null;
   const distinctGuests = new Set(kept.map((b) => b.guestKey)).size;
 
   // A guest's first stay, across all history: a second stay is a second stay
   // whichever window the host is looking at.
   const firstStay = new Map<string, IsoDate>();
-  for (const b of keptBookings(facts.bookings)) {
+  for (const b of withDetails(keptBookings(facts.bookings))) {
     const seen = firstStay.get(b.guestKey);
     if (seen === undefined || b.checkIn < seen) firstStay.set(b.guestKey, b.checkIn);
   }
@@ -99,6 +102,7 @@ export function deriveGuests(ctx: DeriveContext): GuestsView {
     median(rows.map((b) => b.adults + b.children));
 
   return {
+    windowStart: ctx.guestWindowStart ?? null,
     returning: widget("booking", kept.length, () => ({
       value: returningPct(kept),
       delta: makeDelta(returningPct(kept), prevKept ? returningPct(prevKept) : null),

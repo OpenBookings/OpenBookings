@@ -40,6 +40,7 @@ export const PENDING_MIGRATIONS: string[] = [
   "0054_admin_roles.sql",
   "0055_session_active_property.sql",
   "0056_booking_reference.sql",
+  "0057_analytics_month_cache.sql",
 ];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
