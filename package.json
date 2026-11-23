@@ -26,8 +26,8 @@
   "devDependencies": {
     "@openbookings/config": "workspace:*",
     "@openbookings/db": "workspace:*",
-    "knip": "6.45.0",
-    "turbo": "2.11.10"
+    "knip": "6.47.0",
+    "turbo": "2.11.13"
   },
   "overrides": {
     "@types/react": "19.3.0",
