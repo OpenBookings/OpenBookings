@@ -7,7 +7,7 @@ export interface ReservationRow {
   bookingId: string;
   sortIndex: number;
   bookingStatus: "pending" | "confirmed" | "cancelled" | "completed" | "no_show" | "checked_in";
-  /** ISO instant: coalesce(confirmed_at, created_at). */
+  /** ISO instant in Amsterdam time with offset: coalesce(confirmed_at, created_at). Its first 10 characters are the Amsterdam date. */
   bookedAt: string;
   checkIn: IsoDate;
   checkOut: IsoDate;

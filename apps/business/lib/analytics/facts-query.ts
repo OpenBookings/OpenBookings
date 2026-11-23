@@ -22,13 +22,14 @@ interface ReservationSql {
   booking_id: string;
   sort_index: string | number;
   booking_status: ReservationRow["bookingStatus"];
-  booked_at: Date | string;
+  /** Amsterdam wall-clock time with its offset (see amsInstant). */
+  booked_at: string;
   check_in: IsoDate;
   check_out: IsoDate;
   total_nights: number;
   departed_early_on: IsoDate | null;
-  reservation_cancelled_at: Date | string | null;
-  booking_cancelled_at: Date | string | null;
+  reservation_cancelled_at: string | null;
+  booking_cancelled_at: string | null;
   room_id: string;
   rate_plan_id: string;
   price_per_night: string | number;
@@ -36,8 +37,16 @@ interface ReservationSql {
   vat_split: ReservationRow["vatSplit"];
 }
 
-const iso = (v: Date | string): string => new Date(v).toISOString();
-const isoOrNull = (v: Date | string | null): string | null => (v === null ? null : iso(v));
+/**
+ * A timestamptz column as an ISO instant in Amsterdam wall-clock time with its
+ * offset, e.g. `2031-02-01T00:30:00.000+01:00`. The derivations date a booking
+ * by the first ten characters, so they must be the Amsterdam date: the same
+ * day the window filter, the cache triggers and the guest window use. NULL
+ * stays NULL. Amsterdam is always ahead of UTC, so the sign is always `+`.
+ */
+const amsInstant = (col: string) =>
+  `(to_char(${col} AT TIME ZONE '${AMS}', 'YYYY-MM-DD"T"HH24:MI:SS.MS')` +
+  ` || to_char((${col} AT TIME ZONE '${AMS}') - (${col} AT TIME ZONE 'UTC'), '"+"HH24:MI'))`;
 
 interface RoomRow {
   id: string;
@@ -82,16 +91,18 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
          SELECT r.id AS reservation_id, r.booking_id,
                 (row_number() OVER (PARTITION BY r.booking_id ORDER BY r.created_at, r.id) - 1) AS sort_index,
                 b.status::text AS booking_status,
-                coalesce(b.confirmed_at, b.created_at) AS booked_at,
+                coalesce(b.confirmed_at, b.created_at) AS booked_ts,
+                ${amsInstant("coalesce(b.confirmed_at, b.created_at)")} AS booked_at,
                 b.check_in_date::text AS check_in, b.check_out_date::text AS check_out,
                 r.total_nights, b.departed_early_on::text AS departed_early_on,
-                r.cancelled_at AS reservation_cancelled_at, b.cancelled_at AS booking_cancelled_at,
+                ${amsInstant("r.cancelled_at")} AS reservation_cancelled_at,
+                ${amsInstant("b.cancelled_at")} AS booking_cancelled_at,
                 r.room_id, r.rate_plan_id, r.price_per_night, r.nights, r.vat_split
            FROM reservations r
            JOIN bookings b ON b.id = r.booking_id
           WHERE b.hotel_id = $1 AND b.status <> 'pending'
        ) x
-       WHERE (x.booked_at AT TIME ZONE '${AMS}')::date BETWEEN $2::date AND $3::date
+       WHERE (x.booked_ts AT TIME ZONE '${AMS}')::date BETWEEN $2::date AND $3::date
           OR (x.check_in::date <= $3::date AND x.check_out::date > $2::date)`,
       [propertyId, window.from, window.to],
     ),
@@ -210,13 +221,13 @@ function toReservationRows(
       bookingId: r.booking_id,
       sortIndex: Number(r.sort_index),
       bookingStatus: r.booking_status,
-      bookedAt: iso(r.booked_at),
+      bookedAt: r.booked_at,
       checkIn: r.check_in,
       checkOut: r.check_out,
       totalNights: r.total_nights,
       departedEarlyOn: r.departed_early_on,
-      reservationCancelledAt: isoOrNull(r.reservation_cancelled_at),
-      bookingCancelledAt: isoOrNull(r.booking_cancelled_at),
+      reservationCancelledAt: r.reservation_cancelled_at,
+      bookingCancelledAt: r.booking_cancelled_at,
       roomId: r.room_id,
       ratePlanId: r.rate_plan_id,
       pricePerNight,

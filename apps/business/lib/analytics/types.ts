@@ -4,7 +4,11 @@ import type { CompareMode, DateRange, Period } from "./period";
 /** Calendar date, `YYYY-MM-DD`. Every date in this module is one of these. */
 export type IsoDate = string;
 
-/** ISO 8601 instant. Booking creation and cancellation carry a time. */
+/**
+ * ISO 8601 instant. Booking creation and cancellation carry a time. Real facts
+ * carry the Amsterdam offset (`…T00:30:00.000+01:00`), so the first ten
+ * characters are always the host's calendar date.
+ */
 type IsoInstant = string;
 
 // ─────────────────────────────────────────────

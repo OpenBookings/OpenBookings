@@ -43,6 +43,7 @@ function run(text: string, values: unknown[]) {
 }
 
 const { loadWindowFacts, loadHotelSpan } = await import("./facts-query");
+const { bookingDate, bookingsCreatedIn } = await import("./metrics");
 
 type Hotel = Awaited<ReturnType<typeof seedProperty>>;
 
@@ -307,5 +308,48 @@ describeWithDb("live analytics facts", () => {
     expect(facts.bookings.map((b) => b.discountCents).sort()).toEqual([
       1000, 2000,
     ]);
+  });
+
+  /** A confirmed booking whose Booking Time is the given instant. */
+  async function bookedAt(hotel: Hotel, instant: string, checkIn = "2031-09-10") {
+    const made = await booked(hotel, checkIn, 2, "2031-01-01");
+    await db.query(`UPDATE bookings SET confirmed_at = $2::timestamptz WHERE id = $1`, [made.bookingId, instant]);
+    return made;
+  }
+
+  test("a booking made at 00:30 Amsterdam in winter is dated that Amsterdam day, not the UTC day before", async () => {
+    const a = await seedProperty(db);
+    await bookedAt(a, "2031-01-31T23:30:00Z"); // 1 Feb 00:30 CET
+    const feb = await loadWindowFacts(a.propertyId, { from: "2031-02-01", to: "2031-02-28" });
+    expect(feb.bookings).toHaveLength(1);
+    expect(bookingDate(feb.bookings[0])).toBe("2031-02-01");
+    expect(feb.bookings[0].createdAt).toBe("2031-02-01T00:30:00.000+01:00");
+    expect(Date.parse(feb.bookings[0].createdAt)).toBe(Date.parse("2031-01-31T23:30:00Z"));
+    const jan = await loadWindowFacts(a.propertyId, { from: "2031-01-01", to: "2031-01-31" });
+    expect(jan.bookings).toHaveLength(0);
+  });
+
+  test("a booking made at 00:30 Amsterdam in summer is dated that Amsterdam day", async () => {
+    const a = await seedProperty(db);
+    await bookedAt(a, "2031-06-30T22:30:00Z"); // 1 Jul 00:30 CEST
+    const july = await loadWindowFacts(a.propertyId, { from: "2031-07-01", to: "2031-07-31" });
+    expect(july.bookings).toHaveLength(1);
+    expect(bookingDate(july.bookings[0])).toBe("2031-07-01");
+    expect(july.bookings[0].createdAt).toBe("2031-07-01T00:30:00.000+02:00");
+    expect(bookingsCreatedIn(july.bookings, { from: "2031-07-01", to: "2031-07-31" })).toHaveLength(1);
+  });
+
+  test("cancellations just after Amsterdam midnight are dated that Amsterdam day", async () => {
+    const a = await seedProperty(db);
+    const whole = await bookedAt(a, "2031-02-10T12:00:00Z");
+    await db.query(`UPDATE bookings SET status = 'cancelled', cancelled_at = '2031-02-28T23:30:00Z' WHERE id = $1`, [
+      whole.bookingId,
+    ]);
+    const single = await bookedAt(a, "2031-02-10T12:00:00Z");
+    await db.query(`UPDATE reservations SET cancelled_at = '2031-06-30T22:30:00Z' WHERE booking_id = $1`, [single.bookingId]);
+    const facts = await loadWindowFacts(a.propertyId, { from: "2031-02-01", to: "2031-02-28" });
+    const byId = new Map(facts.bookings.map((b) => [b.id, b]));
+    expect(byId.get(whole.reservationIds[0])!.cancelledAt!.slice(0, 10)).toBe("2031-03-01");
+    expect(byId.get(single.reservationIds[0])!.cancelledAt!.slice(0, 10)).toBe("2031-07-01");
   });
 });

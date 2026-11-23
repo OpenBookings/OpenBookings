@@ -41,7 +41,9 @@ function run(text: string, values: unknown[]) {
   return result;
 }
 
-const { loadGuestDetails } = await import("./guest-details");
+const { attachGuestDetails, guestWindow, loadGuestDetails } = await import("./guest-details");
+const { loadWindowFacts } = await import("./facts-query");
+const { bookingsCreatedIn } = await import("./metrics");
 
 type Hotel = Awaited<ReturnType<typeof seedProperty>>;
 
@@ -93,5 +95,29 @@ describeWithDb("guest details", () => {
     await booked(a, "2031-01-15");
     const [detail] = await loadGuestDetails(a.propertyId, "2031-06-01");
     expect(detail.guestCountry).toBe("ZZ");
+  });
+
+  test("the guest window's edges are Amsterdam days: 00:30 on the first day and 23:30 on today are in, the evening before is out", async () => {
+    const a = await seedProperty(db);
+    const today = "2031-06-01";
+    const window = guestWindow(today); // 2029-06-01 .. 2031-06-01, both in summer time
+    const at = async (instant: string) => {
+      const made = await booked(a, "2031-01-15");
+      await db.query(`UPDATE bookings SET confirmed_at = $2::timestamptz WHERE id = $1`, [made.bookingId, instant]);
+      return made.reservationIds[0];
+    };
+    const first = await at("2029-05-31T22:30:00Z"); // 2029-06-01 00:30 Amsterdam
+    const last = await at("2031-06-01T21:30:00Z"); // 2031-06-01 23:30 Amsterdam
+    const before = await at("2029-05-31T21:30:00Z"); // 2029-05-31 23:30 Amsterdam
+
+    const details = await loadGuestDetails(a.propertyId, today);
+    expect(details.map((d) => d.reservationId).sort()).toEqual([first, last].sort());
+
+    // The facts date those bookings on the same Amsterdam days, so the Guests page counts exactly them.
+    const facts = attachGuestDetails(await loadWindowFacts(a.propertyId, window), details);
+    const inWindow = bookingsCreatedIn(facts.bookings, window);
+    expect(inWindow.map((b) => b.id).sort()).toEqual([first, last].sort());
+    expect(inWindow.every((b) => b.hasGuestDetails)).toBe(true);
+    expect(facts.bookings.find((b) => b.id === before)?.hasGuestDetails ?? false).toBe(false);
   });
 });

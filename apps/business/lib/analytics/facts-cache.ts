@@ -10,7 +10,8 @@
  */
 import { loadNames, loadWindowFacts } from "./facts-query";
 import { createMonthStore } from "./facts-cache-store";
-import { amsterdamToday, endOfMonth, startOfMonth, type DateRange } from "./period";
+import { bookingDate } from "./metrics";
+import { endOfMonth, startOfMonth, type DateRange } from "./period";
 import type { BookingFact, Facts, InventoryFact, IsoDate, SoldNight } from "./types";
 
 /** Bump when the shape or meaning of stored facts changes: old rows are then rebuilt. */
@@ -135,10 +136,9 @@ export async function assembleFacts(
   }
 
   const inWindow = (d: IsoDate) => d >= window.from && d <= window.to;
-  const bookedOn = (b: BookingFact) => amsterdamToday(new Date(b.createdAt));
   return {
     bookings: [...bookings.values()].filter(
-      (b) => inWindow(bookedOn(b)) || (b.checkIn <= window.to && b.checkOut > window.from),
+      (b) => inWindow(bookingDate(b)) || (b.checkIn <= window.to && b.checkOut > window.from),
     ),
     nights: [...nights.values()].filter((n) => inWindow(n.date)),
     inventory: [...inventory.values()].filter((i) => inWindow(i.date)),

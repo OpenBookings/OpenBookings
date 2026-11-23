@@ -45,6 +45,7 @@ function run(text: string, values: unknown[]) {
 const { loadWindowFacts, loadNames } = await import("./facts-query");
 const { createMonthStore } = await import("./facts-cache-store");
 const { assembleFacts } = await import("./facts-cache");
+const { bookingsCreatedIn } = await import("./metrics");
 
 describeWithDb("analytics month cache store", () => {
   beforeAll(async () => {
@@ -118,5 +119,20 @@ describeWithDb("analytics month cache store", () => {
     expect((await store.read(hotel.propertyId, ["2031-03-01"])).size).toBe(0);
     await store.write(hotel.propertyId, "2031-03-01", { month: gen.months.get("2031-03-01")!, hotel: gen.hotel }, facts);
     expect((await store.read(hotel.propertyId, ["2031-03-01"])).size).toBe(0);
+  });
+
+  test("a booking made at 00:30 Amsterdam on the 1st lands in that month, cached and live alike", async () => {
+    const hotel = await seed();
+    const guest = await seedGuest(db);
+    const made = await seedBooking(db, hotel, { checkIn: "2031-09-10", nights: 2, userId: guest });
+    await db.query(`UPDATE bookings SET status = 'confirmed', confirmed_at = '2031-01-31T23:30:00Z' WHERE id = $1`, [made.bookingId]);
+    const deps = { store: createMonthStore(), loadLive: loadWindowFacts, loadNames };
+    const FEB = { from: "2031-02-01", to: "2031-02-28" };
+    for (const pass of ["cold", "warm"]) {
+      const feb = await assembleFacts(hotel.propertyId, FEB, "2031-06-15", deps);
+      expect({ pass, ids: bookingsCreatedIn(feb.bookings, FEB).map((b) => b.id) }).toEqual({ pass, ids: made.reservationIds });
+      const jan = await assembleFacts(hotel.propertyId, { from: "2031-01-01", to: "2031-01-31" }, "2031-06-15", deps);
+      expect({ pass, ids: jan.bookings.map((b) => b.id) }).toEqual({ pass, ids: [] });
+    }
   });
 });
