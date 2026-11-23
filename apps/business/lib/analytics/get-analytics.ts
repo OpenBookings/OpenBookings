@@ -55,14 +55,29 @@ export interface FactsSource {
   }>;
 }
 
-/** Everything a page can show: period, its comparisons, 90 days ahead, and the guest window on guests. */
+/** Pace compares with the same weeks 52 weeks back (see derive/occupancy.ts). */
+const PACE_YEAR_DAYS = 364;
+
+/**
+ * Every date a page reads, as one range: the period, its comparisons, 90 days
+ * ahead, and what each page reads on its own — year to date and last year's
+ * year to date on revenue, last year's pace on occupancy, the guest window on
+ * guests. The window-equivalence test holds this to what the derivations read.
+ */
 export function factsWindow(page: PageId, query: PageQuery): DateRange {
   const { period, today } = query;
+  const yearStart = `${today.slice(0, 4)}-01-01`;
   const ranges: DateRange[] = [
     period,
     comparisonRange(period, "previous"),
     query.compare === "last-year" ? comparisonRange(period, "last-year") : null,
     { from: today, to: addDays(today, 90) },
+    // Year to date, and last year's when there is a comparison to show it against.
+    page === "revenue"
+      ? { from: query.compare === "none" ? yearStart : shiftYears(yearStart, -1), to: today }
+      : null,
+    // Pace: what was on the books a year ago for the 13 weeks after it.
+    page === "occupancy" ? { from: addDays(today, -PACE_YEAR_DAYS), to: today } : null,
     page === "guests" ? guestWindow(today) : null,
   ].filter((r): r is DateRange => r !== null);
   return {
@@ -116,6 +131,6 @@ export async function getPageData<P extends PageId>(
     compare,
     canCompareLastYear,
     granularity,
-    view: DERIVE[page]({ facts, period, comparison, today, granularity, guestWindowStart }),
+    view: DERIVE[page]({ facts, period, comparison, today, granularity, guestWindowStart, earliestBooking: earliest }),
   };
 }

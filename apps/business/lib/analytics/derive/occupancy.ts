@@ -1,6 +1,6 @@
 import { formatDayMonth, WEEKDAY_NAMES } from "../format";
 import {
-  bookingDate, earliestFactDate, inventoryIn, MIN_SAMPLE, nightsAvailable, nightsIn,
+  bookingDate, earliestBooking, inventoryIn, MIN_SAMPLE, nightsAvailable, nightsIn,
   occupancyPct, pct,
 } from "../metrics";
 import { addDays, daysBetween, enumerateDates, weekdayOf, type DateRange } from "../period";
@@ -64,7 +64,7 @@ export function deriveOccupancy(ctx: DeriveContext): OccupancyView {
   const next90: DateRange = { from: today, to: addDays(today, 89) };
   const next90Inventory = inventoryIn(facts.inventory, next90);
 
-  const earliest = earliestFactDate(facts);
+  const earliest = earliestBooking(ctx);
   const hasYearOfHistory = earliest !== null && earliest <= addDays(today, -YEAR_OF_WEEKS);
   const paceRange: DateRange = { from: today, to: addDays(today, PACE_WEEKS * 7 - 1) };
 

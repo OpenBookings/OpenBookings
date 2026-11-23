@@ -105,7 +105,18 @@ describe("factsWindow", () => {
     expect(base.to).toBe(addDays(TODAY, 90));
     const guests = factsWindow("guests", query({ period, compare: "none" }));
     expect(guests.from).toBe(guestWindow(TODAY).from);
-    expect(factsWindow("revenue", query({ period, compare: "none" })).from).toBe("2026-07-01"); // the previous period
+    expect(factsWindow("booking-patterns", query({ period, compare: "none" })).from).toBe("2026-07-01"); // the previous period
+  });
+
+  test("revenue reaches back to year to date, and last year's when comparing", () => {
+    const period = custom("2026-08-01", "2026-08-31");
+    expect(factsWindow("revenue", query({ period, compare: "none" })).from).toBe("2026-01-01");
+    expect(factsWindow("revenue", query({ period, compare: "previous" })).from).toBe("2025-01-01");
+  });
+
+  test("occupancy reaches back a year of weeks for pace", () => {
+    const period = custom("2026-08-01", "2026-08-31");
+    expect(factsWindow("occupancy", query({ period, compare: "none" })).from).toBe(addDays(TODAY, -364));
   });
 });
 

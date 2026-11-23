@@ -238,6 +238,11 @@ export interface DeriveContext {
   granularity: Granularity;
   /** First booking date with guest details; absent or null means all history. */
   guestWindowStart?: IsoDate | null;
+  /**
+   * The hotel's first booking date over its whole history, not just the loaded
+   * window. Absent: taken from the facts (demo and direct derivation calls).
+   */
+  earliestBooking?: IsoDate | null;
 }
 
 export interface PageViews {
