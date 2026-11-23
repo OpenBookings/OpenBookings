@@ -28,6 +28,8 @@ export interface BookingFact {
   guestKey: string;
   /** ISO-3166-1 alpha-2. */
   guestCountry: string;
+  /** False when guest fields are outside the guest window or stripped for the cache. */
+  hasGuestDetails: boolean;
   roomId: string;
   ratePlanId: string;
   /** Net room revenue per night, one entry per night. Sums to netRevenueCents. */
