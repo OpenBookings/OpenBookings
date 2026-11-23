@@ -13,6 +13,9 @@ const partySize = (value: number | null) => (value === null ? "—" : `${value} 
 export function GuestsPageView({ data }: { data: PageData<"guests"> }) {
   const { view } = data;
   const periodLabel = formatRange(data.range);
+  const partial =
+    view.windowStart !== null &&
+    (view.windowStart > data.range.from || (data.comparison !== null && view.windowStart > data.comparison.from));
 
   return (
     <>
@@ -60,6 +63,12 @@ export function GuestsPageView({ data }: { data: PageData<"guests"> }) {
           )}
         </ChartCard>
       </WidgetGrid>
+
+      {partial && (
+        <p className="px-4 text-muted-foreground text-xs lg:px-6">
+          Guest details cover bookings made in the last 24 months.
+        </p>
+      )}
 
       <p className="px-4 text-muted-foreground text-xs lg:px-6">
         Totals only. Any group with fewer than five guests is shown as Other, here and in the export, so no single guest can be identified.

@@ -216,6 +216,8 @@ export interface PricingView {
 }
 
 export interface GuestsView {
+  /** First booking date guest details cover; null when they cover all history (demo). */
+  windowStart: IsoDate | null;
   returning: Widget<StatValue>;
   medianPartySize: Widget<StatValue>;
   countries: Widget<Share[]>;
@@ -234,6 +236,8 @@ export interface DeriveContext {
   comparison: DateRange | null;
   today: IsoDate;
   granularity: Granularity;
+  /** First booking date with guest details; absent or null means all history. */
+  guestWindowStart?: IsoDate | null;
 }
 
 export interface PageViews {
