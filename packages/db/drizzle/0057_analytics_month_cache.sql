@@ -23,15 +23,20 @@
 -- creation or archiving moves occupancy in every month, so it touches the
 -- whole hotel.
 --
--- Hotel-wide changes (a room's units, creation or archiving) cannot name the
--- months they move, and a month that was never cached has no generation row
--- to bump. So analytics_touch_hotel also bumps a sentinel row of
--- analytics_month_generation with month = '0001-01-01'. The contract for
+-- Hotel-wide changes (a room's units, creation or archiving) cannot
+-- name the months they move, and a month that was never cached has no
+-- generation row to bump. So analytics_touch_hotel bumps a sentinel row of
+-- analytics_month_generation with month = '0001-01-01' (and only that row). The contract for
 -- readers and builders: before a build, read BOTH the month's generation and
 -- the hotel's sentinel generation (0 when the row is absent). The cache row
 -- stores them as `generation` (the month generation) and `hotel_generation`
 -- (the sentinel generation) at build time. A build may be stored, and a cached
 -- row served, only when both still equal the values read before the build.
+--
+-- Lock order: a multi-month bump locks generation rows in month order, so two
+-- writers touching overlapping months queue instead of deadlocking. A
+-- hotel-wide change bumps only the sentinel row (every reader and builder
+-- checks it) and drops the hotel's cache rows.
 --
 -- The trigger functions are SECURITY DEFINER: a guest cancelling their own
 -- booking must still be able to empty the host's cache, which the guest's role
@@ -69,7 +74,8 @@ ALTER TABLE analytics_month_cache ADD COLUMN IF NOT EXISTS hotel_generation bigi
 -- Touch functions
 -- ---------------------------------------------------------------------------
 
--- Bump the generation of each given month (once, however often it is listed)
+-- Bump the generation of each given month (once, however often it is listed,
+-- in month order so concurrent bumps take their row locks in the same order)
 -- and drop its cache row.
 CREATE OR REPLACE FUNCTION app.analytics_touch_months(p_hotel uuid, p_months date[]) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -81,7 +87,7 @@ BEGIN
   -- after the property row is gone; the FK on the tables below would abort it.
   IF NOT EXISTS (SELECT 1 FROM properties WHERE id = p_hotel) THEN RETURN; END IF;
   INSERT INTO analytics_month_generation (hotel_id, month, generation)
-  SELECT p_hotel, m, 1 FROM (SELECT DISTINCT unnest(p_months) AS m) t WHERE m IS NOT NULL
+  SELECT p_hotel, m, 1 FROM (SELECT DISTINCT unnest(p_months) AS m) t WHERE m IS NOT NULL ORDER BY m
   ON CONFLICT (hotel_id, month)
   DO UPDATE SET generation = analytics_month_generation.generation + 1;
   DELETE FROM analytics_month_cache WHERE hotel_id = p_hotel AND month = ANY (p_months);
@@ -100,21 +106,15 @@ AS $$
   );
 $$;
 
--- Every month the hotel has a cache row or a generation for, and the hotel sentinel.
+-- The whole hotel: bump only the sentinel (reads and writes check it, so every
+-- month's cached copy is already refused) and drop all the hotel's cache rows.
+-- Bumping every month row as well would add nothing but locks.
 CREATE OR REPLACE FUNCTION app.analytics_touch_hotel(p_hotel uuid) RETURNS void
 LANGUAGE sql SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  SELECT app.analytics_touch_months(
-    p_hotel,
-    ARRAY(
-      SELECT month FROM analytics_month_generation WHERE hotel_id = p_hotel
-      UNION
-      SELECT month FROM analytics_month_cache WHERE hotel_id = p_hotel
-      UNION
-      SELECT date '0001-01-01'
-    )
-  );
+  SELECT app.analytics_touch_months(p_hotel, ARRAY[date '0001-01-01']);
+  DELETE FROM analytics_month_cache WHERE hotel_id = p_hotel;
 $$;
 
 -- The months one booking row moves: its booked month and its stay months.

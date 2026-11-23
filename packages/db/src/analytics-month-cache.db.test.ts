@@ -112,7 +112,11 @@ describeWithDb("analytics month cache invalidation", () => {
 
     expect(await cachedMonths(a.propertyId)).toEqual([]);
     expect(await cachedMonths(b.propertyId)).toEqual(["2031-01", "2031-02"]);
-    expect((await generations(a.propertyId))["2031-03"]).toBe(1);
+    // Only the hotel sentinel moves: readers and builders check it, so the
+    // month rows need no bump (and are not locked by a units edit).
+    const g = await generations(a.propertyId);
+    expect(g["0001-01"]).toBe(1);
+    expect(Object.entries(g).filter(([m]) => m !== "0001-01").every(([, n]) => n === 0)).toBe(true);
   });
 
   test("rooms change bumps the hotel sentinel generation", async () => {
@@ -254,6 +258,7 @@ describeWithDb("analytics month cache invalidation", () => {
       [propertyId],
     );
     expect(await cachedMonths(propertyId)).toEqual([]);
-    expect((await generations(propertyId))["2031-01"]).toBe(1);
+    expect((await generations(propertyId))["2031-01"]).toBe(0);
+    expect((await generations(propertyId))["0001-01"]).toBe(1);
   });
 });
