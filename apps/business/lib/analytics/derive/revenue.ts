@@ -1,5 +1,5 @@
 import {
-  adrCents, bookingDate, bookingsCreatedIn, commissionCents, earliestFactDate, groupSum,
+  adrCents, bookingDate, bookingsCreatedIn, commissionCents, earliestBooking, groupSum,
   inventoryIn, keptBookings, nightsIn, revenueCents, revparCents, shares,
 } from "../metrics";
 import { shiftYears, type DateRange } from "../period";
@@ -30,7 +30,7 @@ export function deriveRevenue(ctx: DeriveContext): RevenueView {
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const ytdKept = keptIn({ from: yearStart, to: today });
   const lastYtd = { from: shiftYears(yearStart, -1), to: shiftYears(today, -1) };
-  const earliest = earliestFactDate(facts);
+  const earliest = earliestBooking(ctx);
   const ytdComparable = comparison !== null && earliest !== null && earliest <= lastYtd.from;
 
   return {
