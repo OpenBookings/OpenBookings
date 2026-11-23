@@ -5,6 +5,50 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: ["main"]
+  # A manual run (Actions -> OpenBookings - CI -> Run workflow, or
+  # `gh workflow run ci.yml -f web=false ...`). Unlike a PR or a push it does
+  # not look at what changed: every box ticked runs in full -- lint and tests
+  # on every package, each ticked image built from scratch. Nothing reaches
+  # production unless `release` or `migrate` is ticked, and those two only
+  # work on main and still wait for the production environment's reviewer.
+  workflow_dispatch:
+    inputs:
+      checks:
+        description: Lint, typecheck & knip (all packages)
+        type: boolean
+        default: true
+      tests:
+        description: Tests (all packages except demo)
+        type: boolean
+        default: true
+      web:
+        description: Build the web image
+        type: boolean
+        default: true
+      business:
+        description: Build the business image
+        type: boolean
+        default: true
+      docs:
+        description: Build the docs image
+        type: boolean
+        default: true
+      support:
+        description: Build the support-bot image
+        type: boolean
+        default: true
+      invoice_job:
+        description: Build the invoice-job image
+        type: boolean
+        default: true
+      migrate:
+        description: Apply pending migrations to the production database (main only, needs approval)
+        type: boolean
+        default: false
+      release:
+        description: Push the ticked images and roll production to them (main only, needs approval)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,10 +79,14 @@ jobs:
 
   checks:
     name: Lint & typecheck
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+      || (github.event_name == 'workflow_dispatch' && inputs.checks)
     runs-on: ubuntu-latest
     env:
       TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+      # A manual run checks every package, not just the changed ones.
+      TURBO_AFFECTED: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,8 +99,10 @@ jobs:
           bun-version: 1.3.13
 
       # Turbo's local cache, so a second push to the same PR replays the
-      # packages it did not change instead of linting them again.
+      # packages it did not change instead of linting them again. Not on a
+      # manual run: that is asked for to see everything actually run.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request'
         with:
           path: .turbo/cache
           key: turbo-checks-${{ github.event.pull_request.number }}-${{ github.sha }}
@@ -60,7 +110,10 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bunx turbo run lint typecheck --affected
+      # Unquoted on purpose: empty on a manual run, and must then vanish.
+      - run: |
+          # shellcheck disable=SC2086
+          bunx turbo run lint typecheck $TURBO_AFFECTED
 
       # Unused, missing or unresolved dependencies across the whole repo
       # (~2 s, so not limited to --affected). Config in knip.json.
@@ -68,10 +121,14 @@ jobs:
 
   test:
     name: Test
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+      || (github.event_name == 'workflow_dispatch' && inputs.tests)
     runs-on: ubuntu-latest
     env:
       TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+      # A manual run tests every package, not just the changed ones.
+      TURBO_AFFECTED: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
       LOCAL_DB: postgres://postgres:postgres@localhost:5432/postgres
     # A local Postgres holding a copy of the real schema, not a Neon branch.
     #
@@ -110,8 +167,10 @@ jobs:
       # Replays a package's tests only when nothing it depends on changed --
       # migrations included, since packages/db/drizzle is part of db's hash.
       # Not covered: a schema change on the dev database between two pushes.
-      # The cache is per PR, so that window is the life of one PR.
+      # The cache is per PR, so that window is the life of one PR. A manual
+      # run skips it and runs every suite for real.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request'
         with:
           path: .turbo/cache
           key: turbo-test-${{ github.event.pull_request.number }}-${{ github.sha }}
@@ -125,7 +184,8 @@ jobs:
         id: affected
         run: |
           set -euo pipefail
-          packages=$(bunx turbo run test --affected --filter='!@openbookings/demo' --dry=json \
+          # shellcheck disable=SC2086 # empty on a manual run, must vanish
+          packages=$(bunx turbo run test $TURBO_AFFECTED --filter='!@openbookings/demo' --dry=json \
             | jq -r '[.tasks[] | select(.task == "test") | .package] | unique | join(" ")')
           echo "Affected: ${packages:-none}"
           if [ -n "$packages" ]; then
@@ -201,7 +261,9 @@ jobs:
           DATABASE_URL: ${{ env.LOCAL_DB }}
           DATABASE_URL_DIRECT: ${{ env.LOCAL_DB }}
           PENDING_MIGRATIONS_APPLIED: "1"
-        run: bunx turbo run test --affected --filter='!@openbookings/demo' --concurrency=4
+        run: |
+          # shellcheck disable=SC2086 # empty on a manual run, must vanish
+          bunx turbo run test $TURBO_AFFECTED --filter='!@openbookings/demo' --concurrency=4
 
   # The one check branch protection needs to require. Keeps the old job's name,
   # so an existing "Verify" required check keeps working.
@@ -221,24 +283,37 @@ jobs:
 
   # ---- Pull requests and main ------------------------------------------------
 
+  # What to build, and whether to publish it. On a PR or a push that is the
+  # changed paths; on a manual run it is the boxes ticked.
+  #
+  # `publish` = push the images to the registry and roll production. Always on
+  # a push to main, never on a PR, and on a manual run only with `release`.
+  # `migrate` = apply pending migrations to production: on a push when a
+  # migration file changed, on a manual run only with `migrate`.
   detect:
     name: Detect changed apps
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: >-
+      github.event_name == 'push'
+      || github.event_name == 'workflow_dispatch'
+      || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     outputs:
-      web: ${{ steps.filter.outputs.web }}
-      business: ${{ steps.filter.outputs.business }}
-      docs: ${{ steps.filter.outputs.docs }}
-      support: ${{ steps.filter.outputs.support }}
-      invoice-job: ${{ steps.filter.outputs.invoice-job }}
-      db: ${{ steps.filter.outputs.db }}
+      web: ${{ steps.pick.outputs.web }}
+      business: ${{ steps.pick.outputs.business }}
+      docs: ${{ steps.pick.outputs.docs }}
+      support: ${{ steps.pick.outputs.support }}
+      invoice-job: ${{ steps.pick.outputs.invoice-job }}
+      migrate: ${{ steps.pick.outputs.migrate }}
+      publish: ${{ steps.pick.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name != 'workflow_dispatch'
         with:
           persist-credentials: false
           fetch-depth: 0
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           # ci.yml and .github/scripts are in every app filter. ci.yml
           # defines the build args, so changing it changes what lands in the
@@ -292,6 +367,57 @@ jobs:
             db:
               - 'packages/db/drizzle/**'
 
+      # A manual release or migration from a branch is refused here rather
+      # than left to the production environment's branch policy: by then the
+      # build jobs would already have pushed the branch's images under the
+      # `main` tag, which the invoice job runs from.
+      - name: Decide what to run
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          F_WEB: ${{ steps.filter.outputs.web }}
+          F_BUSINESS: ${{ steps.filter.outputs.business }}
+          F_DOCS: ${{ steps.filter.outputs.docs }}
+          F_SUPPORT: ${{ steps.filter.outputs.support }}
+          F_INVOICE_JOB: ${{ steps.filter.outputs.invoice-job }}
+          F_DB: ${{ steps.filter.outputs.db }}
+          I_WEB: ${{ inputs.web }}
+          I_BUSINESS: ${{ inputs.business }}
+          I_DOCS: ${{ inputs.docs }}
+          I_SUPPORT: ${{ inputs.support }}
+          I_INVOICE_JOB: ${{ inputs.invoice_job }}
+          I_MIGRATE: ${{ inputs.migrate }}
+          I_RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if { [ "$I_RELEASE" = "true" ] || [ "$I_MIGRATE" = "true" ]; } && [ "$REF" != "refs/heads/main" ]; then
+              echo "::error::release and migrate only run on main, not ${REF}. Untick them, or run the workflow on main."
+              exit 1
+            fi
+            web=$I_WEB business=$I_BUSINESS docs=$I_DOCS support=$I_SUPPORT invoice_job=$I_INVOICE_JOB
+            migrate=$I_MIGRATE publish=$I_RELEASE
+          else
+            web=$F_WEB business=$F_BUSINESS docs=$F_DOCS support=$F_SUPPORT invoice_job=$F_INVOICE_JOB
+            if [ "$EVENT" = "push" ]; then
+              migrate=$F_DB publish=true
+            else
+              migrate=false publish=false
+            fi
+          fi
+
+          {
+            echo "web=$web"
+            echo "business=$business"
+            echo "docs=$docs"
+            echo "support=$support"
+            echo "invoice-job=$invoice_job"
+            echo "migrate=$migrate"
+            echo "publish=$publish"
+          } | tee -a "$GITHUB_OUTPUT"
+
   build-web:
     needs: detect
     if: needs.detect.outputs.web == 'true'
@@ -302,7 +428,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: github.event_name == 'push'
+        if: needs.detect.outputs.publish == 'true'
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
@@ -311,13 +437,13 @@ jobs:
         with:
           context: .
           file: ./apps/web/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ needs.detect.outputs.publish == 'true' }}
           # Layer cache: the dependency install is reused whenever bun.lock and
           # the package manifests did not change. Only main writes it (PR caches
           # are scoped to the PR and would just crowd the 10 GB limit); PRs read
           # main's.
           cache-from: type=gha,scope=web
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=web,mode=max' || '' }}
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=web,mode=max' || '' }}
           # A mounted secret, not a build arg: build args are recorded in build
           # metadata and provenance attestations, and this token can write to
           # every project in the org. It is only needed to upload source maps --
@@ -367,7 +493,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: github.event_name == 'push'
+        if: needs.detect.outputs.publish == 'true'
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
@@ -376,13 +502,13 @@ jobs:
         with:
           context: .
           file: ./apps/business/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ needs.detect.outputs.publish == 'true' }}
           # Layer cache: the dependency install is reused whenever bun.lock and
           # the package manifests did not change. Only main writes it (PR caches
           # are scoped to the PR and would just crowd the 10 GB limit); PRs read
           # main's.
           cache-from: type=gha,scope=business
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=business,mode=max' || '' }}
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=business,mode=max' || '' }}
           # A mounted secret, not a build arg: build args are recorded in build
           # metadata and provenance attestations, and this token can write to
           # every project in the org. It is only needed to upload source maps --
@@ -431,7 +557,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: github.event_name == 'push'
+        if: needs.detect.outputs.publish == 'true'
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
@@ -440,13 +566,13 @@ jobs:
         with:
           context: .
           file: ./apps/docs/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ needs.detect.outputs.publish == 'true' }}
           # Layer cache: the dependency install is reused whenever bun.lock and
           # the package manifests did not change. Only main writes it (PR caches
           # are scoped to the PR and would just crowd the 10 GB limit); PRs read
           # main's.
           cache-from: type=gha,scope=docs
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=docs,mode=max' || '' }}
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=docs,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -465,7 +591,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: github.event_name == 'push'
+        if: needs.detect.outputs.publish == 'true'
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
@@ -474,13 +600,13 @@ jobs:
         with:
           context: .
           file: ./apps/support-bot/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ needs.detect.outputs.publish == 'true' }}
           # Layer cache: the dependency install is reused whenever bun.lock and
           # the package manifests did not change. Only main writes it (PR caches
           # are scoped to the PR and would just crowd the 10 GB limit); PRs read
           # main's.
           cache-from: type=gha,scope=support-bot
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=support-bot,mode=max' || '' }}
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=support-bot,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -503,7 +629,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: github.event_name == 'push'
+        if: needs.detect.outputs.publish == 'true'
         with:
           registry: ${{ env.SCW_REGISTRY }}
           username: nologin
@@ -512,13 +638,13 @@ jobs:
         with:
           context: .
           file: ./apps/invoice-job/Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ needs.detect.outputs.publish == 'true' }}
           # Layer cache: the dependency install is reused whenever bun.lock and
           # the package manifests did not change. Only main writes it (PR caches
           # are scoped to the PR and would just crowd the 10 GB limit); PRs read
           # main's.
           cache-from: type=gha,scope=invoice-job
-          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=invoice-job,mode=max' || '' }}
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=invoice-job,mode=max' || '' }}
           # The SHA tag is immutable and is what `release` and `rollback`
           # point at. `main` moves, and exists only so a human can say
           # "the current release" -- never `latest`, which invites a
@@ -529,12 +655,17 @@ jobs:
 
   release:
     name: Release
-    needs: [detect, build-web, build-business, build-docs, build-support, build-invoice-job]
-    # Tests do not run here: they passed on the PR (see `checks` and `test`).
+    needs: [detect, checks, test, build-web, build-business, build-docs, build-support, build-invoice-job]
+    # Tests do not run on a push: they passed on the PR (see `checks` and
+    # `test`). On a manual run they do if ticked, and a failure stops the
+    # release like a failed build does.
     # `!failure()` stops a release when any build failed; `!cancelled()` still
-    # lets *skipped* builds through, which is the normal case -- an app whose
+    # lets *skipped* jobs through, which is the normal case -- an app whose
     # paths did not change has no new image and simply is not rolled.
-    if: ${{ github.event_name == 'push' && needs.detect.result == 'success' && !cancelled() && !failure() }}
+    if: >-
+      ${{ needs.detect.result == 'success'
+      && (needs.detect.outputs.publish == 'true' || needs.detect.outputs.migrate == 'true')
+      && !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     # The single gate for the whole release: a required reviewer, and a
     # deployment branch policy limiting this environment to `main`. Asked once
@@ -543,7 +674,7 @@ jobs:
     # Every secret below is repo-scoped, not environment-scoped -- the
     # environment's protection is the required reviewer and the main-only
     # branch policy, not secret isolation. Nothing reachable from a
-    # pull_request references them (this job is push-only, and the build-*
+    # pull_request references them (this job never runs on a PR, and the build-*
     # jobs use only SCW_SECRET_KEY, for registry login), so a PR still cannot
     # reach them. Moving them onto the environment would make that structural
     # rather than a property of how the jobs happen to be wired today.
@@ -570,18 +701,18 @@ jobs:
       # a drop or a rename in the same release that stops writing the column.
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        if: needs.detect.outputs.db == 'true'
+        if: needs.detect.outputs.migrate == 'true'
         with:
           bun-version: 1.3.13
 
       - name: Install dependencies
-        if: needs.detect.outputs.db == 'true'
+        if: needs.detect.outputs.migrate == 'true'
         run: bun install --frozen-lockfile
 
       # See packages/db/scripts/migrate-ci.ts for why this is not
       # `drizzle-kit migrate`: ./drizzle has no journal to diff against.
       - name: Apply database migrations
-        if: needs.detect.outputs.db == 'true'
+        if: needs.detect.outputs.migrate == 'true'
         working-directory: packages/db
         env:
           DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
@@ -590,6 +721,7 @@ jobs:
       # ---- Containers --------------------------------------------------------
 
       - name: Install the Scaleway CLI
+        if: needs.detect.outputs.publish == 'true'
         env:
           SCW_CLI_VERSION: 2.62.0
           SCW_CLI_SHA256: 7638c385c1a43a5d9022a63791769fd464e14314032a51411726f062f3053e67
@@ -607,6 +739,7 @@ jobs:
       # filter, leaving it here would fail nearly every release on a missing
       # SCW_CONTAINER_ID_SUPPORT. Add the roll back when the container exists.
       - name: Roll the containers whose images were rebuilt
+        if: needs.detect.outputs.publish == 'true'
         env:
           IMAGE_BASE: ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}
           WEB_BUILT: ${{ needs.detect.outputs.web }}
@@ -656,7 +789,7 @@ jobs:
       # business release on the probe, so it is a deliberate choice, not a
       # consequence of this build arg existing.
       - name: Confirm web is serving this commit
-        if: needs.detect.outputs.web == 'true'
+        if: needs.detect.outputs.publish == 'true' && needs.detect.outputs.web == 'true'
         env:
           OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
         run: .github/scripts/check-release.sh openbookings.co "$GITHUB_SHA"
@@ -676,6 +809,7 @@ jobs:
       # now: a failed delete should show up as an annotation, not turn a good
       # release red and invite a rollback nobody needs.
       - name: Prune old images from the registry
+        if: needs.detect.outputs.publish == 'true'
         continue-on-error: true
         env:
           KEEP: 3
