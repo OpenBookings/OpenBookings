@@ -94,7 +94,8 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
       ? Promise.resolve([] as { booking_id: string; commission_cents: string; refunded: string }[])
       : query<{ booking_id: string; commission_cents: string; refunded: string }>(
           `SELECT b.id AS booking_id, b.commission_cents::text,
-                  coalesce((SELECT sum(ce.gross_amount) FROM commission_entries ce
+                  -- fee_refund rows hold a negative amount; commissionRefundedCents is positive
+                  coalesce((SELECT -sum(ce.gross_amount) FROM commission_entries ce
                              WHERE ce.booking_id = b.id AND ce.kind = 'fee_refund'), 0)::text AS refunded
              FROM bookings b WHERE b.id = ANY($1::uuid[])`,
           [bookingIds],
