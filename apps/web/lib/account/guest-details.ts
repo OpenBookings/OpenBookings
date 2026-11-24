@@ -5,11 +5,11 @@ import type { Address, Details } from "@/app/account/personal-details/_lib/valid
 
 /**
  * Writes a guest's personal details: phone and address to `guest_profile`
- * (which hosts read for their bookings), the first and last name through Better Auth so the
- * session's cached user follows. Shared by the account page and checkout.
+ * (which hosts read for their bookings), the first and last name through Better Auth, which
+ * stays the one writer of the "user" row. Shared by the account page and checkout.
  * Throws when either write fails; callers turn that into copy.
  */
-export async function saveGuestDetails(userId: string, current: { firstName: string; lastName: string }, details: Details): Promise<void> {
+export async function saveGuestDetails(userId: string, details: Details): Promise<void> {
   const { phone, address: a } = details;
   await query(
     `INSERT INTO guest_profile (user_id, phone, address_line1, address_line2, postal_code, city, country)
@@ -22,12 +22,27 @@ export async function saveGuestDetails(userId: string, current: { firstName: str
     [userId, phone, a?.line1 ?? null, a?.line2 ?? null, a?.postalCode ?? null, a?.city ?? null, a?.country ?? null],
   );
   // Names go through Better Auth only: the database derives `name` from them.
+  // Compared with the stored names, not the session's: the session is cached
+  // for minutes and would miss a save made just before.
+  const current = await readGuestNames(userId);
   if (details.firstName !== current.firstName || details.lastName !== current.lastName) {
     await auth.api.updateUser({
       headers: await headers(),
       body: { firstName: details.firstName, lastName: details.lastName },
     });
   }
+}
+
+/**
+ * The guest's first and last name as stored. Read from the database rather
+ * than the session, whose cookie cache can serve names up to 5 minutes old.
+ */
+export async function readGuestNames(userId: string): Promise<{ firstName: string; lastName: string }> {
+  const row = await queryOne<{ first_name: string; last_name: string }>(
+    `SELECT first_name, last_name FROM "user" WHERE id = $1`,
+    [userId],
+  );
+  return { firstName: row?.first_name ?? "", lastName: row?.last_name ?? "" };
 }
 
 type ProfileRow = {

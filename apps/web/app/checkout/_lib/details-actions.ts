@@ -28,7 +28,7 @@ export async function saveCheckoutDetails(form: FormData): Promise<CheckoutSaveR
   const parsed = parseCheckoutDetails(form);
   if (!parsed.ok) return { ok: false, errors: parsed.errors };
   try {
-    await saveGuestDetails(session.user.id, { firstName: session.user.firstName ?? "", lastName: session.user.lastName ?? "" }, parsed.value);
+    await saveGuestDetails(session.user.id, parsed.value);
   } catch {
     return { ok: false, message: DETAILS_SAVE_FAILED.message };
   }

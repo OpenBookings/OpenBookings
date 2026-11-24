@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
-import { readGuestProfile } from '@/lib/account/guest-details';
+import { readGuestNames, readGuestProfile } from '@/lib/account/guest-details';
 import { COUNTRIES, DIAL_CODES } from '@/lib/account/countries';
 import { prefillFromProfile } from '../_lib/guest-details';
 import type { BookingIntentStatus } from '@openbookings/db';
@@ -38,7 +38,7 @@ export const dynamic = 'force-dynamic';
  * bypassed; the real refusal lives in `POST /api/checkout`, which reads the
  * session itself and will not create a Session without one.
  */
-async function getViewer(): Promise<(GateViewer & { id: string; firstName: string; lastName: string }) | null> {
+async function getViewer(): Promise<(GateViewer & { id: string }) | null> {
   try {
     const session = await getServerSession();
     if (!session?.user?.email || !session.user.id) return null;
@@ -46,8 +46,6 @@ async function getViewer(): Promise<(GateViewer & { id: string; firstName: strin
       id: session.user.id,
       email: session.user.email,
       name: session.user.name ?? null,
-      firstName: session.user.firstName ?? '',
-      lastName: session.user.lastName ?? '',
     };
   } catch {
     // A session that cannot be read is a session we do not have. The gate
@@ -95,10 +93,10 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
 
   // The details card starts from the account. Read here, beside the intent,
   // so the card is filled on first paint.
-  const profile = await readGuestProfile(viewer.id);
+  const [profile, names] = await Promise.all([readGuestProfile(viewer.id), readGuestNames(viewer.id)]);
   const guestDetails = prefillFromProfile({
-    firstName: viewer.firstName,
-    lastName: viewer.lastName,
+    firstName: names.firstName,
+    lastName: names.lastName,
     email: viewer.email,
     phone: profile.phone,
     address: profile.address,
