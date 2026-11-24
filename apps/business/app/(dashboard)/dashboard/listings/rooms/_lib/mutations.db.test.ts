@@ -14,6 +14,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import type { SessionLike } from "@openbookings/authz";
+import { connectApp } from "@openbookings/db/apps";
 import { applyPendingMigrations } from "../../_lib/pending-migrations";
 import * as m from "./mutations";
 import { loadRoomEditor, loadRoomsIndex } from "./query";
@@ -283,6 +284,26 @@ describeWithDb("Rooms editor against Postgres", () => {
     );
     expect(state.success).toBe(false);
     expect(state.errors?.extraAdultFee?.[0]).toBe("Use at most two decimals, without a thousands separator");
+  });
+
+  test("on a property a connected app manages, the stored extra fees stay while the rest of the form saves", async () => {
+    const feeForm = (extraAdultFee: string, units: string) =>
+      form({ roomId, sizeM2: "40", maxAdults: "3", maxChildren: "1", baseOccupancy: "2", units, bed_king: "1", extraAdultFee, extraChildFee: "8,25" });
+    expect((await m.saveRoomSpace(session(owner), feeForm("17.5", "3"), deps)).success).toBe(true);
+
+    await connectApp(db, { propertyId, appKey: "siteminder", userId: owner, sendUpcoming: true, now: new Date("2031-03-01T12:00:00Z") });
+
+    // The form posts different fees (or none at all, as a read-only field would); they are ignored.
+    expect((await m.saveRoomSpace(session(owner), feeForm("99", "4"), deps)).success).toBe(true);
+    expect(
+      (await m.saveRoomSpace(session(owner), form({ roomId, sizeM2: "41", maxAdults: "3", maxChildren: "1", baseOccupancy: "2", units: "4", bed_king: "1" }), deps)).success,
+    ).toBe(true);
+    const row = await one<{ extra_adult_fee_cents: string; extra_child_fee_cents: string; total_units: number; size_sqm: string }>(
+      `SELECT extra_adult_fee_cents, extra_child_fee_cents, total_units, size_sqm FROM rooms WHERE id = $1`,
+      [roomId],
+    );
+    expect(row).toMatchObject({ extra_adult_fee_cents: "1750", extra_child_fee_cents: "825", total_units: 4 });
+    expect(Number(row!.size_sqm)).toBe(41);
   });
 
   test("units cannot drop below the busiest future night, which the error names", async () => {

@@ -32,6 +32,7 @@ import {
   type PropertyPin,
 } from "@/lib/current-property";
 import { refundableGuardError } from "../../rooms/_lib/refundable-guard";
+import { MANAGED_BY_APP, MANAGED_BY_APP_MESSAGE, managedBy } from "@/lib/apps/managed";
 
 /**
  * Bulk mutations behind the ARI toolbar modals. Every one of them writes a
@@ -52,7 +53,7 @@ export type ActionResult =
   | {
       ok: false;
       error: string;
-      code?: typeof RATES_CONFIRMATION_REQUIRED;
+      code?: typeof RATES_CONFIRMATION_REQUIRED | typeof MANAGED_BY_APP;
       /** The target is on another hotel than the current one (a stale tab). */
       reason?: "property-switched";
     };
@@ -70,6 +71,17 @@ function failed(message: string, access?: PinnedAccess): ActionResult {
 /** An authz check pinned to the current hotel. */
 async function pinned(check: (pin: Partial<PropertyPin>) => Promise<boolean>): Promise<PinnedAccess> {
   return pinnedAccess(await currentPropertyPin(), check);
+}
+
+/**
+ * Refusal for a hotel whose rates and availability a connected app manages.
+ * Called after the ownership check, so the target is on the current hotel
+ * (every check is pinned to it) and a stranger learns nothing.
+ */
+async function managedRefusal(): Promise<ActionResult | null> {
+  const { currentPropertyId } = await currentPropertyPin();
+  if (!(await managedBy(currentPropertyId))) return null;
+  return { ok: false, error: MANAGED_BY_APP_MESSAGE, code: MANAGED_BY_APP };
 }
 
 // ─────────────────────────────────────────────
@@ -109,6 +121,8 @@ export async function setAvailability(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
   if (access !== "ok") return failed("Room type not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
 
   const rows = await query<{ id: string }>(
     `INSERT INTO room_inventory
@@ -189,6 +203,8 @@ export async function setRestriction(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
   if (access !== "ok") return failed("Rate plan not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
 
   const hasStayRule =
     data.minStay !== null ||
@@ -261,6 +277,8 @@ export async function clearRestrictions(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
   if (access !== "ok") return failed("Rate plan not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
 
   const scopeClause =
     data.scope === "closures"
@@ -319,6 +337,8 @@ export async function createRatePlan(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
   if (access !== "ok") return failed("Room type not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
   // A rate plan carries a price. No price is stored until the organisation
   // has confirmed, on record, that its rates include tax.
   if (!(await roomRatesConfirmed(data.roomId))) {
@@ -395,6 +415,8 @@ export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRatePlan(session, data.ratePlanId, pin));
   if (access !== "ok") return failed("Rate plan not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
   // Same gate as createRatePlan: no price is stored until the organisation
   // has confirmed, on record, that its rates include tax.
   if (!(await ratePlanRatesConfirmed(data.ratePlanId))) {
@@ -521,6 +543,8 @@ export async function closeRoomType(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
   if (access !== "ok") return failed("Room type not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
 
   const rows = await query<{ id: string }>(
     `INSERT INTO room_closures (room_id, start_date, end_date, note, created_by)
@@ -553,6 +577,8 @@ export async function reopenRoomType(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
   if (access !== "ok") return failed("Room type not found", access);
+  const managed = await managedRefusal();
+  if (managed) return managed;
 
   const rows = await query<{ id: string }>(
     `UPDATE room_closures
@@ -651,7 +677,7 @@ export type PublishResult =
       error: string;
       stale?: true;
       version?: string;
-      code?: typeof RATES_CONFIRMATION_REQUIRED;
+      code?: typeof RATES_CONFIRMATION_REQUIRED | typeof MANAGED_BY_APP;
       reason?: "property-switched";
     };
 
@@ -695,6 +721,10 @@ export async function publishAriChanges(
       error: "You switched hotel in another tab. Reload to see this hotel's rates.",
       reason: "property-switched",
     };
+  }
+
+  if (await managedBy(data.propertyId)) {
+    return { ok: false, error: MANAGED_BY_APP_MESSAGE, code: MANAGED_BY_APP };
   }
 
   try {
@@ -783,7 +813,7 @@ export async function publishAriChanges(
 type PublishRefusal = {
   stale?: true;
   version?: string;
-  code?: typeof RATES_CONFIRMATION_REQUIRED;
+  code?: typeof RATES_CONFIRMATION_REQUIRED | typeof MANAGED_BY_APP;
 };
 
 /** Carries a refusal out of the transaction without committing it. */

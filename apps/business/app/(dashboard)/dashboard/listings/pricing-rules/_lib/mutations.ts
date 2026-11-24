@@ -1,5 +1,6 @@
 import { userOwnsProperty, type SessionLike } from "@openbookings/authz";
 import { withTransaction } from "@openbookings/db";
+import { MANAGED_BY_APP, MANAGED_BY_APP_MESSAGE } from "@/lib/apps/managed";
 import { currentPropertyPin, pinnedAccess, switchedReason, type PinnedAccess } from "@/lib/current-property";
 import { parseRuleGroupForm, type RuleGroupForm } from "./rule-group-schema";
 
@@ -37,9 +38,20 @@ export type RuleGroupResult =
       ok: false;
       error: string;
       errors?: Record<string, string[] | undefined>;
+      /** A connected app manages this hotel's rates, so rules do not apply to it. */
+      code?: typeof MANAGED_BY_APP;
       /** The rule's hotel is not the current one (a stale tab). */
       reason?: "property-switched";
     };
+
+/** Rules do not apply to rates a connected app sets, so a managed hotel's rules are read-only. */
+async function managedRefusal(db: TxDb, propertyId: string): Promise<RuleGroupResult | null> {
+  const rows = await db.query(
+    `SELECT 1 AS managed FROM app_installations WHERE property_id = $1 AND status = 'active' LIMIT 1`,
+    [propertyId],
+  );
+  return rows.length > 0 ? { ok: false, error: MANAGED_BY_APP_MESSAGE, code: MANAGED_BY_APP } : null;
+}
 
 const notFound = (access: PinnedAccess = "denied"): RuleGroupResult => ({
   ok: false,
@@ -96,6 +108,8 @@ export async function saveRuleGroup(
   if (access !== "ok") return notFound(access);
 
   return deps.tx(async (db) => {
+    const managed = await managedRefusal(db, input.propertyId);
+    if (managed) return managed;
     const propertyPlans = new Set(
       (await db.query<{ id: string }>(PROPERTY_PLANS_SQL, [input.propertyId])).map((p) => p.id),
     );
@@ -157,6 +171,8 @@ export async function setRuleGroupActive(
   return deps.tx(async (db) => {
     const owned = await ownedGroupProperty(session, groupId, db, deps);
     if ("refused" in owned) return notFound(owned.refused);
+    const managed = await managedRefusal(db, owned.propertyId);
+    if (managed) return managed;
     await db.query(`UPDATE rate_modifiers SET is_active = $1 WHERE rule_group_id = $2`, [active, groupId]);
     return { ok: true, groupId, propertyId: owned.propertyId };
   });
@@ -170,6 +186,8 @@ export async function deleteRuleGroup(
   return deps.tx(async (db) => {
     const owned = await ownedGroupProperty(session, groupId, db, deps);
     if ("refused" in owned) return notFound(owned.refused);
+    const managed = await managedRefusal(db, owned.propertyId);
+    if (managed) return managed;
     await db.query(`DELETE FROM rate_modifiers WHERE rule_group_id = $1`, [groupId]);
     return { ok: true, groupId, propertyId: owned.propertyId };
   });

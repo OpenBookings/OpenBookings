@@ -107,6 +107,8 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
   return error.flatten().fieldErrors as Record<string, string[]>;
 }
 
+const toCents = (stored: string | null) => (stored === null ? null : Number(stored));
+
 const str = (formData: FormData, key: string) => String(formData.get(key) ?? "");
 
 /** userOwnsProperty / userOwnsRoom / userOwnsRatePlan, pinned to the current hotel. */
@@ -402,6 +404,14 @@ export async function saveRoomSpace(
   } as SpaceValues;
 
   await requireRoom(session, roomId, deps);
+  const stored = await deps.queryOne<{ managed: boolean; extra_adult: string | null; extra_child: string | null }>(
+    `SELECT EXISTS (
+              SELECT 1 FROM app_installations ai WHERE ai.property_id = r.property_id AND ai.status = 'active'
+            ) AS managed,
+            r.extra_adult_fee_cents::text AS extra_adult, r.extra_child_fee_cents::text AS extra_child
+       FROM rooms r WHERE r.id = $1`,
+    [roomId],
+  );
 
   const parsed = spaceSchema.safeParse({
     ...values,
@@ -409,6 +419,11 @@ export async function saveRoomSpace(
   });
   if (!parsed.success) return { values, errors: fieldErrors(parsed.error), success: false };
   const d = parsed.data;
+  // A connected app sets the extra guest fees (they travel with its rates), so
+  // the stored ones stay whatever this form carries; the rest of the form saves.
+  const keepAppFees = stored?.managed === true;
+  const extraAdultFeeCents = keepAppFees ? toCents(stored.extra_adult) : d.extraAdultFeeCents;
+  const extraChildFeeCents = keepAppFees ? toCents(stored.extra_child) : d.extraChildFeeCents;
 
   const peak = await peakFutureUnits(roomId, deps);
   if (peak && d.units < peak.units) {
@@ -442,8 +457,8 @@ export async function saveRoomSpace(
       d.units,
       roomId,
       d.baseOccupancy,
-      d.extraAdultFeeCents,
-      d.extraChildFeeCents,
+      extraAdultFeeCents,
+      extraChildFeeCents,
       d.cotsMax,
       d.cotFeeCents,
       d.extraBedsMax,

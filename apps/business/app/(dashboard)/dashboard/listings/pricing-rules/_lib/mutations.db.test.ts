@@ -7,6 +7,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import { connectApp, disconnectApp } from "@openbookings/db/apps";
 import { applyPendingMigrations, connectionString, describeWithDb, seedProperty } from "@openbookings/db/testing";
 import { deleteRuleGroup, saveRuleGroup, setRuleGroupActive, type RuleGroupDeps } from "./mutations";
 import type { RuleGroupForm } from "./rule-group-schema";
@@ -130,6 +131,31 @@ describeWithDb("pricing rule groups against Postgres", () => {
       await saveRuleGroup(owner, { ...weekly, propertyId: ids.propertyId, groupId: theirs.groupId }, deps()),
     ).toEqual({ ok: false, error: "Rule not found" });
     expect((await rows(theirs.groupId)).every((r) => r.is_active)).toBe(true);
+  });
+
+  test("while a connected app manages the property, rules cannot be created, changed, switched or deleted; after disconnecting they can", async () => {
+    const saved = await saveRuleGroup(owner, { ...weekly, propertyId: ids.propertyId }, deps());
+    if (!saved.ok) throw new Error(saved.error);
+
+    const { installation } = await connectApp(db, {
+      propertyId: ids.propertyId,
+      appKey: "siteminder",
+      userId: "host-owner",
+      sendUpcoming: true,
+      now: new Date("2031-03-01T12:00:00Z"),
+    });
+    const managed = { ok: false, error: "This is managed by SiteMinder. Change it there.", code: "managed-by-app" } as const;
+    expect(await saveRuleGroup(owner, { ...weekly, propertyId: ids.propertyId }, deps())).toEqual(managed);
+    expect(await saveRuleGroup(owner, { ...weekly, amount: "20", propertyId: ids.propertyId, groupId: saved.groupId }, deps())).toEqual(managed);
+    expect(await setRuleGroupActive(owner, saved.groupId, false, deps())).toEqual(managed);
+    expect(await deleteRuleGroup(owner, saved.groupId, deps())).toEqual(managed);
+    expect(await rows(saved.groupId)).toEqual([
+      { plan: expect.any(String), type: "length_of_stay", value: -10, is_active: true, applies_to_all: true },
+      { plan: expect.any(String), type: "length_of_stay", value: -10, is_active: true, applies_to_all: true },
+    ]);
+
+    await disconnectApp(db, { installationId: installation.id, now: new Date("2031-03-02T12:00:00Z") });
+    expect((await setRuleGroupActive(owner, saved.groupId, false, deps())).ok).toBe(true);
   });
 
   test('a flat weekend surcharge of "15.50" stores 1550 cents', async () => {

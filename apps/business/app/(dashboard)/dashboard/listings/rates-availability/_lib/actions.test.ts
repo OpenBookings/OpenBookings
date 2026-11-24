@@ -22,11 +22,18 @@ const record = async (sql: string, values: unknown[] = []) => {
 
 const realDb = await import("@openbookings/db");
 const realAuthz = await import("@openbookings/authz");
+const realManaged = await import("@/lib/apps/managed");
+/** Whether the current hotel is managed by a connected app; each test sets it. */
+let managed = false;
 await mockModules(
   import.meta.dir,
   {
     "next/cache": () => ({ revalidatePath: () => {} }),
     "next/headers": () => ({ headers: async () => new Headers() }),
+    "@/lib/apps/managed": () => ({
+      ...realManaged,
+      managedBy: async () => (managed ? { appKey: "siteminder", displayName: "SiteMinder" } : null),
+    }),
     "@/lib/purge-property-page": () => ({ purgePropertyPage: async () => {} }),
     "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" }, session: { id: "s1" } }) }),
     "@/lib/current-property": () => ({
@@ -56,10 +63,12 @@ await mockModules(
   ["@/lib/auth"],
 );
 
-const { publishAriChanges, setBaseRate, createRatePlan } = await import("./actions");
+const actions = await import("./actions");
+const { publishAriChanges, setBaseRate, createRatePlan } = actions;
 
 beforeEach(() => {
   calls = [];
+  managed = false;
 });
 
 describe("setBaseRate", () => {
@@ -112,5 +121,43 @@ describe("publishAriChanges", () => {
   test("a price with three decimals is refused, and nothing is written", async () => {
     expect(await publish("120.255")).toEqual({ ok: false, error: "Use at most two decimals, without a thousands separator" });
     expect(calls).toEqual([]);
+  });
+});
+
+describe("a property managed by a connected app", () => {
+  const ROOM = "22222222-2222-4222-8222-222222222222";
+  const range = { startDate: "2031-03-10", endDate: "2031-03-12" };
+  const writes = () => calls.filter((c) => /^\s*(INSERT|UPDATE|DELETE)/i.test(c.sql));
+
+  const attempts: [string, () => Promise<unknown>][] = [
+    ["setAvailability", () => actions.setAvailability({ ...range, roomId: ROOM, availableOverride: 2, blockedRooms: 0, totalRooms: null, note: null })],
+    ["setRestriction", () => actions.setRestriction({ ...range, ratePlanId: PLAN, isClosed: true, minStay: null, maxStay: null, closedToArrival: false, closedToDeparture: false, note: null })],
+    ["clearRestrictions", () => actions.clearRestrictions({ ...range, ratePlanId: PLAN, scope: "all" })],
+    ["createRatePlan", () => createRatePlan({ roomId: ROOM, name: "Flexible", bar: "99", currency: "EUR", isRefundable: true, minStay: 1, maxStay: null })],
+    ["setBaseRate", () => setBaseRate({ ratePlanId: PLAN, bar: "89,50" })],
+    ["closeRoomType", () => actions.closeRoomType({ ...range, roomId: ROOM, note: null })],
+    ["reopenRoomType", () => actions.reopenRoomType({ ...range, roomId: ROOM })],
+    [
+      "publishAriChanges",
+      () =>
+        publishAriChanges({
+          propertyId: PROP,
+          from: "2031-03-01",
+          to: "2031-03-31",
+          version: "v1",
+          changes: [{ type: "closure", ratePlanId: PLAN, dates: ["2031-03-10"] }],
+        }),
+    ],
+  ];
+
+  test.each(attempts)("%s is refused as managed-by-app and writes nothing", async (_name, run) => {
+    managed = true;
+    expect(await run()).toEqual({ ok: false, error: "This is managed by SiteMinder. Change it there.", code: "managed-by-app" });
+    expect(writes()).toEqual([]);
+  });
+
+  test.each(attempts)("%s still writes on a property nobody manages", async (_name, run) => {
+    expect(await run()).toMatchObject({ ok: true });
+    expect(writes().length).toBeGreaterThan(0);
   });
 });
