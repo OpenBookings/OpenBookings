@@ -136,14 +136,15 @@ export async function seedProperty(
 }
 
 /**
- * A guest account. `bookings.user_id` references `"user"(id)` on the real
- * database, so every booking needs one.
+ * A guest account, Test Guest (`name` comes from the 0059 trigger).
+ * `bookings.user_id` references `"user"(id)` on the real database, so every
+ * booking needs one.
  */
 export async function seedGuest(db: Client): Promise<string> {
   const id = `test-guest-${crypto.randomUUID()}`;
   await db.query(
-    `INSERT INTO "user" (id, name, email, "emailVerified", account_type)
-     VALUES ($1, 'Test Guest', $2, true, 'private'::account_type)`,
+    `INSERT INTO "user" (id, first_name, last_name, email, "emailVerified", account_type)
+     VALUES ($1, 'Test', 'Guest', $2, true, 'private'::account_type)`,
     [id, `${id}@example.test`],
   );
   return id;
