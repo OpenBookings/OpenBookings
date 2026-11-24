@@ -26,6 +26,13 @@ export interface Night {
   /** The plan's BAR (`rate_plans.bar_cents`) or the override (`price_per_night_cents`). */
   base_price_cents: number
   has_override: boolean
+  /**
+   * On a rate plan a connected app manages (`RoomRow.managed`): the app's fee
+   * per extra adult / child for this night, in cents. Null or absent = no fee.
+   * Ignored on other plans, which take the room's fees.
+   */
+  extra_adult_fee_cents?: number | null
+  extra_child_fee_cents?: number | null
 }
 
 interface NightWithSurcharge extends Night {
@@ -77,10 +84,18 @@ export interface RoomRow {
   tourist_tax_rules?: TouristTaxRule[]
   /**
    * Per extra guest per night, in cents. Guests above `base_occupancy`
-   * pay it (see `extraGuests`). Absent or null = not charged.
+   * pay it (see `extraGuests`). Absent or null = not charged. Not used when
+   * `managed`: the nights carry the app's fees instead.
    */
   extra_adult_fee_cents?: number | null
   extra_child_fee_cents?: number | null
+  /**
+   * The rate plan's prices come from a connected app (SiteMinder): each
+   * night's `base_price_cents` is the app's price, no rate modifier applies
+   * (discount rules are off), and extra guests pay the night's own fees
+   * (`Night.extra_adult_fee_cents` / `extra_child_fee_cents`).
+   */
+  managed?: boolean
   /** Per cot / extra bed per night, in cents, paid at the property. 0 = free. */
   cot_fee_cents?: number | null
   extra_bed_fee_cents?: number | null
@@ -546,7 +561,9 @@ export function resolveRoom(
   const today = todayAtProperty ?? todayInZone(row.timezone ?? 'UTC')
   const { adults, children, arrivalDate } = params
   const numNights = row.nights.length
-  const modifiersRun = executeModifiers(row.nights, row.modifiers, { numNights, arrivalDate, today })
+  // Discount rules are off on a plan a connected app prices.
+  const modifiers = row.managed ? [] : row.modifiers
+  const modifiersRun = executeModifiers(row.nights, modifiers, { numNights, arrivalDate, today })
 
   const state = applyExtraGuests(modifiersRun, row, params)
   const payAtProperty = payAtPropertyLines(row, params, numNights)
@@ -572,7 +589,7 @@ export function resolveRoom(
     total_price_cents: roomPrice + touristTax.totalCents,
     priced_nights: priced,
     rate_nights: state.nights.map(n => ({ date: n.date, priceCents: n.base_price_cents + n._surcharge })),
-    extra_guests: extraGuestLines(row, params, numNights),
+    extra_guests: extraGuestLines(row, params),
     pay_at_property: payAtProperty,
     pay_at_property_total_cents: payAtProperty.reduce((sum, l) => sum + l.amountCents, 0),
     discount: appliedDiscount(state),
@@ -587,6 +604,44 @@ export function resolveRoom(
 
 const extrasTotal = (state: CalculationState) => state.nights.reduce((sum, n) => sum + n._extra, 0)
 
+type ExtraKind = ExtraGuestLine['kind']
+
+/** Extra guests of one kind charged one fee (cents per guest per night) on these nights. */
+type ExtraGroup = { kind: ExtraKind; count: number; fee: number; dates: Set<string> }
+
+/**
+ * One guest's extra fee on one night, in cents: the room's own fee, or on a
+ * managed plan the app's fee for that night. Null = not charged.
+ */
+function extraFee(row: RoomRow, night: Night, kind: ExtraKind): number | null | undefined {
+  if (row.managed) return kind === 'adult' ? night.extra_adult_fee_cents : night.extra_child_fee_cents
+  return kind === 'adult' ? row.extra_adult_fee_cents : row.extra_child_fee_cents
+}
+
+/**
+ * The charged extra guests of one kind, grouped by fee per night in order of
+ * first appearance: one group on an unmanaged plan (the room's fee every
+ * night); on a managed plan one per fee the app sent, so every group still
+ * reads fee × nights. Nights without a fee charge nothing and are left out.
+ */
+function extraGroups(row: RoomRow, params: SearchParams): ExtraGroup[] {
+  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
+  const groups: ExtraGroup[] = []
+  for (const [kind, count] of [['adult', extra.adults], ['child', extra.children]] as const) {
+    if (count <= 0) continue
+    const byFee = new Map<number, Set<string>>()
+    for (const night of row.nights) {
+      const fee = extraFee(row, night, kind) ?? 0
+      if (fee <= 0) continue
+      const dates = byFee.get(fee) ?? new Set<string>()
+      dates.add(night.date)
+      byFee.set(fee, dates)
+    }
+    for (const [fee, dates] of byFee) groups.push({ kind, count, fee, dates })
+  }
+  return groups
+}
+
 /**
  * Add guests above base occupancy, per night, on top of the rate. Runs after
  * every rate modifier, so no discount reaches these fees. Infants take no
@@ -597,40 +652,31 @@ function applyExtraGuests(
   row: RoomRow,
   params: SearchParams
 ): CalculationState {
-  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
-  const lines: { label: string; fee: number | null | undefined; count: number }[] = [
-    { label: 'Extra adults', fee: row.extra_adult_fee_cents, count: extra.adults },
-    { label: 'Extra children', fee: row.extra_child_fee_cents, count: extra.children },
-  ]
-
   let next = state
-  for (const { label, fee, count } of lines) {
-    const perNight = (fee ?? 0) * count
-    if (perNight <= 0) continue
-    const delta = perNight * next.nights.length
+  for (const { kind, count, fee, dates } of extraGroups(row, params)) {
+    const perNight = fee * count
+    const delta = perNight * dates.size
     const previous = next.trace[next.trace.length - 1]?.result_cents ?? 0
+    const label = kind === 'adult' ? 'Extra adults' : 'Extra children'
     next = {
       ...next,
-      nights: next.nights.map(n => ({ ...n, _extra: n._extra + perNight })),
+      nights: next.nights.map(n => (dates.has(n.date) ? { ...n, _extra: n._extra + perNight } : n)),
       total: next.total + delta,
-      trace: [...next.trace, { label, op: 'extra', value: fee ?? 0, delta_cents: delta, result_cents: previous + delta }],
+      trace: [...next.trace, { label, op: 'extra', value: fee, delta_cents: delta, result_cents: previous + delta }],
     }
   }
   return next
 }
 
-/** One line per kind of extra guest that is charged. Matches applyExtraGuests. */
-function extraGuestLines(row: RoomRow, params: SearchParams, nights: number): ExtraGuestLine[] {
-  const extra = extraGuests(row.base_occupancy, params.adults, params.children)
-  const lines: ExtraGuestLine[] = []
-  const add = (kind: ExtraGuestLine['kind'], count: number, fee: number | null | undefined) => {
-    const perNight = (fee ?? 0) * count
-    if (perNight <= 0) return
-    lines.push({ kind, count, perNightCents: perNight, nights, amountCents: perNight * nights })
-  }
-  add('adult', extra.adults, row.extra_adult_fee_cents)
-  add('child', extra.children, row.extra_child_fee_cents)
-  return lines
+/** One line per kind of extra guest, and per fee, that is charged. Matches applyExtraGuests. */
+function extraGuestLines(row: RoomRow, params: SearchParams): ExtraGuestLine[] {
+  return extraGroups(row, params).map(({ kind, count, fee, dates }) => ({
+    kind,
+    count,
+    perNightCents: fee * count,
+    nights: dates.size,
+    amountCents: fee * count * dates.size,
+  }))
 }
 
 /**

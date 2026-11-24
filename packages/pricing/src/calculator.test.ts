@@ -415,6 +415,67 @@ describe("occupancy & extras", () => {
     expect(r.priced_nights.map((n) => n.priceCents)).toEqual([11000, 11000, 11000]);
   });
 
+  describe("a rate plan a connected app manages", () => {
+    const twoNightDiscount: Modifier = { ...threeNightDiscount, trigger_condition: { min_nights: 2 } };
+    const appNights = [
+      { date: "2026-07-01", base_price_cents: 18650, has_override: false, extra_adult_fee_cents: 2500, extra_child_fee_cents: null },
+      { date: "2026-07-02", base_price_cents: 20000, has_override: false, extra_adult_fee_cents: 3000, extra_child_fee_cents: null },
+    ];
+    const managed = (extra: Partial<RoomRow> = {}) =>
+      room({ managed: true, nights: appNights, modifiers: [twoNightDiscount], ...extra });
+
+    test("takes the app's prices and extra fees per night, and no discount rule", () => {
+      const r = resolveRoom(managed(), stay(3), "2026-06-01");
+      expect(r.room_price_cents).toBe(44150);
+      expect(r.discount).toBeNull();
+      expect(r.applied_modifiers).toEqual([]);
+      expect(r.trace.some((s) => s.modifier_type !== undefined)).toBe(false);
+      expect(r.priced_nights).toEqual([
+        { date: "2026-07-01", priceCents: 21150 },
+        { date: "2026-07-02", priceCents: 23000 },
+      ]);
+      expect(r.rate_nights.map((n) => n.priceCents)).toEqual([18650, 20000]);
+    });
+
+    test("the same row unmanaged takes the discount and the room's own fee", () => {
+      const r = resolveRoom(managed({ managed: false }), stay(3), "2026-06-01");
+      expect(r.discount?.amountCents).toBe(3865);
+      expect(r.room_price_cents).toBe(38650 - 3865 + 2 * 2000);
+    });
+
+    test("an extra-guest line per fee, so each still reads fee × nights", () => {
+      const r = resolveRoom(managed(), stay(3), "2026-06-01");
+      expect(r.extra_guests).toEqual([
+        { kind: "adult", count: 1, perNightCents: 2500, nights: 1, amountCents: 2500 },
+        { kind: "adult", count: 1, perNightCents: 3000, nights: 1, amountCents: 3000 },
+      ]);
+      const sum = r.rate_nights.reduce((s, n) => s + n.priceCents, 0) + r.extra_guests.reduce((s, l) => s + l.amountCents, 0);
+      expect(sum).toBe(r.room_price_cents);
+    });
+
+    test("one line when the app's fee is the same every night", () => {
+      const nights = appNights.map((n) => ({ ...n, extra_adult_fee_cents: 2500 }));
+      const r = resolveRoom(managed({ nights }), stay(3), "2026-06-01");
+      expect(r.extra_guests).toEqual([{ kind: "adult", count: 1, perNightCents: 2500, nights: 2, amountCents: 5000 }]);
+      expect(r.trace.filter((s) => s.op === "extra")).toEqual([
+        { label: "Extra adults", op: "extra", value: 2500, delta_cents: 5000, result_cents: 43650 },
+      ]);
+    });
+
+    test("no fee from the app means no extra-guest charge, whatever the room says", () => {
+      const r = resolveRoom(managed(), stay(2, 1), "2026-06-01");
+      expect(r.room_price_cents).toBe(38650);
+      expect(r.extra_guests).toEqual([]);
+    });
+
+    test("a night without the app's fee charges nothing for it", () => {
+      const nights = [appNights[0], { ...appNights[1], extra_adult_fee_cents: null }];
+      const r = resolveRoom(managed({ nights }), stay(3), "2026-06-01");
+      expect(r.room_price_cents).toBe(38650 + 2500);
+      expect(r.extra_guests).toEqual([{ kind: "adult", count: 1, perNightCents: 2500, nights: 1, amountCents: 2500 }]);
+    });
+  });
+
   test("a percentage tourist tax includes the extras", () => {
     const tenPercent: TouristTaxRule = {
       effectiveFrom: "2026-01-01",

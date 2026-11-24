@@ -8,6 +8,7 @@ import {
   type Queryable,
   type RoomAvailability,
 } from "@openbookings/db";
+import { MANAGED_NIGHT_PRICE_SQL, MANAGED_PROPERTY_SQL } from "@openbookings/db/apps";
 import {
   freeCancellationUntil,
   nonRefundableQualifies,
@@ -163,9 +164,15 @@ type PlanRow = RoomRow & {
 
 /**
  * One row per active room × active rate plan, in display order. Steps 2–4 of
- * the search query (apps/web/app/api/query/route.ts): the nightly price is the
- * highest-priority active override or the plan's BAR, then the plan's active
- * modifiers and the property's tourist tax rules for the resolver.
+ * the search query (apps/web/app/api/query/search-query.ts): the nightly price
+ * (MANAGED_NIGHT_PRICE_SQL: the highest-priority active override or the plan's
+ * BAR, or on a plan a connected app manages the app's price and extra-guest
+ * fees), then the plan's active modifiers (none on a managed plan: discount
+ * rules are off) and the property's tourist tax rules for the resolver.
+ *
+ * A managed plan with a night the app sent no price for is left out: that
+ * night is closed (loadStayAvailability says so), and nothing of ours may
+ * price it.
  *
  * $1 property id, $2 check-in, $3 check-out.
  */
@@ -184,7 +191,8 @@ plans AS (
     r.cots_max, r.extra_beds_max, r.cot_and_extra_bed_together,
     rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar_cents, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay, rp.sort_order AS plan_sort,
-    rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner
+    rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner,
+    ${MANAGED_PROPERTY_SQL} AS managed
   FROM properties p
   JOIN rooms r       ON r.property_id = p.id AND r.is_active AND r.archived_at IS NULL
   JOIN rate_plans rp ON rp.room_id = r.id AND rp.is_active AND rp.archived_at IS NULL
@@ -192,25 +200,22 @@ plans AS (
 ),
 room_nights AS (
   SELECT
-    pl.rate_plan_id,
+    plan_night.rate_plan_id,
     jsonb_agg(jsonb_build_object(
-      'date',         sd.stay_date,
-      'base_price_cents', COALESCE(o.price_per_night_cents, pl.bar_cents),
-      'has_override', (o.price_per_night_cents IS NOT NULL)
-    ) ORDER BY sd.stay_date) AS nights
-  FROM plans pl
-  CROSS JOIN stay_dates sd
-  LEFT JOIN LATERAL (
-    SELECT price_per_night_cents
-    FROM rate_overrides
-    WHERE rate_plan_id = pl.rate_plan_id
-      AND start_date  <= sd.stay_date
-      AND end_date    >= sd.stay_date
-      AND is_active
-    ORDER BY priority DESC
-    LIMIT 1
-  ) o ON TRUE
-  GROUP BY pl.rate_plan_id
+      'date',         plan_night.date,
+      'base_price_cents', price.base_price_cents,
+      'has_override', price.has_override
+    ) || jsonb_strip_nulls(jsonb_build_object(
+      'extra_adult_fee_cents', price.extra_adult_fee_cents,
+      'extra_child_fee_cents', price.extra_child_fee_cents
+    )) ORDER BY plan_night.date) AS nights,
+    bool_and(price.priced) AS priced
+  FROM (
+    SELECT pl.rate_plan_id, pl.bar_cents, pl.managed, sd.stay_date AS date
+    FROM plans pl CROSS JOIN stay_dates sd
+  ) plan_night
+  CROSS JOIN LATERAL (${MANAGED_NIGHT_PRICE_SQL}) price
+  GROUP BY plan_night.rate_plan_id
 ),
 plan_modifiers AS (
   SELECT
@@ -223,7 +228,7 @@ plan_modifiers AS (
       'sort_order',        sort_order
     ) ORDER BY sort_order) AS modifiers
   FROM rate_modifiers
-  WHERE is_active AND rate_plan_id IN (SELECT rate_plan_id FROM plans)
+  WHERE is_active AND rate_plan_id IN (SELECT rate_plan_id FROM plans WHERE NOT managed)
   GROUP BY rate_plan_id
 ),
 tax AS (
@@ -244,7 +249,7 @@ SELECT
   COALESCE(pm.modifiers, '[]'::jsonb) AS modifiers,
   tax.rules AS tourist_tax_rules
 FROM plans pl
-JOIN room_nights rn ON rn.rate_plan_id = pl.rate_plan_id
+JOIN room_nights rn ON rn.rate_plan_id = pl.rate_plan_id AND rn.priced
 LEFT JOIN plan_modifiers pm ON pm.rate_plan_id = pl.rate_plan_id
 CROSS JOIN tax
 ORDER BY pl.room_sort, pl.room_name, pl.room_id, pl.plan_sort, pl.rate_plan_name, pl.rate_plan_id

@@ -1,6 +1,6 @@
 /**
  * Bounds for the public search query, which is unauthenticated and runs a
- * generate_series over the stay (see buildHotelSearchQuery). Without them,
+ * generate_series over the stay (see HOTEL_SEARCH_SQL in search-query.ts). Without them,
  * `checkin=0001-01-01&checkout=9999-12-31` asks Postgres for ~3.6M stay dates
  * per candidate rate plan, and a reversed range or an impossible date such as
  * `2026-02-30` turns into a 500 rather than a clean 400.

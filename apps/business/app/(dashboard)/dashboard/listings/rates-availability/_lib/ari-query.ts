@@ -1,5 +1,5 @@
 import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
-import { MANAGED_PROPERTY_SQL, SETTLED_BOOKED_SQL } from "@openbookings/db/apps";
+import { MANAGED_NIGHT_PRICE_SQL, MANAGED_PROPERTY_SQL, SETTLED_BOOKED_SQL } from "@openbookings/db/apps";
 import {
   bookableUnits,
   hasStayLengthDiscount,
@@ -7,6 +7,7 @@ import {
   resolveNightlyRates,
   todayInZone,
   type Modifier,
+  type NightlyRate,
 } from "@openbookings/pricing";
 import { applyLowestRates, deriveStatus, resolveStatus } from "./derive";
 import type { PricingRule } from "./rule-copy";
@@ -147,7 +148,7 @@ export function buildAvailabilityCell(
   };
 }
 
-interface RateQueryRow {
+export interface RateQueryRow {
   room_id: string;
   rate_plan_id: string;
   rate_plan_name: string;
@@ -155,14 +156,18 @@ interface RateQueryRow {
   /** bigint column, cents — see `toNumber`. */
   bar_cents: string;
   is_refundable: boolean;
+  /** 1 and null on a managed plan: the app's restrictions replace the plan's own. */
   plan_min_stay: number;
   plan_max_stay: number | null;
   base_occupancy: number;
   /** Room published and plan active: what guests can actually book. */
   on_sale: boolean;
   date: string;
-  /** bigint column, cents — see `toNumber`. */
-  base_price_cents: string;
+  /**
+   * bigint column, cents — see `toNumber`. Null only on a managed plan's
+   * night the app sent no price for (`priced` false).
+   */
+  base_price_cents: string | null;
   has_override: boolean;
   override_label: string | null;
   closure_id: string | null;
@@ -183,10 +188,27 @@ interface RateQueryRow {
   restriction_by: string | null;
   restriction_by_name: string | null;
   restriction_at: string | null;
+  /**
+   * The property has an active app installation (SiteMinder): the plan's
+   * price is the app's (MANAGED_NIGHT_PRICE_SQL) and its rules are the app's
+   * restrictions below, never our own closures and restrictions.
+   */
+  managed: boolean;
+  /** False only on a managed night without an app price: closed, as for guests. */
+  priced: boolean;
+  /** app_restrictions for this night; all null/false when unmanaged or not sent. */
+  app_closed: boolean | null;
+  app_cta: boolean | null;
+  app_ctd: boolean | null;
+  app_min_stay_arrival: number | null;
+  app_max_stay_arrival: number | null;
+  app_min_stay_through: number | null;
+  app_max_stay_through: number | null;
+  app_received_at: string | null;
 }
 
 /** Every rule on a plan, switched off ones too; only active ones are priced. */
-type ModifierWithId = Modifier & { id: string; is_active: boolean };
+export type ModifierWithId = Modifier & { id: string; is_active: boolean };
 
 interface ModifierQueryRow {
   rate_plan_id: string;
@@ -331,8 +353,15 @@ ORDER BY sr.name, d.d
  * Closures and restrictions get their own LATERAL each rather than a single
  * "winning row". They are independent facts — a date can be both closed and
  * carry a min-stay — and collapsing them would throw away whichever lost.
+ *
+ * On a plan a connected app manages, the price is the app's for that night
+ * (MANAGED_NIGHT_PRICE_SQL, shared with guest search and the stay quote), and
+ * the rules are the app's restrictions for that night (app_restrictions), as
+ * loadStayAvailability reads them; our own closures, restrictions and the
+ * plan's min/max stay are ignored. A managed night without an app price comes
+ * back unpriced and is shown closed.
  */
-const RATES_SQL = `
+export const RATES_SQL = `
 WITH dates AS (
   SELECT generate_series($3::date, $4::date, INTERVAL '1 day')::date AS d
 ),
@@ -344,7 +373,8 @@ scope_plans AS (
     rp.id, rp.name, rp.bar_cents, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay,
     (r.is_active AND rp.is_active) AS on_sale,
-    r.id AS room_id, r.name AS room_name, r.base_occupancy
+    r.id AS room_id, r.name AS room_name, r.base_occupancy,
+    ${MANAGED_PROPERTY_SQL} AS managed
   FROM rate_plans rp
   JOIN rooms r      ON r.id = rp.room_id
   JOIN properties p ON p.id = r.property_id
@@ -359,14 +389,14 @@ SELECT
   sp.currency,
   sp.bar_cents,
   sp.is_refundable,
-  sp.min_stay                      AS plan_min_stay,
-  sp.max_stay                      AS plan_max_stay,
+  CASE WHEN sp.managed THEN 1 ELSE sp.min_stay END    AS plan_min_stay,
+  CASE WHEN sp.managed THEN NULL ELSE sp.max_stay END AS plan_max_stay,
   sp.base_occupancy,
   sp.on_sale,
   d.d::text                        AS date,
-  COALESCE(o.price_per_night_cents, sp.bar_cents) AS base_price_cents,
-  (o.price_per_night_cents IS NOT NULL)          AS has_override,
-  o.label                          AS override_label,
+  price.base_price_cents,
+  price.has_override,
+  price.override_label,
   cl.id                            AS closure_id,
   cl.start_date::text              AS closure_start,
   cl.end_date::text                AS closure_end,
@@ -384,19 +414,23 @@ SELECT
   rs.note                          AS restriction_note,
   rs.created_by                    AS restriction_by,
   ru.name                          AS restriction_by_name,
-  rs.created_at                    AS restriction_at
+  rs.created_at                    AS restriction_at,
+  sp.managed,
+  price.priced,
+  ars.is_closed                    AS app_closed,
+  ars.closed_to_arrival            AS app_cta,
+  ars.closed_to_departure          AS app_ctd,
+  ars.min_stay_arrival             AS app_min_stay_arrival,
+  ars.max_stay_arrival             AS app_max_stay_arrival,
+  ars.min_stay_through             AS app_min_stay_through,
+  ars.max_stay_through             AS app_max_stay_through,
+  ars.received_at                  AS app_received_at
 FROM scope_plans sp
 CROSS JOIN dates d
-LEFT JOIN LATERAL (
-  SELECT price_per_night_cents, label
-  FROM rate_overrides
-  WHERE rate_plan_id = sp.id
-    AND start_date <= d.d
-    AND end_date   >= d.d
-    AND is_active
-  ORDER BY priority DESC
-  LIMIT 1
-) o ON TRUE
+CROSS JOIN LATERAL (
+  SELECT sp.id AS rate_plan_id, sp.bar_cents, sp.managed, d.d AS date
+) plan_night
+CROSS JOIN LATERAL (${MANAGED_NIGHT_PRICE_SQL}) price
 LEFT JOIN LATERAL (
   SELECT id, start_date, end_date, note, created_by, created_at
   FROM rate_plan_restrictions
@@ -405,6 +439,7 @@ LEFT JOIN LATERAL (
     AND end_date   >= d.d
     AND is_active
     AND is_closed
+    AND NOT sp.managed
   ORDER BY priority DESC
   LIMIT 1
 ) cl ON TRUE
@@ -417,9 +452,11 @@ LEFT JOIN LATERAL (
     AND end_date   >= d.d
     AND is_active
     AND NOT is_closed
+    AND NOT sp.managed
   ORDER BY priority DESC
   LIMIT 1
 ) rs ON TRUE
+LEFT JOIN app_restrictions ars ON sp.managed AND ars.rate_plan_id = sp.id AND ars.date = d.d
 LEFT JOIN "user" cu ON cu.id = cl.created_by
 LEFT JOIN "user" ru ON ru.id = rs.created_by
 ORDER BY sp.room_name, sp.name, d.d
@@ -581,6 +618,184 @@ function ruleFrom(
   };
 }
 
+/** What a plan's cells need from the rest of the grid. */
+export interface RatePlanContext {
+  /** Nights each cell is priced over. */
+  stayLength: number;
+  today: string;
+  /** Whether a date gets a column; the rest is the probe's overhang. */
+  isVisible: (date: string) => boolean;
+  /** The room type's units left on the date. */
+  available: (date: string) => number;
+  /** The room-type closure covering the date, if any. */
+  roomClosure: (date: string) => RoomClosureRule | null;
+}
+
+/**
+ * Split a plan's nights into runs the resolver can price. An unmanaged plan
+ * is one run. A managed plan breaks at every night the app sent no price
+ * for: those nights are never priced, and a longer probe stops short of them
+ * as it does at the end of the window.
+ */
+function pricedRuns(dateRows: RateQueryRow[]): RateQueryRow[][] {
+  const runs: RateQueryRow[][] = [];
+  let run: RateQueryRow[] = [];
+  for (const row of dateRows) {
+    if (row.priced && row.base_price_cents !== null) {
+      run.push(row);
+      continue;
+    }
+    if (run.length > 0) runs.push(run);
+    run = [];
+  }
+  if (run.length > 0) runs.push(run);
+  return runs;
+}
+
+/**
+ * A managed night's rules, from the app's restrictions as loadStayAvailability
+ * reads them. Closed when the app stopped selling it or sent no price for it.
+ * A stay arriving on the date covers it, so the through limits bind it as
+ * well as the arrival ones: the cell shows the stricter of each.
+ *
+ * Rule ids are per plan, not per date, so adjacent closed nights read as one
+ * bar; the range is the night itself, since the app sends nights, not ranges.
+ */
+function appRules(r: RateQueryRow): { closure: RestrictionRule | null; restriction: RestrictionRule | null } {
+  const at = r.app_received_at ?? r.date;
+  const base = { startDate: r.date, endDate: r.date, note: null, createdBy: null, createdByName: null, createdAt: at };
+  const closure =
+    r.app_closed || !r.priced
+      ? { ...base, id: `app:${r.rate_plan_id}:closed`, isClosed: true, minStay: null, maxStay: null, closedToArrival: false, closedToDeparture: false }
+      : null;
+  const mins = [r.app_min_stay_arrival, r.app_min_stay_through].filter((n): n is number => n !== null);
+  const maxes = [r.app_max_stay_arrival, r.app_max_stay_through].filter((n): n is number => n !== null);
+  const minStay = mins.length > 0 ? Math.max(...mins) : null;
+  const maxStay = maxes.length > 0 ? Math.min(...maxes) : null;
+  const cta = r.app_cta ?? false;
+  const ctd = r.app_ctd ?? false;
+  const restriction =
+    cta || ctd || minStay !== null || maxStay !== null
+      ? { ...base, id: `app:${r.rate_plan_id}:restriction`, isClosed: false, minStay, maxStay, closedToArrival: cta, closedToDeparture: ctd }
+      : null;
+  return { closure, restriction };
+}
+
+/** Our own closure and restriction rows covering the date, as stored. */
+function ownRules(r: RateQueryRow): { closure: RestrictionRule | null; restriction: RestrictionRule | null } {
+  const closure = ruleFrom(r.closure_id, r.closure_start, r.closure_end, {
+    isClosed: true,
+    note: r.closure_note,
+    createdBy: r.closure_by,
+    createdByName: r.closure_by_name,
+    createdAt: r.closure_at ?? r.closure_start!,
+  });
+  const restriction = ruleFrom(r.restriction_id, r.restriction_start, r.restriction_end, {
+    minStay: r.restriction_min_stay,
+    maxStay: r.restriction_max_stay,
+    closedToArrival: r.restriction_cta ?? false,
+    closedToDeparture: r.restriction_ctd ?? false,
+    note: r.restriction_note,
+    createdBy: r.restriction_by,
+    createdByName: r.restriction_by_name,
+    createdAt: r.restriction_at ?? r.restriction_start!,
+  });
+  return { closure, restriction };
+}
+
+/**
+ * One rate plan's row of the grid, from its RATES_SQL rows (in date order,
+ * the probe overhang included) and every pricing rule on it (MODIFIERS_SQL).
+ *
+ * On a managed plan the rules are still listed for the editor, but none is
+ * applied: discount rules are off, as in guest search and the stay quote.
+ */
+export function buildRatePlan(dateRows: RateQueryRow[], rules: ModifierWithId[], ctx: RatePlanContext): RatePlanRow {
+  const head = dateRows[0];
+  const modifiers: Modifier[] = head.managed ? [] : rules.filter((rule) => rule.is_active);
+  const planHasStayDiscount = hasStayLengthDiscount(modifiers);
+
+  // Same resolver the guest-facing search uses, so the host sees the number a
+  // guest arriving that day would actually be quoted.
+  const resolvedByDate = new Map<string, NightlyRate>();
+  for (const run of pricedRuns(dateRows)) {
+    const resolved = resolveNightlyRates(
+      run.map((r) => ({
+        date: r.date,
+        base_price_cents: toNumber(r.base_price_cents!),
+        has_override: r.has_override,
+      })),
+      modifiers,
+      { baseOccupancy: head.base_occupancy, stayLength: ctx.stayLength, today: ctx.today },
+    );
+    for (const night of resolved) resolvedByDate.set(night.date, night);
+  }
+
+  const cells: RateCell[] = dateRows
+    .filter((r) => ctx.isVisible(r.date))
+    .map((r) => {
+      // Undefined only on a managed night the app sent no price for.
+      const priced = resolvedByDate.get(r.date);
+      const { closure, restriction } = r.managed ? appRules(r) : ownRules(r);
+      const available = ctx.available(r.date);
+      const effectiveMinStay = restriction?.minStay ?? r.plan_min_stay;
+      const status = resolveStatus({
+        available,
+        roomClosure: ctx.roomClosure(r.date),
+        closure,
+        restriction,
+        effectiveMinStay,
+        planMinStay: r.plan_min_stay,
+      });
+
+      return {
+        date: r.date,
+        state: status.state,
+        // Null is "nothing sellable here", which is what the collapsed-row
+        // summary and the lowest-rate pass need. The resolved figure is kept
+        // separately: a closed date still has a rate underneath it, and the
+        // cell shows it struck through rather than pretending it is gone.
+        priceCents: status.bookable && priced ? priced.price_cents : null,
+        // 0 where nothing priced the night (a managed night without an app
+        // price): there is no rate underneath it, and none of ours stands in.
+        indicativePriceCents: priced?.price_cents ?? 0,
+        basePriceCents: r.base_price_cents === null ? 0 : toNumber(r.base_price_cents),
+        hasOverride: r.has_override,
+        overrideLabel: r.override_label,
+        appliedModifiers: priced?.applied_modifiers ?? [],
+        stayDiscountPending:
+          planHasStayDiscount &&
+          !(priced?.applied_modifiers ?? []).includes("length_of_stay"),
+        minStay: effectiveMinStay,
+        maxStay: restriction?.maxStay ?? r.plan_max_stay,
+        closedToArrival: restriction?.closedToArrival ?? false,
+        closedToDeparture: restriction?.closedToDeparture ?? false,
+        rule: closure ?? restriction,
+        available,
+        primary: status.primary,
+        reasons: status.reasons,
+        bookable: status.bookable,
+        trace: priced?.trace ?? [],
+      };
+    });
+
+  return {
+    id: head.rate_plan_id,
+    name: head.rate_plan_name,
+    currency: head.currency,
+    barCents: toNumber(head.bar_cents),
+    onSale: head.on_sale,
+    isRefundable: head.is_refundable,
+    minStay: head.plan_min_stay,
+    maxStay: head.plan_max_stay,
+    modifiers,
+    rules: rules.map(toPricingRule),
+    hasStayDiscount: planHasStayDiscount,
+    cells,
+    status: deriveStatus(cells),
+  };
+}
+
 export interface AriQueryOptions {
   /** Nights each cell is priced over. Default 1 — the extranet convention. */
   stayLength?: number;
@@ -625,9 +840,6 @@ export async function loadAriGrid(
   const rulesByPlan = new Map<string, ModifierWithId[]>(
     modifierRows.map((row) => [row.rate_plan_id, parseModifiers(row.modifiers)]),
   );
-  const modifiersByPlan = new Map<string, Modifier[]>(
-    [...rulesByPlan].map(([planId, rules]) => [planId, rules.filter((rule) => rule.is_active)]),
-  );
 
   // ── Availability, keyed for the price pass to read back ──
   const rooms = new Map<string, RoomTypeRow>();
@@ -671,11 +883,7 @@ export async function loadAriGrid(
   }
 
   // ── Prices: group rows into plans, then resolve each plan's nights in one pass ──
-  interface PlanAccumulator {
-    row: RateQueryRow;
-    dateRows: RateQueryRow[];
-  }
-  const plansByRoom = new Map<string, Map<string, PlanAccumulator>>();
+  const plansByRoom = new Map<string, Map<string, RateQueryRow[]>>();
 
   for (const row of rateRows) {
     let plans = plansByRoom.get(row.room_id);
@@ -683,121 +891,25 @@ export async function loadAriGrid(
       plans = new Map();
       plansByRoom.set(row.room_id, plans);
     }
-    const existing = plans.get(row.rate_plan_id);
-    if (existing) {
-      existing.dateRows.push(row);
-    } else {
-      plans.set(row.rate_plan_id, { row, dateRows: [row] });
-    }
+    const dateRows = plans.get(row.rate_plan_id);
+    if (dateRows) dateRows.push(row);
+    else plans.set(row.rate_plan_id, [row]);
   }
 
   for (const [roomId, plans] of plansByRoom) {
     const room = rooms.get(roomId);
     if (!room) continue;
 
-    for (const { row: head, dateRows } of plans.values()) {
-      const modifiers = modifiersByPlan.get(head.rate_plan_id) ?? [];
-
-      const planHasStayDiscount = hasStayLengthDiscount(modifiers);
-
-      // Same resolver the guest-facing search uses, so the host sees the
-      // number a guest arriving that day would actually be quoted. `dateRows`
-      // includes the overhang; `visibleRows` is what gets columns.
-      const resolved = resolveNightlyRates(
-        dateRows.map((r) => ({
-          date: r.date,
-          base_price_cents: toNumber(r.base_price_cents),
-          has_override: r.has_override,
-        })),
-        modifiers,
-        { baseOccupancy: head.base_occupancy, stayLength, today },
+    for (const [planId, dateRows] of plans) {
+      room.ratePlans.push(
+        buildRatePlan(dateRows, rulesByPlan.get(planId) ?? [], {
+          stayLength,
+          today,
+          isVisible: (date) => dateIndex.has(date),
+          available: (date) => availabilityByRoomDate.get(`${roomId}|${date}`) ?? 0,
+          roomClosure: (date) => closureByRoomDate.get(`${roomId}|${date}`) ?? null,
+        }),
       );
-      const resolvedByDate = new Map(resolved.map((r) => [r.date, r]));
-
-      const visibleRows = dateRows.filter((r) => dateIndex.has(r.date));
-
-      const cells: RateCell[] = visibleRows.map((r) => {
-        const priced = resolvedByDate.get(r.date)!;
-        const closure = ruleFrom(r.closure_id, r.closure_start, r.closure_end, {
-          isClosed: true,
-          note: r.closure_note,
-          createdBy: r.closure_by,
-          createdByName: r.closure_by_name,
-          createdAt: r.closure_at ?? r.closure_start!,
-        });
-        const restriction = ruleFrom(
-          r.restriction_id,
-          r.restriction_start,
-          r.restriction_end,
-          {
-            minStay: r.restriction_min_stay,
-            maxStay: r.restriction_max_stay,
-            closedToArrival: r.restriction_cta ?? false,
-            closedToDeparture: r.restriction_ctd ?? false,
-            note: r.restriction_note,
-            createdBy: r.restriction_by,
-            createdByName: r.restriction_by_name,
-            createdAt: r.restriction_at ?? r.restriction_start!,
-          },
-        );
-
-        const available =
-          availabilityByRoomDate.get(`${roomId}|${r.date}`) ?? 0;
-        const effectiveMinStay = restriction?.minStay ?? r.plan_min_stay;
-        const status = resolveStatus({
-          available,
-          roomClosure: closureByRoomDate.get(`${roomId}|${r.date}`) ?? null,
-          closure,
-          restriction,
-          effectiveMinStay,
-          planMinStay: r.plan_min_stay,
-        });
-
-        return {
-          date: r.date,
-          state: status.state,
-          // Null is "nothing sellable here", which is what the collapsed-row
-          // summary and the lowest-rate pass need. The resolved figure is kept
-          // separately: a closed date still has a rate underneath it, and the
-          // cell shows it struck through rather than pretending it is gone.
-          priceCents: status.bookable ? priced.price_cents : null,
-          indicativePriceCents: priced.price_cents,
-          basePriceCents: toNumber(r.base_price_cents),
-          hasOverride: r.has_override,
-          overrideLabel: r.override_label,
-          appliedModifiers: priced.applied_modifiers,
-          stayDiscountPending:
-            planHasStayDiscount &&
-            !priced.applied_modifiers.includes("length_of_stay"),
-          minStay: effectiveMinStay,
-          maxStay: restriction?.maxStay ?? r.plan_max_stay,
-          closedToArrival: restriction?.closedToArrival ?? false,
-          closedToDeparture: restriction?.closedToDeparture ?? false,
-          rule: closure ?? restriction,
-          available,
-          primary: status.primary,
-          reasons: status.reasons,
-          bookable: status.bookable,
-          trace: priced.trace,
-        };
-      });
-
-      const plan: RatePlanRow = {
-        id: head.rate_plan_id,
-        name: head.rate_plan_name,
-        currency: head.currency,
-        barCents: toNumber(head.bar_cents),
-        onSale: head.on_sale,
-        isRefundable: head.is_refundable,
-        minStay: head.plan_min_stay,
-        maxStay: head.plan_max_stay,
-        modifiers,
-        rules: (rulesByPlan.get(head.rate_plan_id) ?? []).map(toPricingRule),
-        hasStayDiscount: planHasStayDiscount,
-        cells,
-        status: deriveStatus(cells),
-      };
-      room.ratePlans.push(plan);
     }
   }
 
