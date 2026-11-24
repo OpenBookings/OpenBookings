@@ -2,16 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth";
-import { managedBy } from "@/lib/apps/managed";
-import type { BookingDelivery } from "@/lib/apps/managed-view";
-import { pageAccess } from "@/lib/page-access";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import {
   connectChannelManager as connect,
   disconnectChannelManager as disconnect,
   type ChannelManagerResult,
 } from "./connect";
-import { loadBookingDelivery } from "./data";
 
 /**
  * Server actions behind the Channel manager page. The work is in connect.ts;
@@ -44,21 +40,4 @@ export async function connectChannelManager(input: {
 
 export async function disconnectChannelManager(input: { propertyId: string }): Promise<ChannelManagerResult> {
   return afterChange(input.propertyId, await disconnect(await requireSession(), input));
-}
-
-/**
- * The booking panel's SiteMinder status for one booking of the current hotel.
- * Null when the hotel is not connected to SiteMinder now, the viewer may not
- * open reservations there, or the app was never told about the booking.
- */
-export async function bookingDeliveryAction(bookingId: string): Promise<BookingDelivery | null> {
-  if (typeof bookingId !== "string") return null;
-  const session = await getServerSession();
-  if (!session) return null;
-  const access = await pageAccess("reservations");
-  if (access.level === "none" || !access.current) return null;
-  const propertyId = access.current.propertyId;
-  if (!(await managedBy(propertyId))) return null;
-  const delivery = await loadBookingDelivery(bookingId, propertyId);
-  return delivery ? { status: delivery.status, acknowledgedAt: delivery.acknowledgedAt } : null;
 }

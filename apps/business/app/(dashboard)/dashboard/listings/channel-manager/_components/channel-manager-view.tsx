@@ -38,7 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { appMoment } from "@/lib/apps/managed-view";
+import { appMoment, CONNECT_UNAVAILABLE } from "@/lib/apps/managed-view";
 import { connectChannelManager, disconnectChannelManager } from "../_lib/actions";
 import type { ChannelManagerData } from "../_lib/data";
 
@@ -109,22 +109,28 @@ function ConnectCard({ data, propertyId }: { data: ChannelManagerData; propertyI
   const [sendUpcoming, setSendUpcoming] = React.useState(true);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [, startTransition] = React.useTransition();
+  // Busy until the refreshed page (connected) has landed, not just until the
+  // action answered: a second click in between would connect again and
+  // rotate the app's key.
+  const [refreshing, startTransition] = React.useTransition();
+  const busy = pending || refreshing;
   const n = data.upcomingCount;
 
   const connect = async () => {
-    if (!canEdit || pending) return;
+    if (!canEdit || busy) return;
     setPending(true);
     setError(null);
     try {
-      const result = await connectChannelManager({ propertyId, sendUpcoming: n > 0 && sendUpcoming });
+      // As ticked, true by default. With no box on screen (N = 0) that is
+      // still true: a booking made since the page loaded must reach SiteMinder.
+      const result = await connectChannelManager({ propertyId, sendUpcoming });
       if (!result.ok) {
         setError(result.error);
         return;
       }
       startTransition(() => router.refresh());
     } catch {
-      setError("SiteMinder connection is not available right now. Try again in a few minutes.");
+      setError(CONNECT_UNAVAILABLE);
     } finally {
       setPending(false);
     }
@@ -150,13 +156,14 @@ function ConnectCard({ data, propertyId }: { data: ChannelManagerData; propertyI
       <Separator />
       {n > 0 && (
         <div className="flex items-start gap-2.5">
-          <Checkbox
-            id="send-upcoming"
-            checked={sendUpcoming}
-            disabled={!canEdit || pending}
-            onCheckedChange={(v) => setSendUpcoming(v === true)}
-            className="mt-0.5"
-          />
+          <ViewOnlyHint className="mt-0.5">
+            <Checkbox
+              id="send-upcoming"
+              checked={sendUpcoming}
+              disabled={!canEdit || busy}
+              onCheckedChange={(v) => setSendUpcoming(v === true)}
+            />
+          </ViewOnlyHint>
           <div className="grid gap-0.5">
             <Label htmlFor="send-upcoming" className="font-medium">
               Send your {n} upcoming booking{n === 1 ? "" : "s"} to SiteMinder
@@ -176,9 +183,9 @@ function ConnectCard({ data, propertyId }: { data: ChannelManagerData; propertyI
       )}
       <div className="flex flex-wrap items-center gap-3">
         <ViewOnlyHint>
-          <Button onClick={() => void connect()} disabled={!canEdit || pending}>
-            {pending ? <Spinner /> : <Plug className="size-4" aria-hidden />}
-            {pending ? "Connecting…" : "Connect SiteMinder"}
+          <Button onClick={() => void connect()} disabled={!canEdit || busy}>
+            {busy ? <Spinner /> : <Plug className="size-4" aria-hidden />}
+            {busy ? "Connecting…" : "Connect SiteMinder"}
           </Button>
         </ViewOnlyHint>
         <span className="text-muted-foreground text-xs">You can disconnect at any time.</span>
@@ -387,12 +394,18 @@ function DisconnectSection({ propertyId }: { propertyId: string }) {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Disconnect SiteMinder?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Rates, availability and restrictions come back to OpenBookings, starting from the last values
-                  SiteMinder sent. Pricing rules apply again and new bookings are no longer sent.
-                </AlertDialogDescription>
-                <AlertDialogDescription>
-                  Also remove OpenBookings as a channel in SiteMinder, or it keeps sending updates we&apos;ll ignore.
+                {/* One description, both paragraphs, so the reminder is announced too. */}
+                <AlertDialogDescription asChild>
+                  <div className="flex flex-col gap-2">
+                    <p>
+                      Rates, availability and restrictions come back to OpenBookings, starting from the last values
+                      SiteMinder sent. Pricing rules apply again and new bookings are no longer sent.
+                    </p>
+                    <p>
+                      Also remove OpenBookings as a channel in SiteMinder, or it keeps sending updates we&apos;ll
+                      ignore.
+                    </p>
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

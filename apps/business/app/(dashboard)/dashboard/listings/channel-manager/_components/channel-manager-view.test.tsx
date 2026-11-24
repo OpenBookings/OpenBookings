@@ -2,9 +2,28 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { mockModules } from "@/lib/mock-modules";
 
+/** What the page asked the server to do, and every Button it rendered (to press one). */
+const connectCalls: { propertyId: string; sendUpcoming: boolean }[] = [];
+const buttons: { onClick?: () => void; children?: React.ReactNode }[] = [];
+
 await mockModules(import.meta.dir, {
   "next/navigation": () => ({ useRouter: () => ({ refresh() {} }), usePathname: () => "/", useSearchParams: () => new URLSearchParams() }),
-  "../_lib/actions": () => ({ connectChannelManager: async () => ({ ok: true }), disconnectChannelManager: async () => ({ ok: true }) }),
+  "../_lib/actions": () => ({
+    connectChannelManager: async (input: { propertyId: string; sendUpcoming: boolean }) => {
+      connectCalls.push(input);
+      return { ok: true };
+    },
+    disconnectChannelManager: async () => ({ ok: true }),
+  }),
+  // Records each Button's props so a test can press one; renders a plain button.
+  "@/components/ui/button": () => ({
+    Button: (all: Record<string, unknown> & { asChild?: boolean; children?: React.ReactNode }) => {
+      const props = Object.fromEntries(Object.entries(all).filter(([key]) => !["asChild", "variant", "size"].includes(key)));
+      buttons.push(props as (typeof buttons)[number]);
+      return all.asChild ? all.children : <button {...(props as React.ComponentProps<"button">)} />;
+    },
+    buttonVariants: () => "",
+  }),
   // The real actions import auth, which throws without its env: nothing to snapshot.
 }, ["../_lib/actions"]);
 
@@ -79,5 +98,19 @@ describe("Channel manager page", () => {
     expect(html).toContain("20 Nov, 14:06");
     expect(html).not.toContain("Needs attention");
     expect(render({ ...connected, needsAttentionCount: 1 })).toContain("1 booking");
+  });
+
+  test("Connect sends upcoming bookings by default, also when there is no box to tick (N = 0)", async () => {
+    const text = (node: React.ReactNode): string =>
+      Array.isArray(node) ? node.map(text).join("") : typeof node === "string" ? node : "";
+    for (const upcomingCount of [0, 6]) {
+      connectCalls.length = 0;
+      buttons.length = 0;
+      render({ ...base, upcomingCount });
+      const connect = buttons.find((b) => text(b.children).includes("Connect SiteMinder"));
+      connect!.onClick!();
+      await Promise.resolve();
+      expect(connectCalls).toEqual([{ propertyId: "11111111-1111-4111-8111-111111111111", sendUpcoming: true }]);
+    }
   });
 });

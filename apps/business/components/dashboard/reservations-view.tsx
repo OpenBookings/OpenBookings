@@ -11,7 +11,7 @@ import { ReservationDetailBody } from "@/components/dashboard/reservation-detail
 import { HostBookingActions } from "@/components/dashboard/host-booking-actions";
 import { GetHelpButton } from "@/components/support/get-help-button";
 import { breakGlass } from "@/lib/reservations/break-glass";
-import { bookingDeliveryAction } from "@/app/(dashboard)/dashboard/listings/channel-manager/_lib/actions";
+import { bookingDeliveryAction } from "@/lib/apps/delivery-action";
 import type { BookingDelivery } from "@/lib/apps/managed-view";
 import { isUuid, shortBookingRef } from "@/lib/support/references";
 import {
@@ -86,8 +86,10 @@ export function ReservationsView({
       live = false;
     };
   }, [managed, detail]);
+  // A booking id that is not a UUID is never fetched, so it shows no block
+  // rather than a loader that never ends.
   const siteMinder =
-    managed && detail
+    managed && detail && isUuid(detail.id)
       ? delivery?.id === detail.id
         ? { loading: false, delivery: delivery.delivery }
         : { loading: true, delivery: null }

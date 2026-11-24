@@ -70,6 +70,8 @@ interface AriToolbarProps {
   onIssuesOnlyChange: (value: boolean) => void;
   onClearFilters: () => void;
   onOpenDialog: (kind: "availability" | "restrictions" | "rate-plan") => void;
+  /** Add rate plan stays open on a managed hotel, where every other edit is locked. */
+  canAddRatePlan: boolean;
   /** Staged edits waiting to be published. */
   draftCount: number;
   publishing: boolean;
@@ -94,6 +96,7 @@ export function AriToolbar({
   onIssuesOnlyChange,
   onClearFilters,
   onOpenDialog,
+  canAddRatePlan,
   draftCount,
   publishing,
   onPublish,
@@ -315,15 +318,19 @@ export function AriToolbar({
             Edit restrictions
           </Button>
         </ViewOnlyHint>
-        <ViewOnlyHint>
-          <Button
-            disabled={!canEdit}
-            onClick={() => onOpenDialog("rate-plan")}
-          >
+        {canAddRatePlan ? (
+          <Button onClick={() => onOpenDialog("rate-plan")}>
             <Plus className="size-4" />
             Add rate plan
           </Button>
-        </ViewOnlyHint>
+        ) : (
+          <ViewOnlyHint>
+            <Button disabled>
+              <Plus className="size-4" />
+              Add rate plan
+            </Button>
+          </ViewOnlyHint>
+        )}
       </div>
     </div>
   );

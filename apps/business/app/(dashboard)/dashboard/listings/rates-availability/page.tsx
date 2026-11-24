@@ -141,6 +141,8 @@ async function AriContent({ searchParams }: PageProps) {
         windowDays={windowDays}
         rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
         managed={managed}
+        // Rate plans are structure: made here even while SiteMinder sets their prices (R19).
+        canAddRatePlan={access.level === "edit"}
       />
     </EditAccessProvider>
   );

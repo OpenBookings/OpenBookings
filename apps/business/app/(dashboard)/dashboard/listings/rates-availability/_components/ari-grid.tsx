@@ -910,6 +910,25 @@ function RunCell({
 
   const first = run.cells[0];
 
+  // Before every other state: a room SiteMinder has sent nothing for reads as
+  // sold out to the resolver (no rooms), which is not what is going on. It
+  // has no price and nothing to sell until SiteMinder links it.
+  if (unlinked) {
+    return (
+      <button
+        type="button"
+        {...commonProps}
+        aria-label={unlinkedLabel(plan, run)}
+        className={cn(
+          "flex h-14 items-center gap-2 overflow-hidden rounded-lg border border-(--ari-border) bg-(--ari-cell) px-3 text-left text-muted-foreground text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
+          active && "ring-2 ring-foreground",
+        )}
+      >
+        <span className="truncate">Not linked</span>
+      </button>
+    );
+  }
+
   // Testing the state as well as the flag is what tells the compiler a bar can
   // only ever be a non-open state, which is what CELL_STATE_STYLE is keyed on.
   if (run.state === "open" || first.bookable) {
@@ -1017,8 +1036,8 @@ function RunCell({
         ...(style.hatch ? HATCH_STYLE : undefined),
       }}
       aria-label={`${barLabel(plan, run, note)}${
-        unlinked ? ", not linked in SiteMinder yet" : ""
-      }${staged ? ", unpublished change" : ""}`}
+        staged ? ", unpublished change" : ""
+      }`}
       className={cn(
         "flex h-14 items-center gap-2 overflow-hidden rounded-lg border px-3 text-left text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
         style.className,
@@ -1028,11 +1047,9 @@ function RunCell({
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
       <span className="truncate">
-        {unlinked
-          ? "Not linked"
-          : run.state === "room_closed"
-            ? "Inherited: room type closed"
-            : `${style.label}${note ? ` · ${note}` : ""}`}
+        {run.state === "room_closed"
+          ? "Inherited: room type closed"
+          : `${style.label}${note ? ` · ${note}` : ""}`}
         {staged && " · Unsaved"}
       </span>
       {span > 1 && first.indicativePriceCents > 0 && (
@@ -1096,6 +1113,17 @@ function barLabel(plan: RatePlanRow, run: CellRun, note: string | null): string 
   return `${plan.name}, ${when}: ${reasonsPhrase(first.reasons)}${
     note ? `, note: ${note}` : ""
   }`;
+}
+
+/** What a screen reader hears on a room SiteMinder has not linked yet. */
+function unlinkedLabel(plan: RatePlanRow, run: CellRun): string {
+  const first = run.cells[0];
+  const last = run.cells[run.cells.length - 1];
+  const when =
+    first.date === last.date
+      ? formatFullDate(first.date)
+      : formatDateRange(first.date, last.date);
+  return `${plan.name}, ${when}: not linked in SiteMinder yet, not on sale`;
 }
 
 /**

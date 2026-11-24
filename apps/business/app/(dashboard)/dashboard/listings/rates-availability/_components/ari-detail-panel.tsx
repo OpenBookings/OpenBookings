@@ -219,7 +219,7 @@ function AvailabilityDetail({
         <Section title="Effective availability">
           <Field
             label="Available"
-            value={`${cell.left} of ${cell.total}`}
+            value={unlinked ? "—" : `${cell.left} of ${cell.total}`}
             emphasis
           />
           <p className="text-muted-foreground text-xs">
@@ -233,31 +233,36 @@ function AvailabilityDetail({
           </p>
         </Section>
 
-        <Separator />
+        {/* No numbers to explain until SiteMinder sends some. */}
+        {!unlinked && (
+          <>
+            <Separator />
 
-        <Section title="How this number is reached">
-          {/* A managed night's total is SiteMinder's; units, blocks and our
-              manual number play no part in it. */}
-          {!managed && (
-            <>
-              <Field label="Capacity" value={cell.totalUnits} />
-              {cell.override === null && (
-                <Field label="Blocked" value={`− ${cell.blocked}`} />
+            <Section title="How this number is reached">
+              {/* A managed night's total is SiteMinder's; units, blocks and our
+                  manual number play no part in it. */}
+              {!managed && (
+                <>
+                  <Field label="Capacity" value={cell.totalUnits} />
+                  {cell.override === null && (
+                    <Field label="Blocked" value={`− ${cell.blocked}`} />
+                  )}
+                  <Field
+                    label="Manual override"
+                    value={cell.override ?? "Not set"}
+                    emphasis={cell.source === "override"}
+                  />
+                  <Separator className="my-2" />
+                </>
               )}
-              <Field
-                label="Manual override"
-                value={cell.override ?? "Not set"}
-                emphasis={cell.source === "override"}
-              />
+              <Field label="Rooms this night" value={cell.total} />
+              <Field label="Booked" value={`− ${cell.booked}`} />
+              <Field label="Held" value={`− ${cell.held}`} />
               <Separator className="my-2" />
-            </>
-          )}
-          <Field label="Rooms this night" value={cell.total} />
-          <Field label="Booked" value={`− ${cell.booked}`} />
-          <Field label="Held" value={`− ${cell.held}`} />
-          <Separator className="my-2" />
-          <Field label="Left to book" value={cell.left} emphasis />
-        </Section>
+              <Field label="Left to book" value={cell.left} emphasis />
+            </Section>
+          </>
+        )}
 
         {(cell.note || updatedAt) && (
           <>
@@ -397,7 +402,7 @@ function RateDetail({
         {plan.barCents === 0 && !managed && (
           <p className="text-(--amber-11) text-sm">No base rate yet. Set one before it goes on sale.</p>
         )}
-        <StatusPill run={run} cell={first} />
+        <StatusPill run={run} cell={first} unlinked={unlinked} />
       </SheetHeader>
 
       <Body>
@@ -406,14 +411,15 @@ function RateDetail({
             host asks before deciding whether to reopen. */}
         <PriceBreakdown plan={plan} cell={first} stayLength={stayLength} managed={managed !== null} />
 
-        {first.reasons.length > 0 && (
+        {/* An unlinked room's "sold out" is only SiteMinder's silence: no reasons to list. */}
+        {first.reasons.length > 0 && !unlinked && (
           <>
             <Separator />
             <WhySection cell={first} />
           </>
         )}
 
-        {run.state === "sold_out" && (
+        {run.state === "sold_out" && !unlinked && (
           <SoldOutDetail room={room} run={run} />
         )}
 
@@ -424,11 +430,13 @@ function RateDetail({
             pool is shared without the host having to infer it. */}
         <Section title="Availability">
           <p className="text-sm">
-            {first.available === 0
-              ? "No rooms left on this room type."
-              : `${first.available} of ${nightTotal} room${
-                  nightTotal === 1 ? "" : "s"
-                } left, shared across every rate plan on ${room.name}.`}
+            {unlinked
+              ? "SiteMinder hasn't sent rooms for this room type yet."
+              : first.available === 0
+                ? "No rooms left on this room type."
+                : `${first.available} of ${nightTotal} room${
+                    nightTotal === 1 ? "" : "s"
+                  } left, shared across every rate plan on ${room.name}.`}
           </p>
           <p className="text-muted-foreground text-sm">
             Minimum stay {first.minStay} night
@@ -594,7 +602,8 @@ function RateDetail({
  * book, the other suggests they cannot. The distinction between constrained
  * and unsellable is the whole point of the precedence order underneath it.
  */
-function StatusPill({ run, cell }: { run: CellRun; cell: RateCell }) {
+function StatusPill({ run, cell, unlinked }: { run: CellRun; cell: RateCell; unlinked: boolean }) {
+  if (unlinked) return <StatusBadge tone="neutral">Not linked</StatusBadge>;
   if (cell.bookable) {
     const restriction = chipLabel(cell.reasons);
     return (

@@ -60,9 +60,14 @@ interface AriViewProps {
    * read-only (the page also locks edits through EditAccessProvider).
    */
   managed?: ManagedRooms | null;
+  /**
+   * Whether the role may add a rate plan. Defaults to edit access; on a
+   * managed hotel it stays open while every other edit is locked (R19).
+   */
+  canAddRatePlan?: boolean;
 }
 
-export function AriView({ data, startDate, windowDays, rates, managed = null }: AriViewProps) {
+export function AriView({ data, startDate, windowDays, rates, managed = null, canAddRatePlan }: AriViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = React.useTransition();
@@ -88,6 +93,7 @@ export function AriView({ data, startDate, windowDays, rates, managed = null }: 
   const draft = useAriDraft();
   // View-only roles browse the grid and its details but stage nothing.
   const { canEdit } = useEditAccess();
+  const mayAddRatePlan = canAddRatePlan ?? canEdit;
   const [publishing, setPublishing] = React.useState(false);
   const [range, setRange] = React.useState<RangeSelection | null>(null);
   /**
@@ -231,7 +237,7 @@ export function AriView({ data, startDate, windowDays, rates, managed = null }: 
   // Panel routes into a modal: close the panel first so focus does not end up
   // trapped between two overlapping Radix dialogs.
   const openDialog = (kind: DialogState["kind"], prefill: EditPrefill = {}) => {
-    if (!canEdit) return;
+    if (!(kind === "rate-plan" ? mayAddRatePlan : canEdit)) return;
     setSelection(null);
     setDialog({ kind, prefill });
   };
@@ -273,6 +279,7 @@ export function AriView({ data, startDate, windowDays, rates, managed = null }: 
           onIssuesOnlyChange={setIssuesOnly}
           onClearFilters={clearFilters}
           onOpenDialog={(kind) => openDialog(kind)}
+          canAddRatePlan={mayAddRatePlan}
           draftCount={draft.count}
           publishing={publishing}
           onPublish={publish}

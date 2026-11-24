@@ -9,7 +9,8 @@ import { Client } from "pg";
 import type { InstallationRegistration } from "@openbookings/apps-contract";
 import { activeInstallation, applyAriBatch, connectApp } from "@openbookings/db/apps";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
-import { CONNECT_UNAVAILABLE, connectChannelManager, disconnectChannelManager, type ConnectDeps } from "./connect";
+import { CONNECT_UNAVAILABLE } from "@/lib/apps/managed-view";
+import { connectChannelManager, disconnectChannelManager, type ConnectDeps } from "./connect";
 import { loadBookingDelivery, loadChannelManager } from "./data";
 
 describeWithDb("channel manager", () => {

@@ -133,7 +133,6 @@ describe("a property managed by a connected app", () => {
     ["setAvailability", () => actions.setAvailability({ ...range, roomId: ROOM, availableOverride: 2, blockedRooms: 0, totalRooms: null, note: null })],
     ["setRestriction", () => actions.setRestriction({ ...range, ratePlanId: PLAN, isClosed: true, minStay: null, maxStay: null, closedToArrival: false, closedToDeparture: false, note: null })],
     ["clearRestrictions", () => actions.clearRestrictions({ ...range, ratePlanId: PLAN, scope: "all" })],
-    ["createRatePlan", () => createRatePlan({ roomId: ROOM, name: "Flexible", bar: "99", currency: "EUR", isRefundable: true, minStay: 1, maxStay: null })],
     ["setBaseRate", () => setBaseRate({ ratePlanId: PLAN, bar: "89,50" })],
     ["closeRoomType", () => actions.closeRoomType({ ...range, roomId: ROOM, note: null })],
     ["reopenRoomType", () => actions.reopenRoomType({ ...range, roomId: ROOM })],
@@ -159,5 +158,13 @@ describe("a property managed by a connected app", () => {
   test.each(attempts)("%s still writes on a property nobody manages", async (_name, run) => {
     expect(await run()).toMatchObject({ ok: true });
     expect(writes().length).toBeGreaterThan(0);
+  });
+
+  // R19: rate plans are structure. The hotel makes them here and links them in SiteMinder.
+  test("createRatePlan still works while managed", async () => {
+    managed = true;
+    const result = await createRatePlan({ roomId: ROOM, name: "Flexible", bar: "99", currency: "EUR", isRefundable: true, minStay: 1, maxStay: null });
+    expect(result).toMatchObject({ ok: true });
+    expect(writes().some((c) => c.sql.includes("INSERT INTO rate_plans"))).toBe(true);
   });
 });

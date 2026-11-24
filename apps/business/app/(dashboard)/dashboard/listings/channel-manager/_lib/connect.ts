@@ -3,6 +3,7 @@ import { userCan, type SessionLike } from "@openbookings/authz";
 import { queryOne as dbQueryOne, withTransaction, type Queryable } from "@openbookings/db";
 import { activeInstallation, connectApp, disconnectApp } from "@openbookings/db/apps";
 import type { InstallationRegistration } from "@openbookings/apps-contract";
+import { CONNECT_UNAVAILABLE } from "@/lib/apps/managed-view";
 import { registerInstallation, unregisterInstallation } from "@/lib/apps/registry";
 import { currentPropertyPin, pinnedAccess, switchedReason, type PropertyPin } from "@/lib/current-property";
 
@@ -17,7 +18,6 @@ export type ChannelManagerResult =
   | { ok: true; propertyCode?: string }
   | { ok: false; error: string; reason?: "property-switched" };
 
-export const CONNECT_UNAVAILABLE = "SiteMinder connection is not available right now. Try again in a few minutes.";
 const DISCONNECT_UNAVAILABLE = "Could not disconnect SiteMinder right now. Try again in a few minutes.";
 
 /** How long the app gets to accept an installation before the connect is undone. */

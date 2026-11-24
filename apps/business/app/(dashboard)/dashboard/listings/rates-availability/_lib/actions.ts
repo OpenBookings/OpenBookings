@@ -337,8 +337,8 @@ export async function createRatePlan(
   const session = await requireSession();
   const access = await pinned((pin) => userOwnsRoom(session, data.roomId, pin));
   if (access !== "ok") return failed("Room type not found", access);
-  const managed = await managedRefusal();
-  if (managed) return managed;
+  // Not refused on a managed hotel (R19): rate plans are structure, made here
+  // and linked in SiteMinder, which then sends their prices.
   // A rate plan carries a price. No price is stored until the organisation
   // has confirmed, on record, that its rates include tax.
   if (!(await roomRatesConfirmed(data.roomId))) {

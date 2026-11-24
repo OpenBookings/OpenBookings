@@ -6,6 +6,9 @@ import type { StatusTone } from "@/components/ui/status-badge";
  * (managed.ts holds the loaders), so client components can use it.
  */
 
+/** What a failed connect says, on the server (connect.ts) and in the page alike. */
+export const CONNECT_UNAVAILABLE = "SiteMinder connection is not available right now. Try again in a few minutes.";
+
 /** In place of an edit control or a value the hotel no longer sets here. */
 export const SET_IN_APP = "Set in SiteMinder";
 
