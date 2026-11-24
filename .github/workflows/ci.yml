@@ -37,6 +37,10 @@ on:
         description: Build the support-bot image
         type: boolean
         default: true
+      siteminder:
+        description: Build the siteminder image
+        type: boolean
+        default: true
       invoice_job:
         description: Build the invoice-job image
         type: boolean
@@ -114,6 +118,9 @@ jobs:
       - run: |
           # shellcheck disable=SC2086
           bunx turbo run lint typecheck $TURBO_AFFECTED
+
+      # apps/siteminder may depend on @openbookings/apps-contract only.
+      - run: bun .github/scripts/check-app-boundaries.ts
 
       # Unused, missing or unresolved dependencies across the whole repo
       # (~2 s, so not limited to --affected). Config in knip.json.
@@ -302,6 +309,7 @@ jobs:
       business: ${{ steps.pick.outputs.business }}
       docs: ${{ steps.pick.outputs.docs }}
       support: ${{ steps.pick.outputs.support }}
+      siteminder: ${{ steps.pick.outputs.siteminder }}
       invoice-job: ${{ steps.pick.outputs.invoice-job }}
       migrate: ${{ steps.pick.outputs.migrate }}
       publish: ${{ steps.pick.outputs.publish }}
@@ -354,6 +362,14 @@ jobs:
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
+            siteminder:
+              - 'apps/siteminder/**'
+              - 'packages/apps-contract/**'
+              - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
             invoice-job:
               - 'apps/invoice-job/**'
               - '.github/workflows/ci.yml'
@@ -380,12 +396,14 @@ jobs:
           F_BUSINESS: ${{ steps.filter.outputs.business }}
           F_DOCS: ${{ steps.filter.outputs.docs }}
           F_SUPPORT: ${{ steps.filter.outputs.support }}
+          F_SITEMINDER: ${{ steps.filter.outputs.siteminder }}
           F_INVOICE_JOB: ${{ steps.filter.outputs.invoice-job }}
           F_DB: ${{ steps.filter.outputs.db }}
           I_WEB: ${{ inputs.web }}
           I_BUSINESS: ${{ inputs.business }}
           I_DOCS: ${{ inputs.docs }}
           I_SUPPORT: ${{ inputs.support }}
+          I_SITEMINDER: ${{ inputs.siteminder }}
           I_INVOICE_JOB: ${{ inputs.invoice_job }}
           I_MIGRATE: ${{ inputs.migrate }}
           I_RELEASE: ${{ inputs.release }}
@@ -397,10 +415,10 @@ jobs:
               echo "::error::release and migrate only run on main, not ${REF}. Untick them, or run the workflow on main."
               exit 1
             fi
-            web=$I_WEB business=$I_BUSINESS docs=$I_DOCS support=$I_SUPPORT invoice_job=$I_INVOICE_JOB
+            web=$I_WEB business=$I_BUSINESS docs=$I_DOCS support=$I_SUPPORT siteminder=$I_SITEMINDER invoice_job=$I_INVOICE_JOB
             migrate=$I_MIGRATE publish=$I_RELEASE
           else
-            web=$F_WEB business=$F_BUSINESS docs=$F_DOCS support=$F_SUPPORT invoice_job=$F_INVOICE_JOB
+            web=$F_WEB business=$F_BUSINESS docs=$F_DOCS support=$F_SUPPORT siteminder=$F_SITEMINDER invoice_job=$F_INVOICE_JOB
             if [ "$EVENT" = "push" ]; then
               migrate=$F_DB publish=true
             else
@@ -413,6 +431,7 @@ jobs:
             echo "business=$business"
             echo "docs=$docs"
             echo "support=$support"
+            echo "siteminder=$siteminder"
             echo "invoice-job=$invoice_job"
             echo "migrate=$migrate"
             echo "publish=$publish"
@@ -615,6 +634,42 @@ jobs:
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:${{ github.sha }}
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:main
 
+  # The SiteMinder channel-manager app. Built and pushed, not rolled: there is
+  # no Serverless Container for it yet, so the release job does not wait on it.
+  build-siteminder:
+    needs: detect
+    if: needs.detect.outputs.siteminder == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: needs.detect.outputs.publish == 'true'
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./apps/siteminder/Dockerfile
+          push: ${{ needs.detect.outputs.publish == 'true' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=siteminder
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=siteminder,mode=max' || '' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-siteminder:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-siteminder:main
+
   # The monthly commission-invoice job. A Scaleway Serverless Job, not a
   # container: built and pushed here, never rolled. The job definition points
   # at the `main` tag, so each run picks up the latest image (see
@@ -655,7 +710,7 @@ jobs:
 
   release:
     name: Release
-    needs: [detect, checks, test, build-web, build-business, build-docs, build-support, build-invoice-job]
+    needs: [detect, checks, test, build-web, build-business, build-docs, build-support, build-siteminder, build-invoice-job]
     # Tests do not run on a push: they passed on the PR (see `checks` and
     # `test`). On a manual run they do if ticked, and a failure stops the
     # release like a failed build does.
@@ -825,5 +880,6 @@ jobs:
           .github/scripts/prune-registry.sh openbookings-business "$BUSINESS_CONTAINER_ID" || failed=1
           .github/scripts/prune-registry.sh openbookings-docs     "$DOCS_CONTAINER_ID"     || failed=1
           .github/scripts/prune-registry.sh openbookings-support                           || failed=1
+          .github/scripts/prune-registry.sh openbookings-siteminder                        || failed=1
           .github/scripts/prune-registry.sh openbookings-invoice-job                       || failed=1
           exit "$failed"

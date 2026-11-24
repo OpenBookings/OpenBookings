@@ -11,6 +11,9 @@
     "apps/*": {
       "entry": ["scripts/**/*.ts"]
     },
+    "apps/siteminder": {
+      "ignoreDependencies": ["@openbookings/apps-contract", "@upstash/qstash", "fast-xml-parser", "zod"]
+    },
     "packages/*": {
       "entry": ["scripts/**/*.ts"]
     },

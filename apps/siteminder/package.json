@@ -1,0 +1,27 @@
+{
+  "name": "@openbookings/siteminder",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "PORT=3004 bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "tsc --noEmit",
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "bun run src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@openbookings/apps-contract": "workspace:*",
+    "@upstash/qstash": "2.12.2",
+    "fast-xml-parser": "^5.12.1",
+    "hono": "^4.13.19",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@openbookings/config": "workspace:*",
+    "@types/bun": "latest",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.9.3"
+  }
+}

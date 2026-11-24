@@ -1,0 +1,9 @@
+{
+  "extends": "@openbookings/config/tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "types": ["bun"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
