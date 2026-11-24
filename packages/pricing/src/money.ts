@@ -8,9 +8,19 @@ export function roundHalfUp(x: number): number {
   return x < 0 && rounded !== 0 ? -rounded : rounded;
 }
 
-/** `percent` of an amount in cents, rounded half up: (9999, -10) -> -1000. */
+/**
+ * `percent` of an amount in cents, rounded half away from zero: (9999, -10) -> -1000.
+ * Done in integers (percent in 1/10000ths of a percent, so up to four decimals)
+ * so a half cent is never lost to binary float error.
+ */
 export function percentOfCents(cents: number, percent: number): number {
-  return roundHalfUp((cents * percent) / 100);
+  const basisPoints = Math.round(percent * 10000);
+  const numerator = cents * basisPoints;
+  const divisor = 1_000_000;
+  const abs = Math.abs(numerator);
+  let quotient = Math.floor(abs / divisor);
+  if ((abs - quotient * divisor) * 2 >= divisor) quotient += 1;
+  return numerator < 0 && quotient !== 0 ? -quotient : quotient;
 }
 
 /**

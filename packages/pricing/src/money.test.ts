@@ -30,6 +30,31 @@ describe("percentOfCents", () => {
     expect(Object.is(percentOfCents(1, -10), 0)).toBe(true);
   });
 
+  test("keeps exact half cents for decimal percentages", () => {
+    expect(percentOfCents(5500, 0.7)).toBe(39);
+    expect(percentOfCents(1500, 2.3)).toBe(35);
+    expect(percentOfCents(-5500, 0.7)).toBe(-39);
+  });
+
+  test("matches an exact BigInt reference", () => {
+    const reference = (cents: number, percent: string): number => {
+      const [whole = "0", frac = ""] = percent.split(".");
+      const scaled = BigInt(whole + frac);
+      const divisor = BigInt(100) * BigInt(10) ** BigInt(frac.length);
+      const num = BigInt(cents) * scaled;
+      return Number((BigInt(2) * num + divisor) / (BigInt(2) * divisor));
+    };
+    for (const percent of [0.7, 2.3, 4.5, 6.5, 7.5, 12.34, 21]) {
+      for (let cents = 1; cents <= 20000; cents++) {
+        const got = percentOfCents(cents, percent);
+        const want = reference(cents, String(percent));
+        if (got !== want) {
+          throw new Error(`percentOfCents(${cents}, ${percent}) = ${got}, want ${want}`);
+        }
+      }
+    }
+  });
+
   test("is not thrown off by float artefacts", () => {
     expect(percentOfCents(1005, 10)).toBe(101);
     expect(percentOfCents(18650, 4.5)).toBe(839);
