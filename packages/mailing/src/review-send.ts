@@ -135,7 +135,7 @@ export async function sendReviewReplied(
     const c = resolve(deps);
     const row = (
       await c.db.query(
-        `SELECT u.email, u.name AS guest_name, rv.guest_user_id, p.name AS property_name, rv.booking_id,
+        `SELECT u.email, u.first_name AS guest_first_name, rv.guest_user_id, p.name AS property_name, rv.booking_id,
                 (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out,
                 (SELECT rr.body FROM review_replies rr
                   WHERE rr.review_id = rv.id AND rr.author_role = 'host' AND rr.status = 'published'
@@ -150,7 +150,7 @@ export async function sendReviewReplied(
     ).rows[0] as
       | {
           email: string | null;
-          guest_name: string | null;
+          guest_first_name: string | null;
           guest_user_id: string | null;
           property_name: string;
           booking_id: string;
@@ -160,7 +160,7 @@ export async function sendReviewReplied(
       | undefined;
     if (!row?.guest_user_id || !row.email || row.opted_out || !row.reply_body) return;
     const message = guestReviewReplied({
-      guestFirstName: (row.guest_name ?? "").trim().split(/\s+/)[0] || "there",
+      guestFirstName: row.guest_first_name?.trim() || "there",
       propertyName: row.property_name,
       replyBody: row.reply_body,
       manageUrl: reviewManageUrl(c.urls.webUrl, row.booking_id),

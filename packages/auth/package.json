@@ -11,7 +11,8 @@
     "./callback-url": "./src/callbackUrl.ts",
     "./env": "./src/env.ts",
     "./same-origin": "./src/same-origin.ts",
-    "./magic-link-confirm": "./src/magic-link-confirm.ts"
+    "./magic-link-confirm": "./src/magic-link-confirm.ts",
+    "./names": "./src/names.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",

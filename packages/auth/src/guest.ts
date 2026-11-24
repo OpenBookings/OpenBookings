@@ -4,6 +4,8 @@ import { magicLink } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { endpointFailed, refusePlainEmailVerification, refuseStalePasskeyRegistration } from "./guest-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
+import { appleUserInfo } from "./apple-user-info";
+import { namesFromGoogle } from "./names";
 import {
   accountLinkingOptions,
   accountTypeHooksForPool,
@@ -148,6 +150,8 @@ export function createGuestAuth(config: GuestAuthConfig) {
             // sendOnSignUp: false above, or the refused sign-up would be sent
             // a plain verification mail.
             requireEmailVerification: true,
+            // Shapes the user on creation only; overrideUserInfoOnSignIn stays off.
+            mapProfileToUser: (profile) => namesFromGoogle(profile) ?? {},
           },
         }
         : {}),
@@ -161,6 +165,9 @@ export function createGuestAuth(config: GuestAuthConfig) {
             // sendOnSignUp: false above, or the refused sign-up would be sent
             // a plain verification mail.
             requireEmailVerification: true,
+            // Replaces the default getUserInfo (which would bypass
+            // mapProfileToUser anyway) to read Apple's real firstName/lastName.
+            getUserInfo: appleUserInfo,
           },
         }
         : {}),

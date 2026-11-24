@@ -57,7 +57,7 @@ function Summary({ saved, countries }: { saved: CheckoutDetailsController['saved
   ];
   return (
     <div className="flex flex-col gap-1.5 text-sm">
-      <p className="text-[15px] font-semibold">{saved.name}</p>
+      <p className="text-[15px] font-semibold">{`${saved.firstName} ${saved.lastName}`}</p>
       <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-1.5">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
@@ -103,9 +103,14 @@ export function DetailsCard({
       ) : (
         // Its own form so Enter in a field never reaches the Pay button's form.
         <form ref={bindForm} noValidate onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-3">
-          <Field id="name" label="Full name" required error={errors.name}>
-            <Input id="name" name="name" defaultValue={saved.name} autoComplete="name" maxLength={100} required className={INPUT} />
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field id="firstName" label="First name" required error={errors.firstName}>
+              <Input id="firstName" name="firstName" defaultValue={saved.firstName} autoComplete="given-name" maxLength={50} required className={INPUT} />
+            </Field>
+            <Field id="lastName" label="Last name" required error={errors.lastName}>
+              <Input id="lastName" name="lastName" defaultValue={saved.lastName} autoComplete="family-name" maxLength={50} required className={INPUT} />
+            </Field>
+          </div>
           <div className="flex min-w-0 flex-col gap-1.5">
             <label htmlFor="checkout-email" className="text-[13px] text-muted-foreground">
               Email

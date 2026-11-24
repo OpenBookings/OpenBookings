@@ -22,6 +22,11 @@ describe("buildGuestExport", () => {
     });
   });
 
+  test("the account export carries first_name and last_name next to name", () => {
+    expect(EXPORT_QUERIES.user).toMatch(/\bfirst_name\b/);
+    expect(EXPORT_QUERIES.user).toMatch(/\blast_name\b/);
+  });
+
   test("every query is scoped to the user and nothing secret is selected", async () => {
     const seen: { sql: string; values: unknown[] }[] = [];
     await buildGuestExport("u1", async (sql, values) => {

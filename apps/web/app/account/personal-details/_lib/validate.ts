@@ -5,6 +5,7 @@
  * and nothing else: the browser's own `required`/`maxLength` are a convenience.
  */
 
+import { MAX_NAME_LENGTH, normalizeWhitespace } from "@openbookings/auth/names";
 import { joinPhone } from "./phone";
 
 export type Address = {
@@ -35,11 +36,44 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function parseName(form: FormData): Parsed<string, "name"> {
-  const name = text(form, "name");
-  if (!name) return { ok: false, errors: { name: "Enter your name." } };
-  if (name.length > 100) return { ok: false, errors: { name: "Use 100 characters or fewer." } };
-  return { ok: true, value: name };
+type NameField = "firstName" | "lastName";
+
+const NAME_MISSING: Record<NameField, string> = {
+  firstName: "Enter your first name",
+  lastName: "Enter your last name",
+};
+const NAME_TOO_LONG = `Use ${MAX_NAME_LENGTH} characters or fewer`;
+
+/**
+ * Whitespace is normalised (NBSP and friends count as spaces); everything else
+ * stays as typed, so particles and diacritics are never touched.
+ */
+function parseOneName(form: FormData, field: NameField): { value: string } | { error: string } {
+  const raw = form.get(field);
+  const value = typeof raw === "string" ? normalizeWhitespace(raw) : "";
+  if (!value) return { error: NAME_MISSING[field] };
+  if (value.length > MAX_NAME_LENGTH) return { error: NAME_TOO_LONG };
+  return { value };
+}
+
+/** Both names, every error at once (the forms show them side by side). */
+function parseNamePair(form: FormData): Parsed<{ firstName: string; lastName: string }, NameField> {
+  const first = parseOneName(form, "firstName");
+  const last = parseOneName(form, "lastName");
+  if ("value" in first && "value" in last) return { ok: true, value: { firstName: first.value, lastName: last.value } };
+  return {
+    ok: false,
+    errors: { ...("error" in first ? { firstName: first.error } : {}), ...("error" in last ? { lastName: last.error } : {}) },
+  };
+}
+
+export function parseNames(
+  form: FormData,
+): { ok: true; firstName: string; lastName: string } | { ok: false; field: NameField; error: string } {
+  const parsed = parseNamePair(form);
+  if (parsed.ok) return { ok: true, ...parsed.value };
+  const field: NameField = parsed.errors.firstName ? "firstName" : "lastName";
+  return { ok: false, field, error: parsed.errors[field]! };
 }
 
 export const PHONE_ERROR = "Check the number and the country code.";
@@ -86,15 +120,15 @@ export function parseAddress(form: FormData): Parsed<Address | null, AddressFiel
   return { ok: true, value: { ...raw, line2: raw.line2 || null } };
 }
 
-export type Details = { name: string; phone: string | null; address: Address | null };
+export type Details = { firstName: string; lastName: string; phone: string | null; address: Address | null };
 
 /** The whole form: valid only when every part is, with every part's errors. */
-export function parseDetails(form: FormData): Parsed<Details, "name" | "phone" | AddressField> {
-  const name = parseName(form);
+export function parseDetails(form: FormData): Parsed<Details, NameField | "phone" | AddressField> {
+  const name = parseNamePair(form);
   const phone = parsePhone(form);
   const address = parseAddress(form);
   if (name.ok && phone.ok && address.ok) {
-    return { ok: true, value: { name: name.value, phone: phone.value, address: address.value } };
+    return { ok: true, value: { ...name.value, phone: phone.value, address: address.value } };
   }
   return {
     ok: false,
@@ -108,10 +142,10 @@ export function parseDetails(form: FormData): Parsed<Details, "name" | "phone" |
 
 export const PHONE_REQUIRED = "Enter a phone number so the hotel can reach you.";
 
-export type DetailsField = "name" | "phone" | AddressField;
+export type DetailsField = NameField | "phone" | AddressField;
 
 /** What checkout needs: the account page's details, with phone and address required. */
-export type CheckoutDetails = { name: string; phone: string; address: Address };
+export type CheckoutDetails = { firstName: string; lastName: string; phone: string; address: Address };
 
 /**
  * Checkout's rules. The host needs a number and an address for every paid
@@ -119,7 +153,7 @@ export type CheckoutDetails = { name: string; phone: string; address: Address };
  * account page keeps them optional.
  */
 export function parseCheckoutDetails(form: FormData): Parsed<CheckoutDetails, DetailsField> {
-  const name = parseName(form);
+  const name = parseNamePair(form);
   const phone = parsePhone(form);
   const address = parseAddress(form);
   const errors: Partial<Record<DetailsField, string>> = {
@@ -128,7 +162,7 @@ export function parseCheckoutDetails(form: FormData): Parsed<CheckoutDetails, De
     ...(address.ok ? (address.value === null ? { ...MISSING } : {}) : address.errors),
   };
   if (name.ok && phone.ok && phone.value !== null && address.ok && address.value !== null) {
-    return { ok: true, value: { name: name.value, phone: phone.value, address: address.value } };
+    return { ok: true, value: { ...name.value, phone: phone.value, address: address.value } };
   }
   return { ok: false, errors };
 }

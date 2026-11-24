@@ -10,7 +10,8 @@ const base = {
   property_id: "p1",
   property_name: "Hotel",
   guest_email: "g@example.com",
-  guest_name: "Guest One",
+  guest_name: "Anna de Vries",
+  guest_first_name: "Anna de",
   opted_out: false,
   host_warned_at: null,
   sent_at: null,
@@ -44,6 +45,7 @@ describe("runReviewInvitations", () => {
       onError: (error, ctx) => errors.push({ error, ctx }),
     });
     expect(sent.map((m) => (m.kind === "invitation" ? m.bookingId : m.kind))).toEqual(["goodZone"]);
+    expect(sent[0]).toMatchObject({ guestFirstName: "Anna de" });
     expect(summary.invitations).toBe(1);
     expect(summary.failed).toBe(1);
     expect(errors).toHaveLength(1);

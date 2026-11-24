@@ -20,12 +20,12 @@ function escapeHtml(value: string): string {
  * Only the ticket reference and a link.
  */
 export function renderSupportReplyEmail(input: {
-  name: string | null;
+  firstName: string | null;
   reference: number;
   url: string;
 }): { subject: string; text: string; html: string } {
   const subject = `New reply on your support ticket #${input.reference}`;
-  const greeting = input.name?.trim() ? `Hi ${input.name.trim().split(/\s+/)[0]},` : "Hi,";
+  const greeting = input.firstName?.trim() ? `Hi ${input.firstName.trim()},` : "Hi,";
   const lines = [
     greeting,
     "",
@@ -75,7 +75,7 @@ export async function sendSupportReplyNotification(
   }
   const url = `${env.businessAppUrl}/support?ticket=${encodeURIComponent(claim.ticket_id)}`;
   const { subject, html, text } = renderSupportReplyEmail({
-    name: claim.name,
+    firstName: claim.first_name,
     reference: claim.conversation_id,
     url,
   });

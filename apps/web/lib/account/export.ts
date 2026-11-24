@@ -7,7 +7,7 @@ type Run = (sql: string, values: unknown[]) => Promise<unknown[]>;
  * passkey public keys or credential ids.
  */
 export const EXPORT_QUERIES = {
-  user: `SELECT id, name, email, "emailVerified" AS email_verified, image, "createdAt" AS created_at
+  user: `SELECT id, name, first_name, last_name, email, "emailVerified" AS email_verified, image, "createdAt" AS created_at
          FROM "user" WHERE id = $1`,
   profile: `SELECT phone, address_line1, address_line2, postal_code, city, country, review_emails_opt_out_at, updated_at
             FROM guest_profile WHERE user_id = $1`,

@@ -72,7 +72,7 @@ export async function searchBookings(db: Queryable, input: SearchInput): Promise
   } else if (kind === "text") {
     const p = add(escapeLike(value));
     where.push(
-      `(u.name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR p.name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR lower(u.email) LIKE lower(${p}) || '%' ESCAPE '\\')`,
+      `(u.name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR u.first_name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR u.last_name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR p.name ILIKE '%' || ${p} || '%' ESCAPE '\\' OR lower(u.email) LIKE lower(${p}) || '%' ESCAPE '\\')`,
     );
   }
   if (input.status && STATUSES.includes(input.status)) {

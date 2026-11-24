@@ -35,6 +35,13 @@ describeWithDb("booking search against Postgres", () => {
     expect(rows[0].checkIn).toBe("2031-11-10");
   });
 
+  test("finds by first or last name", async () => {
+    const userId = (await db.query(`SELECT user_id FROM bookings WHERE id = $1`, [a.bookingId])).rows[0].user_id;
+    await db.query(`UPDATE "user" SET first_name = 'Anna de', last_name = 'Vriesenga' WHERE id = $1`, [userId]);
+    expect((await searchBookings(db, { q: "Vriesenga" })).map((r) => r.id)).toContain(a.bookingId);
+    expect((await searchBookings(db, { q: "Anna de" })).map((r) => r.id)).toContain(a.bookingId);
+  });
+
   test("finds by reservation id", async () => {
     const rows = await searchBookings(db, { q: b.reservationIds[1] });
     expect(rows.map((r) => r.id)).toEqual([b.bookingId]);

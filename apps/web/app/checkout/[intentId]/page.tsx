@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
-import { readGuestProfile } from '@/lib/account/guest-details';
+import { readGuestNames, readGuestProfile } from '@/lib/account/guest-details';
 import { COUNTRIES, DIAL_CODES } from '@/lib/account/countries';
 import { prefillFromProfile } from '../_lib/guest-details';
 import type { BookingIntentStatus } from '@openbookings/db';
@@ -42,7 +42,11 @@ async function getViewer(): Promise<(GateViewer & { id: string }) | null> {
   try {
     const session = await getServerSession();
     if (!session?.user?.email || !session.user.id) return null;
-    return { id: session.user.id, email: session.user.email, name: session.user.name ?? null };
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name ?? null,
+    };
   } catch {
     // A session that cannot be read is a session we do not have. The gate
     // asks for sign-in, which is the right outcome either way.
@@ -89,9 +93,10 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
 
   // The details card starts from the account. Read here, beside the intent,
   // so the card is filled on first paint.
-  const profile = await readGuestProfile(viewer.id);
+  const [profile, names] = await Promise.all([readGuestProfile(viewer.id), readGuestNames(viewer.id)]);
   const guestDetails = prefillFromProfile({
-    name: viewer.name ?? '',
+    firstName: names.firstName,
+    lastName: names.lastName,
     email: viewer.email,
     phone: profile.phone,
     address: profile.address,

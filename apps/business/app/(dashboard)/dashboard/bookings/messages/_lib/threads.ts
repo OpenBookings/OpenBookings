@@ -1,5 +1,6 @@
 import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import type { ThreadListItem } from "@openbookings/messaging";
+import { guestLabelSql } from "./guest-label";
 
 /**
  * The current hotel's guest threads. `t.host_id = $1` stays: messages are
@@ -15,9 +16,7 @@ export function loadThreads(session: SessionLike, propertyId: string) {
        p.name AS property_name,
        -- PII minimization (task 15): the list shows initial + surname only;
        -- the full name/contact loads when a single thread is opened.
-       CASE WHEN position(' ' in g.name) = 0 THEN g.name
-            ELSE LEFT(g.name, 1) || '. ' || split_part(g.name, ' ', -1)
-       END AS guest_name,
+       ${guestLabelSql("g")} AS guest_name,
        g.image AS guest_image,
        lm.body AS last_message_body,
        lm.created_at AS last_message_at,

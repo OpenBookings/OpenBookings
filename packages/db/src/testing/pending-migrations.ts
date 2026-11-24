@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const PENDING_MIGRATIONS: string[] = [];
+export const PENDING_MIGRATIONS: string[] = ["0059_user_first_last_name.sql"];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 

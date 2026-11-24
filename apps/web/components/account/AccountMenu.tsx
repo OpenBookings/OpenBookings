@@ -14,23 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { userInitials } from "@/lib/account/initials";
 import { ACCOUNT_SECTIONS } from "@/lib/account/sections";
 import { signOutGuest } from "@/lib/sign-out";
 import { cn } from "@/lib/utils";
 
 type Variant = "glass" | "console";
-
-export function initials(name: string): string {
-  return (
-    name
-      .split(" ")
-      .map((part) => part[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "?"
-  );
-}
 
 /**
  * The signed-in guest's menu: every account tab, then Sign out.
@@ -42,7 +31,7 @@ export function AccountMenu({
   user,
   variant,
 }: {
-  user: { name?: string | null; email: string; image?: string | null };
+  user: { name?: string | null; firstName?: string | null; lastName?: string | null; email: string; image?: string | null };
   variant: Variant;
 }) {
   const router = useRouter();
@@ -66,7 +55,7 @@ export function AccountMenu({
           )}
         >
           <AvatarImage src={user.image || "/profile_avatar.png"} alt="" draggable={false} />
-          <AvatarFallback className={glass ? "bg-black/60 text-white" : undefined}>{initials(name)}</AvatarFallback>
+          <AvatarFallback className={glass ? "bg-black/60 text-white" : undefined}>{userInitials(user)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent

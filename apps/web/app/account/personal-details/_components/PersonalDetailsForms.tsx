@@ -26,7 +26,7 @@ import type { Address } from "../_lib/validate";
 const IDLE: SaveState = { status: "idle" };
 
 /** Every field, in page order: the first one with an error gets focus. */
-const FIELDS = ["name", "phone", "phoneCountry", "line1", "line2", "postalCode", "city", "country"] as const;
+const FIELDS = ["firstName", "lastName", "phone", "phoneCountry", "line1", "line2", "postalCode", "city", "country"] as const;
 const ADDRESS_FIELDS = ["line1", "line2", "postalCode", "city", "country"] as const;
 
 function values(form: HTMLFormElement): Record<string, string> {
@@ -129,13 +129,15 @@ function useLeaveGuard(dirty: boolean) {
  * countries differently, so building the list here would break hydration.
  */
 export function PersonalDetailsForm({
-  name,
+  firstName,
+  lastName,
   phone,
   address,
   countries,
   dialCodes,
 }: {
-  name: string;
+  firstName: string;
+  lastName: string;
   /** Split for the form by `splitPhone`. */
   phone: { country: string; number: string };
   address: Address | null;
@@ -195,10 +197,15 @@ export function PersonalDetailsForm({
       }}
       className="flex flex-col gap-4"
     >
-      <DetailsCard id="details-name" title="Name" required>
-        <Field id="name" label="Full name" labelHidden error={errors.name}>
-          <Input id="name" name="name" defaultValue={name} autoComplete="name" maxLength={100} required className={INPUT} />
-        </Field>
+      <DetailsCard id="details-name" title="Name">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field id="firstName" label="First name" required error={errors.firstName}>
+            <Input id="firstName" name="firstName" defaultValue={firstName} autoComplete="given-name" maxLength={50} required className={INPUT} />
+          </Field>
+          <Field id="lastName" label="Last name" required error={errors.lastName}>
+            <Input id="lastName" name="lastName" defaultValue={lastName} autoComplete="family-name" maxLength={50} required className={INPUT} />
+          </Field>
+        </div>
       </DetailsCard>
 
       <DetailsCard id="details-phone" title="Phone number">

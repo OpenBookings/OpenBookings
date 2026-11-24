@@ -8,7 +8,7 @@ const urls = { webUrl: "https://openbookings.co", businessUrl: "https://business
 
 type Row = {
   email: string | null;
-  guest_name: string | null;
+  guest_first_name: string | null;
   guest_user_id: string | null;
   property_name: string;
   booking_id: string;
@@ -18,7 +18,7 @@ type Row = {
 
 const base: Row = {
   email: "anna@example.com",
-  guest_name: "Anna de Vries",
+  guest_first_name: "Anna de",
   guest_user_id: "g1",
   property_name: "Canal House",
   booking_id: "b1",
@@ -50,9 +50,15 @@ describe("sendReviewReplied", () => {
     expect(sent[0]!.to).toBe("anna@example.com");
     expect(sent[0]!.from).toBe("Roy at OpenBookings <roy@openbookings.co>");
     expect(sent[0]!.subject).toBe("Canal House replied to your review");
-    expect(sent[0]!.html).toContain("Hi Anna,");
+    expect(sent[0]!.html).toContain("Hi Anna de,");
     expect(sent[0]!.html).toContain("Thank you, Anna.");
     expect(sent[0]!.html).toContain("https://openbookings.co/bookings/b1/review");
+  });
+
+  test("greets with 'there' when the guest has no first name", async () => {
+    const { sent, run } = setup({ ...base, guest_first_name: "" });
+    await run();
+    expect(sent[0]!.html).toContain("Hi there,");
   });
 
   test("sends nothing when the guest turned review emails off", async () => {

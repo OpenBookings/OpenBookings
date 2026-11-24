@@ -60,12 +60,19 @@ describeWithDb("guest reviews against Postgres", () => {
     expect(row).toMatchObject({
       score: 9,
       body: "Lovely stay.",
-      author_name: "Anna",
+      author_name: "Anna de",
       status: "published",
       room_label: "Double",
       submitted_via: "session",
     });
     expect((row.stay_month as Date).toISOString().slice(0, 10)).toBe("2031-11-01");
+  });
+
+  test("a guest without a first name is shown as Guest", async () => {
+    await db.query(`UPDATE "user" SET first_name = '', last_name = '' WHERE id = $1`, [guestId]);
+    expect((await submit(at(DAY))).ok).toBe(true);
+    const row = await one<Record<string, unknown>>(`SELECT author_name FROM reviews WHERE booking_id = $1`, [bookingId]);
+    expect(row.author_name).toBe("Guest");
   });
 
   test("one review per booking", async () => {
@@ -173,7 +180,7 @@ describeWithDb("guest reviews against Postgres", () => {
       expect(await run(at(DAY - HOUR))).toMatchObject({ invitations: 0 });
       expect(await run(at(DAY))).toMatchObject({ invitations: 1 });
       const mail = sent.find((m) => m.kind === "invitation");
-      expect(mail).toMatchObject({ kind: "invitation", bookingId, guestFirstName: "Anna" });
+      expect(mail).toMatchObject({ kind: "invitation", bookingId, guestFirstName: "Anna de" });
       if (mail?.kind !== "invitation") throw new Error("no invitation");
       expect(await bookingForReviewToken(db, mail.token, at(DAY))).toBe(bookingId);
       expect(await run(at(DAY + HOUR))).toMatchObject({ invitations: 0 });

@@ -1,5 +1,7 @@
 import { APIError, type User, type Session } from "better-auth";
 import { Pool, type PoolClient } from "pg";
+import { z } from "zod";
+import { MAX_NAME_LENGTH } from "./names";
 
 /**
  * Shared building blocks for the two Better Auth instances. This module is
@@ -357,12 +359,33 @@ export const accountLinkingOptions = {
   },
 } as const;
 
-/** `user.additionalFields` both instances share. Never client-settable. */
+/** Better Auth runs this on every client-supplied name (sign-up, updateUser, profile mappers). */
+export const nameInput = z.string().max(MAX_NAME_LENGTH);
+
+/**
+ * `user.additionalFields` both instances share. `account_type` is never
+ * client-settable; `firstName`/`lastName` are (sign-up, updateUser, and the
+ * social profile mappers), the `user_names_sync` trigger keeps `name` equal.
+ */
 export const userAdditionalFields = {
   account_type: {
     type: "string",
     required: false,
     input: false,
+  },
+  firstName: {
+    type: "string",
+    required: false,
+    input: true,
+    fieldName: "first_name",
+    validator: { input: nameInput },
+  },
+  lastName: {
+    type: "string",
+    required: false,
+    input: true,
+    fieldName: "last_name",
+    validator: { input: nameInput },
   },
 } as const;
 
