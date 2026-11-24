@@ -282,7 +282,7 @@ describeWithDb("Rooms editor against Postgres", () => {
       deps,
     );
     expect(state.success).toBe(false);
-    expect(state.errors?.extraAdultFee?.[0]).toBe("Use at most two decimals");
+    expect(state.errors?.extraAdultFee?.[0]).toBe("Use at most two decimals, without a thousands separator");
   });
 
   test("units cannot drop below the busiest future night, which the error names", async () => {

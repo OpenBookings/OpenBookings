@@ -68,7 +68,7 @@ describe("modifierSchema", () => {
     expect(errorOn({ adjustmentType: "percent", amount: "2.5" }, "amount")).toBeDefined();
     expect(errorOn({ amount: "0" }, "amount")).toBe("Enter an amount from €0.01 to €9,999.");
     expect(errorOn({ amount: "9999.01" }, "amount")).toBe("Enter an amount from €0.01 to €9,999.");
-    expect(errorOn({ amount: "2.555" }, "amount")).toBe("Use at most two decimals");
+    expect(errorOn({ amount: "2.555" }, "amount")).toBe("Use at most two decimals, without a thousands separator");
     expect(errorOn({ amount: "1.234,50" }, "amount")).toBeDefined();
   });
 

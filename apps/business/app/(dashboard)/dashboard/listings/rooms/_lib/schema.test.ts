@@ -154,7 +154,7 @@ describe("spaceSchema", () => {
     expect(errorOn({ maxAdults: "3", extraAdultFee: "10000" }, "extraAdultFee")).toBe(
       "The extra adult fee can be at most €9,999.99.",
     );
-    expect(errorOn({ maxAdults: "3", extraAdultFee: "12.555" }, "extraAdultFee")).toBe("Use at most two decimals");
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "12.555" }, "extraAdultFee")).toBe("Use at most two decimals, without a thousands separator");
     expect(errorOn({ maxAdults: "3", extraAdultFee: "1.234,50" }, "extraAdultFee")).toBeDefined();
     expect(errorOn({ maxAdults: "3", extraAdultFee: "-5" }, "extraAdultFee")).toBeDefined();
   });

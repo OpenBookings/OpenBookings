@@ -49,7 +49,7 @@ export function parseEuroInput(
     return { ok: false, error: "Enter an amount of 0 or more" };
   }
   if (/^\d+[.,]\d{3,}$/.test(text)) {
-    return { ok: false, error: "Use at most two decimals" };
+    return { ok: false, error: "Use at most two decimals, without a thousands separator" };
   }
   const match = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(text);
   if (!match) {

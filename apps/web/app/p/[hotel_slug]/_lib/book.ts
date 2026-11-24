@@ -246,5 +246,7 @@ export function interpretBookResponse(status: number, body: unknown): BookOutcom
     // The same words as the checkout page's config_error.
     return { kind: "error", message: "This property can't take bookings right now." };
   }
+  // A page loaded before a deploy can post a body the server no longer accepts.
+  if (status === 400) return { kind: "error", message: "This page is out of date. Reload it and try again." };
   return SOMETHING_WENT_WRONG;
 }

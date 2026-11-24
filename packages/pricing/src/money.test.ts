@@ -78,7 +78,7 @@ describe("parseEuroInput", () => {
   test("rejects more than two decimals", () => {
     expect(parseEuroInput("89.505")).toEqual({
       ok: false,
-      error: "Use at most two decimals",
+      error: "Use at most two decimals, without a thousands separator",
     });
   });
 

@@ -84,7 +84,7 @@ describe("touristTaxRuleSchema", () => {
 
   test("rejects amounts with more than two decimals, and anything that is not an amount", () => {
     expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: "2.555" }] })).toContain(
-      "Use at most two decimals",
+      "Use at most two decimals, without a thousands separator",
     );
     expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: "6.555" }] })).toContain(
       "Use at most two decimals",

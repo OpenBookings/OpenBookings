@@ -193,6 +193,13 @@ describe("interpretBookResponse", () => {
     expect(interpretBookResponse(401, { error: "auth_required" })).toEqual({ kind: "sign_in" });
   });
 
+  test("400 tells a guest on an old page to reload", () => {
+    expect(interpretBookResponse(400, { error: "invalid_body" })).toEqual({
+      kind: "error",
+      message: "This page is out of date. Reload it and try again.",
+    });
+  });
+
   test("409 price_changed carries the new total", () => {
     expect(interpretBookResponse(409, { error: "price_changed", quote: { totalCents: 41250, roomsTotalCents: 40000 } })).toEqual({
       kind: "price_changed",
@@ -215,7 +222,7 @@ describe("interpretBookResponse", () => {
 
   test("anything else is a plain error, never a code", () => {
     const error = { kind: "error" as const, message: "Something went wrong. Please try again." };
-    expect(interpretBookResponse(400, { error: "invalid_request", errors: ["x"] })).toEqual(error);
+    expect(interpretBookResponse(422, { error: "invalid_request", errors: ["x"] })).toEqual(error);
     expect(interpretBookResponse(429, { error: "rate_limited" })).toEqual(error);
     expect(interpretBookResponse(500, { error: "server_error" })).toEqual(error);
     expect(interpretBookResponse(409, { error: "price_changed" })).toEqual(error);

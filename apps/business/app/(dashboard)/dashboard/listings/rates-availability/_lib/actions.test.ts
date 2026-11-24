@@ -70,7 +70,7 @@ describe("setBaseRate", () => {
   });
 
   test("text that is not an amount is refused before anything is written", async () => {
-    expect(await setBaseRate({ ratePlanId: PLAN, bar: "89.505" })).toEqual({ ok: false, error: "Use at most two decimals" });
+    expect(await setBaseRate({ ratePlanId: PLAN, bar: "89.505" })).toEqual({ ok: false, error: "Use at most two decimals, without a thousands separator" });
     expect(await setBaseRate({ ratePlanId: PLAN, bar: "1.234,50" })).toMatchObject({ ok: false });
     expect(await setBaseRate({ ratePlanId: PLAN, bar: "0" })).toMatchObject({ ok: false });
     expect(calls).toEqual([]);
@@ -110,7 +110,7 @@ describe("publishAriChanges", () => {
   });
 
   test("a price with three decimals is refused, and nothing is written", async () => {
-    expect(await publish("120.255")).toEqual({ ok: false, error: "Use at most two decimals" });
+    expect(await publish("120.255")).toEqual({ ok: false, error: "Use at most two decimals, without a thousands separator" });
     expect(calls).toEqual([]);
   });
 });
