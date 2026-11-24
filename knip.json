@@ -12,7 +12,7 @@
       "entry": ["scripts/**/*.ts"]
     },
     "apps/siteminder": {
-      "ignoreDependencies": ["@openbookings/apps-contract", "@upstash/qstash", "zod"]
+      "ignoreDependencies": ["@upstash/qstash", "zod"]
     },
     "packages/*": {
       "entry": ["scripts/**/*.ts"]
