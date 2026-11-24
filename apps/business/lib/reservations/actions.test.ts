@@ -5,6 +5,7 @@ const captured: unknown[][] = [];
 const refundMails: unknown[][] = [];
 let lifecycle: unknown = { ok: true, refunds: [] };
 const goodwillCalls: unknown[] = [];
+const rung: string[] = [];
 
 await mockModules(import.meta.dir, {
   "next/server": () => ({ after: (task: () => unknown) => void task() }),
@@ -43,6 +44,7 @@ await mockModules(import.meta.dir, {
       captured.push(args);
     },
   }),
+  "@/lib/apps/doorbell": () => ({ ringBookingChanged: (id: string) => void rung.push(id) }),
   "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" }, session: { id: "s1" } }) }),
   "@/lib/mailing/booking-mail": () => ({
     sendCancellation: async () => {},
@@ -52,12 +54,13 @@ await mockModules(import.meta.dir, {
   }),
 }, ["@/lib/auth"]);
 
-const { hostGoodwillRefund, hostMarkCheckedIn, hostRecordEarlyDeparture, hostRetryRefunds } = await import("./actions");
+const { hostCancelRooms, hostGoodwillRefund, hostMarkCheckedIn, hostRecordEarlyDeparture, hostRetryRefunds } = await import("./actions");
 
 beforeEach(() => {
   captured.length = 0;
   refundMails.length = 0;
   goodwillCalls.length = 0;
+  rung.length = 0;
   lifecycle = { ok: true, refunds: [] };
 });
 
@@ -107,5 +110,22 @@ describe("hostGoodwillRefund amount", () => {
       expect(await hostGoodwillRefund("b1", bad)).toEqual({ ok: false, error: "invalid_amount" });
     }
     expect(goodwillCalls).toEqual([]);
+  });
+});
+
+describe("the app doorbell", () => {
+  it("rings after a cancellation and after an early departure", async () => {
+    lifecycle = { ok: true, refunds: [], cancelled: [{ reservationId: "r1" }] };
+    await hostCancelRooms("b1", null);
+    await hostRecordEarlyDeparture("b2", "2031-11-10");
+    expect(rung).toEqual(["b1", "b2"]);
+  });
+
+  it("rings nothing when nothing was cancelled or the lifecycle refuses", async () => {
+    lifecycle = { ok: true, refunds: [] };
+    await hostCancelRooms("b1", null);
+    lifecycle = { ok: false, error: "not_allowed" };
+    await hostRecordEarlyDeparture("b1", "2031-11-10");
+    expect(rung).toEqual([]);
   });
 });

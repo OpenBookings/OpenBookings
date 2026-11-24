@@ -5,6 +5,7 @@ import { queryOne } from '@openbookings/db';
 import { cancelRooms, previewRefund, type LifecycleResult } from '@openbookings/db/booking-lifecycle';
 import * as Sentry from '@sentry/nextjs';
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from '@openbookings/stripe';
+import { ringBookingChanged } from '@/lib/apps/doorbell';
 import { getServerSession } from '@/lib/auth';
 import { sendCancellation } from '@/lib/mailing/booking-mail';
 
@@ -55,7 +56,10 @@ export async function guestCancelRooms(bookingId: string, reservationIds: string
     },
     { bookingId, actor: { kind: 'guest', userId }, reservationIds },
   );
-  if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
+  if (result.ok && result.cancelled) {
+    ringBookingChanged(bookingId);
+    await sendCancellation(bookingId, result.cancelled);
+  }
   revalidatePath(`/bookings/${bookingId}`);
   return result;
 }

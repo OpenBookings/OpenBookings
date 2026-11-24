@@ -104,6 +104,30 @@ describe("confirmPaidCheckout", () => {
     expect(t.of("refund")).toEqual([]);
   });
 
+  test("a confirmed booking rings its app, and a failing doorbell does not fail the confirmation", async () => {
+    const rung: string[] = [];
+    const t = setup([confirmed(true)], { notifyConfirmed: (id) => void rung.push(id) });
+    expect(await confirmPaidCheckout(paid, t.deps)).toBe("confirmed");
+    expect(rung).toEqual(["b-1"]);
+
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const broken = setup([confirmed(true)], {
+      notifyConfirmed: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await confirmPaidCheckout(paid, broken.deps)).toBe("confirmed");
+    expect(broken.of("sendConfirmed")).toEqual([["sendConfirmed", "b-1"]]);
+    warn.mockRestore();
+  });
+
+  test("an oversold payment rings nothing", async () => {
+    const rung: string[] = [];
+    const t = setup([oversold(true)], { notifyConfirmed: (id) => void rung.push(id) });
+    await confirmPaidCheckout(paid, t.deps);
+    expect(rung).toEqual([]);
+  });
+
   test("a booking already confirmed (a redelivered event) is not sent again", async () => {
     const t = setup([confirmed(false)]);
     await confirmPaidCheckout(paid, t.deps);

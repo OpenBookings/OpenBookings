@@ -29,6 +29,12 @@ export type ConfirmationDeps = {
     error: unknown,
     context: { level: "error" | "warning"; tags?: Record<string, string>; extra: Record<string, unknown> },
   ) => void;
+  /**
+   * A booking stands: tell its app, if it has one. Also on a redelivered event,
+   * since a ring is cheap and the first one may not have gone out. Runs after
+   * the conversion committed; a throw is logged, never raised.
+   */
+  notifyConfirmed?: (bookingId: string) => void;
   /** Tests replace these; the app uses the real ones. */
   convert?: typeof convertIntentToBooking;
   markRefunded?: typeof markIntentRefundedOversold;
@@ -97,6 +103,11 @@ export async function confirmPaidCheckout(i: PaidCheckout, deps: ConfirmationDep
   }
 
   if (result.outcome === "confirmed") {
+    try {
+      deps.notifyConfirmed?.(result.bookingId);
+    } catch (error) {
+      console.warn("[booking-confirmation] app doorbell failed:", error instanceof Error ? error.message : error);
+    }
     if (!result.firstTime) return "confirmed";
     await deps.sendConfirmed(result.bookingId).catch((error: unknown) => {
       console.error("[booking-confirmation] confirmation email failed:", error instanceof Error ? error.message : error);

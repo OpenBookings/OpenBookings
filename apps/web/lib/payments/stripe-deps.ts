@@ -16,6 +16,7 @@ import {
   retrieveBookingCheckout,
   type StripeEventDeps,
 } from '@openbookings/stripe';
+import { ringBookingChanged } from '@/lib/apps/doorbell';
 import { sendConfirmed, sendOversold } from '@/lib/mailing/booking-mail';
 import { confirmPaidCheckout, type ConfirmationDeps } from './booking-confirmation';
 import type { ReconcileDeps } from './reconcile';
@@ -37,6 +38,7 @@ const confirmation: ConfirmationDeps = {
   now: () => new Date(),
   sendConfirmed,
   sendOversold,
+  notifyConfirmed: ringBookingChanged,
   report: (error, { level, tags, extra }) =>
     Sentry.captureException(error, { level, tags: { area: 'booking-confirmation', ...tags }, extra }),
 };

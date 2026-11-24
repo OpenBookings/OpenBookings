@@ -18,6 +18,7 @@ import {
 import { captureOutcome } from "@openbookings/mailing/tracking";
 import * as Sentry from "@sentry/nextjs";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
+import { ringBookingChanged } from "@/lib/apps/doorbell";
 import { getServerSession } from "@/lib/auth";
 import { currentPropertyPin, pinnedAccess, switchedReason, type PinnedAccess } from "@/lib/current-property";
 import { goodwillAmount } from "./goodwill-amount";
@@ -80,7 +81,10 @@ async function run(
 export async function hostCancelRooms(bookingId: string, reservationIds: string[] | null) {
   return run(bookingId, ACTION_PERMISSION.cancel, async (actor) => {
     const result = await cancelRooms(deps, { bookingId, actor, reservationIds });
-    if (result.ok && result.cancelled) await sendCancellation(bookingId, result.cancelled);
+    if (result.ok && result.cancelled) {
+      ringBookingChanged(bookingId);
+      await sendCancellation(bookingId, result.cancelled);
+    }
     return result;
   });
 }
@@ -100,7 +104,10 @@ export async function hostMarkNoShow(bookingId: string) {
 export async function hostRecordEarlyDeparture(bookingId: string, lastNightStayed: string) {
   return run(bookingId, ACTION_PERMISSION.record_early_departure, async (actor) => {
     const result = await recordEarlyDeparture(deps, { bookingId, actor, lastNightStayed });
-    if (result.ok) await sendRefundMail(bookingId, "early_departure", result.refunds);
+    if (result.ok) {
+      ringBookingChanged(bookingId);
+      await sendRefundMail(bookingId, "early_departure", result.refunds);
+    }
     return result;
   });
 }
