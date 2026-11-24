@@ -22,6 +22,7 @@
     "test": "bun test --timeout 30000"
   },
   "dependencies": {
+    "@openbookings/apps-contract": "workspace:*",
     "@openbookings/pricing": "workspace:*",
     "drizzle-orm": "1.0.0-rc.5",
     "pg": "^8.23.1"
