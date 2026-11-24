@@ -209,7 +209,7 @@ export type ReplyNotification = {
   ticket_id: string;
   conversation_id: number;
   email: string;
-  name: string | null;
+  first_name: string | null;
 };
 
 /**
@@ -241,7 +241,7 @@ export async function claimSupportReplyNotification(
           SELECT 1 FROM "member" m
            WHERE m."organizationId" = t.organization_id AND m."userId" = t.opened_by_user_id
         )
-      RETURNING t.id AS ticket_id, t.chatwoot_conversation_id::int AS conversation_id, u.email, u.name`,
+      RETURNING t.id AS ticket_id, t.chatwoot_conversation_id::int AS conversation_id, u.email, u.first_name`,
     [conversationId, messageAt],
   );
   return rows[0] ?? null;

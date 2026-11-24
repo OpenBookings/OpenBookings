@@ -22,7 +22,7 @@ import type { Queryable } from "../reservation-policy";
 export * from "./shared";
 export * from "./invitations";
 export * from "./replies";
-import { firstName, normalizeReviewBody } from "./shared";
+import { authorFirstName, normalizeReviewBody } from "./shared";
 import { loadReviewReplies, type ReviewReply } from "./replies";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,7 +70,7 @@ type ContextRow = {
   property_id: string;
   property_name: string;
   property_slug: string;
-  guest_name: string | null;
+  guest_first_name: string | null;
   guest_country: string | null;
   room_label: string | null;
   review_id: string | null;
@@ -85,7 +85,7 @@ const CONTEXT_SQL = `
          b.check_out_date::text AS check_out_date,
          to_char(p.check_out_time, 'HH24:MI') AS check_out_time, p.timezone,
          p.id AS property_id, p.name AS property_name, p.slug AS property_slug,
-         u.name AS guest_name, gp.country AS guest_country,
+         u.first_name AS guest_first_name, gp.country AS guest_country,
          (SELECT string_agg(DISTINCT rm.name, ', ')
             FROM reservations r JOIN rooms rm ON rm.id = r.room_id
            WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS room_label,
@@ -111,7 +111,7 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
     propertyName: row.property_name,
     propertySlug: row.property_slug,
     stayMonth: stayMonth(row.check_out_date),
-    authorName: firstName(row.guest_name),
+    authorName: authorFirstName(row.guest_first_name),
     authorCountry: row.guest_country?.trim().toUpperCase() || null,
     roomLabel: row.room_label,
     checkOutAt,

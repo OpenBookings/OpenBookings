@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
 import { CS_AuthForm } from "@/components/auth/CS-AuthForm";
-import { AccountMenu, initials } from "@/components/account/AccountMenu";
+import { AccountMenu } from "@/components/account/AccountMenu";
+import { userInitials } from "@/lib/account/initials";
 import { writeNavHint } from "@/lib/nav-hint";
 
 interface NavProps {
@@ -17,15 +18,15 @@ interface NavProps {
 export function Nav({ authError = null, onDismissAuthError }: NavProps) {
   const { data: session, isPending: sessionPending, error: sessionError } = authClient.useSession();
   const user = session?.user ?? null;
-  const userInitials = user ? initials(user.name?.trim() || "") : null;
+  const navInitials = user ? userInitials(user) : null;
 
   // Keep the device's hint in step with the real answer, for the next visit.
   // A failed check (offline, server error) is not an answer: it must not mark
   // a signed-in visitor as signed out.
   useEffect(() => {
     if (sessionPending || sessionError) return;
-    writeNavHint(userInitials ? { signedIn: true, initials: userInitials } : { signedIn: false });
-  }, [sessionPending, sessionError, userInitials]);
+    writeNavHint(navInitials ? { signedIn: true, initials: navInitials } : { signedIn: false });
+  }, [sessionPending, sessionError, navInitials]);
 
   return (
     <>

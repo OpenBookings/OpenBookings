@@ -211,14 +211,19 @@ describe("hostTicketNote", () => {
 
 describe("reply email", () => {
   it("carries the reference and link, never the message or title", () => {
-    const email = renderSupportReplyEmail({ name: "Sam Host", reference: 12, url: "https://b.test/support?ticket=t-1" });
+    const email = renderSupportReplyEmail({ firstName: "Anna de", reference: 12, url: "https://b.test/support?ticket=t-1" });
     expect(email.subject).toBe("New reply on your support ticket #12");
-    expect(email.text).toContain("Hi Sam,");
+    expect(email.text).toContain("Hi Anna de,");
     expect(email.html).toContain('href="https://b.test/support?ticket=t-1"');
   });
 
+  it("greets without a name when the first name is empty", () => {
+    expect(renderSupportReplyEmail({ firstName: "", reference: 1, url: "https://b.test" }).text).toStartWith("Hi,\n");
+    expect(renderSupportReplyEmail({ firstName: null, reference: 1, url: "https://b.test" }).text).toStartWith("Hi,\n");
+  });
+
   it("escapes the name", () => {
-    const email = renderSupportReplyEmail({ name: "<script>", reference: 1, url: "https://b.test" });
+    const email = renderSupportReplyEmail({ firstName: "<script>", reference: 1, url: "https://b.test" });
     expect(email.html).not.toContain("<script>");
   });
 });

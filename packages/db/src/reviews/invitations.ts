@@ -29,7 +29,7 @@ import {
   type BookingStatus,
 } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
-import { createReviewToken, deleteReviewToken, firstName } from "./shared";
+import { authorFirstName, createReviewToken, deleteReviewToken } from "./shared";
 
 const DAY = 86_400_000;
 /** A claim older than this belongs to a run that died mid-send. */
@@ -89,6 +89,7 @@ type CandidateRow = {
   property_name: string;
   guest_email: string | null;
   guest_name: string | null;
+  guest_first_name: string | null;
   opted_out: boolean;
   host_warned_at: Date | null;
   sent_at: Date | null;
@@ -110,7 +111,7 @@ async function candidates(db: Queryable, now: Date, testing: boolean): Promise<C
             b.check_in_date::text AS check_in_date, b.check_out_date::text AS check_out_date,
             to_char(p.check_out_time, 'HH24:MI') AS check_out_time, p.timezone,
             p.id AS property_id, p.name AS property_name,
-            u.email AS guest_email, u.name AS guest_name,
+            u.email AS guest_email, u.name AS guest_name, u.first_name AS guest_first_name,
             (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out,
             ri.host_warned_at, ri.sent_at, ri.reminder_sent_at, ri.claimed_at,
             COALESCE(ri.attempts, 0)::int AS attempts
@@ -264,7 +265,7 @@ export async function runReviewInvitations(deps: ReviewInvitationDeps): Promise<
         kind,
         bookingId: row.booking_id,
         to: row.guest_email,
-        guestFirstName: firstName(row.guest_name),
+        guestFirstName: authorFirstName(row.guest_first_name),
         propertyName: row.property_name,
         checkOutDate: row.check_out_date,
         token,

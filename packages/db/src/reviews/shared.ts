@@ -5,10 +5,13 @@ import type { Queryable } from "../reservation-policy";
 /** 32 random bytes as base64url: always 43 characters. */
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
-/** What shows publicly as the author: the first word of the account name. */
-export function firstName(name: string | null): string {
-  const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
-  return first.slice(0, 40) || "Guest";
+/**
+ * What shows publicly as the author, and what the review emails greet: the
+ * guest's first name as entered. A user with no first name (a legacy sign-up)
+ * shows as "Guest".
+ */
+export function authorFirstName(firstName: string | null): string {
+  return (firstName ?? "").trim().slice(0, 40) || "Guest";
 }
 
 /** Trims a review or reply text; empty means none. */

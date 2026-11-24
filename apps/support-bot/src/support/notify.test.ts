@@ -32,14 +32,14 @@ beforeAll(() => {
 });
 
 const payload = { conversationId: 7, messageAt: "2026-11-15T10:00:00Z" } as Parameters<typeof sendSupportReplyNotification>[0];
-const claim = async () => ({ ticket_id: "t-1", conversation_id: 7, email: "host@hotel.nl", name: "Olga Owner" }) as any;
+const claim = async () => ({ ticket_id: "t-1", conversation_id: 7, email: "host@hotel.nl", first_name: "Olga" }) as any;
 
 describe("sendSupportReplyNotification tracking", () => {
   test("sends the tracked html as support_reply, text unchanged, onSent after send()", async () => {
     const log: string[] = [];
     const sent: Sent[] = [];
     await sendSupportReplyNotification(payload, { track: tracker(log), claim, getClient: fakeClient(log, sent) });
-    const plain = renderSupportReplyEmail({ name: "Olga Owner", reference: 7, url: "https://business.example/support?ticket=t-1" });
+    const plain = renderSupportReplyEmail({ firstName: "Olga", reference: 7, url: "https://business.example/support?ticket=t-1" });
     expect(sent[0].html!.endsWith("<!--support_reply:host@hotel.nl-->")).toBe(true);
     expect(sent[0].text).toBe(plain.text);
     expect(log).toEqual(["send", "onSent"]);
