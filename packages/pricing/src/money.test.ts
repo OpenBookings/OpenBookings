@@ -15,6 +15,11 @@ describe("roundHalfUp", () => {
     expect(roundHalfUp(-2.4999)).toBe(-2);
     expect(roundHalfUp(0)).toBe(0);
   });
+
+  test("never returns negative zero", () => {
+    expect(Object.is(roundHalfUp(-0.2), 0)).toBe(true);
+    expect(Object.is(roundHalfUp(-0), 0)).toBe(true);
+  });
 });
 
 describe("percentOfCents", () => {
@@ -22,6 +27,15 @@ describe("percentOfCents", () => {
     expect(percentOfCents(9999, -10)).toBe(-1000);
     expect(percentOfCents(10000, 4.5)).toBe(450);
     expect(percentOfCents(1010, 5)).toBe(51);
+    expect(Object.is(percentOfCents(1, -10), 0)).toBe(true);
+  });
+
+  test("is not thrown off by float artefacts", () => {
+    expect(percentOfCents(1005, 10)).toBe(101);
+    expect(percentOfCents(18650, 4.5)).toBe(839);
+    expect(percentOfCents(18650, 6.5)).toBe(1212);
+    expect(percentOfCents(2010, 4.5)).toBe(90);
+    expect(percentOfCents(1000, 4.5)).toBe(45);
   });
 });
 
@@ -78,6 +92,15 @@ describe("formatCents", () => {
   test("negative amounts get a real minus sign", () => {
     expect(formatCents(-6000, { whole: "always-decimals" })).toBe("−€60.00");
     expect(formatCents(-6050)).toBe("−€60.50");
+    expect(formatCents(-6000)).toBe("−€60");
+  });
+
+  test("groups thousands with a comma", () => {
+    expect(formatCents(123400)).toBe("€1,234");
+    expect(formatCents(123450)).toBe("€1,234.50");
+    expect(formatCents(123400, { whole: "always-decimals" })).toBe("€1,234.00");
+    expect(formatCents(-123450)).toBe("−€1,234.50");
+    expect(formatCents(100000000)).toBe("€1,000,000");
   });
 });
 

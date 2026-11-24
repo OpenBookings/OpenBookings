@@ -5,7 +5,7 @@
 /** Round to an integer, half away from zero: 2.5 -> 3, -2.5 -> -3. */
 export function roundHalfUp(x: number): number {
   const rounded = Math.round(Math.abs(x));
-  return x < 0 ? -rounded : rounded;
+  return x < 0 && rounded !== 0 ? -rounded : rounded;
 }
 
 /** `percent` of an amount in cents, rounded half up: (9999, -10) -> -1000. */
@@ -14,7 +14,7 @@ export function percentOfCents(cents: number, percent: number): number {
 }
 
 /**
- * "€89" / "€89.50"; a negative amount gets a real minus sign: "−€60.50".
+ * "€89" / "€89.50" / "€1,234"; a negative amount gets a real minus sign: "−€60.50".
  * `whole: "auto"` (default) drops the decimals for whole euros,
  * `"always-decimals"` always shows two.
  */
@@ -24,7 +24,9 @@ export function formatCents(
 ): string {
   const abs = Math.abs(cents);
   const whole = (opts.whole ?? "auto") === "auto" && abs % 100 === 0;
-  const text = whole ? `€${abs / 100}` : `€${(abs / 100).toFixed(2)}`;
+  const [euros = "0", fraction] = (abs / 100).toFixed(2).split(".");
+  const grouped = euros.replace(/\B(?=(\d{3})+$)/g, ",");
+  const text = whole ? `€${grouped}` : `€${grouped}.${fraction}`;
   return cents < 0 ? `−${text}` : text;
 }
 
