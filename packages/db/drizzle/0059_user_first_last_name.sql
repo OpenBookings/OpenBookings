@@ -15,8 +15,8 @@
 --     name is rebuilt from them. A name written alongside them is ignored.
 --   * otherwise, name written (Better Auth sign-up and profile updates, older
 --     code paths): name is split by the split rule below. On UPDATE only when
---     name actually changed, so rewriting the same name keeps the first and
---     last name a guest set. An UPDATE to an empty or blank name (a magic-link
+--     name actually changed (ignoring surrounding whitespace), so rewriting the
+--     same name keeps the first and last name a guest set. An UPDATE to an empty or blank name (a magic-link
 --     sign-in) never wipes them: name keeps its old value.
 --   * an UPDATE of any other column changes nothing.
 --
@@ -34,6 +34,10 @@
 --
 -- ob_app (0049) and the admin roles (0054) read "user" through column grants,
 -- so they get SELECT on the two new columns, like `name`.
+--
+-- The app.* functions follow the 0049/0056 convention: no PUBLIC execute, and
+-- ob_app, ob_auth and ob_system may call them (Better Auth writes "user" as
+-- ob_auth, which runs the trigger and the helpers it calls).
 --
 -- Idempotent: safe to replay (see packages/db/src/testing/pending-migrations.ts).
 
@@ -82,7 +86,7 @@ BEGIN
   IF names_written THEN
     NEW.first_name := app.trim_name(NEW.first_name);
     NEW.last_name := app.trim_name(NEW.last_name);
-  ELSIF TG_OP = 'INSERT' OR NEW.name IS DISTINCT FROM OLD.name THEN
+  ELSIF TG_OP = 'INSERT' OR app.trim_name(NEW.name) IS DISTINCT FROM app.trim_name(OLD.name) THEN
     IF TG_OP = 'UPDATE' AND app.trim_name(NEW.name) = '' THEN
       NEW.name := OLD.name;
       RETURN NEW;
@@ -91,6 +95,9 @@ BEGIN
     NEW.first_name := split.first_name;
     NEW.last_name := split.last_name;
   ELSE
+    -- Same name up to surrounding whitespace: keep first and last, store the
+    -- trimmed value.
+    NEW.name := app.trim_name(NEW.name);
     RETURN NEW;
   END IF;
 
@@ -118,6 +125,21 @@ BEGIN
   FOREACH r IN ARRAY ARRAY['ob_app', 'ob_admin_read', 'ob_admin_write'] LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
       EXECUTE format('GRANT SELECT (first_name, last_name) ON "user" TO %I', r);
+    END IF;
+  END LOOP;
+END
+$$;
+
+REVOKE ALL ON FUNCTION app.trim_name(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.split_user_name(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.user_names_sync() FROM PUBLIC;
+
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['ob_app', 'ob_auth', 'ob_system'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION app.trim_name(text), app.split_user_name(text), app.user_names_sync() TO %I', r);
     END IF;
   END LOOP;
 END

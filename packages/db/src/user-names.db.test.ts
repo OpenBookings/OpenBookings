@@ -115,6 +115,12 @@ describeWithDb("first and last name on users (0059)", () => {
     expect(await names(id)).toEqual({ name: "Anna de Vries", first_name: "Anna de", last_name: "Vries" });
   });
 
+  test("rewriting name with only whitespace differences keeps the names and canonicalises name", async () => {
+    const id = await insertUser({ first_name: "Anna", last_name: "de Vries" });
+    await db.query(`UPDATE "user" SET name = 'Anna de Vries ' WHERE id = $1`, [id]);
+    expect(await names(id)).toEqual({ name: "Anna de Vries", first_name: "Anna", last_name: "de Vries" });
+  });
+
   test("writing an empty name (magic-link) never wipes the names the guest set", async () => {
     const id = await insertUser({ first_name: "Anna de", last_name: "Vries" });
     await db.query(`UPDATE "user" SET name = '' WHERE id = $1`, [id]);
