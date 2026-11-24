@@ -122,7 +122,7 @@ jobs:
       # apps/siteminder may depend on @openbookings/apps-contract only.
       - run: bun .github/scripts/check-app-boundaries.ts
       # The script's own tests: .github/scripts is outside every turbo package.
-      - run: bun test .github/scripts/check-app-boundaries.test.ts
+      - run: bun test ./.github/scripts/check-app-boundaries.test.ts
 
       # Unused, missing or unresolved dependencies across the whole repo
       # (~2 s, so not limited to --affected). Config in knip.json.
