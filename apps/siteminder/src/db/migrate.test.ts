@@ -18,7 +18,7 @@ describe.skipIf(skipDbTests)("migrations (rolled back)", () => {
   it("record each file with its sha256, and apply nothing twice", async () => {
     await withTestDb(async (db) => {
       const { rows } = await db.query<{ filename: string; sha256: string }>(`SELECT filename, sha256 FROM siteminder.migrations ORDER BY filename`);
-      expect(rows.map((r) => r.filename)).toEqual(["0001_init.sql", "0002_inbox_lease.sql", "0003_poll_cadence.sql", "0004_delivery.sql"]);
+      expect(rows.map((r) => r.filename)).toEqual(["0001_init.sql", "0002_inbox_lease.sql", "0003_poll_cadence.sql", "0004_delivery.sql", "0005_first_failure.sql"]);
       for (const row of rows) expect(row.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(await applyMigrations(db)).toEqual([]);
     });

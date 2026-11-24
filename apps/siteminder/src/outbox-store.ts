@@ -16,7 +16,8 @@ export const uniqueIdOf = (reference: string) => reference.replaceAll("-", "");
  *   channel has not been told this version), `needs_attention` (a newer version may fix what failed; the
  *   state machine puts a reopened-after-cancel booking back in needs_attention) and `retrying` (the retry was
  *   for the older version; the newer one goes out at once). `waiting` and `sending` keep their status (a send
- *   in flight sees the newer `latest_version` when it finishes) and `not_sent` stays not sent.
+ *   in flight sees the newer `latest_version` when it finishes) and `not_sent` stays not sent. A reset also
+ *   clears `first_failed_at`: the newer version is a new message with its own 30-minute retry window.
  */
 async function applyFeed(db: Queryable, inst: AppInstallation, bookings: AppBooking[], now: Date, cursor?: string): Promise<void> {
   // One entry per booking, highest version wins (the feed sends one, but one INSERT must never touch a row twice).
@@ -38,6 +39,7 @@ async function applyFeed(db: Queryable, inst: AppInstallation, bookings: AppBook
          attempts = CASE WHEN o.status IN ('delivered', 'needs_attention', 'retrying') THEN 0 ELSE o.attempts END,
          next_attempt_at = CASE WHEN o.status IN ('delivered', 'needs_attention', 'retrying') THEN NULL ELSE o.next_attempt_at END,
          last_error = CASE WHEN o.status IN ('delivered', 'needs_attention', 'retrying') THEN NULL ELSE o.last_error END,
+         first_failed_at = CASE WHEN o.status IN ('delivered', 'needs_attention', 'retrying') THEN NULL ELSE o.first_failed_at END,
          updated_at = EXCLUDED.updated_at
        WHERE EXCLUDED.latest_version > COALESCE(o.latest_version, -1)
        RETURNING 1

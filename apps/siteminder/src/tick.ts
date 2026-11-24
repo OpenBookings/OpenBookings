@@ -1,9 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { type AriBatch, MAX_ARI_CHANGES } from "@openbookings/apps-contract";
+import { alert } from "./alert";
 import { CORE_TIMEOUT_MS, CoreApiError, coreClient } from "./core-client";
 import type { Queryable } from "./db/migrate";
 import { getPool } from "./db/pool";
-import { type DeliveryCounts, type Post, type ReservationConfig, deliverDue, installationsWithDueDeliveries, reservationPoster } from "./deliver";
+import {
+  type DeliveryCounts,
+  type Post,
+  type ReservationConfig,
+  SITEMINDER_TIMEOUT_MS,
+  deliverDue,
+  installationsWithDueDeliveries,
+  reservationPoster,
+} from "./deliver";
 import {
   type PendingMessage,
   headIsDue,
@@ -45,10 +54,14 @@ export const MAX_BATCH_NIGHTS = 50_000;
 export const RETRY_SECONDS = [5, 15, 30, 60] as const;
 export const ALERT_AFTER_FAILURES = 5;
 export const STALE_INBOX_SECONDS = 10 * 60;
-export const DEFAULT_BUDGET_MS = 50_000;
+/**
+ * When new work may start. It fits one full SiteMinder send (60 s timeout) after other work: a send only starts
+ * while the remaining budget can hold its whole timeout. A tick can run past it by at most one core call.
+ */
+export const DEFAULT_BUDGET_MS = 120_000;
 
-// A lease outlives any single core call; it is renewed before each one.
-const LEASE_MS = CORE_TIMEOUT_MS + 60_000;
+// A lease outlives any single call out (core or SiteMinder); it is renewed before each one.
+const LEASE_MS = Math.max(CORE_TIMEOUT_MS, SITEMINDER_TIMEOUT_MS) + 60_000;
 const MESSAGES_PER_ROUND = 200;
 
 export function defaultTickDeps(): TickDeps {
@@ -60,12 +73,6 @@ export function defaultTickDeps(): TickDeps {
     pollSeconds: env.pollSeconds,
     post: reservationPoster(() => env.reservationUrl),
   };
-}
-
-/** Something a person must look at. The app has no Sentry SDK (nor does support-bot): the error/warning log line is the alert. */
-function alert(level: "error" | "warning", message: string, extra: Record<string, unknown>): void {
-  if (level === "error") console.error(`[siteminder] ${message}`, extra);
-  else console.warn(`[siteminder] ${message}`, extra);
 }
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));

@@ -97,17 +97,30 @@ function fakeCore() {
   return { reports, client, failNext: (n: number) => { failures += n; } };
 }
 
-type Row = { booking_id: string; status: string; acked: string; acked_version: string | null; attempts: number; last_error: string | null; report_pending: boolean };
+type Row = {
+  booking_id: string;
+  status: string;
+  acked: string;
+  acked_version: string | null;
+  attempts: number;
+  last_error: string | null;
+  report_pending: boolean;
+  first_failed_at: string | null;
+};
 const rowOf = async (db: Queryable, bookingId = B1): Promise<Row> =>
   (
     await db.query<Row>(
-      `SELECT booking_id, status, acked, acked_version::text, attempts, last_error, report_pending FROM siteminder.outbox WHERE installation_id = $1 AND booking_id = $2`,
+      `SELECT booking_id, status, acked, acked_version::text, attempts, last_error, report_pending,
+              to_char(first_failed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS first_failed_at
+         FROM siteminder.outbox WHERE installation_id = $1 AND booking_id = $2`,
       [reg.installationId, bookingId],
     )
   ).rows[0] as Row;
 
 const resStatus = (xml: string) => /ResStatus="([^"]+)"/.exec(xml)?.[1];
 const uniqueId = (xml: string) => /<UniqueID Type="14" ID="([^"]+)"/.exec(xml)?.[1];
+/** A test's own post (to look at or change things mid-send), with the same short timeout as the real poster. */
+const withTimeout = (fn: (xml: string) => Promise<{ status: number; body: string }>): Post => Object.assign(fn, { timeoutMs: 300 });
 const statuses = (core: ReturnType<typeof fakeCore>) => core.reports.map((r) => [r.report.status, r.report.version]);
 
 // One set of spies for the whole file (a second spy on the same method is undone by the first one's restore).
@@ -244,7 +257,7 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
     });
   });
 
-  it("five timeouts: needs_attention, and core is told once", async () => {
+  it("five timeouts: still retrying, our own alert at the 5th, core told retrying once; the 6th delivers", async () => {
     await withTestDb(async (db) => {
       const inst = await setup(db);
       const core = fakeCore();
@@ -252,22 +265,75 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       await upsertFromFeed(db, inst, booking(B1, 1), T0);
       sm.failNext(5, "timeout");
 
-      expect(await run(mkDeps(db, core, clock), 200_000)).toEqual({ delivered: 0, retrying: 4, needsAttention: 1 });
+      expect(await run(mkDeps(db, core, clock), 1_000_000)).toEqual({ delivered: 1, retrying: 5, needsAttention: 0 });
 
-      expect(clock.slept).toEqual([5_000, 15_000, 30_000, 60_000]);
-      expect(sm.received).toHaveLength(5);
+      expect(clock.slept).toEqual([5_000, 15_000, 30_000, 60_000, 60_000]);
+      expect(sm.received).toHaveLength(6);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked: "committed", attempts: 0, last_error: null, first_failed_at: null });
+      // Hotels are not told about a short outage: core hears retrying once, then delivered.
+      expect(statuses(core)).toEqual([["retrying", 1], ["delivered", 1]]);
+      expect(core.reports[0]?.report.detail).toMatch(/no answer from SiteMinder/);
+      // We are: one alert at the 5th consecutive failure.
+      expect(logged.error.map((e) => e[0])).toEqual(["[siteminder] a booking failed 5 times in a row delivering to SiteMinder; still retrying"]);
+    });
+  });
+
+  it("transient failures for 30 minutes since the first: needs_attention, told once, not retried after", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      sm.failNext(1_000, "http500");
+
+      // A long run of ticks: each one picks up the retry that is due (no inline wait beyond 60 s).
+      for (let n = 0; n < 60; n++) {
+        await run(mkDeps(db, core, clock), 1_000);
+        clock.t += 60_000;
+      }
+
+      // One attempt per tick, 60 s apart: at 0, 60, ..., 1740 s retrying; the one at 1800 s is final.
       const row = await rowOf(db);
-      expect(row).toMatchObject({ status: "needs_attention", acked: "none", attempts: 5 });
-      expect(row.last_error).toMatch(/no answer from SiteMinder/);
+      expect(row).toMatchObject({ status: "needs_attention", acked: "none", attempts: 31, last_error: "SiteMinder answered HTTP 500" });
+      expect(sm.received).toHaveLength(31);
       expect(statuses(core)).toEqual([["retrying", 1], ["needs_attention", 1]]);
-      expect(core.reports[1]?.report.detail).toMatch(/no answer from SiteMinder/);
-      expect(logged.error.map((e) => e[0])).toEqual(["[siteminder] a booking could not be delivered to SiteMinder and needs attention"]);
-
-      // needs_attention is not retried on later ticks.
+      expect(logged.error.map((e) => e[0])).toEqual([
+        "[siteminder] a booking failed 5 times in a row delivering to SiteMinder; still retrying",
+        "[siteminder] a booking could not be delivered to SiteMinder and needs attention",
+      ]);
+      const sent = sm.received.length;
       clock.t += 3_600_000;
-      expect(await run(mkDeps(db, core, clock), 200_000)).toEqual({ delivered: 0, retrying: 0, needsAttention: 0 });
-      expect(sm.received).toHaveLength(5);
-      expect(core.reports).toHaveLength(2);
+      expect(await run(mkDeps(db, core, clock), 1_000)).toEqual({ delivered: 0, retrying: 0, needsAttention: 0 });
+      expect(sm.received).toHaveLength(sent);
+    });
+  });
+
+  it("the retry window is the current message's: a newer version starts it again", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      sm.failNext(1, "http500");
+      await run(mkDeps(db, core, clock), 1_000);
+      expect(await rowOf(db)).toMatchObject({ status: "retrying", attempts: 1, first_failed_at: T0.toISOString() });
+
+      await upsertFromFeed(db, inst, booking(B1, 2), T0);
+      expect(await rowOf(db)).toMatchObject({ status: "waiting", attempts: 0, first_failed_at: null });
+    });
+  });
+
+  it("no send starts when the remaining budget cannot hold a full timeout", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+
+      expect(await run(mkDeps(db, core, clock), 299)).toEqual({ delivered: 0, retrying: 0, needsAttention: 0 });
+      expect(sm.received).toEqual([]);
+      expect(await rowOf(db)).toMatchObject({ status: "waiting" });
+      expect(await run(mkDeps(db, core, clock), 300)).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
     });
   });
 
@@ -311,11 +377,12 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       const clock = fakeClock();
       await upsertFromFeed(db, inst, booking(B1, 1), T0);
       await upsertFromFeed(db, inst, booking(B2, 1), new Date(T0.getTime() + 1));
-      sm.failNext(10, "http500", UID[B1]);
+      sm.failNext(1_000, "http500", UID[B1]);
 
-      const counts = await run(mkDeps(db, core, clock), 200_000);
-      expect(counts).toEqual({ delivered: 1, retrying: 4, needsAttention: 1 });
-      expect(await rowOf(db, B1)).toMatchObject({ status: "needs_attention", attempts: 5 });
+      // Room for B1's attempts at 0, 5, 20 and 50 s; its next one (110 s) is left for a later tick.
+      const counts = await run(mkDeps(db, core, clock), 100_000);
+      expect(counts).toEqual({ delivered: 1, retrying: 4, needsAttention: 0 });
+      expect(await rowOf(db, B1)).toMatchObject({ status: "retrying", attempts: 4 });
       expect(await rowOf(db, B2)).toMatchObject({ status: "delivered", acked: "committed" });
       // B2 went out right after B1's first failure, not after B1's retries.
       expect(sm.received.slice(0, 2).map(uniqueId)).toEqual([UID[B1], UID[B2]]);
@@ -333,7 +400,7 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       const http = reservationPoster(() => sm.url, 300);
       const seenBySecondSend: Row[] = [];
       let sends = 0;
-      const post: Post = async (xml) => {
+      const post: Post = withTimeout(async (xml) => {
         sends += 1;
         if (sends === 1) {
           // v2 lands while the Commit of v1 is in flight.
@@ -342,7 +409,7 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
           seenBySecondSend.push(await rowOf(sdb));
         }
         return http(xml);
-      };
+      });
 
       expect(await run({ ...mkDeps(db, core, clock), db: sdb, post })).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
 
@@ -387,10 +454,10 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       await run(mkDeps(db, core, clock));
       await upsertFromFeed(db, inst, booking(B1, 2, { cancelled: true }), T0);
       const http = reservationPoster(() => sm.url, 300);
-      const post: Post = async (xml) => {
+      const post: Post = withTimeout(async (xml) => {
         if (resStatus(xml) === "Cancel") await upsertFromFeed(sdb, inst, booking(B1, 3), T0);
         return http(xml);
-      };
+      });
 
       expect(await run({ ...mkDeps(db, core, clock), db: sdb, post })).toEqual({ delivered: 0, retrying: 0, needsAttention: 1 });
       expect(sm.received.map(resStatus)).toEqual(["Commit", "Cancel"]);

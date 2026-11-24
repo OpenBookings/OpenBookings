@@ -1,7 +1,13 @@
 import type { AppBooking } from "@openbookings/apps-contract";
 
-/** Seconds to wait before attempt 2, 3, 4 and 5 (index = failed attempts - 1). The 5th failure is final. */
+/**
+ * Seconds to wait after the 1st, 2nd, 3rd and 4th transient failure; every later failure waits the last value
+ * (60 s). Transient failures are retried until RETRY_WINDOW_SECONDS have passed since the first failure of the
+ * current message (guides_error-handling.md:248: back off, "then every 1 minute until a minimum timeout of 30
+ * minutes is reached").
+ */
 export const RETRY_SECONDS = [5, 15, 30, 60];
+export const RETRY_WINDOW_SECONDS = 30 * 60;
 
 export type OutboxRow = {
   acked: "none" | "committed" | "cancelled";
@@ -17,8 +23,6 @@ export type NextMessage = { send: "Commit" | "Modify" | "Cancel"; booking: AppBo
 export type Sent = "Commit" | "Modify" | "Cancel";
 /** How one send went: SiteMinder's Success, or a failure that is permanent (fix first) or transient (retry). */
 export type Result = { ok: true } | { ok: false; permanent: boolean; error: string };
-
-const MAX_ATTEMPTS = RETRY_SECONDS.length + 1;
 
 /** A booking is cancelled for the hotel when the whole booking is, or every one of its (at least one) rooms is. */
 const isCancelled = (b: AppBooking) => b.cancelled || (b.rooms.length > 0 && b.rooms.every((r) => r.cancelled));
@@ -64,24 +68,26 @@ export function nextMessage(row: OutboxRow): NextMessage {
  *   the send, or a Commit of an already-cancelled booking still needs its Cancel. A reopen after Cancel also
  *   goes to `waiting`; the next `nextMessage` reports the needs-attention reason.
  * - Permanent failure: `needs_attention` at once, attempts counted, acked unchanged (a failed Commit stays 'none').
- * - Transient failure: attempts + 1; the 5th failure -> `needs_attention`, else `retrying` after
- *   `RETRY_SECONDS[attempts - 1]` (5, 15, 30, 60).
+ * - Transient failure: attempts + 1; `retrying` after `RETRY_SECONDS[attempts - 1]` (5, 15, 30, 60, then 60
+ *   each time), until the failure comes `RETRY_WINDOW_SECONDS` or more after the first failure of this message
+ *   (`failingForSeconds`, 0 for the first failure): then `needs_attention`. Ignored on success.
  */
 export function afterResult(
   row: OutboxRow,
   sent: Sent,
   result: Result,
   sentVersion: number,
+  failingForSeconds: number,
 ): Pick<OutboxRow, "acked" | "ackedVersion" | "status" | "attempts"> & { retryInSeconds: number | null } {
   if (!result.ok) {
     const attempts = row.attempts + 1;
-    const final = result.permanent || attempts >= MAX_ATTEMPTS;
+    const final = result.permanent || failingForSeconds >= RETRY_WINDOW_SECONDS;
     return {
       acked: row.acked,
       ackedVersion: row.ackedVersion,
       attempts,
       status: final ? "needs_attention" : "retrying",
-      retryInSeconds: final ? null : (RETRY_SECONDS[attempts - 1] ?? null),
+      retryInSeconds: final ? null : (RETRY_SECONDS[Math.min(attempts, RETRY_SECONDS.length) - 1] as number),
     };
   }
   const acked = sent === "Cancel" ? "cancelled" : "committed";

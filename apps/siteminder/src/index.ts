@@ -8,14 +8,14 @@ import { inboxHealth } from "./inbox";
 import { removeInstallation, upsertInstallation } from "./installations";
 import { startRunMode } from "./run-mode";
 import { type SoapDeps, defaultSoapDeps, handleSoap } from "./soap/route";
-import { type TickDeps, defaultTickDeps, tick } from "./tick";
+import { DEFAULT_BUDGET_MS, type TickDeps, defaultTickDeps, tick } from "./tick";
 
 // Only when this file is the entrypoint — importing it (tests) must not
 // require the production env set.
 if (import.meta.main) assertRequiredEnv();
 
 /** `POST /tick` (the outside scheduler in scale-to-zero) starts new work for this long. */
-const TICK_ENDPOINT_BUDGET_MS = 50_000;
+const TICK_ENDPOINT_BUDGET_MS = DEFAULT_BUDGET_MS;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
