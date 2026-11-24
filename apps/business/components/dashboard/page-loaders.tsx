@@ -44,6 +44,10 @@ const LOADERS = {
     label: "Rates & availability",
     lines: ["Lining up your calendar", "Filling in rates and availability", "Checking restrictions"],
   },
+  channelManager: {
+    label: "Channel manager",
+    lines: ["Checking the SiteMinder connection", "Counting linked rooms"],
+  },
   team: {
     label: "Team",
     lines: ["Gathering your team", "Looking up everyone's role"],
@@ -77,6 +81,7 @@ const BY_PATH: ReadonlyArray<readonly [string, LoaderId]> = [
   ["/dashboard/listings/rates-availability", "rates"],
   ["/dashboard/listings/rooms/", "room"],
   ["/dashboard/listings/rooms", "rooms"],
+  ["/dashboard/listings/channel-manager", "channelManager"],
   ["/dashboard/listings", "property"],
   ["/dashboard/finance/billing", "billing"],
   ["/dashboard/finance", "payouts"],

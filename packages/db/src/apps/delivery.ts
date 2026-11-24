@@ -120,12 +120,15 @@ export async function recordDelivery(
  * How the booking stands with its property's app, for the host's booking
  * page: the active installation's row, else the most recently updated one
  * (a disconnected app's last word). Null when no app was ever told.
+ * With `propertyId`, a booking of any other property is null as well.
  */
 export async function deliveryForBooking(
   db: Queryable,
   bookingId: string,
+  opts: { propertyId?: string } = {},
 ): Promise<{ appKey: string; status: string; acknowledgedAt: string | null; detail: string | null } | null> {
   if (!UUID_RE.test(bookingId)) return null;
+  if (opts.propertyId !== undefined && !UUID_RE.test(opts.propertyId)) return null;
   const row = (
     await db.query(
       `SELECT ai.app_key, d.status, d.acknowledged_at, d.detail
@@ -133,9 +136,10 @@ export async function deliveryForBooking(
          JOIN app_installations ai ON ai.id = d.installation_id
          JOIN bookings b ON b.id = d.booking_id AND b.hotel_id = ai.property_id
         WHERE d.booking_id = $1::uuid
+          AND ($2::uuid IS NULL OR b.hotel_id = $2::uuid)
         ORDER BY (ai.status = 'active') DESC, d.updated_at DESC
         LIMIT 1`,
-      [bookingId],
+      [bookingId, opts.propertyId ?? null],
     )
   ).rows[0] as { app_key: string; status: string; acknowledged_at: Date | null; detail: string | null } | undefined;
   if (!row) return null;

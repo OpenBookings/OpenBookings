@@ -84,6 +84,14 @@ export function sourceLabel(source: ReasonSource): string {
 }
 
 /**
+ * A rule SiteMinder sent rather than one a team member set: ari-query builds
+ * a managed night's rules with `app:<plan>:…` ids.
+ */
+export function isAppRule(reason: Pick<Reason, "ruleId">): boolean {
+  return reason.ruleId?.startsWith("app:") ?? false;
+}
+
+/**
  * Why the source pill says what it does.
  *
  * "Derived" rather than "System": nothing set it, it fell out of the

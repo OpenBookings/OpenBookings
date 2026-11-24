@@ -6,6 +6,7 @@ import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
+import { loadManagedRooms } from "@/lib/apps/managed";
 import { RoomEditor } from "../_components/room-editor";
 import { loadRoomEditor } from "../_lib/query";
 
@@ -41,13 +42,14 @@ async function EditorContent({ params }: PageProps) {
   const { current } = access;
   const data = await loadRoomEditor(session, current?.propertyId ?? null, roomId);
   if (!data) notFound();
+  const managed = current ? await loadManagedRooms(current.propertyId) : null;
 
   return (
     <>
       <BreadcrumbLabel segment={roomId} label={data.room.name} />
       <PageHold id="room" fill>
         <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
-          <RoomEditor data={data} />
+          <RoomEditor data={data} managed={managed} />
         </EditAccessProvider>
       </PageHold>
     </>

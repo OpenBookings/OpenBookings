@@ -5,10 +5,11 @@ import { pageAccess } from "@/lib/page-access";
 import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { BreadcrumbLabel } from "@/components/dashboard/breadcrumb-labels";
+import { managedBy } from "@/lib/apps/managed";
 import { RuleForm } from "../_components/rule-form";
 import { PricingRulesLoading } from "../_components/states";
 import { loadRuleGroup } from "../_lib/query";
-import { sectionOf } from "../_lib/rule-model";
+import { RULES_OFF_REASON, sectionOf } from "../_lib/rule-model";
 
 interface PageProps {
   params: Promise<{ groupId: string }>;
@@ -37,12 +38,18 @@ async function EditRuleContent({ params }: PageProps) {
   const loaded = await loadRuleGroup(session, current?.propertyId ?? null, groupId);
   if (!loaded) notFound();
   const section = sectionOf(loaded.rule);
+  // Read-only while SiteMinder sets the prices: the rules are off, and saving is refused.
+  const managed = (await managedBy(loaded.data.property.id)) !== null;
 
   return (
     <>
       <BreadcrumbLabel segment="pricing-rules" label="Pricing rules" />
       <BreadcrumbLabel segment={groupId} label={section === "discount" ? "Edit discount" : "Edit price adjustment"} />
-      <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
+      <EditAccessProvider
+        canEdit={access.level === "edit" && !managed}
+        hotelName={current?.propertyName}
+        reason={managed ? RULES_OFF_REASON : null}
+      >
         <RuleForm
           section={section}
           propertyId={loaded.data.property.id}

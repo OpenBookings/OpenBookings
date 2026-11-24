@@ -39,6 +39,7 @@ const open: Record<NavKey, AccessLevel> = {
   rooms: "edit",
   rates: "edit",
   pricingRules: "edit",
+  channelManager: "edit",
   analytics: "edit",
   payouts: "edit",
   billing: "edit",

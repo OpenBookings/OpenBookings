@@ -23,10 +23,11 @@ import { BED_TYPES, LIMITS, type BedConfig, type BedTypeKey } from "../../_lib/c
 import { bedLabel, totalBeds } from "../../_lib/derive";
 import type { SpaceValues } from "../../_lib/mutations";
 import type { RoomEditorData } from "../../_lib/types";
+import { SET_IN_APP } from "@/lib/apps/managed-view";
 import { Stepper } from "../stepper";
 import type { RoomSectionProps } from "./props";
 
-export function SpaceSection({ data, onDirtyChange }: RoomSectionProps) {
+export function SpaceSection({ data, onDirtyChange, managed = false }: RoomSectionProps) {
   const { room } = data;
   // Steppers hold their counts in React state, which a form reset cannot
   // reach. Remounting the fields is what makes Discard put them back.
@@ -64,7 +65,14 @@ export function SpaceSection({ data, onDirtyChange }: RoomSectionProps) {
       onReset={() => setResetKey((k) => k + 1)}
     >
       {(state, pending, markDirty) => (
-        <SpaceFields key={resetKey} data={data} state={state} pending={pending} markDirty={markDirty} />
+        <SpaceFields
+          key={resetKey}
+          data={data}
+          state={state}
+          pending={pending}
+          markDirty={markDirty}
+          managed={managed}
+        />
       )}
     </SectionForm>
   );
@@ -74,11 +82,14 @@ function SpaceFields({
   state,
   pending,
   markDirty,
+  managed,
 }: {
   data: RoomEditorData;
   state: FormState<SpaceValues>;
   pending: boolean;
   markDirty: () => void;
+  /** SiteMinder sends the extra-guest fees: those two fields are read-only and empty. */
+  managed: boolean;
 }) {
   const v = state.values;
   const [beds, setBeds] = React.useState<BedConfig>(() =>
@@ -260,20 +271,22 @@ function SpaceFields({
             <FeeField
               id="extraAdultFee"
               label="Each extra adult"
-              description={`${AGE_BANDS.adults}. Leave empty for free.`}
+              description={`${AGE_BANDS.adults}. ${managed ? "SiteMinder sends this per night, with the price." : "Leave empty for free."}`}
               defaultValue={v.extraAdultFee}
               error={state.errors?.extraAdultFee?.[0]}
               disabled={pending}
+              setInApp={managed}
             />
           )}
           {childCanBeExtra && (
             <FeeField
               id="extraChildFee"
               label="Each extra child"
-              description={`${AGE_BANDS.children}. Leave empty for free.`}
+              description={`${AGE_BANDS.children}. ${managed ? "SiteMinder sends this per night, with the price." : "Leave empty for free."}`}
               defaultValue={v.extraChildFee}
               error={state.errors?.extraChildFee?.[0]}
               disabled={pending}
+              setInApp={managed}
             />
           )}
         </div>
@@ -461,6 +474,7 @@ function FeeField({
   defaultValue,
   error,
   disabled,
+  setInApp = false,
 }: {
   id: string;
   label: string;
@@ -468,7 +482,31 @@ function FeeField({
   defaultValue: string;
   error?: string;
   disabled: boolean;
+  /**
+   * SiteMinder sends this fee per night and rate plan: the field is disabled
+   * and shows no number (the saved fee is kept for a disconnect, but an old
+   * number in a disabled field would read as the live price).
+   */
+  setInApp?: boolean;
 }) {
+  if (setInApp) {
+    return (
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor={id} className="font-normal">
+            {label}
+          </FieldLabel>
+          <FieldDescription>{description}</FieldDescription>
+        </FieldContent>
+        <InputGroup className="w-40 shrink-0">
+          <InputGroupAddon>
+            <InputGroupText>€</InputGroupText>
+          </InputGroupAddon>
+          <InputGroupInput id={id} placeholder={SET_IN_APP} disabled />
+        </InputGroup>
+      </Field>
+    );
+  }
   return (
     <Field orientation="horizontal" data-invalid={!!error}>
       <FieldContent>

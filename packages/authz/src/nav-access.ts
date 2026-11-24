@@ -19,6 +19,7 @@ export type NavKey =
   | "rooms"
   | "rates"
   | "pricingRules"
+  | "channelManager"
   | "analytics"
   | "payouts"
   | "billing"
@@ -41,6 +42,7 @@ export const NAV_ACCESS: Record<NavKey, { view: Permission[] | "member"; edit?: 
   rooms: { view: "member", edit: { property: ["update"] } },
   rates: { view: [{ rate: ["read"] }], edit: { rate: ["update"] } },
   pricingRules: { view: [{ rate: ["read"] }], edit: { rate: ["update"] } },
+  channelManager: { view: "member", edit: { property: ["update"] } },
   analytics: { view: [{ payout: ["read"] }, { rate: ["update"] }] },
   payouts: { view: [{ payout: ["read"] }], edit: { payout: ["update"] } },
   billing: { view: [{ billing: ["read"] }], edit: { billing: ["update"] } },
@@ -106,6 +108,7 @@ const BY_PATH: ReadonlyArray<readonly [string, NavKey]> = [
   ["/dashboard/listings/rooms", "rooms"],
   ["/dashboard/listings/rates-availability", "rates"],
   ["/dashboard/listings/pricing-rules", "pricingRules"],
+  ["/dashboard/listings/channel-manager", "channelManager"],
   ["/dashboard/analytics", "analytics"],
   ["/dashboard/finance/billing", "billing"],
   ["/dashboard/finance", "payouts"],

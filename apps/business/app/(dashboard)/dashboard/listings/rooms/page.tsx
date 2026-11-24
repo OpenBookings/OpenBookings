@@ -7,6 +7,7 @@ import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { EditAccessProvider } from "@/components/dashboard/edit-access";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
+import { loadManagedRooms } from "@/lib/apps/managed";
 import { RoomsIndex } from "./_components/rooms-index";
 import { loadRoomsIndex } from "./_lib/query";
 
@@ -37,11 +38,12 @@ async function IndexContent() {
   const { current } = access;
   const data = await loadRoomsIndex(session, current?.propertyId ?? null);
   if (!data) return <NoProperty />;
+  const managed = current ? await loadManagedRooms(current.propertyId) : null;
 
   return (
     <PageHold id="rooms" fill>
       <EditAccessProvider canEdit={access.level === "edit"} hotelName={current?.propertyName}>
-        <RoomsIndex data={data} />
+        <RoomsIndex data={data} managed={managed} />
       </EditAccessProvider>
     </PageHold>
   );

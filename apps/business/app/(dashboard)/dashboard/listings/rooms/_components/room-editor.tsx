@@ -27,6 +27,7 @@ import { IdentitySection } from "./sections/identity";
 import { PhotosSection } from "./sections/photos";
 import { RatesSection } from "./sections/rates";
 import { SpaceSection } from "./sections/space";
+import { isUnlinkedRoom, type ManagedRooms } from "@/lib/apps/managed-view";
 
 const SECTIONS = ROOM_SECTION_IDS.map((id) => ({ id, label: ROOM_SECTION_LABELS[id] }));
 
@@ -39,7 +40,14 @@ const SECTIONS = ROOM_SECTION_IDS.map((id) => ({ id, label: ROOM_SECTION_LABELS[
  * the one piece of state in the URL, so a rate can be linked to — opening the
  * editor with it lands on Rates.
  */
-export function RoomEditor({ data }: { data: RoomEditorData }) {
+export function RoomEditor({
+  data,
+  managed = null,
+}: {
+  data: RoomEditorData;
+  /** Set while SiteMinder runs the hotel's rates (extra-guest fees come from there). */
+  managed?: ManagedRooms | null;
+}) {
   const searchParams = useSearchParams();
   const [active, setActive] = React.useState<RoomSectionId>(
     searchParams.get("rate") ? "rates" : "identity",
@@ -77,7 +85,9 @@ export function RoomEditor({ data }: { data: RoomEditorData }) {
     setDirty(false);
   }
 
-  const sectionProps = { data, onDirtyChange: setDirty };
+  const sectionProps = { data, onDirtyChange: setDirty, managed: managed !== null };
+  // A room SiteMinder hasn't sent availability for is not on sale yet.
+  const readiness = isUnlinkedRoom(data.room.id, managed) ? ["Link this room in SiteMinder"] : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
@@ -86,6 +96,7 @@ export function RoomEditor({ data }: { data: RoomEditorData }) {
         statuses={statuses}
         active={active}
         completed={completed}
+        readiness={readiness}
         onSelect={requestSection}
         publishSlot={
           <PublishToggle

@@ -11,6 +11,8 @@ import { ReservationDetailBody } from "@/components/dashboard/reservation-detail
 import { HostBookingActions } from "@/components/dashboard/host-booking-actions";
 import { GetHelpButton } from "@/components/support/get-help-button";
 import { breakGlass } from "@/lib/reservations/break-glass";
+import { bookingDeliveryAction } from "@/app/(dashboard)/dashboard/listings/channel-manager/_lib/actions";
+import type { BookingDelivery } from "@/lib/apps/managed-view";
 import { isUuid, shortBookingRef } from "@/lib/support/references";
 import {
   Drawer,
@@ -43,9 +45,12 @@ function useIsDesktop() {
 export function ReservationsView({
   reservations,
   buckets,
+  managed = false,
 }: {
   reservations: HostReservation[];
   buckets: ReservationBuckets<HostReservation>;
+  /** The hotel is connected to SiteMinder: each booking shows whether it arrived there. */
+  managed?: boolean;
 }) {
   const isDesktop = useIsDesktop();
   const router = useRouter();
@@ -66,6 +71,27 @@ export function ReservationsView({
   const [breaking, setBreaking] = React.useState(false);
   const [glassError, setGlassError] = React.useState<{ id: string; message: string } | null>(null);
   const sealed = !detail || opened?.id !== detail.id;
+
+  // Whether SiteMinder has the open booking, fetched when it opens and after
+  // every refresh. Only on a hotel connected to SiteMinder.
+  const [delivery, setDelivery] = React.useState<{ id: string; delivery: BookingDelivery | null } | null>(null);
+  React.useEffect(() => {
+    if (!managed || !detail || !isUuid(detail.id)) return;
+    let live = true;
+    const id = detail.id;
+    bookingDeliveryAction(id)
+      .then((result) => live && setDelivery({ id, delivery: result }))
+      .catch(() => live && setDelivery({ id, delivery: null }));
+    return () => {
+      live = false;
+    };
+  }, [managed, detail]);
+  const siteMinder =
+    managed && detail
+      ? delivery?.id === detail.id
+        ? { loading: false, delivery: delivery.delivery }
+        : { loading: true, delivery: null }
+      : null;
 
   const handleBreakGlass = async () => {
     if (!detail) return;
@@ -184,6 +210,7 @@ export function ReservationsView({
             ) : (
               <ReservationDetailBody
                 reservation={detail}
+                siteMinder={siteMinder}
                 seal={{
                   opened: sealed ? null : { contact: opened!.contact, at: opened!.at },
                   busy: breaking,

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "@/lib/auth";
+import { managedBy } from "@/lib/apps/managed";
 import { getCurrentProperty } from "@/lib/current-property";
 import { purgePropertyPage } from "@/lib/purge-property-page";
 import {
@@ -53,5 +54,10 @@ export async function deleteRuleGroupAction(groupId: string): Promise<RuleGroupR
 export async function tryStayAction(input: TryStayInput): Promise<TryStayResult> {
   // Priced on the current hotel only: a plan of any other hotel is not found.
   const session = await requireSession();
-  return priceTryStay(session, (await getCurrentProperty())?.propertyId ?? null, input);
+  const propertyId = (await getCurrentProperty())?.propertyId ?? null;
+  // SiteMinder prices a managed hotel's nights, so our rules would preview a price no guest pays.
+  if (propertyId && (await managedBy(propertyId))) {
+    return { ok: false, error: "Not applied to rates managed by SiteMinder." };
+  }
+  return priceTryStay(session, propertyId, input);
 }

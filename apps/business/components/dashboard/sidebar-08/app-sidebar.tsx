@@ -84,6 +84,7 @@ const navMain: NavItem[] = [
       { title: "Pricing rules", url: "/dashboard/listings/pricing-rules", navKey: "pricingRules" },
       { title: "Property", url: "/dashboard/listings/property", navKey: "property" },
       { title: "Rooms", url: "/dashboard/listings/rooms", navKey: "rooms" },
+      { title: "CM", url: "/dashboard/listings/channel-manager", navKey: "channelManager" },
     ],
   },
   {

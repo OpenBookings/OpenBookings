@@ -1,6 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
 import { formatCents } from "@openbookings/pricing/money";
+import { AttentionAlert } from "@/components/dashboard/attention-alert";
+import { InlineLoader } from "@/components/dashboard/inline-loader";
+import { AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { deliveryBadge, type BookingDelivery, type DeliveryBadge } from "@/lib/apps/managed-view";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
@@ -198,16 +205,62 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
   );
 }
 
+/** The one booking state the hotel must act on, at the top of the panel. */
+function NotDeliveredAlert() {
+  return (
+    <AttentionAlert>
+      <TriangleAlert aria-hidden />
+      <AlertTitle>Not in SiteMinder yet</AlertTitle>
+      <AlertDescription>
+        <p>
+          Add it in SiteMinder or your PMS by hand, or check the connection.{" "}
+          <Link
+            href="/dashboard/listings/channel-manager"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            Channel manager
+          </Link>
+        </p>
+      </AlertDescription>
+    </AttentionAlert>
+  );
+}
+
+/** Whether the booking reached SiteMinder: one badge and a line, at the end of the panel. */
+function SiteMinderSection({ loading, badge }: { loading: boolean; badge: DeliveryBadge | null }) {
+  if (!loading && !badge) return null;
+  return (
+    <DetailSection title="SiteMinder">
+      {loading ? (
+        <InlineLoader label="Checking SiteMinder" size="sm" className="justify-start" />
+      ) : badge ? (
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-muted-foreground text-sm">Delivery</span>
+            <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+          </div>
+          <p className="text-muted-foreground text-xs">{badge.detail}</p>
+        </>
+      ) : null}
+    </DetailSection>
+  );
+}
+
 export function ReservationDetailBody({
   reservation,
   seal,
+  siteMinder = null,
 }: {
   reservation: HostReservation;
   /** The guest's phone and address: sealed until someone opens them. */
   seal: React.ComponentProps<typeof GuestContactSeal>;
+  /** On a hotel connected to SiteMinder: whether this booking arrived there. Null otherwise. */
+  siteMinder?: { loading: boolean; delivery: BookingDelivery | null } | null;
 }) {
+  const badge = siteMinder ? deliveryBadge(siteMinder.delivery, reservation.timezone) : null;
   return (
     <div className="flex flex-col gap-7">
+      {badge?.notDelivered ? <NotDeliveredAlert /> : null}
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
         <DetailField label="Party" value={reservation.partyLabel} />
@@ -217,6 +270,7 @@ export function ReservationDetailBody({
       <StayTicket reservation={reservation} />
       <BookingTimeline timeline={reservation.timeline} />
       <RoomsAndPayment reservation={reservation} />
+      {siteMinder ? <SiteMinderSection loading={siteMinder.loading} badge={badge} /> : null}
     </div>
   );
 }

@@ -2,11 +2,15 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Monitor } from "lucide-react";
+import Link from "next/link";
+import { Lock, Monitor } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useEditAccess } from "@/components/dashboard/edit-access";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
+import type { ManagedRooms } from "@/lib/apps/managed-view";
+import { AriManagedProvider } from "./managed-context";
 import { AriToolbar } from "./ari-toolbar";
 import { AriGrid } from "./ari-grid";
 import { AriDetailPanel } from "./ari-detail-panel";
@@ -51,9 +55,14 @@ interface AriViewProps {
    * only decides what the host is shown.
    */
   rates: { confirmed: boolean; canConfirm: boolean; hasOrganisation: boolean };
+  /**
+   * Set while SiteMinder runs this hotel's rates: the grid shows them
+   * read-only (the page also locks edits through EditAccessProvider).
+   */
+  managed?: ManagedRooms | null;
 }
 
-export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
+export function AriView({ data, startDate, windowDays, rates, managed = null }: AriViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = React.useTransition();
@@ -139,7 +148,8 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
    * letting one person's sweep silently overwrite another's.
    */
   const publish = async () => {
-    if (draft.count === 0 || publishing) return;
+    // Nothing is staged on a managed hotel, and nothing may be sent from it.
+    if (draft.count === 0 || publishing || managed) return;
     setPublishing(true);
     try {
       const result = await publishAriChanges({
@@ -227,11 +237,19 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
   };
 
   return (
-    <>
+    <AriManagedProvider value={managed}>
       <PageHeader
         title="Rates & availability"
         description="Set what each room costs and how many you sell, night by night."
         className="px-4 pb-4 lg:px-6"
+        actions={
+          managed ? (
+            <StatusBadge tone="neutral" dot={false}>
+              <Lock className="size-3" aria-hidden />
+              Managed by SiteMinder
+            </StatusBadge>
+          ) : undefined
+        }
       />
       <div className="hidden min-h-0 flex-1 flex-col lg:flex">
         <AriToolbar
@@ -268,7 +286,18 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         */}
         <div className="flex min-h-0 flex-1 flex-col px-4 pt-4 lg:px-6 lg:pt-6">
           <p className="pb-2 text-muted-foreground text-xs">
-            {rates.confirmed ? (
+            {managed && rates.confirmed ? (
+              <>
+                SiteMinder sets these prices, rooms to sell and restrictions. Change them in SiteMinder. All rates
+                include VAT, plus tourist tax from your rules.{" "}
+                <Link
+                  href="/dashboard/listings/channel-manager"
+                  className="text-foreground underline underline-offset-2 hover:no-underline"
+                >
+                  Channel manager
+                </Link>
+              </>
+            ) : rates.confirmed ? (
               "All rates include VAT. Guests pay the price shown here, plus tourist tax from your rules."
             ) : (
               <>
@@ -338,7 +367,7 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
         data={data}
         onClose={() => setDialog(null)}
       />
-    </>
+    </AriManagedProvider>
   );
 }
 

@@ -39,6 +39,8 @@ import {
   PolicyTag,
   StatusDot,
 } from "./cell-states";
+import { useAriManaged } from "./managed-context";
+import { isUnlinkedRoom } from "@/lib/apps/managed-view";
 
 /** The sticky left rail carrying room type and rate plan names. */
 const RAIL_WIDTH = 240;
@@ -435,6 +437,9 @@ function RoomTypeRowView({
 }) {
   const byDate = new Map(room.availability.map((a) => [a.date, a]));
   const runs = buildClosureRuns(dates, byDate);
+  // SiteMinder has sent this room nothing yet: it is not on sale, and its
+  // numbers are not SiteMinder's, so the cells say so instead.
+  const unlinked = isUnlinkedRoom(room.id, useAriManaged());
 
   return (
     <div
@@ -464,11 +469,17 @@ function RoomTypeRowView({
               <span className="truncate font-semibold text-sm leading-tight">
                 {room.name}
               </span>
-              {!room.onSale && <NotOnSaleTag label="Draft" />}
+              {unlinked ? <NotOnSaleTag label="Not linked" /> : !room.onSale && <NotOnSaleTag label="Draft" />}
             </span>
             <span className="block truncate text-[11px] text-muted-foreground leading-tight">
-              {room.totalUnits} room{room.totalUnits === 1 ? "" : "s"} ·{" "}
-              {expanded ? "shared inventory" : openPlanSummary(room)}
+              {unlinked ? (
+                "Not on sale until SiteMinder sends prices"
+              ) : (
+                <>
+                  {room.totalUnits} room{room.totalUnits === 1 ? "" : "s"} ·{" "}
+                  {expanded ? "shared inventory" : openPlanSummary(room)}
+                </>
+              )}
             </span>
           </span>
         </button>
@@ -499,6 +510,7 @@ function RoomTypeRowView({
             registerCell={registerCell}
             onSelect={onSelect}
             isToday={run.dates[0] === today}
+            unlinked={unlinked}
             active={
               selection?.kind === "availability" &&
               selection.room.id === room.id &&
@@ -556,6 +568,7 @@ function AvailabilityCellView({
   registerCell,
   onSelect,
   isToday,
+  unlinked,
   active,
   staged,
 }: {
@@ -568,6 +581,8 @@ function AvailabilityCellView({
   registerCell: (row: number, col: number, node: HTMLElement | null) => void;
   onSelect: (selection: AriSelection) => void;
   isToday: boolean;
+  /** SiteMinder has sent this room nothing: no number to show. */
+  unlinked: boolean;
   active: boolean;
   staged: boolean;
 }) {
@@ -586,7 +601,9 @@ function AvailabilityCellView({
       onFocus={() => onFocusCell({ row: rowIndex, col: colIndex })}
       onClick={() => onSelect({ kind: "availability", room, cell })}
       aria-label={`${room.name}, ${formatFullDate(cell.date)}: ${
-        soldOut
+        unlinked
+          ? "not linked in SiteMinder yet, not on sale"
+          : soldOut
           ? "sold out"
           : `${cell.left} of ${cell.total} available${
               level === "low" ? ", running low" : ""
@@ -601,7 +618,9 @@ function AvailabilityCellView({
         staged && "border-dashed border-primary",
       )}
     >
-      {soldOut ? (
+      {unlinked ? (
+        <span className="text-muted-foreground text-sm leading-tight">—</span>
+      ) : soldOut ? (
         <span className="font-medium text-(--ari-soldout-fg) text-sm leading-tight">
           Sold out
         </span>
@@ -840,6 +859,7 @@ function RunCell({
 }) {
   const span = run.endIndex - run.startIndex;
   const focused = focus.row === rowIndex && withinRun(focus.col, run);
+  const unlinked = isUnlinkedRoom(room.id, useAriManaged());
   const selected =
     range !== null &&
     run.startIndex <= range.endIndex &&
@@ -977,8 +997,9 @@ function RunCell({
           staged && "border-dashed border-primary",
         )}
       >
+        {/* 0 only on a managed night SiteMinder sent no price for: no rate underneath. */}
         <span className="font-semibold text-muted-foreground text-sm line-through tabular-nums">
-          {formatCents(first.indicativePriceCents)}
+          {first.indicativePriceCents > 0 ? formatCents(first.indicativePriceCents) : "—"}
         </span>
         <Chip tone={staged ? "unsaved" : "sold_out"}>
           {staged ? "Unsaved" : "Sold out"}
@@ -996,8 +1017,8 @@ function RunCell({
         ...(style.hatch ? HATCH_STYLE : undefined),
       }}
       aria-label={`${barLabel(plan, run, note)}${
-        staged ? ", unpublished change" : ""
-      }`}
+        unlinked ? ", not linked in SiteMinder yet" : ""
+      }${staged ? ", unpublished change" : ""}`}
       className={cn(
         "flex h-14 items-center gap-2 overflow-hidden rounded-lg border px-3 text-left text-xs transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
         style.className,
@@ -1007,12 +1028,14 @@ function RunCell({
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
       <span className="truncate">
-        {run.state === "room_closed"
-          ? "Inherited: room type closed"
-          : `${style.label}${note ? ` · ${note}` : ""}`}
+        {unlinked
+          ? "Not linked"
+          : run.state === "room_closed"
+            ? "Inherited: room type closed"
+            : `${style.label}${note ? ` · ${note}` : ""}`}
         {staged && " · Unsaved"}
       </span>
-      {span > 1 && (
+      {span > 1 && first.indicativePriceCents > 0 && (
         <span className="ml-auto shrink-0 text-[10px] line-through opacity-70 tabular-nums">
           {formatCents(first.indicativePriceCents)}
         </span>

@@ -42,6 +42,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { isUnlinkedRoom, type ManagedRooms } from "@/lib/apps/managed-view";
 import { archiveRoom, createRoom, reorderRooms, setRoomPublished } from "../_lib/actions";
 import { roomSummary } from "../_lib/derive";
 import type { RoomsIndexData } from "../_lib/query";
@@ -57,7 +58,14 @@ const roomHref = (id: string) => `/dashboard/listings/rooms/${id}`;
  * the keyboard route. Either way the new order is written on drop, and put
  * back if the write is refused.
  */
-export function RoomsIndex({ data }: { data: RoomsIndexData }) {
+export function RoomsIndex({
+  data,
+  managed = null,
+}: {
+  data: RoomsIndexData;
+  /** Set while SiteMinder runs the hotel's rates: a published room it hasn't linked is not on sale. */
+  managed?: ManagedRooms | null;
+}) {
   const router = useRouter();
   const [rooms, setRooms] = React.useState(data.rooms);
   const [creating, setCreating] = React.useState(false);
@@ -218,9 +226,16 @@ export function RoomsIndex({ data }: { data: RoomsIndexData }) {
                 <TableCell className="text-right tabular-nums">{room.units}</TableCell>
                 <TableCell className="text-right tabular-nums">{room.activeRates}</TableCell>
                 <TableCell>
-                  <StatusBadge tone={room.status === "published" ? "positive" : "neutral"}>
-                    {room.status === "published" ? "Published" : "Draft"}
-                  </StatusBadge>
+                  {room.status === "published" && isUnlinkedRoom(room.id, managed) ? (
+                    <div className="flex flex-col gap-0.5">
+                      <StatusBadge tone="attention">Not on sale</StatusBadge>
+                      <span className="text-muted-foreground text-xs">Not linked in SiteMinder yet</span>
+                    </div>
+                  ) : (
+                    <StatusBadge tone={room.status === "published" ? "positive" : "neutral"}>
+                      {room.status === "published" ? "Published" : "Draft"}
+                    </StatusBadge>
+                  )}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>

@@ -26,16 +26,22 @@ export function viewOnlyReason(hotelName: string): string {
 export function EditAccessProvider({
   canEdit,
   hotelName,
+  reason,
   children,
 }: {
   canEdit: boolean;
   /** The current hotel, for the tooltip. */
   hotelName: string | null | undefined;
+  /**
+   * Why nothing here can be changed, when it is not the role: a hotel whose
+   * rates come from SiteMinder. Replaces the view-only sentence.
+   */
+  reason?: string | null;
   children: React.ReactNode;
 }) {
   const value = React.useMemo<EditAccess>(
-    () => ({ canEdit, reason: canEdit ? null : viewOnlyReason(hotelName ?? "this hotel") }),
-    [canEdit, hotelName],
+    () => ({ canEdit, reason: canEdit ? null : (reason ?? viewOnlyReason(hotelName ?? "this hotel")) }),
+    [canEdit, hotelName, reason],
   );
   return <EditAccessContext.Provider value={value}>{children}</EditAccessContext.Provider>;
 }

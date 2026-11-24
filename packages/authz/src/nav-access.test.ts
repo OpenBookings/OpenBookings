@@ -10,6 +10,7 @@ const PROPERTY_BOUND: NavKey[] = [
   "rooms",
   "rates",
   "pricingRules",
+  "channelManager",
   "analytics",
 ];
 
@@ -40,6 +41,7 @@ describe("navAccess", () => {
     expect(access.overview).toBe("edit");
     expect(access.property).toBe("view");
     expect(access.rooms).toBe("view");
+    expect(access.channelManager).toBe("view");
   });
 
   test("finance: reservations view, payouts view, billing edit", () => {
@@ -69,6 +71,7 @@ describe("navAccess", () => {
     expect(access.rooms).toBe("edit");
     expect(access.rates).toBe("edit");
     expect(access.pricingRules).toBe("edit");
+    expect(access.channelManager).toBe("edit");
     expect(access.analytics).toBe("edit");
     expect(access.reservations).toBe("edit");
     expect(access.payouts).toBe("none");
@@ -124,6 +127,7 @@ describe("navKeyForPath", () => {
     ["/dashboard/listings/rates-availability", "rates"],
     ["/dashboard/listings/pricing-rules", "pricingRules"],
     ["/dashboard/listings/pricing-rules/new", "pricingRules"],
+    ["/dashboard/listings/channel-manager", "channelManager"],
     ["/dashboard/analytics", "analytics"],
     ["/dashboard/analytics/revenue", "analytics"],
     ["/dashboard/analytics/booking-patterns", "analytics"],

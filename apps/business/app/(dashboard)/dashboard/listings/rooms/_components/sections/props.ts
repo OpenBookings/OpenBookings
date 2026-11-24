@@ -4,4 +4,6 @@ import type { RoomEditorData } from "../../_lib/types";
 export interface RoomSectionProps {
   data: RoomEditorData;
   onDirtyChange: (dirty: boolean) => void;
+  /** SiteMinder runs this hotel's rates: what it sends is read-only here. */
+  managed?: boolean;
 }

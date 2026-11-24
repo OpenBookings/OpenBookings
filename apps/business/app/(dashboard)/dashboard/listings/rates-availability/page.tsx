@@ -12,6 +12,8 @@ import {
   userCanConfirmRates,
 } from "@openbookings/authz";
 import { PageHold, PageLoading } from "@/components/dashboard/page-loaders";
+import { loadManagedRooms } from "@/lib/apps/managed";
+import { MANAGED_REASON } from "@/lib/apps/managed-view";
 import { AriView } from "./_components/ari-view";
 import { addDays, loadAriGrid, toIsoDate } from "./_lib/ari-query";
 import { buildMockAriGrid } from "./_lib/mock-ari";
@@ -112,24 +114,33 @@ async function AriContent({ searchParams }: PageProps) {
 
   if (!data) return <EmptyState />;
 
-  const [ratesConfirmed, canConfirmRates, hasOrganisation] = await Promise.all([
+  const [ratesConfirmed, canConfirmRates, hasOrganisation, managed] = await Promise.all([
     propertyRatesConfirmed(propertyId),
     userCanConfirmRates(session, propertyId),
     propertyHasOrganisation(propertyId),
+    loadManagedRooms(propertyId),
   ]);
 
   // Keyed on the property alone: moving through weeks, ranges or stay lengths
   // must not remount the shell, or the host's filters and expanded rows are
   // thrown away on every chevron press. Switching property is a different
   // dataset, so there a fresh shell is right.
+  //
+  // While SiteMinder runs this hotel's rates the grid is read-only for
+  // everyone, with SiteMinder as the reason (the server refuses the writes).
   return (
-    <EditAccessProvider canEdit={access.level === "edit"} hotelName={current.propertyName}>
+    <EditAccessProvider
+      canEdit={access.level === "edit" && !managed}
+      hotelName={current.propertyName}
+      reason={managed ? MANAGED_REASON : null}
+    >
       <AriView
         key={propertyId}
         data={data}
         startDate={start}
         windowDays={windowDays}
         rates={{ confirmed: ratesConfirmed, canConfirm: canConfirmRates, hasOrganisation }}
+        managed={managed}
       />
     </EditAccessProvider>
   );

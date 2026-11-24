@@ -132,7 +132,7 @@ describeWithDb("channel manager", () => {
     const { bookingId } = await seedBooking(db, ids, { checkIn: "2031-03-10", nights: 2 });
     await db.query(`UPDATE bookings SET status = 'confirmed'::booking_status WHERE id = $1`, [bookingId]);
     await connectChannelManager(session(ownerId), { propertyId: ids.propertyId, sendUpcoming: false }, deps());
-    expect((await loadBookingDelivery(bookingId, db))?.status).toBe("not_sent");
+    expect((await loadBookingDelivery(bookingId, ids.propertyId, db))?.status).toBe("not_sent");
   });
 
   test("when the app cannot be told, the connection is rolled back and the hotel sees the plain error", async () => {
@@ -187,11 +187,12 @@ describeWithDb("channel manager", () => {
   test("not connected: the code and how many upcoming bookings the tick box would send", async () => {
     const { bookingId } = await seedBooking(db, ids, { checkIn: "2031-03-10", nights: 2 });
     await db.query(`UPDATE bookings SET status = 'confirmed'::booking_status WHERE id = $1`, [bookingId]);
-    const property = await row<{ channel_code: string }>(`SELECT channel_code FROM properties WHERE id = $1`, [ids.propertyId]);
+    const property = await row<{ channel_code: string; timezone: string }>(`SELECT channel_code, timezone FROM properties WHERE id = $1`, [ids.propertyId]);
 
     expect(await loadChannelManager(ids.propertyId, db, now)).toEqual({
       connected: false,
       propertyCode: property!.channel_code,
+      timezone: property!.timezone,
       appName: "SiteMinder",
       connectedAt: null,
       upcomingCount: 1,
@@ -259,7 +260,10 @@ describeWithDb("channel manager", () => {
       lastUpdateAt: "2031-03-01T11:30:00.000Z",
       needsAttentionCount: 1,
     });
-    expect(await loadBookingDelivery(upcoming.bookingId, db)).toMatchObject({ appKey: "siteminder", status: "needs_attention", detail: "Hotel not found" });
-    expect(await loadBookingDelivery("11111111-1111-4111-8111-111111111111", db)).toBeNull();
+    expect(await loadBookingDelivery(upcoming.bookingId, ids.propertyId, db)).toMatchObject({ appKey: "siteminder", status: "needs_attention", detail: "Hotel not found" });
+    expect(await loadBookingDelivery("11111111-1111-4111-8111-111111111111", ids.propertyId, db)).toBeNull();
+    // Asked for from another hotel, the booking is not there.
+    const other = await seedProperty(db);
+    expect(await loadBookingDelivery(upcoming.bookingId, other.propertyId, db)).toBeNull();
   });
 });

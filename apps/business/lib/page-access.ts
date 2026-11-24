@@ -22,6 +22,7 @@ export const PAGE_NAMES: Record<NavKey, string> = {
   rooms: "Rooms",
   rates: "Rates & availability",
   pricingRules: "Pricing rules",
+  channelManager: "Channel manager",
   analytics: "Analytics",
   payouts: "Payouts",
   billing: "Billing",

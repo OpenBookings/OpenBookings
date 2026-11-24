@@ -26,8 +26,11 @@ import type {
   RateCell,
   RoomTypeRow,
 } from "../_lib/types";
+import { isUnlinkedRoom, SET_IN_APP } from "@/lib/apps/managed-view";
+import { useAriManaged } from "./managed-context";
 import {
   chipLabel,
+  isAppRule,
   reasonPhrase,
   sourceHint,
   sourceLabel,
@@ -168,6 +171,18 @@ function Section({
   );
 }
 
+/**
+ * In place of the edit buttons on a hotel SiteMinder runs: the sheet is for
+ * reading there, and every change is made in SiteMinder.
+ */
+function SetInApp() {
+  return (
+    <p className="text-muted-foreground text-sm">
+      {SET_IN_APP}. Rates, availability and restrictions for this hotel come from there.
+    </p>
+  );
+}
+
 function Body({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex-1 space-y-5 overflow-y-auto px-4 pb-6">{children}</div>
@@ -190,6 +205,8 @@ function AvailabilityDetail({
   onStage: (edits: DraftEdit[]) => void;
 }) {
   const updatedAt = formatTimestamp(cell.updatedAt);
+  const managed = useAriManaged();
+  const unlinked = isUnlinkedRoom(room.id, managed);
 
   return (
     <>
@@ -206,25 +223,35 @@ function AvailabilityDetail({
             emphasis
           />
           <p className="text-muted-foreground text-xs">
-            {cell.source === "override"
-              ? "Your number is the rooms for this night. Bookings come off it."
-              : "Rooms for this night come from units and blocks. No manual number is set."}
+            {unlinked
+              ? "Not linked in SiteMinder yet · not on sale. SiteMinder hasn't sent rooms for this room type."
+              : managed
+                ? "SiteMinder sends the rooms for this night. Bookings come off it."
+                : cell.source === "override"
+                  ? "Your number is the rooms for this night. Bookings come off it."
+                  : "Rooms for this night come from units and blocks. No manual number is set."}
           </p>
         </Section>
 
         <Separator />
 
         <Section title="How this number is reached">
-          <Field label="Capacity" value={cell.totalUnits} />
-          {cell.override === null && (
-            <Field label="Blocked" value={`− ${cell.blocked}`} />
+          {/* A managed night's total is SiteMinder's; units, blocks and our
+              manual number play no part in it. */}
+          {!managed && (
+            <>
+              <Field label="Capacity" value={cell.totalUnits} />
+              {cell.override === null && (
+                <Field label="Blocked" value={`− ${cell.blocked}`} />
+              )}
+              <Field
+                label="Manual override"
+                value={cell.override ?? "Not set"}
+                emphasis={cell.source === "override"}
+              />
+              <Separator className="my-2" />
+            </>
           )}
-          <Field
-            label="Manual override"
-            value={cell.override ?? "Not set"}
-            emphasis={cell.source === "override"}
-          />
-          <Separator className="my-2" />
           <Field label="Rooms this night" value={cell.total} />
           <Field label="Booked" value={`− ${cell.booked}`} />
           <Field label="Held" value={`− ${cell.held}`} />
@@ -247,55 +274,61 @@ function AvailabilityDetail({
           </>
         )}
 
-        {/* The room type's own switch lives here rather than on a rate plan
-            row, because that is where the decision belongs: closing a room
-            type is one act that every plan under it inherits. */}
-        <ViewOnlyHint className="flex w-full">
-          <Button
-            variant={cell.closure ? "default" : "outline"}
-            className="w-full"
-            onClick={() =>
-              onStage([
-                {
-                  kind: "roomClosure",
-                  roomId: room.id,
-                  date: cell.date,
-                  closed: !cell.closure,
-                  note: null,
-                },
-              ])
-            }
-          >
-            {cell.closure ? (
-              <>
-                <Undo2 className="size-4" />
-                Reopen the room type
-              </>
-            ) : (
-              <>
-                <Lock className="size-4" />
-                Close the room type
-              </>
-            )}
-          </Button>
-        </ViewOnlyHint>
+        {managed ? (
+          <SetInApp />
+        ) : (
+          <>
+            {/* The room type's own switch lives here rather than on a rate plan
+                row, because that is where the decision belongs: closing a room
+                type is one act that every plan under it inherits. */}
+            <ViewOnlyHint className="flex w-full">
+              <Button
+                variant={cell.closure ? "default" : "outline"}
+                className="w-full"
+                onClick={() =>
+                  onStage([
+                    {
+                      kind: "roomClosure",
+                      roomId: room.id,
+                      date: cell.date,
+                      closed: !cell.closure,
+                      note: null,
+                    },
+                  ])
+                }
+              >
+                {cell.closure ? (
+                  <>
+                    <Undo2 className="size-4" />
+                    Reopen the room type
+                  </>
+                ) : (
+                  <>
+                    <Lock className="size-4" />
+                    Close the room type
+                  </>
+                )}
+              </Button>
+            </ViewOnlyHint>
 
-        <ViewOnlyHint className="flex w-full">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() =>
-              onEditAvailability({
-                roomId: room.id,
-                startDate: cell.date,
-                endDate: cell.date,
-              })
-            }
-          >
-            <CalendarCog className="size-4" />
-            Edit availability
-          </Button>
-        </ViewOnlyHint>
+            <ViewOnlyHint className="flex w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  onEditAvailability({
+                    roomId: room.id,
+                    startDate: cell.date,
+                    endDate: cell.date,
+                  })
+                }
+              >
+                <CalendarCog className="size-4" />
+                Edit availability
+              </Button>
+            </ViewOnlyHint>
+          </>
+        )}
       </Body>
     </>
   );
@@ -335,6 +368,8 @@ function RateDetail({
   // Staging is per cell, so a bar spanning a week stages seven edits. The
   // publish step folds them back into one range.
   const dates = run.cells.map((cell) => cell.date);
+  const managed = useAriManaged();
+  const unlinked = isUnlinkedRoom(room.id, managed);
 
   return (
     <>
@@ -350,14 +385,16 @@ function RateDetail({
           {plan.name} · {plan.isRefundable ? "Refundable" : "Non-refundable"}
         </p>
         {/* Said once, up top: everything below reads as live otherwise. */}
-        {!plan.onSale && (
+        {unlinked ? (
+          <p className="text-(--amber-11) text-sm">Not linked in SiteMinder yet · not on sale.</p>
+        ) : !plan.onSale && (
           <p className="text-(--amber-11) text-sm">
             {room.onSale
               ? "Not on sale — this rate is switched off in Rooms."
               : "Not on sale — this room type is a draft in Rooms."}
           </p>
         )}
-        {plan.barCents === 0 && (
+        {plan.barCents === 0 && !managed && (
           <p className="text-(--amber-11) text-sm">No base rate yet. Set one before it goes on sale.</p>
         )}
         <StatusPill run={run} cell={first} />
@@ -367,7 +404,7 @@ function RateDetail({
         {/* Always, whatever the state. A closed date still has a rate under
             it, and "what would this have sold for?" is exactly the question a
             host asks before deciding whether to reopen. */}
-        <PriceBreakdown plan={plan} cell={first} stayLength={stayLength} />
+        <PriceBreakdown plan={plan} cell={first} stayLength={stayLength} managed={managed !== null} />
 
         {first.reasons.length > 0 && (
           <>
@@ -405,138 +442,144 @@ function RateDetail({
       {/* Pinned, because the build-up above scrolls and the decision should
           not scroll away from the evidence for it. */}
       <div className="space-y-2 border-t bg-(--ari-group) p-4">
-        {run.state === "sold_out" && (
-          <ViewOnlyHint className="flex w-full">
-            <Button
-              className="w-full"
-              onClick={() =>
-                onEditAvailability({ roomId: room.id, ...range })
-              }
-            >
-              <CalendarCog className="size-4" />
-              Fix availability
+        {managed ? (
+          <SetInApp />
+        ) : (
+          <>
+            {run.state === "sold_out" && (
+              <ViewOnlyHint className="flex w-full">
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    onEditAvailability({ roomId: room.id, ...range })
+                  }
+                >
+                  <CalendarCog className="size-4" />
+                  Fix availability
+                </Button>
+              </ViewOnlyHint>
+            )}
+
+            {/* Room closures are lifted on the room type, never here. Offering
+                "reopen" on a rate plan whose room is shut would stage an edit
+                that changes nothing a guest can see. */}
+            {run.state === "room_closed" && (
+              <ViewOnlyHint className="flex w-full">
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    onStage(
+                      dates.map((date) => ({
+                        kind: "roomClosure",
+                        roomId: room.id,
+                        date,
+                        closed: false,
+                        note: null,
+                      })),
+                    )
+                  }
+                >
+                  <Undo2 className="size-4" />
+                  Reopen the room type
+                </Button>
+              </ViewOnlyHint>
+            )}
+
+            {run.state === "closed" && (
+              <ViewOnlyHint className="flex w-full">
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    onStage(
+                      dates.map((date) => ({
+                        kind: "closure",
+                        ratePlanId: plan.id,
+                        date,
+                        closed: false,
+                        note: null,
+                      })),
+                    )
+                  }
+                >
+                  <Undo2 className="size-4" />
+                  Reopen {dateCount(dates)}
+                </Button>
+              </ViewOnlyHint>
+            )}
+
+            {first.bookable && (
+              <ViewOnlyHint className="flex w-full">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() =>
+                    onStage(
+                      dates.map((date) => ({
+                        kind: "closure",
+                        ratePlanId: plan.id,
+                        date,
+                        closed: true,
+                        note: null,
+                      })),
+                    )
+                  }
+                >
+                  <Ban className="size-4" />
+                  Close {dateCount(dates)}
+                </Button>
+              </ViewOnlyHint>
+            )}
+
+            <StagePriceForm plan={plan} cell={first} dates={dates} onStage={onStage} />
+
+            {/* The buttons above act on the dates on screen. A closure usually
+                runs past them — the Why section says how far — and reopening
+                only the visible slice would leave the rest shut without saying
+                so. This routes to the form that can take the whole range. */}
+            {!first.bookable && extendsBeyond(first, dates) && (
+              <ViewOnlyHint className="flex w-full">
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground text-xs"
+                  onClick={() => onReopen({ ratePlanId: plan.id, ...range })}
+                >
+                  This rule runs past these dates — reopen a longer range
+                </Button>
+              </ViewOnlyHint>
+            )}
+
+            <ViewOnlyHint className="flex w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
+              >
+                <Tag className="size-4" />
+                {plan.barCents === 0 ? "Set base rate" : "Edit base rate"}
+              </Button>
+            </ViewOnlyHint>
+
+            <ViewOnlyHint className="flex w-full">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => onEditRestrictions({ ratePlanId: plan.id, ...range })}
+              >
+                <PencilLine className="size-4" />
+                Edit restrictions
+              </Button>
+            </ViewOnlyHint>
+
+            {/* Rules are set for the whole property on their own page; this
+                opens it filtered to the plan the host is looking at. */}
+            <Button variant="outline" className="w-full" asChild>
+              <Link href={`/dashboard/listings/pricing-rules?plan=${plan.id}`}>
+                <Percent className="size-4" />
+                {plan.rules.length > 0 ? `Pricing rules (${plan.rules.length})` : "Add pricing rules"}
+              </Link>
             </Button>
-          </ViewOnlyHint>
+          </>
         )}
-
-        {/* Room closures are lifted on the room type, never here. Offering
-            "reopen" on a rate plan whose room is shut would stage an edit
-            that changes nothing a guest can see. */}
-        {run.state === "room_closed" && (
-          <ViewOnlyHint className="flex w-full">
-            <Button
-              className="w-full"
-              onClick={() =>
-                onStage(
-                  dates.map((date) => ({
-                    kind: "roomClosure",
-                    roomId: room.id,
-                    date,
-                    closed: false,
-                    note: null,
-                  })),
-                )
-              }
-            >
-              <Undo2 className="size-4" />
-              Reopen the room type
-            </Button>
-          </ViewOnlyHint>
-        )}
-
-        {run.state === "closed" && (
-          <ViewOnlyHint className="flex w-full">
-            <Button
-              className="w-full"
-              onClick={() =>
-                onStage(
-                  dates.map((date) => ({
-                    kind: "closure",
-                    ratePlanId: plan.id,
-                    date,
-                    closed: false,
-                    note: null,
-                  })),
-                )
-              }
-            >
-              <Undo2 className="size-4" />
-              Reopen {dateCount(dates)}
-            </Button>
-          </ViewOnlyHint>
-        )}
-
-        {first.bookable && (
-          <ViewOnlyHint className="flex w-full">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() =>
-                onStage(
-                  dates.map((date) => ({
-                    kind: "closure",
-                    ratePlanId: plan.id,
-                    date,
-                    closed: true,
-                    note: null,
-                  })),
-                )
-              }
-            >
-              <Ban className="size-4" />
-              Close {dateCount(dates)}
-            </Button>
-          </ViewOnlyHint>
-        )}
-
-        <StagePriceForm plan={plan} cell={first} dates={dates} onStage={onStage} />
-
-        {/* The buttons above act on the dates on screen. A closure usually
-            runs past them — the Why section says how far — and reopening
-            only the visible slice would leave the rest shut without saying
-            so. This routes to the form that can take the whole range. */}
-        {!first.bookable && extendsBeyond(first, dates) && (
-          <ViewOnlyHint className="flex w-full">
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground text-xs"
-              onClick={() => onReopen({ ratePlanId: plan.id, ...range })}
-            >
-              This rule runs past these dates — reopen a longer range
-            </Button>
-          </ViewOnlyHint>
-        )}
-
-        <ViewOnlyHint className="flex w-full">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
-          >
-            <Tag className="size-4" />
-            {plan.barCents === 0 ? "Set base rate" : "Edit base rate"}
-          </Button>
-        </ViewOnlyHint>
-
-        <ViewOnlyHint className="flex w-full">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => onEditRestrictions({ ratePlanId: plan.id, ...range })}
-          >
-            <PencilLine className="size-4" />
-            Edit restrictions
-          </Button>
-        </ViewOnlyHint>
-
-        {/* Rules are set for the whole property on their own page; this
-            opens it filtered to the plan the host is looking at. */}
-        <Button variant="outline" className="w-full" asChild>
-          <Link href={`/dashboard/listings/pricing-rules?plan=${plan.id}`}>
-            <Percent className="size-4" />
-            {plan.rules.length > 0 ? `Pricing rules (${plan.rules.length})` : "Add pricing rules"}
-          </Link>
-        </Button>
       </div>
     </>
   );
@@ -591,10 +634,13 @@ function PriceBreakdown({
   plan,
   cell,
   stayLength,
+  managed,
 }: {
   plan: RatePlanRow;
   cell: RateCell;
   stayLength: number;
+  /** SiteMinder's price: no rules apply to it. */
+  managed: boolean;
 }) {
   const fired = new Set(
     cell.trace.map((step) => step.modifier_type).filter(Boolean),
@@ -609,7 +655,7 @@ function PriceBreakdown({
     <Section title="Price build-up">
       {cell.trace.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No rate is configured for this date.
+          {managed ? "SiteMinder hasn't sent a price for this date." : "No rate is configured for this date."}
         </p>
       ) : (
         <ul className="divide-y overflow-hidden rounded-lg border">
@@ -623,7 +669,7 @@ function PriceBreakdown({
                   {step.label}
                 </span>
                 <span className="block truncate text-muted-foreground text-xs">
-                  {stepCaption(step, plan)}
+                  {managed && step.op === "base" ? "From SiteMinder" : stepCaption(step, plan)}
                 </span>
               </span>
               <span className="shrink-0 text-right text-sm tabular-nums">
@@ -736,9 +782,9 @@ function WhySection({ cell }: { cell: RateCell }) {
               </span>
               <span
                 className="shrink-0 rounded-full border px-1.5 py-px text-muted-foreground text-xs"
-                title={sourceHint(reason.source)}
+                title={isAppRule(reason) ? "Sent by SiteMinder" : sourceHint(reason.source)}
               >
-                {sourceLabel(reason.source)}
+                {isAppRule(reason) ? SET_IN_APP : sourceLabel(reason.source)}
               </span>
             </div>
 
@@ -754,7 +800,7 @@ function WhySection({ cell }: { cell: RateCell }) {
               </p>
             )}
 
-            {reason.source.kind === "host" && (
+            {reason.source.kind === "host" && !isAppRule(reason) && (
               <>
                 {reason.source.note && (
                   <p className="text-sm">“{reason.source.note}”</p>

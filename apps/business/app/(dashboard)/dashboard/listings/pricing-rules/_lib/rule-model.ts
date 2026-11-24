@@ -98,3 +98,6 @@ export const PRICING_RULES_PATH = "/dashboard/listings/pricing-rules";
 
 /** The longest stay "Try a stay" prices. */
 export const TRY_STAY_MAX_NIGHTS = 30;
+
+/** Why the rules can't be changed while SiteMinder is connected: the tooltip on their controls. */
+export const RULES_OFF_REASON = "Not applied to rates managed by SiteMinder. Change prices and promotions in SiteMinder.";

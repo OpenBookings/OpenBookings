@@ -11,6 +11,8 @@ export type ChannelManagerData = {
   connected: boolean;
   /** The HotelCode the hotel gives SiteMinder. Null when the property is not found. */
   propertyCode: string | null;
+  /** The hotel's IANA timezone, for the times the page shows. */
+  timezone: string;
   appName: "SiteMinder";
   /** ISO time of the active connection; null when not connected. */
   connectedAt: string | null;
@@ -39,6 +41,7 @@ export async function loadChannelManager(
   const installation = await activeInstallation(db, propertyId);
   const base = {
     propertyCode: property.channel_code,
+    timezone: property.timezone,
     appName: "SiteMinder" as const,
   };
   if (!installation) {
@@ -99,7 +102,10 @@ export async function loadChannelManager(
   };
 }
 
-/** How one booking stands with the hotel's app, for the booking detail; null when no app was ever told. */
-export function loadBookingDelivery(bookingId: string, db: Queryable = getPool()) {
-  return deliveryForBooking(db, bookingId);
+/**
+ * How one booking of `propertyId` stands with the hotel's app, for the booking
+ * detail; null when no app was ever told, or the booking is another hotel's.
+ */
+export function loadBookingDelivery(bookingId: string, propertyId: string, db: Queryable = getPool()) {
+  return deliveryForBooking(db, bookingId, { propertyId });
 }

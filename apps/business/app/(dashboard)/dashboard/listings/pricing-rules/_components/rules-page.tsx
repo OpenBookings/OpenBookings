@@ -3,10 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Info, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -36,8 +37,11 @@ const ALL = "all";
  * (one per stay, the biggest wins) for the whole property, each on the rate
  * plans the host chose. Beside them, how a guest's price is built and a
  * "Try a stay" that prices one stay with the real engine.
+ *
+ * While SiteMinder is connected (`managed`) the rules are kept but off: they
+ * stay listed, muted and read-only, with no way to add one.
  */
-export function RulesPage({ data }: { data: PricingRulesData }) {
+export function RulesPage({ data, managed = false }: { data: PricingRulesData; managed?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const planFilter = params.get("plan");
@@ -92,6 +96,17 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
         }
       />
 
+      {managed && (
+        <Alert>
+          <Info aria-hidden />
+          <AlertTitle>Not applied to rates managed by SiteMinder</AlertTitle>
+          <AlertDescription>
+            SiteMinder sets every night&apos;s price for this hotel, so these rules are off while it&apos;s connected. Run
+            promotions in SiteMinder. Your rules come back as they are if you disconnect.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-8">
           <RulesSection
@@ -102,6 +117,7 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
             addHref={newHref("adjustment")}
             rules={bySection("adjustment")}
             data={data}
+            managed={managed}
           />
           <RulesSection
             section="discount"
@@ -111,12 +127,22 @@ export function RulesPage({ data }: { data: PricingRulesData }) {
             addHref={newHref("discount")}
             rules={bySection("discount")}
             data={data}
+            managed={managed}
           />
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
-          <PriceBuildCard />
-          {data.plans.length > 0 && <TryAStay plans={data.plans} defaultPlanId={filterPlan?.id ?? data.plans[0].id} />}
+          <PriceBuildCard managed={managed} />
+          {managed ? (
+            <Card role="region" aria-label="Try a stay" className="gap-2 p-5">
+              <SectionHeader
+                title="Try a stay"
+                description="SiteMinder prices this hotel's stays, so there is nothing to try here while it's connected."
+              />
+            </Card>
+          ) : (
+            data.plans.length > 0 && <TryAStay plans={data.plans} defaultPlanId={filterPlan?.id ?? data.plans[0].id} />
+          )}
         </aside>
       </div>
     </div>
@@ -131,6 +157,7 @@ function RulesSection({
   addHref,
   rules,
   data,
+  managed,
 }: {
   section: RuleSection;
   title: string;
@@ -139,6 +166,7 @@ function RulesSection({
   addHref: string;
   rules: RuleGroup[];
   data: PricingRulesData;
+  managed: boolean;
 }) {
   const isDiscount = section === "discount";
   const { canEdit } = useEditAccess();
@@ -148,7 +176,8 @@ function RulesSection({
         title={title}
         description={description}
         actions={
-          canEdit ? (
+          // No way to add a rule while SiteMinder sets the prices.
+          managed ? null : canEdit ? (
             <Button variant="outline" asChild>
               <Link href={addHref}>
                 <Plus className="size-4" aria-hidden />
@@ -191,7 +220,7 @@ function RulesSection({
             </TableHeader>
             <TableBody>
               {rules.map((rule) => (
-                <RuleRow key={rule.id} rule={rule} data={data} isDiscount={isDiscount} />
+                <RuleRow key={rule.id} rule={rule} data={data} isDiscount={isDiscount} managed={managed} />
               ))}
             </TableBody>
           </Table>
@@ -201,7 +230,18 @@ function RulesSection({
   );
 }
 
-function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRulesData; isDiscount: boolean }) {
+function RuleRow({
+  rule,
+  data,
+  isDiscount,
+  managed,
+}: {
+  rule: RuleGroup;
+  data: PricingRulesData;
+  isDiscount: boolean;
+  /** Off while SiteMinder is connected: the row reads like a switched-off one. */
+  managed: boolean;
+}) {
   const [active, setActive] = React.useState(rule.active);
   const [busy, setBusy] = React.useState(false);
   const { canEdit } = useEditAccess();
@@ -230,8 +270,8 @@ function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRul
   };
 
   return (
-    <TableRow className={cn(!active && "text-muted-foreground")}>
-      <TableCell className={cn("font-semibold text-base", isDiscount && active && "text-(--green-11)")}>
+    <TableRow className={cn((!active || managed) && "text-muted-foreground")}>
+      <TableCell className={cn("font-semibold text-base", isDiscount && active && !managed && "text-(--green-11)")}>
         <Link href={href} className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           {amountLabel(rule)}
         </Link>
@@ -262,13 +302,18 @@ function RuleRow({ rule, data, isDiscount }: { rule: RuleGroup; data: PricingRul
   );
 }
 
-function PriceBuildCard() {
-  const steps = [
-    { title: "Each night's price", detail: "Your base rate, or the price you set for that date" },
-    { title: "+ Price adjustments", detail: "Every one that matches the night" },
-    { title: "− One discount", detail: "The biggest the stay qualifies for" },
-    { title: "+ Extra guests", detail: "Never discounted" },
-  ];
+function PriceBuildCard({ managed }: { managed: boolean }) {
+  const steps = managed
+    ? [
+        { title: "Each night's price", detail: "From SiteMinder" },
+        { title: "+ Extra guests", detail: "From SiteMinder. Never discounted" },
+      ]
+    : [
+        { title: "Each night's price", detail: "Your base rate, or the price you set for that date" },
+        { title: "+ Price adjustments", detail: "Every one that matches the night" },
+        { title: "− One discount", detail: "The biggest the stay qualifies for" },
+        { title: "+ Extra guests", detail: "Never discounted" },
+      ];
   return (
     <Card role="region" aria-label="How a guest's price is built" className="gap-3 p-5">
       <SectionHeader title="How a guest's price is built" />

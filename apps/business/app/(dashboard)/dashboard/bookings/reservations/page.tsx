@@ -8,6 +8,7 @@ import { getServerSession } from "@/lib/auth";
 import { NoAccessPage } from "@/components/dashboard/no-access-page";
 import { pageAccess } from "@/lib/page-access";
 import { loadHostReservations } from "@/lib/reservations/query";
+import { managedBy } from "@/lib/apps/managed";
 
 export default async function ReservationsPage() {
   const session = await getServerSession();
@@ -21,7 +22,10 @@ export default async function ReservationsPage() {
     );
   }
   const { current } = access;
-  const reservations = await loadHostReservations(session, current?.propertyId ?? null);
+  const [reservations, managed] = await Promise.all([
+    loadHostReservations(session, current?.propertyId ?? null),
+    current ? managedBy(current.propertyId) : null,
+  ]);
 
   return (
     <PageHold id="reservations" fill>
@@ -31,7 +35,11 @@ export default async function ReservationsPage() {
         className="shrink-0 px-4 pb-4 md:pb-6 lg:px-6"
       />
       <Suspense>
-        <ReservationsView reservations={reservations} buckets={bucketReservations(reservations)} />
+        <ReservationsView
+          reservations={reservations}
+          buckets={bucketReservations(reservations)}
+          managed={managed !== null}
+        />
       </Suspense>
     </PageHold>
   );
