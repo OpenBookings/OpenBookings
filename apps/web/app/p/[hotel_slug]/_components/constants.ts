@@ -19,22 +19,23 @@ export type DbAmenityCategory = { label: string; items: DbAmenityItem[] };
 export type DbRatePlan = {
   id: string;
   name: string;
-  bar: number;
+  /** The host's rate per night, in cents. */
+  bar_cents: number;
   currency: string;
   /** true = follows the property's cancellation tier; false = Non-refundable. */
   is_refundable: boolean;
   meal_plan: string | null;
   /** Set at render time by withCancellationTerms. */
   cancellation_tier?: CancellationTier;
-  /** Non-refundable only: how much less a night costs than the cheapest refundable rate. */
-  saving_vs_refundable?: number;
+  /** Non-refundable only: how many cents less a night costs than the cheapest refundable rate. */
+  saving_vs_refundable_cents?: number;
   /**
-   * What the guest pays for one night from today, all-in: the rate with its
+   * What the guest pays, in cents, for one night from today, all-in: the rate with its
    * overrides and modifiers, plus tourist tax. Set at render time by
    * withAllInPrices; absent on demo data.
    */
-  price_per_night?: number;
-  /** Tonight can't be booked on this rate: `price_per_night` is the base rate, shown as "from". */
+  price_per_night_cents?: number;
+  /** Tonight can't be booked on this rate: `price_per_night_cents` is the base rate, shown as "from". */
   price_from?: boolean;
 };
 
@@ -51,14 +52,14 @@ export type DbRoom = {
   max_children?: number;
   /** Guests the base rate is for. The listing's all-in price is quoted at this. */
   base_occupancy?: number;
-  /** Per extra guest per night, whole euros; null = not charged (0040). Absent on demo data. */
-  extra_adult_fee?: number | null;
-  extra_child_fee?: number | null;
-  /** Cots and extra beds per unit (0 = not offered) and their fee per night, paid at the hotel. */
+  /** Per extra guest per night, in cents; null = not charged (0040). Absent on demo data. */
+  extra_adult_fee_cents?: number | null;
+  extra_child_fee_cents?: number | null;
+  /** Cots and extra beds per unit (0 = not offered) and their fee per night in cents, paid at the hotel. */
   cots_max?: number;
-  cot_fee?: number | null;
+  cot_fee_cents?: number | null;
   extra_beds_max?: number;
-  extra_bed_fee?: number | null;
+  extra_bed_fee_cents?: number | null;
   /** False: one unit takes a cot or an extra bed, not both. */
   cot_and_extra_bed_together?: boolean;
   images: string[];

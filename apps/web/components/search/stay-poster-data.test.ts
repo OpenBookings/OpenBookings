@@ -4,7 +4,6 @@ import {
   coverPosition,
   formatDateRange,
   formatDistance,
-  formatEuro,
   posterEyebrow,
   posterPrice,
   posterTags,
@@ -13,7 +12,7 @@ import {
   type StayPosterData,
 } from "./stay-poster-data";
 
-const avail = (total: number, nights: number) => ({ status: "available", nights, total }) as const;
+const avail = (totalCents: number, nights: number) => ({ status: "available", nights, totalCents }) as const;
 
 function stay(id: string, availability: StayAvailability): StayPosterData {
   return {
@@ -29,10 +28,10 @@ function stay(id: string, availability: StayAvailability): StayPosterData {
   };
 }
 
-test("formatEuro: whole euros, rounded for display only", () => {
-  expect(formatEuro(422)).toBe("€422");
-  expect(formatEuro(211.6)).toBe("€212");
-  expect(formatEuro(1_234_567)).toBe("€1,234,567");
+test("poster prices come from cents: whole euros stay whole, anything else shows its cents", () => {
+  expect(posterPrice(avail(42200, 1), "total")).toMatchObject({ amount: "€422" });
+  expect(posterPrice(avail(21160, 1), "total")).toMatchObject({ amount: "€211.60" });
+  expect(posterPrice(avail(123456789, 1), "total")).toMatchObject({ amount: "€1,234,567.89" });
 });
 
 describe("formatDistance", () => {
@@ -70,7 +69,7 @@ test("formatDateRange", () => {
 
 describe("posterPrice", () => {
   test("total mode", () =>
-    expect(posterPrice(avail(486, 3), "total")).toEqual({
+    expect(posterPrice(avail(48600, 3), "total")).toEqual({
       kind: "price",
       amount: "€486",
       unit: "total",
@@ -79,7 +78,7 @@ describe("posterPrice", () => {
       cta: "View",
     }));
   test("night mode keeps the total visible", () =>
-    expect(posterPrice(avail(486, 3), "night")).toEqual({
+    expect(posterPrice(avail(48600, 3), "night")).toEqual({
       kind: "price",
       amount: "€162",
       unit: "avg / night",
@@ -88,20 +87,21 @@ describe("posterPrice", () => {
       cta: "View",
     }));
   test("avg rounds, singular night", () => {
-    expect(posterPrice(avail(487, 3), "night")).toMatchObject({ amount: "€162" });
-    expect(posterPrice(avail(162, 1), "total")).toMatchObject({ detail: "1 night · avg €162 / night" });
+    // 48700 / 3 = 16233.33 cents, a whole cent on the card.
+    expect(posterPrice(avail(48700, 3), "night")).toMatchObject({ amount: "€162.33" });
+    expect(posterPrice(avail(16200, 1), "total")).toMatchObject({ detail: "1 night · avg €162 / night" });
   });
   test("several rooms: the price is for all of them and the detail says how many", () => {
-    const two = { status: "available", nights: 3, total: 972, rooms: 2 } as const;
+    const two = { status: "available", nights: 3, totalCents: 97200, rooms: 2 } as const;
     expect(posterPrice(two, "total")).toMatchObject({ amount: "€972", detail: "3 nights · 2 rooms · avg €324 / night" });
     expect(posterPrice(two, "night")).toMatchObject({ amount: "€324", detail: "€972 total · 3 nights · 2 rooms" });
     expect(posterPrice({ ...two, rooms: 1 }, "total")).toMatchObject({ detail: "3 nights · avg €324 / night" });
   });
   // Measured on the narrowest (260px) card: up to 7 visible characters fit at 26px.
   test("more than 7 characters → long", () => {
-    expect(posterPrice(avail(99_999, 3), "total")).toMatchObject({ amount: "€99,999", long: false });
-    expect(posterPrice(avail(123_456, 3), "total")).toMatchObject({ amount: "€123,456", long: true });
-    expect(posterPrice(avail(1_234_567, 3), "total")).toMatchObject({ long: true });
+    expect(posterPrice(avail(9_999_900, 3), "total")).toMatchObject({ amount: "€99,999", long: false });
+    expect(posterPrice(avail(12_345_600, 3), "total")).toMatchObject({ amount: "€123,456", long: true });
+    expect(posterPrice(avail(123_456_700, 3), "total")).toMatchObject({ long: true });
   });
   test("unavailable with a next window", () =>
     expect(posterPrice({ status: "unavailable", nextFrom: "2026-12-04", nextTo: "2026-12-07" }, "total")).toEqual({

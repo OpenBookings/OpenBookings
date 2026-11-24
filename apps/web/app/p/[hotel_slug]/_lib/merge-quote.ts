@@ -1,22 +1,24 @@
 import type { AppliedDiscount } from "@openbookings/pricing";
+import { roundHalfUp } from "@openbookings/pricing/money";
 import type { StayQuote } from "@/lib/booking/quote";
 import type { DbRoom } from "../_components/constants";
 
-/** One rate's price for the stay in the URL, in euros, tourist tax included in `total`. */
+/** One rate's price for the stay in the URL, in cents, tourist tax included in `totalCents`. */
 export type PricedRate = {
   ratePlanId: string;
-  stayTotal: number;
-  touristTax: number;
-  total: number;
-  perNight: number;
+  stayTotalCents: number;
+  touristTaxCents: number;
+  totalCents: number;
+  perNightCents: number;
   freeCancellationUntil: string | null;
-  /** Non-refundable only: how much less a night costs than the cheapest refundable rate shown. */
-  saving: number;
+  /** Non-refundable only: how many cents less a night costs than the cheapest refundable rate shown. */
+  savingCents: number;
   /** The stay discount already in the price ("Weekly discount", 10 %), or null. */
   discount: AppliedDiscount | null;
   /**
-   * `total` is for one room's largest share of the party. What one room costs
-   * for each other party it may be given, by `partyKey`; see QuotedRatePlan.
+   * `totalCents` is for one room's largest share of the party. What one room
+   * costs, in cents, for each other party it may be given, by `partyKey`; see
+   * QuotedRatePlan.
    */
   partyTotals: Record<string, number>;
 };
@@ -41,8 +43,6 @@ export type RoomView = {
 };
 
 export type QuoteState = { status: "none" } | { status: "loading" } | { status: "error" } | { status: "ready"; quote: StayQuote };
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * How close a room is to selling out, louder as it runs out: 3 left is a
@@ -87,26 +87,25 @@ export function mergeQuote(rooms: DbRoom[], state: QuoteState): RoomView[] {
       for (const plan of room.rate_plans) {
         const qp = q.ratePlans.find((p) => p.ratePlanId === plan.id);
         if (!qp || qp.reasons.length > 0) continue;
-        const total = round2(qp.stayTotal + qp.touristTax.total);
         rates[plan.id] = {
           ratePlanId: plan.id,
-          stayTotal: qp.stayTotal,
-          touristTax: qp.touristTax.total,
-          total,
-          perNight: round2(total / nights),
+          stayTotalCents: qp.stayTotalCents,
+          touristTaxCents: qp.touristTax.totalCents,
+          totalCents: qp.totalCents,
+          perNightCents: roundHalfUp(qp.totalCents / nights),
           freeCancellationUntil: qp.freeCancellationUntil,
-          saving: 0,
+          savingCents: 0,
           discount: qp.discount ?? null,
           partyTotals: qp.partyTotals ?? {},
         };
       }
       // Same comparison as the listing (withCancellationTerms), on the stay's prices.
-      const refundable = room.rate_plans.filter((p) => p.is_refundable && rates[p.id]).map((p) => rates[p.id].perNight);
+      const refundable = room.rate_plans.filter((p) => p.is_refundable && rates[p.id]).map((p) => rates[p.id].perNightCents);
       if (refundable.length > 0) {
         const cheapest = Math.min(...refundable);
         for (const plan of room.rate_plans) {
           const r = rates[plan.id];
-          if (r && !plan.is_refundable) r.saving = Math.max(0, round2(cheapest - r.perNight));
+          if (r && !plan.is_refundable) r.savingCents = Math.max(0, cheapest - r.perNightCents);
         }
       }
     }

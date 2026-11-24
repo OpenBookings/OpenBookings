@@ -20,8 +20,16 @@ export const CACHE_SCHEMA_VERSION = "v1";
  * column. Normalising here means they cannot disagree.
  */
 export function propertyPageKey(slug: string): string {
-  return `ob:${CACHE_SCHEMA_VERSION}:prop-page:${slug.toLowerCase()}`;
+  return `ob:${CACHE_SCHEMA_VERSION}:prop-page:${PROPERTY_PAGE_SHAPE}:${slug.toLowerCase()}`;
 }
+
+/**
+ * The property page payload's own shape version, bumped on its own so a change
+ * there doesn't throw away every other cached value as well.
+ * p2: money in cents (`bar_cents`, `cot_fee_cents`…); entries cached with
+ * euro amounts are never read.
+ */
+const PROPERTY_PAGE_SHAPE = "p2";
 
 /**
  * The key for one property's published reviews (the card and the "show all"

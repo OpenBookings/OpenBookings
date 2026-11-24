@@ -101,13 +101,13 @@ function buildPropertyPageQuery(slug: string) {
         'max_children', r.max_children,
         'base_occupancy', r.base_occupancy,
         -- What goes on top of the rate (0040): extra guests are prepaid, cots
-        -- and extra beds are paid at the hotel. Fees are whole euros.
-        'extra_adult_fee', r.extra_adult_fee::int,
-        'extra_child_fee', r.extra_child_fee::int,
+        -- and extra beds are paid at the hotel. Fees are cents.
+        'extra_adult_fee_cents', r.extra_adult_fee_cents::int,
+        'extra_child_fee_cents', r.extra_child_fee_cents::int,
         'cots_max', r.cots_max,
-        'cot_fee', r.cot_fee::int,
+        'cot_fee_cents', r.cot_fee_cents::int,
         'extra_beds_max', r.extra_beds_max,
-        'extra_bed_fee', r.extra_bed_fee::int,
+        'extra_bed_fee_cents', r.extra_bed_fee_cents::int,
         'cot_and_extra_bed_together', r.cot_and_extra_bed_together,
         'images', COALESCE(
           (SELECT json_agg(ri.url ORDER BY ri.sort_order ASC, ri.created_at ASC)
@@ -118,7 +118,7 @@ function buildPropertyPageQuery(slug: string) {
           (SELECT json_agg(json_build_object(
             'id', rp.id,
             'name', rp.name,
-            'bar', rp.bar,
+            'bar_cents', rp.bar_cents,
             'currency', rp.currency,
             'is_refundable', rp.is_refundable,
             -- The rate's own meals, worded as the stay quote words them (mealPlan).
@@ -131,7 +131,7 @@ function buildPropertyPageQuery(slug: string) {
               WHEN rp.includes_lunch THEN 'Lunch included'
               WHEN rp.includes_dinner THEN 'Dinner included'
             END
-          ) ORDER BY rp.bar ASC)
+          ) ORDER BY rp.bar_cents ASC)
           FROM rate_plans rp WHERE rp.room_id = r.id AND rp.is_active = true AND rp.archived_at IS NULL),
           '[]'::json
         ),

@@ -16,6 +16,7 @@ import {
   snapshotTier,
   splitVat,
   type AppliedDiscount,
+  type NightPrice,
   type PropertyCancellationTier,
   type ResolvedRoom,
   type RoomRow,
@@ -25,7 +26,6 @@ import {
 import { commissionSplit } from "@openbookings/billing/commission";
 import { billingTreatmentForProperty } from "@openbookings/billing/profiles";
 import { applicationFeeCents } from "@openbookings/stripe/fees";
-import { toCents } from "@/app/checkout/_lib/booking-lines";
 import { stayBoundErrors } from "@/app/api/query/search-bounds";
 import { possibleRoomParties, partyKey } from "./room-parties";
 import { MAX_INFANTS_PER_ROOM, MAX_ROOMS, todayInZone, type StayInput } from "./stay-input";
@@ -48,14 +48,16 @@ export type QuotedRatePlan = {
   name: string;
   isRefundable: boolean;
   mealPlan: string | null;
-  nights: { date: string; price: number }[];
-  stayTotal: number;
+  nights: NightPrice[];
+  stayTotalCents: number;
   touristTax: TouristTaxResult;
+  /** All-in, in cents: `stayTotalCents` plus the tourist tax, for the largest even share. */
+  totalCents: number;
   freeCancellationUntil: string | null;
-  /** The stay discount already in `stayTotal`, for the rate row's chip. */
+  /** The stay discount already in `stayTotalCents`, for the rate row's chip. */
   discount: AppliedDiscount | null;
   /**
-   * One unit's all-in price (stay plus tourist tax) for every party it could
+   * One unit's all-in price in cents (stay plus tourist tax) for every party it could
    * be given when the guest's party is split over the rooms picked, by
    * `partyKey`. The fields above are for the largest even share
    * (perRoomParty); a split that gives a room fewer guests is priced here, so
@@ -106,8 +108,8 @@ export type VisibleProperty = {
   commissionRate: string;
   country: string;
   accommodationType: "hotel";
-  /** Euros per person per night, VAT-inclusive; null = not given. */
-  breakfastValue: number | null;
+  /** Cents per person per night, VAT-inclusive; null = not given. */
+  breakfastValueCents: number | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -126,14 +128,14 @@ export async function loadVisibleProperty(
   const { rows } = await db.query(
     `SELECT id, slug, timezone, to_char(check_in_time, 'HH24:MI') AS check_in_time,
             cancellation_tier, commission_rate::text AS commission_rate,
-            country, accommodation_type, breakfast_value::text AS breakfast_value
+            country, accommodation_type, breakfast_value_cents::text AS breakfast_value_cents
      FROM properties
      WHERE ${column} = $1 AND is_active AND (NOT is_demo OR $2::boolean)
      LIMIT 1`,
     ["id" in by ? by.id : by.slug, testing],
   );
   const row = rows[0] as
-    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string; country: string; accommodation_type: "hotel"; breakfast_value: string | null }
+    | { id: string; slug: string; timezone: string; check_in_time: string | null; cancellation_tier: PropertyCancellationTier; commission_rate: string; country: string; accommodation_type: "hotel"; breakfast_value_cents: string | null }
     | undefined;
   if (!row) return null;
   return {
@@ -145,7 +147,7 @@ export async function loadVisibleProperty(
     commissionRate: row.commission_rate,
     country: row.country,
     accommodationType: row.accommodation_type,
-    breakfastValue: row.breakfast_value === null ? null : Number(row.breakfast_value),
+    breakfastValueCents: row.breakfast_value_cents === null ? null : Number(row.breakfast_value_cents),
   };
 }
 
@@ -178,9 +180,9 @@ plans AS (
     r.id AS room_id, r.name AS room_name, r.description AS room_description, r.room_type,
     r.base_occupancy, r.max_adults, r.max_children, r.sort_order AS room_sort,
     -- bigint comes back as a string from node-postgres; the resolver adds these.
-    r.extra_adult_fee::int, r.extra_child_fee::int, r.cot_fee::int, r.extra_bed_fee::int,
+    r.extra_adult_fee_cents::int, r.extra_child_fee_cents::int, r.cot_fee_cents::int, r.extra_bed_fee_cents::int,
     r.cots_max, r.extra_beds_max, r.cot_and_extra_bed_together,
-    rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar, rp.currency, rp.is_refundable,
+    rp.id AS rate_plan_id, rp.name AS rate_plan_name, rp.bar_cents, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay, rp.sort_order AS plan_sort,
     rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner
   FROM properties p
@@ -193,13 +195,13 @@ room_nights AS (
     pl.rate_plan_id,
     jsonb_agg(jsonb_build_object(
       'date',         sd.stay_date,
-      'base_price',   COALESCE(o.price_per_night, pl.bar),
-      'has_override', (o.price_per_night IS NOT NULL)
+      'base_price_cents', COALESCE(o.price_per_night_cents, pl.bar_cents),
+      'has_override', (o.price_per_night_cents IS NOT NULL)
     ) ORDER BY sd.stay_date) AS nights
   FROM plans pl
   CROSS JOIN stay_dates sd
   LEFT JOIN LATERAL (
-    SELECT price_per_night
+    SELECT price_per_night_cents
     FROM rate_overrides
     WHERE rate_plan_id = pl.rate_plan_id
       AND start_date  <= sd.stay_date
@@ -309,8 +311,8 @@ function priceRooms(
     const open = (ratePlanId: string) => plans.some((p) => p.ratePlanId === ratePlanId && p.reasons.length === 0);
     const refundableTotals = room.plans
       .filter((p) => p.row.is_refundable && open(p.row.rate_plan_id))
-      .map((p) => p.priced.room_price);
-    room.plans = room.plans.filter((p) => p.row.is_refundable || nonRefundableQualifies(p.priced.room_price, refundableTotals));
+      .map((p) => p.priced.room_price_cents);
+    room.plans = room.plans.filter((p) => p.row.is_refundable || nonRefundableQualifies(p.priced.room_price_cents, refundableTotals));
   }
   return [...rooms.values()];
 }
@@ -365,12 +367,13 @@ export async function quoteStay(
         isRefundable: row.is_refundable,
         mealPlan: mealPlan(row),
         nights: priced.priced_nights,
-        stayTotal: priced.room_price,
+        stayTotalCents: priced.room_price_cents,
         touristTax: priced.tourist_tax,
+        totalCents: priced.total_price_cents,
         freeCancellationUntil: cancellationUntil(property, row.is_refundable, checkIn, i.now),
         discount: priced.discount,
         partyTotals: Object.fromEntries(
-          parties.map((p) => [partyKey(p), resolveRoom(row, { ...p, arrivalDate: checkIn }, today).total_price]),
+          parties.map((p) => [partyKey(p), resolveRoom(row, { ...p, arrivalDate: checkIn }, today).total_price_cents]),
         ),
         reasons: a.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"],
       })),
@@ -382,8 +385,8 @@ export async function quoteStay(
 
 /** One rate's price for tonight, for the listing without dates. */
 export type TonightPrice = {
-  /** All-in, one night at the room's base occupancy: rate, modifiers and tourist tax. */
-  price: number;
+  /** All-in cents, one night at the room's base occupancy: rate, modifiers and tourist tax. */
+  priceCents: number;
   /** Whether tonight can be booked on this rate at all (stock, closures, minimum stay…). */
   sellable: boolean;
 };
@@ -415,7 +418,7 @@ export async function priceTonight(
     const a = byRoom.get(row.room_id);
     const planReasons = a?.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"];
     prices[row.rate_plan_id] = {
-      price: resolveRoom(row, { ...party, arrivalDate: checkIn }, checkIn).total_price,
+      priceCents: resolveRoom(row, { ...party, arrivalDate: checkIn }, checkIn).total_price_cents,
       sellable: a !== undefined && roomReasons(a, party).length === 0 && planReasons.length === 0,
     };
   }
@@ -441,8 +444,6 @@ function extrasError(room: PlanRow, s: SelectedRoom): string | null {
 type SelectionResult =
   | { ok: true; rooms: IntentRoomInput[]; snapshot: IntentSnapshot }
   | { ok: false; error: "invalid_selection" | "too_many_guests" | "unavailable"; detail: string };
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function applicationFeeEnabled(): boolean {
   return process.env.STRIPE_APPLICATION_FEE_ENABLED === "true";
@@ -540,7 +541,7 @@ export async function priceSelection(
       type: property.accommodationType,
       nights: plan.priced.priced_nights,
       includesBreakfast: plan.row.includes_breakfast,
-      breakfastValue: property.breakfastValue,
+      breakfastValueCents: property.breakfastValueCents,
       people: s.adults + s.children,
     });
     if (!vatSplit) {
@@ -558,27 +559,27 @@ export async function priceSelection(
       infants: s.infants,
       cots: s.cots,
       extraBeds: s.extraBeds,
-      payAtProperty: plan.priced.pay_at_property_total,
-      discount: plan.priced.discount && { label: plan.priced.discount.label, amount: plan.priced.discount.amount },
+      payAtPropertyCents: plan.priced.pay_at_property_total_cents,
+      discount: plan.priced.discount && { label: plan.priced.discount.label, amountCents: plan.priced.discount.amountCents },
       rateNights: plan.priced.rate_nights,
       extraGuests: plan.priced.extra_guests,
       payAtPropertyLines: plan.priced.pay_at_property,
       nights: plan.priced.priced_nights,
-      stayTotal: plan.priced.room_price,
-      touristTax: plan.priced.tourist_tax.total,
+      stayTotalCents: plan.priced.room_price_cents,
+      touristTaxCents: plan.priced.tourist_tax.totalCents,
       touristTaxLines: plan.priced.tourist_tax.lines,
       vatSplit,
     };
   });
-  const roomsTotal = round2(rooms.reduce((sum, r) => sum + r.stayTotal, 0));
-  const touristTaxTotal = round2(rooms.reduce((sum, r) => sum + r.touristTax, 0));
+  const roomsTotalCents = rooms.reduce((sum, r) => sum + r.stayTotalCents, 0);
+  const touristTaxTotalCents = rooms.reduce((sum, r) => sum + r.touristTaxCents, 0);
 
-  const taxShare = touristTaxShare(roomsTotal, touristTaxTotal);
+  const taxShare = touristTaxShare(roomsTotalCents, touristTaxTotalCents);
   if (taxShare !== "ok") {
     Sentry.captureMessage("tourist tax out of proportion to the room price", {
       level: taxShare === "refuse" ? "error" : "warning",
       tags: { area: "booking" },
-      extra: { propertyId: property.id, roomsTotal, touristTaxTotal },
+      extra: { propertyId: property.id, roomsTotalCents, touristTaxTotalCents },
     });
   }
   if (taxShare === "refuse") {
@@ -589,7 +590,7 @@ export async function priceSelection(
   // billing profile. No profile yet: the split stays empty rather than refusing
   // the quote (readiness is gated elsewhere).
   const commissionRate = Number(property.commissionRate);
-  const commissionCents = applicationFeeEnabled() ? applicationFeeCents(toCents(roomsTotal), commissionRate) : 0;
+  const commissionCents = applicationFeeEnabled() ? applicationFeeCents(roomsTotalCents, commissionRate) : 0;
   const treatment = await billingTreatmentForProperty(property.id, db);
   const split = treatment ? commissionSplit({ feeCents: commissionCents, treatment }) : null;
 
@@ -597,9 +598,9 @@ export async function priceSelection(
     ok: true,
     rooms,
     snapshot: {
-      roomsTotal,
-      touristTaxTotal,
-      total: round2(roomsTotal + touristTaxTotal),
+      roomsTotalCents,
+      touristTaxTotalCents,
+      totalCents: roomsTotalCents + touristTaxTotalCents,
       // The stay only: tourist tax passes through to the host untouched.
       commissionCents,
       commissionRate,

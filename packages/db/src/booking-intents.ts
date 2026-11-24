@@ -1,4 +1,4 @@
-import type { ExtraGuestLine, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine, VatSplit } from "@openbookings/pricing";
+import type { ExtraGuestLine, NightPrice, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine, VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import { recordBookingEvent } from "./booking-events";
 import type { VatTreatment } from "./billing-types";
@@ -8,7 +8,7 @@ import { confirmBookingPolicy, type Queryable } from "./reservation-policy";
 
 /**
  * One room of a guest's selection, priced on the server for its own party.
- * Amounts are euros (major units); `nights` sum to `stayTotal`.
+ * Amounts are integer cents; `nights` sum to `stayTotalCents`.
  */
 export type IntentRoomInput = {
   roomId: string;
@@ -20,19 +20,19 @@ export type IntentRoomInput = {
   /** Cots and extra beds booked with the room (0040). */
   cots: number;
   extraBeds: number;
-  /** What the cots and extra beds cost, paid at the property: never in `nights` or `stayTotal` (0042). */
-  payAtProperty: number;
+  /** What the cots and extra beds cost, paid at the property: never in `nights` or `stayTotalCents` (0042). */
+  payAtPropertyCents: number;
   /** The stay discount already in `nights`, for checkout to show (0042). */
-  discount: { label: string; amount: number } | null;
+  discount: { label: string; amountCents: number } | null;
   /** Base rate per night, before extra guests and discount (0044). */
-  rateNights: { date: string; price: number }[];
-  /** Guests above base occupancy, already in `stayTotal` (0044). */
+  rateNights: NightPrice[];
+  /** Guests above base occupancy, already in `stayTotalCents` (0044). */
   extraGuests: ExtraGuestLine[];
-  /** The lines behind `payAtProperty` (0044). */
+  /** The lines behind `payAtPropertyCents` (0044). */
   payAtPropertyLines: PayAtPropertyLine[];
-  nights: { date: string; price: number }[];
-  stayTotal: number;
-  touristTax: number;
+  nights: NightPrice[];
+  stayTotalCents: number;
+  touristTaxCents: number;
   touristTaxLines: TouristTaxLine[];
   /** VAT inside each night, for the host's books; null when the country has no rates (0045). */
   vatSplit: VatSplit | null;
@@ -44,9 +44,9 @@ export type IntentRoomInput = {
  * is switched off.
  */
 export type IntentSnapshot = {
-  roomsTotal: number;
-  touristTaxTotal: number;
-  total: number;
+  roomsTotalCents: number;
+  touristTaxTotalCents: number;
+  totalCents: number;
   commissionCents: number;
   /**
    * The split of `commissionCents` into net and VAT, fixed when the intent was

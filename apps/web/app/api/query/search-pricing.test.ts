@@ -3,7 +3,7 @@ import type { RoomRow } from "@openbookings/pricing";
 import { evenRoomParties } from "@/lib/booking/room-parties";
 import { priceSearchStays } from "./search-pricing";
 
-const row = (hotel: string, room: string, price: number, over: Partial<RoomRow> = {}): RoomRow => ({
+const row = (hotel: string, room: string, priceCents: number, over: Partial<RoomRow> = {}): RoomRow => ({
   hotel_id: hotel,
   hotel_name: hotel,
   hotel_slug: hotel,
@@ -23,8 +23,8 @@ const row = (hotel: string, room: string, price: number, over: Partial<RoomRow> 
   min_stay: 1,
   max_stay: null,
   nights: [
-    { date: "2026-12-04", base_price: price, has_override: false },
-    { date: "2026-12-05", base_price: price, has_override: false },
+    { date: "2026-12-04", base_price_cents: priceCents, has_override: false },
+    { date: "2026-12-05", base_price_cents: priceCents, has_override: false },
   ],
   modifiers: [],
   ...over,
@@ -48,14 +48,14 @@ describe("evenRoomParties", () => {
 
 describe("priceSearchStays", () => {
   test("one room: the room's all-in price", () => {
-    const [r] = priceSearchStays([row("h", "double", 100)], stay, TODAY);
-    expect(r.total_price).toBe(200);
+    const [r] = priceSearchStays([row("h", "double", 10000)], stay, TODAY);
+    expect(r.total_price_cents).toBe(20000);
     expect(r.rooms).toBe(1);
   });
 
   test("two rooms: the total is for both, not one room's price", () => {
-    const [r] = priceSearchStays([row("h", "double", 100)], { ...stay, adults: 4, rooms: 2 }, TODAY);
-    expect(r.total_price).toBe(400);
+    const [r] = priceSearchStays([row("h", "double", 10000)], { ...stay, adults: 4, rooms: 2 }, TODAY);
+    expect(r.total_price_cents).toBe(40000);
     expect(r.rooms).toBe(2);
   });
 
@@ -65,29 +65,29 @@ describe("priceSearchStays", () => {
     // charged for 3 people, not 4.
     const tax = {
       effectiveFrom: "2026-01-01",
-      charges: [{ kind: "fixed" as const, amount: 3, perPerson: true, perNight: true, perRoom: false }],
+      charges: [{ kind: "fixed" as const, amountCents: 300, perPerson: true, perNight: true, perRoom: false }],
       childrenExempt: false,
       maxNights: null,
     };
     const [r] = priceSearchStays(
-      [row("h", "double", 100, { base_occupancy: 1, extra_adult_fee: 20, tourist_tax_rules: [tax] })],
+      [row("h", "double", 10000, { base_occupancy: 1, extra_adult_fee_cents: 2000, tourist_tax_rules: [tax] })],
       { ...stay, adults: 3, rooms: 2 },
       TODAY,
     );
     // Room 1: 2 nights × (100 + 20 extra adult) + 2 adults × 2 nights × 3 = 252.
     // Room 2: 2 nights × 100 + 1 adult × 2 nights × 3 = 206.
-    expect(r.total_price).toBe(458);
+    expect(r.total_price_cents).toBe(45800);
   });
 
   test("the cheapest room type wins on the total, and hotels sort by it", () => {
     const results = priceSearchStays(
-      [row("a", "suite", 150), row("a", "double", 120), row("b", "double", 110)],
+      [row("a", "suite", 15000), row("a", "double", 12000), row("b", "double", 11000)],
       { ...stay, rooms: 2 },
       TODAY,
     );
-    expect(results.map((r) => [r.hotel_id, r.room_id, r.total_price])).toEqual([
-      ["b", "double", 440],
-      ["a", "double", 480],
+    expect(results.map((r) => [r.hotel_id, r.room_id, r.total_price_cents])).toEqual([
+      ["b", "double", 44000],
+      ["a", "double", 48000],
     ]);
   });
 });

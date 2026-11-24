@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { DbRoom, DbRatePlan } from "./constants";
 import { TIER_SUMMARIES } from "@openbookings/pricing";
+import { formatCents } from "@openbookings/pricing/money";
 import { useRoomLikes } from "./use-room-likes";
 import { todayInZone } from "@/lib/booking/stay-input";
 import { guestsLabel, partyFromParams, stayDatesLabel, stayFromParams, withStay, type Stay, type StayDraft } from "../_lib/stay";
@@ -68,20 +69,12 @@ const rowVariants: Variants = {
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
-const EURO_WHOLE = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-const EURO_CENTS = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
-
-/** "€1,001.70". Whole euros stay whole; anything else shows its cents. */
-function euro(amount: number): string {
-  return (Number.isInteger(amount) ? EURO_WHOLE : EURO_CENTS).format(amount);
-}
-
 /**
- * The all-in price for one night from today (tourist tax included, see
- * withAllInPrices), falling back to the host's rate where it was not worked out.
+ * The all-in price in cents for one night from today (tourist tax included,
+ * see withAllInPrices), falling back to the host's rate where it was not worked out.
  */
-function nightlyPrice(plan: DbRatePlan): number {
-  return plan.price_per_night ?? plan.bar;
+function nightlyPriceCents(plan: DbRatePlan): number {
+  return plan.price_per_night_cents ?? plan.bar_cents;
 }
 
 function tierOf(rate: DbRatePlan) {
@@ -186,9 +179,9 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
   // With dates, the cheapest quoted night; without, today's prices as before.
   const quoted = Object.values(view.rates).filter((r): r is PricedRate => r !== null);
   const fromPrice = stayFields.hasStay
-    ? (quoted.length > 0 ? Math.min(...quoted.map((r) => r.perNight)) : null)
+    ? (quoted.length > 0 ? Math.min(...quoted.map((r) => r.perNightCents)) : null)
     : room.rate_plans.length > 0
-      ? Math.min(...room.rate_plans.map(nightlyPrice))
+      ? Math.min(...room.rate_plans.map(nightlyPriceCents))
       : null;
 
   return (
@@ -244,7 +237,7 @@ function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onTog
               <div>
                 <p className="text-xs text-white/60">From</p>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-serif text-3xl text-white">{fromPrice != null ? euro(fromPrice) : "—"}</span>
+                  <span className="font-serif text-3xl text-white">{fromPrice != null ? formatCents(fromPrice) : "—"}</span>
                   <span className="text-sm text-white/60">/ night</span>
                 </div>
               </div>
@@ -355,8 +348,8 @@ function occupancyLine(room: DbRoom, view: RoomView): string | null {
 }
 
 /** "Free" or "€25 / night". */
-function extraFee(fee: number | null | undefined): string {
-  return fee ? `${euro(fee)} / night` : "Free";
+function extraFee(feeCents: number | null | undefined): string {
+  return feeCents ? `${formatCents(feeCents)} / night` : "Free";
 }
 
 /**
@@ -382,7 +375,7 @@ function ExtrasControls({ room, state, onChange }: {
         <ExtraStepper
           label="Cot"
           plural="cots"
-          fee={extraFee(room.cot_fee)}
+          fee={extraFee(room.cot_fee_cents)}
           value={value.cots}
           max={limits.cots}
           onChange={(cots) => onChange({ ...value, cots })}
@@ -395,7 +388,7 @@ function ExtrasControls({ room, state, onChange }: {
         <ExtraStepper
           label="Extra bed"
           plural="extra beds"
-          fee={extraFee(room.extra_bed_fee)}
+          fee={extraFee(room.extra_bed_fee_cents)}
           value={value.extraBeds}
           max={limits.extraBeds}
           onChange={(extraBeds) => onChange({ ...value, extraBeds })}
@@ -469,10 +462,10 @@ type RateRowProps = {
 
 function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
   const tier = tierOf(rate);
-  const saving = priced ? priced.saving : hasStay ? 0 : (rate.saving_vs_refundable ?? 0);
-  const price = priced ? euro(priced.perNight) : hasStay ? "—" : euro(nightlyPrice(rate));
+  const savingCents = priced ? priced.savingCents : hasStay ? 0 : (rate.saving_vs_refundable_cents ?? 0);
+  const price = priced ? formatCents(priced.perNightCents) : hasStay ? "—" : formatCents(nightlyPriceCents(rate));
   // Without dates, a rate that can't be booked tonight shows its base rate.
-  const from = !priced && !hasStay && (rate.price_from || rate.price_per_night === undefined);
+  const from = !priced && !hasStay && (rate.price_from || rate.price_per_night_cents === undefined);
 
   return (
     <motion.div
@@ -485,9 +478,9 @@ function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, on
       <div className="flex flex-col gap-2.5 min-w-0 flex-1 basis-56">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold text-white text-base leading-snug">{rate.name}</p>
-          {saving > 0 && (
+          {savingCents > 0 && (
             <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-400/15 border border-emerald-400/25 text-emerald-300 leading-tight">
-              Save {euro(saving)} / night
+              Save {formatCents(savingCents)} / night
             </span>
           )}
           {/* Already in the price: says why it is lower for these dates. */}
@@ -785,13 +778,13 @@ type BookBar = {
    * The stay's total for the picks, each room priced for the party it is
    * given (what booking charges); null when they can't be booked as they stand.
    */
-  total: number | null;
-  /** The total to show instead of the summed one, once the price changed. */
-  totalOverride: number | null;
+  totalCents: number | null;
+  /** The total, in cents, to show instead of the summed one, once the price changed. */
+  totalOverrideCents: number | null;
   /** Keeps the bar up with nothing picked, so its message is still seen. */
   keepOpen: boolean;
   /** What the picked rooms' cots and extra beds cost, paid at the hotel; null when none are added. */
-  atHotel: number | null;
+  atHotelCents: number | null;
   canBook: boolean;
   pending: boolean;
   onBook: () => void;
@@ -820,9 +813,9 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
       const qty = quantities[rate.id] ?? 0;
       if (qty === 0) continue;
       picks.push({ rateId: rate.id, roomIndex, roomName: room.name, rateName: rate.name, qty });
-      nightlyTotal += qty * nightlyPrice(rate);
+      nightlyTotal += qty * nightlyPriceCents(rate);
       const priced = views[roomIndex]?.rates[rate.id];
-      if (priced) quotedTotal += qty * priced.total;
+      if (priced) quotedTotal += qty * priced.totalCents;
       else allQuoted = false;
     }
     if (picks.length > 0) groups.push({ roomIndex, picks });
@@ -830,9 +823,9 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
   // With dates, the stay's quoted total, each room for its own share of the
   // party (rooms × the largest share's price only while the picks can't be
   // booked); without, today's price for one night.
-  const shownTotal = bookBar.totalOverride ?? (stay
-    ? (bookBar.total ?? (allQuoted ? Math.round(quotedTotal * 100) / 100 : null))
-    : Math.round(nightlyTotal * 100) / 100);
+  const shownTotal = bookBar.totalOverrideCents ?? (stay
+    ? (bookBar.totalCents ?? (allQuoted ? quotedTotal : null))
+    : nightlyTotal);
   const groupsKey = groups.map((g) => g.roomIndex).join(",");
 
   // If the tags overflow, the room on screen is scrolled into view.
@@ -947,7 +940,7 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
               {/* What the stay costs */}
               <div className="shrink-0 text-right" aria-live="polite">
                 <p className="text-base font-semibold text-white tabular-nums leading-none">
-                  {shownTotal != null ? euro(shownTotal) : "—"}
+                  {shownTotal != null ? formatCents(shownTotal) : "—"}
                 </p>
                 <p className="text-[11px] text-white/60 mt-1 leading-none">
                   {!ratesConfirmed
@@ -956,9 +949,9 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
                       ? `total · ${stay.nights} ${stay.nights === 1 ? "night" : "nights"} · incl. tax`
                       : "Pick your dates")}
                 </p>
-                {ratesConfirmed && !bookBar.message && bookBar.atHotel !== null && (
+                {ratesConfirmed && !bookBar.message && bookBar.atHotelCents !== null && (
                   <p className="text-[11px] text-amber-200/90 mt-1 leading-none">
-                    {bookBar.atHotel > 0 ? `+ ${euro(bookBar.atHotel)} at the hotel` : "+ free at the hotel"}
+                    {bookBar.atHotelCents > 0 ? `+ ${formatCents(bookBar.atHotelCents)} at the hotel` : "+ free at the hotel"}
                   </p>
                 )}
               </div>

@@ -6,7 +6,7 @@ import { mergeQuote, pruneQuantities, type QuoteState } from "./merge-quote";
 const plan = (id: string, over: Partial<DbRatePlan> = {}): DbRatePlan => ({
   id,
   name: id,
-  bar: 100,
+  bar_cents: 10000,
   currency: "EUR",
   is_refundable: true,
   meal_plan: null,
@@ -32,11 +32,12 @@ const quoted = (ratePlanId: string, over: Partial<QuotedRatePlan> = {}): QuotedR
   isRefundable: true,
   mealPlan: null,
   nights: [],
-  stayTotal: 360,
-  touristTax: { total: 9, lines: [] },
+  stayTotalCents: 36000,
+  touristTax: { totalCents: 900, lines: [] },
+  totalCents: 36900,
   freeCancellationUntil: "2026-12-15T14:00:00.000Z",
   discount: null,
-  partyTotals: { "2/0/0": 369, "1/0/0": 339 },
+  partyTotals: { "2/0/0": 36900, "1/0/0": 33900 },
   reasons: [],
   ...over,
 });
@@ -86,26 +87,26 @@ describe("mergeQuote", () => {
     const [a] = mergeQuote(ROOMS, ready([quotedRoom("a", [quoted("a1"), quoted("a2")]), quotedRoom("b", [quoted("b1")])]));
     expect(a.rates.a1).toEqual({
       ratePlanId: "a1",
-      stayTotal: 360,
-      touristTax: 9,
-      total: 369,
-      perNight: 123,
+      stayTotalCents: 36000,
+      touristTaxCents: 900,
+      totalCents: 36900,
+      perNightCents: 12300,
       freeCancellationUntil: "2026-12-15T14:00:00.000Z",
-      saving: 0,
+      savingCents: 0,
       discount: null,
-      partyTotals: { "2/0/0": 369, "1/0/0": 339 },
+      partyTotals: { "2/0/0": 36900, "1/0/0": 33900 },
     });
   });
 
   test("the stay discount that applied is kept for the rate row", () => {
-    const discount = { label: "Weekly discount", percent: 10, amount: 40 };
+    const discount = { label: "Weekly discount", percent: 10, amountCents: 4000 };
     const [a] = mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1", { discount })])]));
     expect(a.rates.a1?.discount).toEqual(discount);
   });
 
-  test("per night is rounded to cents", () => {
-    const [a] = mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1", { stayTotal: 100, touristTax: { total: 0, lines: [] } })])]));
-    expect(a.rates.a1?.perNight).toBe(33.33);
+  test("per night is rounded half up to a whole cent", () => {
+    const [a] = mergeQuote([room("a", [plan("a1")])], ready([quotedRoom("a", [quoted("a1", { stayTotalCents: 10000, totalCents: 10000, touristTax: { totalCents: 0, lines: [] } })])]));
+    expect(a.rates.a1?.perNightCents).toBe(3333);
   });
 
   test("a rate with reasons is hidden", () => {
@@ -154,13 +155,13 @@ describe("mergeQuote", () => {
       rooms,
       ready([
         quotedRoom("a", [
-          quoted("flex", { stayTotal: 300, touristTax: { total: 0, lines: [] } }),
-          quoted("nr", { isRefundable: false, stayTotal: 240, touristTax: { total: 0, lines: [] } }),
+          quoted("flex", { stayTotalCents: 30000, totalCents: 30000, touristTax: { totalCents: 0, lines: [] } }),
+          quoted("nr", { isRefundable: false, stayTotalCents: 24000, totalCents: 24000, touristTax: { totalCents: 0, lines: [] } }),
         ]),
       ]),
     );
-    expect(a.rates.nr?.saving).toBe(20);
-    expect(a.rates.flex?.saving).toBe(0);
+    expect(a.rates.nr?.savingCents).toBe(2000);
+    expect(a.rates.flex?.savingCents).toBe(0);
   });
 });
 

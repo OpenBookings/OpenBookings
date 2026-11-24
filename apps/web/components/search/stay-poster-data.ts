@@ -1,11 +1,13 @@
+import { formatCents, roundHalfUp } from "@openbookings/pricing/money";
+
 export type PriceMode = "total" | "night";
 
 export type StayAvailability =
   /**
-   * `total` is the all-in price in euros (OpenBookings is EUR-only) for the
-   * searched dates, guests and `rooms` rooms (one when absent).
+   * `totalCents` is the all-in price in cents (OpenBookings is EUR-only) for
+   * the searched dates, guests and `rooms` rooms (one when absent).
    */
-  | { status: "available"; nights: number; total: number; rooms?: number }
+  | { status: "available"; nights: number; totalCents: number; rooms?: number }
   /** Next free window as YYYY-MM-DD check-in and check-out dates, when known. */
   | { status: "unavailable"; nextFrom?: string; nextTo?: string }
   | { status: "undated" };
@@ -36,13 +38,6 @@ export const DEFAULT_FOCAL = { x: 0.5, y: 0.4 } as const;
 const MAX_HIGHLIGHTS = 2;
 /** Longest amount ("€99,999") that fits the 26px price beside "View" on the narrowest (260px) card. */
 const LONG_AMOUNT_CHARS = 7;
-
-const EURO = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-
-/** Whole euros. Rounds for display only; never feed the result back into a price. */
-export function formatEuro(amount: number): string {
-  return EURO.format(amount);
-}
 
 /** "0.8 km" below 10 km, "26 km" from 10 km up. */
 export function formatDistance(km: number): string {
@@ -86,10 +81,10 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
     return { kind: "notice", heading: "Add dates for prices", detail: null, cta: "Dates" };
   }
 
-  const total = formatEuro(a.total);
+  const total = formatCents(a.totalCents);
   // An average, because rate modifiers can make individual nights differ. With
   // several rooms it is for all of them, as the total is; the detail says how many.
-  const perNight = formatEuro(Math.round(a.total / a.nights));
+  const perNight = formatCents(roundHalfUp(a.totalCents / a.nights));
   const rooms = (a.rooms ?? 1) > 1 ? ` · ${a.rooms} rooms` : "";
   const nights = `${a.nights} ${a.nights === 1 ? "night" : "nights"}${rooms}`;
   const amount = mode === "total" ? total : perNight;
@@ -105,8 +100,8 @@ export function posterPrice(a: StayAvailability, mode: PriceMode): PosterPrice {
 
 /** Sort by total price (all rooms); stays without a price always come last, in their original order. */
 export function comparePrice(a: StayPosterData, b: StayPosterData, dir: "asc" | "desc"): number {
-  const pa = a.availability.status === "available" ? a.availability.total : null;
-  const pb = b.availability.status === "available" ? b.availability.total : null;
+  const pa = a.availability.status === "available" ? a.availability.totalCents : null;
+  const pb = b.availability.status === "available" ? b.availability.totalCents : null;
   if (pa === null || pb === null) return (pa === null ? 1 : 0) - (pb === null ? 1 : 0);
   return dir === "asc" ? pa - pb : pb - pa;
 }

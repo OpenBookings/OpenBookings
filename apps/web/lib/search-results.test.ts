@@ -4,7 +4,7 @@ import { mapSearchResult, nightsBetween, resolveCoverUrl, type HotelSearchApiRes
 const base: HotelSearchApiResult = {
   hotel_id: "h1", hotel_name: "Hotel Lago", hotel_slug: "hotel-lago", city: "Como", country: "IT",
   hero_image_url: "https://x/a.jpg", room_name: "Lake View Double", room_description: "",
-  currency: "EUR", is_refundable: true, free_cancellation_until: "2026-11-09T14:00:00.000Z", total_price: 422, nights: [{ date: "2026-11-10" }, { date: "2026-11-11" }],
+  currency: "EUR", is_refundable: true, free_cancellation_until: "2026-11-09T14:00:00.000Z", total_price_cents: 42200, nights: [{ date: "2026-11-10" }, { date: "2026-11-11" }],
 };
 
 describe("nightsBetween", () => {
@@ -26,13 +26,13 @@ describe("mapSearchResult", () => {
       id: "h1", name: "Hotel Lago", slug: "hotel-lago", location: "Como, IT", distanceKm: 0.812,
       refundable: true, highlights: [],
       cover: { url: "https://x/a.jpg", tint: null, focalX: 0.5, focalY: 0.4 },
-      availability: { status: "available", nights: 2, total: 422, rooms: 1 },
+      availability: { status: "available", nights: 2, totalCents: 42200, rooms: 1 },
     }));
   test("a search for several rooms keeps how many the total is for", () =>
-    expect(mapSearchResult({ ...base, total_price: 844, rooms: 2 }).availability).toEqual({
+    expect(mapSearchResult({ ...base, total_price_cents: 84400, rooms: 2 }).availability).toEqual({
       status: "available",
       nights: 2,
-      total: 844,
+      totalCents: 84400,
       rooms: 2,
     }));
   test("no nights → undated", () =>
