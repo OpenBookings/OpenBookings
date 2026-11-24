@@ -22,6 +22,7 @@ import { createStepUpHooks } from "./step-up-hooks";
 import { passkeyAccountName } from "./passkey-account-name";
 import { refuseLastPasskeyRemoval } from "./last-passkey";
 import { reassignPropertiesFromFormerOwner } from "./owner-sync";
+import { namesFromGoogle } from "./names";
 import { HOST_MAGIC_LINK_CONFIRM_PATH, magicLinkConfirmTarget } from "./magic-link-confirm";
 
 export type { SignInLocation } from "./location";
@@ -467,6 +468,8 @@ export function createHostAuth(config: HostAuthConfig) {
             // Google reports a trustworthy email_verified; no session
             // without it.
             requireEmailVerification: true,
+            // Shapes the user on creation only; overrideUserInfoOnSignIn stays off.
+            mapProfileToUser: (profile) => namesFromGoogle(profile) ?? {},
           },
         }
         : {}),

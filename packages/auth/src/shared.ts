@@ -357,12 +357,28 @@ export const accountLinkingOptions = {
   },
 } as const;
 
-/** `user.additionalFields` both instances share. Never client-settable. */
+/**
+ * `user.additionalFields` both instances share. `account_type` is never
+ * client-settable; `firstName`/`lastName` are (sign-up, updateUser, and the
+ * social profile mappers), the `user_names_sync` trigger keeps `name` equal.
+ */
 export const userAdditionalFields = {
   account_type: {
     type: "string",
     required: false,
     input: false,
+  },
+  firstName: {
+    type: "string",
+    required: false,
+    input: true,
+    fieldName: "first_name",
+  },
+  lastName: {
+    type: "string",
+    required: false,
+    input: true,
+    fieldName: "last_name",
   },
 } as const;
 

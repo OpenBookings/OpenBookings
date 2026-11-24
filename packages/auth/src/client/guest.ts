@@ -13,7 +13,11 @@ export function createGuestAuthClient(baseURL: string) {
       magicLinkClient(),
       passkeyClient(),
       inferAdditionalFields({
-        user: { account_type: { type: "string" } },
+        user: {
+          account_type: { type: "string" },
+          firstName: { type: "string" },
+          lastName: { type: "string" },
+        },
       }),
     ],
   });

@@ -22,7 +22,11 @@ export function createHostAuthClient(baseURL: string) {
       passkeyClient(),
       twoFactorClient(),
       inferAdditionalFields({
-        user: { account_type: { type: "string" } },
+        user: {
+          account_type: { type: "string" },
+          firstName: { type: "string" },
+          lastName: { type: "string" },
+        },
       }),
     ],
   });
