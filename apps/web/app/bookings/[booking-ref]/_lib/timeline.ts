@@ -1,4 +1,5 @@
 import { localTimeToUtc, type CancellationTier } from '@openbookings/pricing';
+import { formatCents } from '@openbookings/pricing/money';
 import type { GuestBookingRow } from './shape';
 
 /**
@@ -191,13 +192,13 @@ export function buildTimeline(row: GuestBookingRow, now: Date): Timeline {
 
   function headline(): Timeline['headline'] {
     if (cancelled) {
-      const refunded = Number(row.refunded);
+      const refundedCents = Number(row.refunded_cents);
       return {
         tone: 'cancelled',
         eyebrow: 'Cancelled',
         sentence:
-          refunded > 0
-            ? `${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(refunded)} is refunded to your card.`
+          refundedCents > 0
+            ? `${formatCents(refundedCents, { whole: 'always-decimals' })} is refunded to your card.`
             : 'Nothing was refunded for this booking.',
       };
     }

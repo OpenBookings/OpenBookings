@@ -8,7 +8,7 @@ import {
   totalCents,
   type BookingSummary,
 } from '@/app/checkout/_lib/booking';
-import { stayCents, toCents } from '@/app/checkout/_lib/booking-lines';
+import { stayCents } from '@/app/checkout/_lib/booking-lines';
 import { openIntentSession, refusalFor } from '@/app/checkout/_lib/intent-session';
 import {
   checkoutErrorCopy,
@@ -113,11 +113,12 @@ function assertChargeable(summary: BookingSummary): number {
 
   const total = totalCents(summary.lines);
   // The lines are rebuilt from the intent's rooms; the guest agreed to the
-  // intent's total. Should the two ever part, nothing is charged at all.
-  if (total !== toCents(summary.intentTotal)) {
+  // intent's total. Both are cents, compared as they are. Should the two ever
+  // part, nothing is charged at all.
+  if (total !== summary.intentTotalCents) {
     throw new CheckoutError(
       'booking_invalid',
-      `Lines total ${total} differs from the intent total ${toCents(summary.intentTotal)}`
+      `Lines total ${total} differs from the intent total ${summary.intentTotalCents}`
     );
   }
 

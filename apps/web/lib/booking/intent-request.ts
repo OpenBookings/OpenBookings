@@ -7,8 +7,8 @@ export type IntentRequest = {
   checkIn: string;
   checkOut: string;
   rooms: SelectedRoom[];
-  /** The total the guest was shown, in euros. */
-  expectedTotal: number;
+  /** The total the guest was shown, in integer cents. */
+  expectedTotalCents: number;
 };
 
 /** The most cots, or extra beds, any room takes (rooms.cots_max / extra_beds_max). */
@@ -23,13 +23,13 @@ const wholeIn = (v: unknown, min: number, max: number): v is number =>
 export function parseIntentRequest(body: unknown): { ok: true; value: IntentRequest } | { ok: false; errors: string[] } {
   if (!isObject(body)) return { ok: false, errors: ["body must be a JSON object"] };
   const errors: string[] = [];
-  const { propertyId, checkIn, checkOut, rooms, expectedTotal } = body;
+  const { propertyId, checkIn, checkOut, rooms, expectedTotalCents } = body;
 
   if (typeof propertyId !== "string" || !UUID.test(propertyId)) errors.push("propertyId must be a property id");
   if (typeof checkIn !== "string" || !DATE.test(checkIn)) errors.push("checkIn must be YYYY-MM-DD");
   if (typeof checkOut !== "string" || !DATE.test(checkOut)) errors.push("checkOut must be YYYY-MM-DD");
-  if (typeof expectedTotal !== "number" || !Number.isFinite(expectedTotal) || expectedTotal < 0) {
-    errors.push("expectedTotal must be the total shown, in euros");
+  if (!wholeIn(expectedTotalCents, 0, Number.MAX_SAFE_INTEGER)) {
+    errors.push("expectedTotalCents must be the total shown, in whole cents");
   }
 
   const selection: SelectedRoom[] = [];
@@ -78,7 +78,19 @@ export function parseIntentRequest(body: unknown): { ok: true; value: IntentRequ
       checkIn: checkIn as string,
       checkOut: checkOut as string,
       rooms: selection,
-      expectedTotal: expectedTotal as number,
+      expectedTotalCents: expectedTotalCents as number,
     },
   };
+}
+
+/**
+ * The 409 body when the total the guest was shown is not, to the cent, the
+ * total the server quotes now; null when it is. Both are integer cents, so
+ * they match exactly or the guest is shown the new price.
+ */
+export function priceChanged<Q extends { totalCents: number }>(
+  expectedTotalCents: number,
+  quote: Q,
+): { error: "price_changed"; quote: Q } | null {
+  return expectedTotalCents === quote.totalCents ? null : { error: "price_changed", quote };
 }

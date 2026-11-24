@@ -13,8 +13,8 @@ export type GuestBookingListRow = {
   /** Rooms still booked (cancelled rooms left out, unless every room is). */
   rooms: number;
   guests: number;
-  /** What the guest paid, tourist tax included, in euros. */
-  total_paid: number;
+  /** What the guest paid, tourist tax included, in cents. */
+  total_paid_cents: number;
   /** For the review button: the property's check-out time (HH:MM) and time zone. */
   check_out_time: string | null;
   timezone: string;
@@ -72,11 +72,12 @@ export const GUEST_BOOKINGS_SQL = `
       (SELECT count(*) FROM reservations r WHERE r.booking_id = b.id AND r.cancelled_at IS NULL), 0),
       (SELECT count(*) FROM reservations r WHERE r.booking_id = b.id))::int AS rooms,
     COALESCE((SELECT SUM(r.adults + r.children) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS guests,
+    -- Cents. int8 would come back as text; these sums stay far below 2^53, so float8 is exact.
     COALESCE(NULLIF((
-      SELECT SUM((n->>'price')::numeric + COALESCE((n->>'touristTax')::numeric, 0))
+      SELECT SUM((n->>'priceCents')::bigint + COALESCE((n->>'touristTaxCents')::bigint, 0))
       FROM reservations r, jsonb_array_elements(r.nights) n
       WHERE r.booking_id = b.id
-    ), 0), b.total_amount)::float8 AS total_paid
+    ), 0), b.total_cents)::float8 AS total_paid_cents
   FROM bookings b
   JOIN properties p ON p.id = b.hotel_id
   WHERE b.user_id = $1 AND b.status <> 'pending'

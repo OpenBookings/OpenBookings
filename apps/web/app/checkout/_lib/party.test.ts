@@ -17,27 +17,27 @@ describe("partyFacts", () => {
 });
 
 describe("payAtPropertyNote", () => {
-  const room = (payAtProperty: number, cots: number, extraBeds: number) => ({ payAtProperty, cots, extraBeds });
+  const room = (payAtPropertyCents: number, cots: number, extraBeds: number) => ({ payAtPropertyCents, cots, extraBeds });
   test("nothing paid at the property: no note", () => {
     expect(payAtPropertyNote([room(0, 0, 0)])).toBeNull();
   });
   test("one extra bed", () => {
-    expect(payAtPropertyNote([room(20, 0, 1)])).toBe(
+    expect(payAtPropertyNote([room(2000, 0, 1)])).toBe(
       "The extra bed is paid at the property, so cancelling never costs you for it.",
     );
   });
   test("a cot", () => {
-    expect(payAtPropertyNote([room(10, 1, 0)])).toBe(
+    expect(payAtPropertyNote([room(1000, 1, 0)])).toBe(
       "The cot is paid at the property, so cancelling never costs you for it.",
     );
   });
   test("a cot and an extra bed", () => {
-    expect(payAtPropertyNote([room(30, 1, 1)])).toBe(
+    expect(payAtPropertyNote([room(3000, 1, 1)])).toBe(
       "The cot and extra bed are paid at the property, so cancelling never costs you for them.",
     );
   });
   test("two extra beds across rooms", () => {
-    expect(payAtPropertyNote([room(20, 0, 1), room(20, 0, 1), room(0, 0, 0)])).toBe(
+    expect(payAtPropertyNote([room(2000, 0, 1), room(2000, 0, 1), room(0, 0, 0)])).toBe(
       "The extra beds are paid at the property, so cancelling never costs you for them.",
     );
   });

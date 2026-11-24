@@ -1,5 +1,5 @@
 import type { PolicyStep } from '@openbookings/pricing';
-import { formatMoney } from './ledger';
+import { formatCents } from '@openbookings/pricing/money';
 import { payAtPropertyNoun } from './party';
 
 /** Under this much time left the hold label counts down in minutes. */
@@ -34,9 +34,9 @@ export function payReassurance(steps: PolicyStep[][]): { tone: 'free' | 'neutral
 }
 
 /** "+ €75.00 at the property for the extra bed": display only, never part of the charge. */
-export function payAtPropertyLine(rooms: { payAtProperty: number; cots: number; extraBeds: number }[]): string | null {
+export function payAtPropertyLine(rooms: { payAtPropertyCents: number; cots: number; extraBeds: number }[]): string | null {
   const noun = payAtPropertyNoun(rooms);
   if (!noun) return null;
-  const total = rooms.reduce((n, r) => n + r.payAtProperty, 0);
-  return `+ ${formatMoney(total)} at the property for the ${noun.text}`;
+  const totalCents = rooms.reduce((n, r) => n + r.payAtPropertyCents, 0);
+  return `+ ${formatCents(totalCents, { whole: 'always-decimals' })} at the property for the ${noun.text}`;
 }

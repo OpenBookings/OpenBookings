@@ -15,7 +15,7 @@ function row(over: Partial<GuestBookingListRow>): GuestBookingListRow {
     hero_image_url: null,
     rooms: 1,
     guests: 2,
-    total_paid: 200,
+    total_paid_cents: 20000,
     check_out_time: "11:00",
     timezone: "Europe/Amsterdam",
     no_show_reported_at: null,

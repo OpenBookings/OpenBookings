@@ -60,8 +60,8 @@ describeWithDb("availability against Postgres", () => {
     const row = (
       await db.query(
         `INSERT INTO booking_intents
-           (user_id, property_id, check_in_date, check_out_date, hold_expires_at, snapshot, total_amount, status)
-         VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, 300.00, $6) RETURNING id`,
+           (user_id, property_id, check_in_date, check_out_date, hold_expires_at, snapshot, total_cents, status)
+         VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, 30000, $6) RETURNING id`,
         [
           userId,
           ids.propertyId,
@@ -73,8 +73,8 @@ describeWithDb("availability against Postgres", () => {
       )
     ).rows[0] as { id: string };
     await db.query(
-      `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total)
-       VALUES ($1, $2, $3, 2, '[100,100,100]'::jsonb, 300.00)`,
+      `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total_cents)
+       VALUES ($1, $2, $3, 2, '[10000,10000,10000]'::jsonb, 30000)`,
       [row.id, ids.roomId, ids.ratePlanId],
     );
     return row.id;
@@ -210,7 +210,7 @@ describeWithDb("availability against Postgres", () => {
   test("only active plans on non-archived rooms; drafts are listed as not on sale", async () => {
     const inactive = (
       await db.query(
-        `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, 'Off', 90, true, false) RETURNING id`,
+        `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Off', 9000, true, false) RETURNING id`,
         [ids.roomId],
       )
     ).rows[0] as { id: string };
@@ -264,7 +264,7 @@ describeWithDb("availability against Postgres", () => {
         [ids.propertyId],
       )
     ).rows[0] as { id: string };
-    await db.query(`INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, 'Room only', 90, true, true)`, [
+    await db.query(`INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Room only', 9000, true, true)`, [
       twin.id,
     ]);
 

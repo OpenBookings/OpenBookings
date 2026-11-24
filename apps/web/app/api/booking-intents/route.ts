@@ -4,7 +4,7 @@ import type { LifecycleDb } from '@openbookings/db/booking-lifecycle';
 import { isTestingMode } from '@openbookings/demo';
 import { expireBookingCheckout } from '@openbookings/stripe';
 import { getServerSession } from '@/lib/auth';
-import { parseIntentRequest } from '@/lib/booking/intent-request';
+import { parseIntentRequest, priceChanged } from '@/lib/booking/intent-request';
 import { loadVisibleProperty, priceSelection } from '@/lib/booking/quote';
 import { propertyBookable } from '@/lib/booking/readiness-gate';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
@@ -13,16 +13,13 @@ import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
  * "Book now": re-price the guest's selection on the server, hold the rooms for
  * HOLD_MINUTES in a booking intent, and send the guest to pay for it.
  *
- * POST /api/booking-intents { propertyId, checkIn, checkOut, rooms, expectedTotal }
+ * POST /api/booking-intents { propertyId, checkIn, checkOut, rooms, expectedTotalCents }
  * → 201 { intentId, holdExpiresAt, checkoutUrl }
- * → 409 { error: 'price_changed', quote } when the total moved since the guest saw it
+ * → 409 { error: 'price_changed', quote } when the total (in cents, `quote.totalCents`) is not, to the cent, what the guest saw
  * → 409 { error: 'unavailable', ... } when the rooms are gone
  * → 409 { error: 'not_ready' } when the property cannot take bookings yet (Stripe, legal or billing details missing)
  */
 export const dynamic = 'force-dynamic';
-
-/** Pennies of rounding between what the page added up and what we did. */
-const PRICE_TOLERANCE = 0.005;
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -71,9 +68,8 @@ export async function POST(request: Request) {
     if (!priced.ok) {
       return json({ error: priced.error, detail: priced.detail }, priced.error === 'unavailable' ? 409 : 400);
     }
-    if (Math.abs(body.expectedTotal - priced.snapshot.total) > PRICE_TOLERANCE) {
-      return json({ error: 'price_changed', quote: priced.snapshot }, 409);
-    }
+    const changed = priceChanged(body.expectedTotalCents, priced.snapshot);
+    if (changed) return json(changed, 409);
 
     const created = await createBookingIntent(poolDb, {
       userId,

@@ -22,8 +22,8 @@ const GUEST_BOOKING_SQL = `
     to_char(p.check_in_until, 'HH24:MI') AS check_in_until,
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
     b.confirmed_at,
-    COALESCE((SELECT SUM(rf.amount) FROM refunds rf
-              WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::float8 AS refunded,
+    COALESCE((SELECT SUM(rf.amount_cents) FROM refunds rf
+              WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::bigint AS refunded_cents,
     COALESCE((
       SELECT json_agg(json_build_object(
         'reservation_id', r.id,
@@ -36,8 +36,8 @@ const GUEST_BOOKING_SQL = `
         'infants', r.infants,
         'cots', r.cots,
         'extra_beds', r.extra_beds,
-        -- Euros (numeric 10,2): cots and extra beds, owed at the hotel, never charged online.
-        'pay_at_property_amount', r.pay_at_property_amount
+        -- Cents: cots and extra beds, owed at the hotel, never charged online.
+        'pay_at_property_cents', r.pay_at_property_cents
       ) ORDER BY r.created_at, r.id)
       FROM reservations r JOIN rooms rm ON rm.id = r.room_id
       WHERE r.booking_id = b.id

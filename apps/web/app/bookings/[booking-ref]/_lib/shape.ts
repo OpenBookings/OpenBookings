@@ -22,8 +22,8 @@ export type GuestBookingRow = {
   check_in_until: string | null;
   check_out_time: string;
   confirmed_at: string | null;
-  /** Refunded so far (rows that did not fail), euros. */
-  refunded: number;
+  /** Refunded so far (rows that did not fail), cents. A bigint, so pg hands it over as text. */
+  refunded_cents: number | string;
   rooms: {
     reservation_id: string;
     room_name: string;
@@ -36,8 +36,8 @@ export type GuestBookingRow = {
     infants?: number;
     cots?: number;
     extra_beds?: number;
-    /** Owed at the hotel for the cots and extra beds, euros. Postgres numeric arrives as text or number. */
-    pay_at_property_amount?: number | string;
+    /** Owed at the hotel for the cots and extra beds, cents. A JSON number, or text if read outside JSON. */
+    pay_at_property_cents?: number | string;
   }[];
 };
 
@@ -48,11 +48,12 @@ type GuestBookingRoom = {
   /** What cancelling this room would mean right now. */
   cancelHint: string;
   cancelledAt: string | null;
-  paid: number;
+  /** The nights and their tourist tax, cents. */
+  paidCents: number;
   /** "1 cot · 1 extra bed · 1 infant", or null when there is none of these. */
   extras: string | null;
-  /** Owed at the hotel for cots and extra beds, euros. */
-  payAtProperty: number;
+  /** Owed at the hotel for cots and extra beds, cents. */
+  payAtPropertyCents: number;
 };
 
 export type GuestBooking = {
@@ -64,17 +65,15 @@ export type GuestBooking = {
   checkOutDate: string;
   status: BookingStatus;
   canCancel: boolean;
-  totalPaid: number;
-  /** Still to pay at the hotel for the cots and extra beds of rooms not cancelled, euros. */
-  payAtProperty: number;
-  refunded: number;
+  totalPaidCents: number;
+  /** Still to pay at the hotel for the cots and extra beds of rooms not cancelled, cents. */
+  payAtPropertyCents: number;
+  refundedCents: number;
   rooms: GuestBookingRoom[];
   /** What cancelling the whole booking would mean right now. */
   cancelHint: string;
   timeline: Timeline;
 };
-
-const cents = (euros: number) => Math.round(euros * 100);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -101,9 +100,9 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
           ? `Full refund until ${formatWhen(freeUntil, row.timezone)}.`
           : "The room price isn't refunded. Tourist tax is.",
       cancelledAt: r.cancelled_at,
-      paid: r.nights.reduce((sum, n) => sum + cents(n.price) + cents(n.touristTax), 0) / 100,
+      paidCents: r.nights.reduce((sum, n) => sum + n.priceCents + n.touristTaxCents, 0),
       extras: extrasText(r),
-      payAtProperty: Number(r.pay_at_property_amount ?? 0) || 0,
+      payAtPropertyCents: Number(r.pay_at_property_cents ?? 0) || 0,
     };
   });
 
@@ -133,9 +132,9 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
     checkOutDate: row.check_out_date,
     status: row.status,
     canCancel,
-    totalPaid: rooms.reduce((sum, r) => sum + cents(r.paid), 0) / 100,
-    payAtProperty: rooms.filter((r) => !r.cancelledAt).reduce((sum, r) => sum + cents(r.payAtProperty), 0) / 100,
-    refunded: Number(row.refunded),
+    totalPaidCents: rooms.reduce((sum, r) => sum + r.paidCents, 0),
+    payAtPropertyCents: rooms.filter((r) => !r.cancelledAt).reduce((sum, r) => sum + r.payAtPropertyCents, 0),
+    refundedCents: Number(row.refunded_cents),
     rooms,
     cancelHint: bookingCancelHint(rooms),
     timeline: buildTimeline(row, now),

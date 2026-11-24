@@ -1,4 +1,4 @@
-import type { TouristTaxLine } from '@openbookings/pricing';
+import type { NightPrice, TouristTaxLine } from '@openbookings/pricing';
 
 /** Rows the guest is shown, and Stripe is charged, one for one. */
 export type BookingLine = {
@@ -13,14 +13,9 @@ export type BookingLine = {
   kind: 'stay' | 'tourist_tax';
 };
 
-export function toCents(majorUnits: number): number {
-  return Math.round(majorUnits * 100);
-}
-
 /**
  * What the guest pays for a booking intent: per room, one line for the whole
- * stay (its nights summed exactly, then rounded once to cents), followed by
- * that room's tourist tax. The nights are the intent's own prices, fixed when
+ * stay (its nights' cents added up), followed by that room's tourist tax. The nights are the intent's own prices, fixed when
  * the rooms were held, so nothing is re-priced here.
  *
  * Rates include VAT and every mandatory fee by contract with the host — every
@@ -33,7 +28,7 @@ export function buildIntentLines(
   rooms: {
     roomName: string;
     roomType: string | null;
-    nights: { date: string; price: number }[];
+    nights: NightPrice[];
     touristTaxLines: TouristTaxLine[];
   }[],
 ): BookingLine[] {
@@ -42,7 +37,7 @@ export function buildIntentLines(
     return [
       {
         name: `${room.roomName}${room.roomType ? ` ${room.roomType}` : ''} · ${n} ${n === 1 ? 'night' : 'nights'}`,
-        unitAmountCents: toCents(room.nights.reduce((sum, night) => sum + night.price, 0)),
+        unitAmountCents: room.nights.reduce((sum, night) => sum + night.priceCents, 0),
         quantity: 1,
         kind: 'stay',
       },
@@ -54,7 +49,7 @@ export function buildIntentLines(
 function taxLines(lines: TouristTaxLine[]): BookingLine[] {
   return lines.map((line) => ({
     name: `Tourist tax · ${line.label}`,
-    unitAmountCents: toCents(line.amount),
+    unitAmountCents: line.amountCents,
     quantity: 1,
     kind: 'tourist_tax',
   }));

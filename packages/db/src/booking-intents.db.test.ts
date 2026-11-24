@@ -32,28 +32,28 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   infants: 0,
   cots: 0,
   extraBeds: 0,
-  payAtProperty: 0,
+  payAtPropertyCents: 0,
   discount: null,
   rateNights: [
-    { date: "2031-11-10", price: 100 },
-    { date: "2031-11-11", price: 100 },
+    { date: "2031-11-10", priceCents: 10000 },
+    { date: "2031-11-11", priceCents: 10000 },
   ],
   extraGuests: [],
   payAtPropertyLines: [],
   nights: [
-    { date: "2031-11-10", price: 100 },
-    { date: "2031-11-11", price: 100 },
+    { date: "2031-11-10", priceCents: 10000 },
+    { date: "2031-11-11", priceCents: 10000 },
   ],
-  stayTotal: 200,
-  touristTax: 6.5,
-  touristTaxLines: [],
+  stayTotalCents: 20000,
+  touristTaxCents: 650,
+  touristTaxLines: [{ label: "€3.25 per room per night", amountCents: 650, effectiveFrom: "2026-01-01" }],
   vatSplit: null,
 });
 
 const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
-  roomsTotal: 200 * rooms.length,
-  touristTaxTotal: 6.5 * rooms.length,
-  total: 206.5 * rooms.length,
+  roomsTotalCents: 20000 * rooms.length,
+  touristTaxTotalCents: 650 * rooms.length,
+  totalCents: 20650 * rooms.length,
   commissionCents: 0,
   commissionRate: 0.1,
   commissionVatTreatment: null,
@@ -219,8 +219,8 @@ describeWithDb("booking intents against Postgres", () => {
         infants: 1,
         cots: 1,
         extraBeds: 1,
-        payAtProperty: 70,
-        discount: { label: "Weekly discount", amount: 22.5 },
+        payAtPropertyCents: 7000,
+        discount: { label: "Weekly discount", amountCents: 2250 },
       },
     ];
     const { intentId } = await created(guest, rooms);
@@ -237,6 +237,28 @@ describeWithDb("booking intents against Postgres", () => {
     expect(intent!.bookingId).toBeNull();
     expect(intent!.rooms.map(({ id: _id, ...r }) => r)).toEqual(rooms);
     expect(await held()).toEqual([2, 2]);
+
+    // The columns hold the same cents as the snapshot, never euros.
+    const totals = (
+      await db.query(
+        `SELECT total_cents::int AS total, tourist_tax_cents::int AS tax, commission_cents::int AS commission
+         FROM booking_intents WHERE id = $1`,
+        [intentId],
+      )
+    ).rows[0];
+    expect(totals).toEqual({ total: 41300, tax: 1300, commission: 0 });
+    const roomRows = (
+      await db.query(
+        `SELECT stay_total_cents::int AS stay, tourist_tax_cents::int AS tax, pay_at_property_cents::int AS at_hotel,
+                discount_cents::int AS discount
+         FROM booking_intent_rooms WHERE intent_id = $1 ORDER BY sort_order`,
+        [intentId],
+      )
+    ).rows;
+    expect(roomRows).toEqual([
+      { stay: 20000, tax: 650, at_hotel: 0, discount: null },
+      { stay: 20000, tax: 650, at_hotel: 7000, discount: 2250 },
+    ]);
   });
 
   test("an intent round-trips rateNights, extraGuests and payAtPropertyLines", async () => {
@@ -246,18 +268,18 @@ describeWithDb("booking intents against Postgres", () => {
       children: 1,
       cots: 1,
       extraBeds: 1,
-      payAtProperty: 70,
+      payAtPropertyCents: 7000,
       rateNights: [
-        { date: "2031-11-10", price: 90 },
-        { date: "2031-11-11", price: 90 },
+        { date: "2031-11-10", priceCents: 9000 },
+        { date: "2031-11-11", priceCents: 9000 },
       ],
       extraGuests: [
-        { kind: "adult", count: 1, per_night: 10, nights: 2, amount: 20 },
-        { kind: "child", count: 1, per_night: 0, nights: 2, amount: 0 },
+        { kind: "adult", count: 1, perNightCents: 1000, nights: 2, amountCents: 2000 },
+        { kind: "child", count: 1, perNightCents: 0, nights: 2, amountCents: 0 },
       ],
       payAtPropertyLines: [
-        { label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 },
-        { label: "Extra beds", count: 1, fee_per_night: 25, nights: 2, amount: 50 },
+        { label: "Cots", count: 1, feePerNightCents: 1000, nights: 2, amountCents: 2000 },
+        { label: "Extra beds", count: 1, feePerNightCents: 2500, nights: 2, amountCents: 5000 },
       ],
     };
     const { intentId } = await created(guest, [r]);
@@ -299,7 +321,7 @@ describeWithDb("booking intents against Postgres", () => {
     );
     const secondRoom = (second.rows[0] as { id: string }).id;
     const plan = await db.query(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, 'Room only', 80, true, true) RETURNING id`,
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Room only', 8000, true, true) RETURNING id`,
       [secondRoom],
     );
     const secondPlan = (plan.rows[0] as { id: string }).id;
@@ -414,7 +436,7 @@ describeWithDb("booking intents under concurrency", () => {
     );
     const roomId = (r.rows[0] as { id: string }).id;
     const p = await setup.query(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, 'Room only', 120, true, true) RETURNING id`,
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Room only', 12000, true, true) RETURNING id`,
       [roomId],
     );
     roomy = { roomId, ratePlanId: (p.rows[0] as { id: string }).id };
