@@ -47,6 +47,7 @@
  */
 import type { AppBooking, AppBookingRoom, BookingChangesPage } from "@openbookings/apps-contract";
 import { todayInZone } from "@openbookings/pricing";
+import { roundHalfUp } from "@openbookings/pricing/money";
 import { bookingReference } from "../booking-reference";
 import type { BookingEventKind } from "../booking-events";
 import type { Queryable } from "../reservation-policy";
@@ -227,8 +228,10 @@ type BookingRow = {
   modified_at: Date;
   version: string;
   rooms_total_cents: string;
-  tourist_tax_cents: string;
+  total_cents: string;
   commission_cents: string;
+  room_price_refunded_cents: string;
+  disputed_cents: string;
   first_name: string;
   last_name: string;
 };
@@ -244,12 +247,35 @@ type ReservationRow = {
   cots: number;
   extra_beds: number;
   cancelled: boolean;
-  nights: { date: string; priceCents: number }[];
+  nights: { date: string; priceCents: number; touristTaxCents?: number }[];
   tourist_tax_cents: string;
   pay_at_property_cents: string;
 };
 
-/** Full current state of the given bookings of one property, in the order given. */
+/**
+ * The commission OpenBookings keeps now: the fee charged less what refunds
+ * gave back, following the refund model (2026-11-20): in proportion to the
+ * room price refunded through OpenBookings, and for a lost dispute to the
+ * whole payment; refunds made outside OpenBookings give nothing back. Rounded
+ * down per part, never below zero, like `commissionRefundDue`
+ * (@openbookings/stripe), which settles the actual fee refunds with Stripe.
+ */
+function commissionKept(b: BookingRow): number {
+  const fee = BigInt(b.commission_cents);
+  const share = (part: string, whole: string) =>
+    BigInt(whole) > BigInt(0) ? (fee * BigInt(part)) / BigInt(whole) : BigInt(0);
+  const back = share(b.room_price_refunded_cents, b.rooms_total_cents) + share(b.disputed_cents, b.total_cents);
+  return Number(back >= fee ? BigInt(0) : fee - back);
+}
+
+/**
+ * Full current state of the given bookings of one property, in the order given.
+ *
+ * Money is what the booking is worth now (R14): nights after an early
+ * departure are left out of each room (with their tourist tax and cots/extra
+ * beds, which are charged per night), and the booking totals count only rooms
+ * not cancelled. Cancelled rooms still list their nights, for the app's record.
+ */
 async function loadBookings(db: Queryable, propertyId: string, ids: string[]): Promise<AppBooking[]> {
   if (ids.length === 0) return [];
   // The stay ends the day after the last night stayed when the guest left early.
@@ -262,8 +288,10 @@ async function loadBookings(db: Queryable, propertyId: string, ids: string[]): P
               COALESCE(ev.modified_at, b.confirmed_at, b.created_at) AS modified_at,
               COALESCE(ev.version, 0)::text AS version,
               b.rooms_total_cents::text AS rooms_total_cents,
-              b.tourist_tax_cents::text AS tourist_tax_cents,
+              b.total_cents::text AS total_cents,
               b.commission_cents::text AS commission_cents,
+              rf.room_price_refunded_cents::text AS room_price_refunded_cents,
+              rf.disputed_cents::text AS disputed_cents,
               u.first_name, u.last_name
          FROM bookings b
          JOIN "user" u ON u.id = b.user_id
@@ -272,6 +300,12 @@ async function loadBookings(db: Queryable, propertyId: string, ids: string[]): P
              FROM booking_events e
             WHERE e.booking_id = b.id AND e.kind = ANY ($3::text[])
          ) ev ON true
+         CROSS JOIN LATERAL (
+           SELECT COALESCE(sum(f.accommodation_cents) FILTER (WHERE f.source = 'openbookings'), 0) AS room_price_refunded_cents,
+                  COALESCE(sum(f.amount_cents) FILTER (WHERE f.source = 'dispute'), 0) AS disputed_cents
+             FROM refunds f
+            WHERE f.booking_id = b.id AND f.status <> 'failed'
+         ) rf
         WHERE b.id = ANY ($1::uuid[]) AND b.hotel_id = $2::uuid`,
       [ids, propertyId, DELIVERY_EVENT_KINDS],
     )
@@ -300,31 +334,40 @@ async function loadBookings(db: Queryable, propertyId: string, ids: string[]): P
     roomsByBooking.set(r.booking_id, list);
   }
 
+  const room = (b: BookingRow, cancelled: boolean, r: ReservationRow): AppBookingRoom => {
+    // YYYY-MM-DD strings compare as dates; nights after an early departure are not stayed.
+    const stayed = r.nights.filter((n) => n.date >= b.check_in && n.date < b.check_out);
+    // Nights from before the policy snapshot (0027) are unknown: keep the stored amounts.
+    const known = r.nights.length > 0;
+    return {
+      reservationId: r.id,
+      roomCode: r.room_code,
+      ratePlanCode: r.rate_plan_code,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+      adults: r.adults,
+      children: r.children,
+      infants: r.infants,
+      cots: r.cots,
+      extraBeds: r.extra_beds,
+      // A booking cancelled as a whole (e.g. an admin's forced status) may leave rooms unmarked.
+      cancelled: cancelled || r.cancelled,
+      nights: stayed.map((n) => ({ date: n.date, priceCents: n.priceCents })),
+      touristTaxCents: known
+        ? stayed.reduce((sum, n) => sum + (n.touristTaxCents ?? 0), 0)
+        : Number(r.tourist_tax_cents),
+      // Cots and extra beds cost the same every night (calculator payAtPropertyLines).
+      payAtPropertyCents: known
+        ? roundHalfUp((Number(r.pay_at_property_cents) * stayed.length) / r.nights.length)
+        : Number(r.pay_at_property_cents),
+    };
+  };
+
   const byId = new Map(
     bookingRows.map((b): [string, AppBooking] => {
       const cancelled = b.status === "cancelled";
-      const rooms = (roomsByBooking.get(b.id) ?? []).map(
-        (r): AppBookingRoom => ({
-          reservationId: r.id,
-          roomCode: r.room_code,
-          ratePlanCode: r.rate_plan_code,
-          checkIn: b.check_in,
-          checkOut: b.check_out,
-          adults: r.adults,
-          children: r.children,
-          infants: r.infants,
-          cots: r.cots,
-          extraBeds: r.extra_beds,
-          // A booking cancelled as a whole (e.g. an admin's forced status) may leave rooms unmarked.
-          cancelled: cancelled || r.cancelled,
-          // YYYY-MM-DD strings compare as dates; nights after an early departure are not stayed.
-          nights: r.nights
-            .filter((n) => n.date >= b.check_in && n.date < b.check_out)
-            .map((n) => ({ date: n.date, priceCents: n.priceCents })),
-          touristTaxCents: Number(r.tourist_tax_cents),
-          payAtPropertyCents: Number(r.pay_at_property_cents),
-        }),
-      );
+      const rooms = (roomsByBooking.get(b.id) ?? []).map((r) => room(b, cancelled, r));
+      const open = rooms.filter((r) => !r.cancelled);
       return [
         b.id,
         {
@@ -338,9 +381,9 @@ async function loadBookings(db: Queryable, propertyId: string, ids: string[]): P
           checkOut: b.check_out,
           booker: appName(b.first_name, b.last_name),
           rooms,
-          roomsTotalCents: Number(b.rooms_total_cents),
-          touristTaxCents: Number(b.tourist_tax_cents),
-          commissionCents: Number(b.commission_cents),
+          roomsTotalCents: open.reduce((sum, r) => sum + r.nights.reduce((s, n) => s + n.priceCents, 0), 0),
+          touristTaxCents: open.reduce((sum, r) => sum + r.touristTaxCents, 0),
+          commissionCents: commissionKept(b),
         },
       ];
     }),

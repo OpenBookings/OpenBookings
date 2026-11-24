@@ -164,8 +164,8 @@ describeWithDb("booking change feed", () => {
           payAtPropertyCents: 2500,
         },
       ],
-      roomsTotalCents: 20000,
-      touristTaxCents: 0,
+      roomsTotalCents: 18650 + 18651,
+      touristTaxCents: 600,
       commissionCents: 1678,
     });
     // No guest contact data anywhere: the seeded guest's email has an @.
@@ -256,16 +256,51 @@ describeWithDb("booking change feed", () => {
     expect(snapshot.bookings).toEqual([]);
   });
 
-  test("an early departure ends the stay the day after the last night stayed", async () => {
+  test("an early departure ends the stay the day after the last night stayed, with that night's money only", async () => {
     const { ids, installation } = await setup();
     const a = await confirmed(ids, "2031-06-10", { nights: 3 });
+    await db.query(`UPDATE reservations SET pay_at_property_cents = 3000 WHERE booking_id = $1`, [a.bookingId]); // €10 a night
     const cursor = await hereCursor();
     await db.query(`UPDATE bookings SET departed_early_on = '2031-06-10', status = 'checked_in' WHERE id = $1`, [a.bookingId]);
     await event(a.bookingId, "early_departure");
     const got = (await changes(installation, cursor)).bookings[0]!;
     expect(got.checkOut).toBe("2031-06-11");
-    expect(got.rooms[0]!.checkOut).toBe("2031-06-11");
-    expect(got.rooms[0]!.nights).toEqual([{ date: "2031-06-10", priceCents: 18650 }]);
+    expect(got.rooms[0]).toMatchObject({
+      checkOut: "2031-06-11",
+      nights: [{ date: "2031-06-10", priceCents: 18650 }],
+      touristTaxCents: 300,
+      payAtPropertyCents: 1000,
+    });
+    expect(got.roomsTotalCents).toBe(18650);
+    expect(got.touristTaxCents).toBe(300);
+  });
+
+  test("after one of two rooms is cancelled, totals and commission are the remaining room's", async () => {
+    const { ids, installation } = await setup();
+    const a = await confirmed(ids, "2031-06-10", { rooms: 2 }); // rooms_total_cents 40000, commission 1678
+    const cursor = await hereCursor();
+    await cancelRoom(a.bookingId, a.reservationIds[0]!);
+    // Refunded in full through OpenBookings: half the room price, so half the commission goes back.
+    await db.query(
+      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, $2, 'guest_cancellation', 20000, 600, 20600, 'pending', $3)`,
+      [a.bookingId, a.reservationIds[0], `test-${crypto.randomUUID()}`],
+    );
+    const got = (await changes(installation, cursor)).bookings[0]!;
+    const cancelledById = new Map(got.rooms.map((r) => [r.reservationId, r.cancelled]));
+    expect([cancelledById.get(a.reservationIds[0]!), cancelledById.get(a.reservationIds[1]!)]).toEqual([true, false]);
+    expect(got.roomsTotalCents).toBe(18650 + 18651);
+    expect(got.touristTaxCents).toBe(600);
+    expect(got.commissionCents).toBe(1678 - 839);
+
+    // A refund that failed, or one the host made outside OpenBookings, gives no commission back.
+    await db.query(`UPDATE refunds SET status = 'failed' WHERE booking_id = $1`, [a.bookingId]);
+    await db.query(
+      `INSERT INTO refunds (booking_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, NULL, 'stripe_dashboard', 20000, 0, 20000, 'succeeded', $2)`,
+      [a.bookingId, `test-${crypto.randomUUID()}`],
+    );
+    expect((await changes(installation, cursor)).bookings[0]!.commissionCents).toBe(1678);
   });
 
   test("the booker's name is first and last name only, as typed", async () => {

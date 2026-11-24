@@ -195,11 +195,13 @@ CREATE INDEX IF NOT EXISTS idx_booking_events_txid_seq ON booking_events (txid, 
 -- ob_app's row-level security, an admin as ob_admin_write).
 CREATE OR REPLACE FUNCTION app.app_delivery_booking_changed() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 BEGIN
-  UPDATE app_booking_delivery
-     SET status = 'pending', updated_at = now()
+  -- Schema-qualified, and pg_temp searched last: a caller's temporary table
+  -- can never stand in for the real one under the definer's rights.
+  UPDATE public.app_booking_delivery
+     SET status = 'pending', updated_at = pg_catalog.now()
    WHERE booking_id = NEW.booking_id AND status = 'delivered';
   RETURN NULL;
 END
