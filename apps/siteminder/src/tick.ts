@@ -13,14 +13,19 @@ import {
   pendingMessages,
   scheduleRetry,
 } from "./inbox";
+import { env } from "./env";
 import { type AppInstallation, activeInstallations } from "./installations";
+import { dueForPoll } from "./outbox-store";
 import { dayNumber } from "./ota/status-control";
+import { pollInstallation } from "./poll";
 
 export type TickDeps = {
   db: Queryable;
   client: (inst: AppInstallation) => ReturnType<typeof coreClient>;
   now: () => Date;
   sleep: (ms: number) => Promise<void>;
+  /** How often to ask core for booking changes. Unset: the tick does not poll core. */
+  pollSeconds?: number;
 };
 
 /** `inboxFailed` counts messages whose send failed in this tick, whether retried later or given up. */
@@ -39,7 +44,7 @@ const LEASE_MS = CORE_TIMEOUT_MS + 60_000;
 const MESSAGES_PER_ROUND = 200;
 
 export function defaultTickDeps(): TickDeps {
-  return { db: getPool(), client: (inst) => coreClient(inst), now: () => new Date(), sleep: (ms) => Bun.sleep(ms) };
+  return { db: getPool(), client: (inst) => coreClient(inst), now: () => new Date(), sleep: (ms) => Bun.sleep(ms), pollSeconds: env.pollSeconds };
 }
 
 /** Something a person must look at. The app has no Sentry SDK (nor does support-bot): the error/warning log line is the alert. */
@@ -215,11 +220,27 @@ async function drain(deps: TickDeps, inst: AppInstallation, token: string, budge
   }
 }
 
-async function processInstallation(deps: TickDeps, inst: AppInstallation, budget: Budget, counts: TickResult): Promise<void> {
+/**
+ * Booking changes from core into the outbox, under the installation's lease (one poller at a time, so cursor
+ * and pages stay in order). A core error leaves the cursor where it was and does not stop the inbox work.
+ */
+async function poll(deps: TickDeps, inst: AppInstallation, token: string, budget: Budget): Promise<void> {
+  try {
+    await pollInstallation(deps, inst, async () => budget.left() > 0 && (await renewLease(deps.db, inst.id, token, new Date(deps.now().getTime() + LEASE_MS))));
+  } catch (e) {
+    alert("warning", "polling core for booking changes failed; will try again", { installationId: inst.id, propertyCode: inst.propertyCode, error: errorText(e) });
+  }
+}
+
+async function processInstallation(deps: TickDeps, inst: AppInstallation, budget: Budget, counts: TickResult, polling: boolean): Promise<void> {
   for (;;) {
     const token = await claimLease(deps.db, inst.id, deps.now());
     if (!token) return; // another tick is on it
     try {
+      if (polling) {
+        await poll(deps, inst, token, budget);
+        polling = false; // the look-again loop below is for inbox messages only
+      }
       await drain(deps, inst, token, budget, counts);
     } finally {
       await releaseLease(deps.db, inst.id, token);
@@ -242,12 +263,15 @@ export async function tick(deps: TickDeps, i: { installationId?: string; budgetM
 
   const active = await activeInstallations(deps.db);
   const pending = i.installationId ? new Set([i.installationId]) : await installationsWithPending(deps.db);
+  // Polling: every installation whose last poll is old enough, and the requested one right away (the doorbell).
+  const polls = deps.pollSeconds === undefined ? new Set<string>() : await dueForPoll(deps.db, deps.now(), deps.pollSeconds);
+  if (deps.pollSeconds !== undefined && i.installationId) polls.add(i.installationId);
   await Promise.all(
     active
-      .filter((inst) => pending.has(inst.id))
+      .filter((inst) => pending.has(inst.id) || polls.has(inst.id))
       .map(async (inst) => {
         try {
-          await processInstallation(deps, inst, budget, counts);
+          await processInstallation(deps, inst, budget, counts, polls.has(inst.id));
         } catch (e) {
           alert("error", "tick failed for an installation", { installationId: inst.id, propertyCode: inst.propertyCode, error: errorText(e) });
         }
