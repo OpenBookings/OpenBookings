@@ -28,7 +28,9 @@ const READ = [
   "support_tickets: SELECT",
   "transactions: SELECT",
   "user.email: SELECT",
+  "user.first_name: SELECT",
   "user.id: SELECT",
+  "user.last_name: SELECT",
   "user.name: SELECT",
 ];
 
@@ -63,7 +65,9 @@ const WRITE = [
   "reservations: SELECT",
   "rooms: SELECT",
   "user.email: SELECT",
+  "user.first_name: SELECT",
   "user.id: SELECT",
+  "user.last_name: SELECT",
   "user.name: SELECT",
 ];
 
