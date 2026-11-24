@@ -164,12 +164,22 @@ export function buildResNotif(i: {
   const { booking, status } = i;
   if (booking.rooms.length === 0) throw new Error(`booking ${booking.reference} has no rooms`);
   const active = booking.rooms.filter((r) => !r.cancelled);
+  if (status === "Modify" && active.length === 0) throw new Error(`booking ${booking.reference}: a Modify with its rooms all cancelled is a Cancel`);
   const rooms = status === "Cancel" || active.length === 0 ? booking.rooms : active;
   const allBooked = rooms.every((r) => !r.cancelled);
+  if (rooms.some((r) => r.adults < 1)) throw new Error(`booking ${booking.reference} has a room with no adults`);
 
   const commissions = allocateCents(booking.commissionCents, rooms.map(roomPriceCents));
   const touristTaxCents = rooms.reduce((sum, r) => sum + r.touristTaxCents, 0);
   const totalCents = rooms.reduce((sum, r) => sum + roomPriceCents(r) + r.touristTaxCents, 0);
+  // What the hotel is told must be what the guest paid. Only checked when the rooms sent are the booked ones: a
+  // Cancel, or the Commit of a booking cancelled before SiteMinder had it, lists cancelled rooms on purpose.
+  const sendsBookedRooms = status !== "Cancel" && !booking.cancelled && active.length > 0;
+  if (sendsBookedRooms && totalCents !== booking.roomsTotalCents + booking.touristTaxCents) {
+    throw new Error(
+      `booking ${booking.reference}: room totals ${totalCents} differ from the booking's totals ${booking.roomsTotalCents} + ${booking.touristTaxCents}`,
+    );
+  }
 
   const reservation = {
     "@_CreateDateTime": booking.createdAt,

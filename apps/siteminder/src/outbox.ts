@@ -14,8 +14,9 @@ export type OutboxRow = {
 
 export type NextMessage = { send: "Commit" | "Modify" | "Cancel"; booking: AppBooking } | { send: "none" } | { needsAttention: string };
 
-type Sent = "Commit" | "Modify" | "Cancel";
-type Result = { ok: true } | { ok: false; permanent: boolean; error: string };
+export type Sent = "Commit" | "Modify" | "Cancel";
+/** How one send went: SiteMinder's Success, or a failure that is permanent (fix first) or transient (retry). */
+export type Result = { ok: true } | { ok: false; permanent: boolean; error: string };
 
 const MAX_ATTEMPTS = RETRY_SECONDS.length + 1;
 
@@ -54,7 +55,8 @@ export function nextMessage(row: OutboxRow): NextMessage {
 
 /**
  * The row's new delivery state after one send. `row` is the FRESH row (re-read after the send), `sentVersion`
- * the version that message carried (defaults to `row.latestVersion`, i.e. nothing changed meanwhile).
+ * the version that message carried. It is required: a newer version may have arrived during the send, and
+ * defaulting to `row.latestVersion` would ack a version SiteMinder never saw.
  *
  * - Success: acked moves to committed (Commit/Modify) or cancelled (Cancel) at `sentVersion`; attempts reset to 0.
  *   `delivered` only when nothing else is pending: the sent version is still the latest and `nextMessage` of the
@@ -69,7 +71,7 @@ export function afterResult(
   row: OutboxRow,
   sent: Sent,
   result: Result,
-  sentVersion: number = row.latestVersion,
+  sentVersion: number,
 ): Pick<OutboxRow, "acked" | "ackedVersion" | "status" | "attempts"> & { retryInSeconds: number | null } {
   if (!result.ok) {
     const attempts = row.attempts + 1;

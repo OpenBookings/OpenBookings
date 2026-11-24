@@ -391,7 +391,7 @@ describe("buildResNotif: Modify and Cancel", () => {
 
   it("Modify after an early departure sends the shortened stay", () => {
     const shortened = { ...roomOne, checkOut: "2031-05-02", nights: [{ date: "2031-05-01", priceCents: 18650 }], touristTaxCents: 300 };
-    const { roomStays } = parsed(booking({ rooms: [shortened, roomTwo] }), "Modify");
+    const { roomStays } = parsed(booking({ rooms: [shortened, roomTwo], roomsTotalCents: 58650, touristTaxCents: 700 }), "Modify");
     expect((roomStays[0] as Node).TimeSpan).toEqual({ "@_Start": "2031-05-01", "@_End": "2031-05-02" });
     expect(rates(roomStays[0] as Node).map((r) => [r["@_EffectiveDate"], r["@_ExpireDate"]])).toEqual([["2031-05-01", "2031-05-02"]]);
   });
@@ -427,5 +427,29 @@ describe("buildResNotif: Modify and Cancel", () => {
 
   it("refuses a booking without rooms (SiteMinder needs at least one RoomStay)", () => {
     expect(() => build(booking({ rooms: [] }))).toThrow(/no rooms/);
+  });
+});
+
+describe("buildResNotif: guards against a booking it cannot send faithfully", () => {
+  it("refuses a room without adults", () => {
+    expect(() => build(booking({ rooms: [roomOne, { ...roomTwo, adults: 0 }] }))).toThrow(/no adults/);
+    // Also on a Cancel, which lists every room.
+    const cancelled = booking({ cancelled: true, rooms: [{ ...roomOne, cancelled: true, adults: 0 }], roomsTotalCents: 0, touristTaxCents: 0 });
+    expect(() => build(cancelled, "Cancel")).toThrow(/no adults/);
+  });
+
+  it("refuses a Modify whose rooms are all cancelled (that is a Cancel)", () => {
+    const allCancelled = booking({ rooms: [{ ...roomOne, cancelled: true }, { ...roomTwo, cancelled: true }], roomsTotalCents: 0, touristTaxCents: 0 });
+    expect(() => build(allCancelled, "Modify")).toThrow(/all cancelled/);
+  });
+
+  it("refuses a Commit or Modify whose room totals differ from the booking's totals", () => {
+    expect(() => build(booking({ roomsTotalCents: 78649 }))).toThrow(/totals/);
+    expect(() => build(booking({ touristTaxCents: 1001 }), "Modify")).toThrow(/totals/);
+    // A Cancel lists the cancelled rooms with their original prices: the booking's totals no longer match, by design.
+    expect(() => build(booking({ cancelled: true, rooms: [{ ...roomOne, cancelled: true }], roomsTotalCents: 0, touristTaxCents: 0 }), "Cancel")).not.toThrow();
+    // So does the Commit of a booking cancelled before SiteMinder ever had it (Commit then Cancel).
+    const cancelledEarly = booking({ cancelled: true, rooms: [{ ...roomOne, cancelled: true }, { ...roomTwo, cancelled: true }], roomsTotalCents: 0, touristTaxCents: 0 });
+    expect(() => build(cancelledEarly, "Commit")).not.toThrow();
   });
 });

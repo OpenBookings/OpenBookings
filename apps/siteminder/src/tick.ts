@@ -3,6 +3,7 @@ import { type AriBatch, MAX_ARI_CHANGES } from "@openbookings/apps-contract";
 import { CORE_TIMEOUT_MS, CoreApiError, coreClient } from "./core-client";
 import type { Queryable } from "./db/migrate";
 import { getPool } from "./db/pool";
+import { type DeliveryCounts, type Post, type ReservationConfig, deliverDue, installationsWithDueDeliveries, reservationPoster } from "./deliver";
 import {
   type PendingMessage,
   headIsDue,
@@ -26,10 +27,17 @@ export type TickDeps = {
   sleep: (ms: number) => Promise<void>;
   /** How often to ask core for booking changes. Unset: the tick does not poll core. */
   pollSeconds?: number;
+  /** SiteMinder's reservation endpoint. Unset: the tick does not deliver bookings. */
+  post?: Post;
+  /** RequestorID and credentials for SiteMinder; from the environment when unset. */
+  reservation?: ReservationConfig;
 };
 
-/** `inboxFailed` counts messages whose send failed in this tick, whether retried later or given up. */
-export type TickResult = { inboxApplied: number; inboxFailed: number };
+/**
+ * `inboxFailed` counts messages whose send failed in this tick, whether retried later or given up. `delivery`
+ * (when the tick delivers) counts bookings that ended delivered, retrying or needing attention in this tick.
+ */
+export type TickResult = { inboxApplied: number; inboxFailed: number; delivery?: DeliveryCounts };
 
 /** Nights one POST may expand to in core (sum over its changes of the days from..to), next to MAX_ARI_CHANGES. */
 export const MAX_BATCH_NIGHTS = 50_000;
@@ -44,7 +52,14 @@ const LEASE_MS = CORE_TIMEOUT_MS + 60_000;
 const MESSAGES_PER_ROUND = 200;
 
 export function defaultTickDeps(): TickDeps {
-  return { db: getPool(), client: (inst) => coreClient(inst), now: () => new Date(), sleep: (ms) => Bun.sleep(ms), pollSeconds: env.pollSeconds };
+  return {
+    db: getPool(),
+    client: (inst) => coreClient(inst),
+    now: () => new Date(),
+    sleep: (ms) => Bun.sleep(ms),
+    pollSeconds: env.pollSeconds,
+    post: reservationPoster(() => env.reservationUrl),
+  };
 }
 
 /** Something a person must look at. The app has no Sentry SDK (nor does support-bot): the error/warning log line is the alert. */
@@ -232,6 +247,20 @@ async function poll(deps: TickDeps, inst: AppInstallation, token: string, budget
   }
 }
 
+const renewLeaseFor = (deps: TickDeps, installationId: string, token: string, holdMs: number) =>
+  renewLease(deps.db, installationId, token, new Date(deps.now().getTime() + holdMs + LEASE_MS));
+
+/** Bookings out to SiteMinder under the installation's lease, renewed before each call out and each retry wait. */
+async function deliver(deps: TickDeps, inst: AppInstallation, token: string, budget: Budget, counts: TickResult): Promise<void> {
+  const post = deps.post;
+  if (!post || !counts.delivery) return;
+  const renewLease = (holdMs: number) => renewLeaseFor(deps, inst.id, token, holdMs);
+  const done = await deliverDue({ ...deps, post }, { budgetMs: budget.left(), installationId: inst.id, renewLease });
+  counts.delivery.delivered += done.delivered;
+  counts.delivery.retrying += done.retrying;
+  counts.delivery.needsAttention += done.needsAttention;
+}
+
 async function processInstallation(deps: TickDeps, inst: AppInstallation, budget: Budget, counts: TickResult, polling: boolean): Promise<void> {
   for (;;) {
     const token = await claimLease(deps.db, inst.id, deps.now());
@@ -242,6 +271,7 @@ async function processInstallation(deps: TickDeps, inst: AppInstallation, budget
         polling = false; // the look-again loop below is for inbox messages only
       }
       await drain(deps, inst, token, budget, counts);
+      await deliver(deps, inst, token, budget, counts);
     } finally {
       await releaseLease(deps.db, inst.id, token);
     }
@@ -252,17 +282,21 @@ async function processInstallation(deps: TickDeps, inst: AppInstallation, budget
 
 /**
  * All background work, idempotent and safe to run concurrently. Inbound: each active installation's unprocessed
- * messages (or only `installationId`'s), in arrival order, merged into batches and written to core. Installations
- * run in parallel; within one, a lease keeps a single tick at work. `budgetMs` bounds when new work may start.
+ * messages (or only `installationId`'s), in arrival order, merged into batches and written to core. Outbound
+ * (with `post`): booking changes polled from core, then due bookings delivered to SiteMinder and their state
+ * reported to core. Installations run in parallel; within one, a lease keeps a single tick at work. `budgetMs`
+ * bounds when new work may start.
  */
 export async function tick(deps: TickDeps, i: { installationId?: string; budgetMs?: number } = {}): Promise<TickResult> {
-  const counts: TickResult = { inboxApplied: 0, inboxFailed: 0 };
+  const counts: TickResult = { inboxApplied: 0, inboxFailed: 0, ...(deps.post ? { delivery: { delivered: 0, retrying: 0, needsAttention: 0 } } : {}) };
   const start = deps.now().getTime();
   const budgetMs = i.budgetMs ?? DEFAULT_BUDGET_MS;
   const budget: Budget = { left: () => budgetMs - (deps.now().getTime() - start) };
 
   const active = await activeInstallations(deps.db);
   const pending = i.installationId ? new Set([i.installationId]) : await installationsWithPending(deps.db);
+  // Due deliveries count as pending work, so retries and unsent reports go out between polls too.
+  if (deps.post && !i.installationId) for (const id of await installationsWithDueDeliveries(deps.db, deps.now())) pending.add(id);
   // Polling: every installation whose last poll is old enough, and the requested one right away (the doorbell).
   const polls = deps.pollSeconds === undefined ? new Set<string>() : await dueForPoll(deps.db, deps.now(), deps.pollSeconds);
   if (deps.pollSeconds !== undefined && i.installationId) polls.add(i.installationId);

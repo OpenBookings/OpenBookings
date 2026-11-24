@@ -64,18 +64,24 @@ describe("nextMessage", () => {
 
 describe("afterResult", () => {
   test("success resets attempts and delivers when nothing newer is pending", () => {
-    const out = afterResult(row({ attempts: 3, status: "sending" }), "Commit", { ok: true });
+    const out = afterResult(row({ attempts: 3, status: "sending" }), "Commit", { ok: true }, 1);
     expect(out).toEqual({ acked: "committed", ackedVersion: 1, attempts: 0, status: "delivered", retryInSeconds: null });
   });
   test("Modify and Cancel success", () => {
     const m = row({ acked: "committed", ackedVersion: 1, latest: booking(2), latestVersion: 2 });
-    expect(afterResult(m, "Modify", { ok: true })).toMatchObject({ acked: "committed", ackedVersion: 2, status: "delivered" });
+    expect(afterResult(m, "Modify", { ok: true }, 2)).toMatchObject({ acked: "committed", ackedVersion: 2, status: "delivered" });
     const c = row({ acked: "committed", ackedVersion: 1, latest: booking(2, { cancelled: true }), latestVersion: 2 });
-    expect(afterResult(c, "Cancel", { ok: true })).toMatchObject({ acked: "cancelled", ackedVersion: 2, status: "delivered" });
+    expect(afterResult(c, "Cancel", { ok: true }, 2)).toMatchObject({ acked: "cancelled", ackedVersion: 2, status: "delivered" });
   });
   test("sent an older version than latest -> waiting, acked at the sent version", () => {
     const fresh = row({ latest: booking(4), latestVersion: 4, status: "sending" });
     expect(afterResult(fresh, "Commit", { ok: true }, 2)).toEqual({ acked: "committed", ackedVersion: 2, attempts: 0, status: "waiting", retryInSeconds: null });
+  });
+  test("Modify of v2 succeeds while v4 is the latest -> acked at 2, waiting (v4 still to send)", () => {
+    const fresh = row({ acked: "committed", ackedVersion: 1, latest: booking(4), latestVersion: 4, status: "sending" });
+    const out = afterResult(fresh, "Modify", { ok: true }, 2);
+    expect(out).toEqual({ acked: "committed", ackedVersion: 2, attempts: 0, status: "waiting", retryInSeconds: null });
+    expect(nextMessage({ ...fresh, ...out })).toEqual({ send: "Modify", booking: fresh.latest });
   });
   test("three changes while undelivered: Commit then one Modify with the latest version", () => {
     // The Commit is built from the latest booking; if newer versions landed during the send, one Modify follows.
@@ -88,7 +94,7 @@ describe("afterResult", () => {
   });
   test("Commit of an already-cancelled booking -> waiting, then Cancel", () => {
     const r = row({ latest: booking(2, { cancelled: true }), latestVersion: 2, status: "sending" });
-    const out = afterResult(r, "Commit", { ok: true });
+    const out = afterResult(r, "Commit", { ok: true }, 2);
     expect(out.status).toBe("waiting");
     expect(nextMessage({ ...r, ...out })).toMatchObject({ send: "Cancel" });
   });
@@ -102,7 +108,7 @@ describe("afterResult", () => {
     expect(RETRY_SECONDS).toEqual([5, 15, 30, 60]);
     const seen: Array<number | null> = [];
     for (let attempts = 0; attempts < 5; attempts++) {
-      const out = afterResult(row({ attempts, status: "sending" }), "Commit", fail());
+      const out = afterResult(row({ attempts, status: "sending" }), "Commit", fail(), 1);
       expect(out.attempts).toBe(attempts + 1);
       seen.push(out.retryInSeconds);
       expect(out.status).toBe(attempts < 4 ? "retrying" : "needs_attention");
@@ -110,10 +116,10 @@ describe("afterResult", () => {
     expect(seen).toEqual([5, 15, 30, 60, null]);
   });
   test("permanent failure -> needs_attention at once; a failed Commit leaves acked none", () => {
-    expect(afterResult(row({ status: "sending" }), "Commit", fail(true))).toEqual({ acked: "none", ackedVersion: null, attempts: 1, status: "needs_attention", retryInSeconds: null });
+    expect(afterResult(row({ status: "sending" }), "Commit", fail(true), 1)).toEqual({ acked: "none", ackedVersion: null, attempts: 1, status: "needs_attention", retryInSeconds: null });
   });
   test("failure keeps the acked state", () => {
     const r = row({ acked: "committed", ackedVersion: 1, latest: booking(2), latestVersion: 2 });
-    expect(afterResult(r, "Modify", fail())).toMatchObject({ acked: "committed", ackedVersion: 1, status: "retrying", retryInSeconds: 5 });
+    expect(afterResult(r, "Modify", fail(), 2)).toMatchObject({ acked: "committed", ackedVersion: 1, status: "retrying", retryInSeconds: 5 });
   });
 });
