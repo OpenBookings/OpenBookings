@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { namesFromApple, namesFromGoogle, splitFullName, appleProfileNames } from "./names";
+import { namesFromApple, namesFromGoogle, splitFullName } from "./names";
 
 describe("splitFullName", () => {
   test("last token is the last name, the rest the first name", () => {
@@ -53,15 +53,5 @@ describe("namesFromApple", () => {
     expect(namesFromApple({})).toBeNull();
     expect(namesFromApple({ name: {} })).toBeNull();
     expect(namesFromApple({ name: { firstName: " ", lastName: "" } })).toBeNull();
-  });
-});
-
-describe("appleProfileNames (better-auth hands mapProfileToUser a joined name string)", () => {
-  test("a joined name is split", () => {
-    expect(appleProfileNames({ name: "Anna de Vries" })).toEqual({ firstName: "Anna de", lastName: "Vries" });
-  });
-  test("an empty or missing name is null", () => {
-    expect(appleProfileNames({ name: "" })).toBeNull();
-    expect(appleProfileNames({})).toBeNull();
   });
 });

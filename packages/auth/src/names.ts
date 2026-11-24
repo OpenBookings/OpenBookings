@@ -40,13 +40,3 @@ export function namesFromApple(p: { name?: { firstName?: string; lastName?: stri
   const lastName = clean(p?.name?.lastName);
   return firstName || lastName ? { firstName, lastName } : null;
 }
-
-/**
- * Better Auth's Apple provider joins `token.user.name` into one `name` string
- * before it calls `mapProfileToUser` (core/dist/social-providers/apple.mjs),
- * so the first/last pair is gone by then; split the string again.
- */
-export function appleProfileNames(profile: { name?: unknown }): Names | null {
-  const split = splitFullName(profile.name);
-  return split.firstName || split.lastName ? split : null;
-}
