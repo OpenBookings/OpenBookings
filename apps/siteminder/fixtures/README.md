@@ -29,6 +29,8 @@ Copied verbatim from the SiteConnect docs (https://developer.siteminder.com/site
 | `rates-rs-error-included-occupancy-expecting.xml` | reference_rates: Rates > 2. Confirmation Response > Invalid Included Occupancy tab (second block, 'expecting 2') |
 | `rates-rs-error-number-of-adults.xml` | reference_rates: Rates > 2. Confirmation Response > Invalid number of adults tab (first block) |
 | `rates-rs-error-number-of-adults-expecting.xml` | reference_rates: Rates > 2. Confirmation Response > Invalid number of adults tab (second block, 'expecting 5') |
+| `reservation-rq-max-content.xml` | reference_reservations: Reservations > Reservation XML Samples > Maximum Content XML (full SOAP envelope) |
+| `reservation-rq-deposit-only.xml` | reference_reservations: Reservations > DepositPayments > Deposit Only tab |
 | `reservation-rs-success.xml` | reference_reservations: Reservations > 2. Confirmation Response > Success tab |
 | `reservation-rs-error.xml` | reference_reservations: Reservations > 2. Confirmation Response > Error tab |
 | `error-handling-sample-error-response.xml` | guides_error-handling: Error Handling > Responses to SiteMinder > Sample Error Response (full SOAP envelope) |

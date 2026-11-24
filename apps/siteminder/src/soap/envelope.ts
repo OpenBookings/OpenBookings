@@ -8,9 +8,9 @@ export type { OtaError } from "./errors";
 
 export const MAX_BODY_BYTES = 5_000_000;
 
-const OTA_NAMESPACE = "http://www.opentravel.org/OTA/2003/05";
-const SOAP_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/";
-const PASSWORD_TEXT = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText";
+export const OTA_NAMESPACE = "http://www.opentravel.org/OTA/2003/05";
+export const SOAP_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/";
+export const PASSWORD_TEXT = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText";
 
 const KINDS = ["HotelAvailRQ", "HotelAvailNotifRQ", "HotelRateAmountNotifRQ"] as const;
 type Kind = (typeof KINDS)[number];
@@ -90,6 +90,9 @@ function checkedPayload(payload: Record<string, unknown> | undefined): Record<st
   return payload ?? {};
 }
 
+/** ISO 8601 in UTC without milliseconds, as in SiteMinder's samples. */
+export const otaTimeStamp = (now: Date): string => now.toISOString().replace(/\.\d{3}Z$/, "Z");
+
 export function buildResponse(
   kind: OtaRequest["kind"],
   echoToken: string,
@@ -111,7 +114,7 @@ export function buildResponse(
   const message = toXml(root, {
     "@_xmlns": OTA_NAMESPACE,
     "@_EchoToken": echoToken,
-    "@_TimeStamp": now.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    "@_TimeStamp": otaTimeStamp(now),
     "@_Version": "1.0",
     ...inner,
   });
