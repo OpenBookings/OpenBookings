@@ -62,7 +62,7 @@ function toInstallation(row: InstallationRow): Installation {
 }
 
 /** Bookings that still matter to the hotel: confirmed or checked in, check-out today or later (property time). */
-const upcomingBookings = (propertyParam: string, todayParam: string) => `
+export const upcomingBookings = (propertyParam: string, todayParam: string) => `
   SELECT b.id
     FROM bookings b
    WHERE b.hotel_id = ${propertyParam}::uuid

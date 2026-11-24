@@ -15,6 +15,8 @@
 --   booking_events.txid, .seq
 --                     a total order for the booking-event feed: events of one
 --                     transaction share a txid, seq breaks ties across inserts.
+--                     A delivery-relevant event puts the booking's delivered
+--                     row back to pending (trigger app_delivery_booking_changed).
 --
 -- Privileges follow 0049/0057: ob_system (BYPASSRLS) reads and writes it all;
 -- ob_app gets the installation and delivery tables behind property policies.
@@ -179,11 +181,44 @@ ALTER TABLE booking_events ADD COLUMN IF NOT EXISTS txid xid8 NOT NULL DEFAULT p
 ALTER TABLE booking_events ADD COLUMN IF NOT EXISTS seq bigint GENERATED ALWAYS AS IDENTITY;
 CREATE INDEX IF NOT EXISTS idx_booking_events_txid_seq ON booking_events (txid, seq);
 
+-- A booking change the app must hear about un-settles a delivered booking at
+-- once, in the writer's own transaction: the availability rule
+-- (packages/db/src/apps/managed-sql.ts) treats only `delivered` rows as
+-- included in the app's limit, so a reopened or changed booking counts again
+-- until the app reports the change delivered. `not_sent` rows (and rows not
+-- delivered yet) are left alone. The kinds match DELIVERY_EVENT_KINDS in
+-- packages/db/src/apps/feed.ts: check-in, no-show and refund events are not
+-- sent to the channel.
+--
+-- SECURITY DEFINER with a pinned search_path (as 0057's triggers): events are
+-- written by roles that may not touch app_booking_delivery (a guest through
+-- ob_app's row-level security, an admin as ob_admin_write).
+CREATE OR REPLACE FUNCTION app.app_delivery_booking_changed() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  UPDATE app_booking_delivery
+     SET status = 'pending', updated_at = now()
+   WHERE booking_id = NEW.booking_id AND status = 'delivered';
+  RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS app_delivery_booking_changed ON booking_events;
+CREATE TRIGGER app_delivery_booking_changed AFTER INSERT ON booking_events
+  FOR EACH ROW
+  WHEN (NEW.kind IN ('confirmed', 'rooms_cancelled', 'early_departure', 'forced_status',
+                     'forced_uncancel', 'forced_cancel', 'forced_markers_cleared'))
+  EXECUTE FUNCTION app.app_delivery_booking_changed();
+
 -- ---------------------------------------------------------------------------
 -- Privileges and row-level security (same form as 0049/0057)
 -- ---------------------------------------------------------------------------
 
 REVOKE ALL ON FUNCTION app.channel_code_default(), app.channel_code_immutable() FROM PUBLIC;
+-- A trigger function runs whoever inserts; nobody calls it directly.
+REVOKE ALL ON FUNCTION app.app_delivery_booking_changed() FROM PUBLIC;
 
 DO $$
 DECLARE r text;
