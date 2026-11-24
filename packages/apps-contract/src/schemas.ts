@@ -127,8 +127,11 @@ export const AppBookingRoomSchema = z.object({
   cots: count,
   extraBeds: count,
   cancelled: z.boolean(),
+  /** The nights stayed or to stay: after an early departure, the later nights are left out. */
   nights: z.array(z.object({ date: IsoDateSchema, priceCents: cents })),
+  /** Tourist tax for those nights. */
   touristTaxCents: cents,
+  /** Cots and extra beds, paid at the hotel, for those nights. */
   payAtPropertyCents: cents,
 });
 export type AppBookingRoom = z.infer<typeof AppBookingRoomSchema>;
@@ -144,8 +147,15 @@ export const AppBookingSchema = z.object({
   checkOut: IsoDateSchema,
   booker: AppNameSchema,
   rooms: z.array(AppBookingRoomSchema),
+  /** Room price incl. VAT of the rooms not cancelled, nights after an early departure left out. */
   roomsTotalCents: cents,
+  /** Tourist tax of the rooms not cancelled, for the nights stayed. */
   touristTaxCents: cents,
+  /**
+   * The commission OpenBookings keeps on this booking now: the fee charged,
+   * less what went back with refunds (in proportion to the room price
+   * refunded through OpenBookings, or to the whole payment for a lost dispute).
+   */
   commissionCents: cents,
 });
 export type AppBooking = z.infer<typeof AppBookingSchema>;
@@ -162,8 +172,15 @@ export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
 
 export const DeliveryReportSchema = z.object({
   status: DeliveryStatusSchema,
-  acknowledgedAt: z.string().nullable(),
+  /** When the channel acknowledged the latest successful message (ISO 8601 with Z or an offset). */
+  acknowledgedAt: z.iso.datetime({ offset: true }).nullable(),
   detail: z.string().nullable(),
+  /**
+   * The `AppBooking.version` this report is about. A `delivered` report for an
+   * older version than core's current one leaves the booking pending: the
+   * channel has not been told the newer change yet.
+   */
+  version: count,
 });
 export type DeliveryReport = z.infer<typeof DeliveryReportSchema>;
 

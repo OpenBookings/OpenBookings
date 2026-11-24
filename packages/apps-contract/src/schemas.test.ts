@@ -65,8 +65,19 @@ describe("other schemas", () => {
     expect(AriResultSchema.safeParse({ ok: false, error: "x" }).success).toBe(false);
   });
   test("DeliveryReport", () => {
-    expect(DeliveryReportSchema.safeParse({ status: "retrying", acknowledgedAt: null, detail: null }).success).toBe(true);
-    expect(DeliveryReportSchema.safeParse({ status: "nope", acknowledgedAt: null, detail: null }).success).toBe(false);
+    const ok = (r: unknown) => DeliveryReportSchema.safeParse(r).success;
+    expect(ok({ status: "retrying", acknowledgedAt: null, detail: null, version: 3 })).toBe(true);
+    expect(ok({ status: "delivered", acknowledgedAt: "2031-01-01T10:00:00Z", detail: null, version: 0 })).toBe(true);
+    expect(ok({ status: "delivered", acknowledgedAt: "2031-01-01T10:00:00.123+01:00", detail: null, version: 7 })).toBe(true);
+    expect(ok({ status: "nope", acknowledgedAt: null, detail: null, version: 1 })).toBe(false);
+    // The booking version the report is about is required, a whole number, never negative.
+    expect(ok({ status: "delivered", acknowledgedAt: null, detail: null })).toBe(false);
+    expect(ok({ status: "delivered", acknowledgedAt: null, detail: null, version: -1 })).toBe(false);
+    expect(ok({ status: "delivered", acknowledgedAt: null, detail: null, version: 1.5 })).toBe(false);
+    // A malformed or zone-less timestamp is refused here (a 400), not by the database.
+    for (const acknowledgedAt of ["yesterday", "2031-01-01", "2031-01-01T10:00:00", "2031-13-01T10:00:00Z"]) {
+      expect(ok({ status: "delivered", acknowledgedAt, detail: null, version: 1 })).toBe(false);
+    }
   });
   test("InstallationRegistration", () => {
     expect(InstallationRegistrationSchema.safeParse({ installationId: "i", propertyCode: "p", propertyName: "n", apiKey: "k", coreBaseUrl: "https://x" }).success).toBe(true);
