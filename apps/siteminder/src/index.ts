@@ -3,6 +3,7 @@ import { InstallationRegistrationSchema } from "@openbookings/apps-contract";
 import { Hono, type Context, type Next } from "hono";
 import { getPool } from "./db/pool";
 import type { Queryable } from "./db/migrate";
+import { type DoorbellDeps, defaultDoorbellDeps, handleDoorbell } from "./doorbell";
 import { assertRequiredEnv, env } from "./env";
 import { inboxHealth } from "./inbox";
 import { removeInstallation, upsertInstallation } from "./installations";
@@ -31,6 +32,7 @@ export function createApp(
   getDb: () => Queryable = getPool,
   soapDeps: SoapDeps = defaultSoapDeps,
   tickDeps: () => TickDeps = defaultTickDeps,
+  doorbellDeps: DoorbellDeps = defaultDoorbellDeps,
 ) {
   const app = new Hono();
 
@@ -69,6 +71,8 @@ export function createApp(
   });
 
   app.post("/soap", (c) => handleSoap(c, getDb, soapDeps));
+
+  app.post("/doorbell", (c) => handleDoorbell(c, getDb, tickDeps, doorbellDeps));
 
   app.post("/tick", async (c) => {
     if (!hasBearer(c.req.header("authorization"), env.tickSecret)) return c.json({ error: "unauthorized" }, 401);

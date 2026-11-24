@@ -68,6 +68,11 @@ export async function markPolling(db: Queryable, installationId: string, now: Da
   await db.query(`UPDATE siteminder.installations SET last_polled_at = $2 WHERE id = $1`, [installationId, now.toISOString()]);
 }
 
+/** Make the installation due for a poll at once (a doorbell found its lease taken; the holder polls again). */
+export async function markDueForPoll(db: Queryable, installationId: string): Promise<void> {
+  await db.query(`UPDATE siteminder.installations SET last_polled_at = NULL WHERE id = $1`, [installationId]);
+}
+
 /** Active installations whose last poll is at least `pollSeconds` ago (or that were never polled). */
 export async function dueForPoll(db: Queryable, now: Date, pollSeconds: number): Promise<Set<string>> {
   const { rows } = await db.query<{ id: string }>(

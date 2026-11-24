@@ -25,7 +25,7 @@ import {
 } from "./inbox";
 import { env } from "./env";
 import { type AppInstallation, activeInstallations } from "./installations";
-import { dueForPoll } from "./outbox-store";
+import { dueForPoll, markDueForPoll } from "./outbox-store";
 import { dayNumber } from "./ota/status-control";
 import { pollInstallation } from "./poll";
 import { ALERT_AFTER_FAILURES, retryDelaySeconds } from "./retry";
@@ -265,22 +265,30 @@ async function deliver(deps: TickDeps, inst: AppInstallation, token: string, bud
   counts.delivery.needsAttention += done.needsAttention;
 }
 
-async function processInstallation(deps: TickDeps, inst: AppInstallation, budget: Budget, counts: TickResult, polling: boolean): Promise<void> {
+async function processInstallation(deps: TickDeps, inst: AppInstallation, budget: Budget, counts: TickResult, polling: boolean, requested: boolean): Promise<void> {
   for (;;) {
     const token = await claimLease(deps.db, inst.id, deps.now());
-    if (!token) return; // another tick is on it
+    if (!token) {
+      // Another tick is on it. A poll asked for by name (the doorbell) must not wait a whole poll interval: mark
+      // the installation due, and the lease holder polls again before it leaves. Scheduled ticks never do this.
+      if (requested && polling) await markDueForPoll(deps.db, inst.id);
+      return;
+    }
     try {
       if (polling) {
         await poll(deps, inst, token, budget);
-        polling = false; // the look-again loop below is for inbox messages only
+        polling = false;
       }
       await drain(deps, inst, token, budget, counts);
       await deliver(deps, inst, token, budget, counts);
     } finally {
       await releaseLease(deps.db, inst.id, token);
     }
-    // A message stored while we held the lease had its own tick turned away: look again before leaving.
-    if (budget.left() <= 0 || !(await headIsDue(deps.db, inst.id, deps.now()))) return;
+    // Work that had its own tick turned away while we held the lease: a message stored meanwhile, or a doorbell
+    // that marked the installation due for a poll. Look again before leaving.
+    if (budget.left() <= 0) return;
+    polling = deps.pollSeconds !== undefined && (await dueForPoll(deps.db, deps.now(), deps.pollSeconds)).has(inst.id);
+    if (!polling && !(await headIsDue(deps.db, inst.id, deps.now()))) return;
   }
 }
 
@@ -309,7 +317,7 @@ export async function tick(deps: TickDeps, i: { installationId?: string; budgetM
       .filter((inst) => pending.has(inst.id) || polls.has(inst.id))
       .map(async (inst) => {
         try {
-          await processInstallation(deps, inst, budget, counts, polls.has(inst.id));
+          await processInstallation(deps, inst, budget, counts, polls.has(inst.id), i.installationId === inst.id);
         } catch (e) {
           alert("error", "tick failed for an installation", { installationId: inst.id, propertyCode: inst.propertyCode, error: errorText(e) });
         }

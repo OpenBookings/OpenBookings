@@ -12,7 +12,7 @@
       "entry": ["scripts/**/*.ts"]
     },
     "apps/siteminder": {
-      "ignoreDependencies": ["@upstash/qstash", "zod"]
+      "ignoreDependencies": ["zod"]
     },
     "packages/*": {
       "entry": ["scripts/**/*.ts"]

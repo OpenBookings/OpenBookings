@@ -309,6 +309,39 @@ describe.skipIf(skipDbTests)("tick (rolled back)", () => {
     });
   });
 
+  it("a doorbell turned away by a held lease is polled by the holder before it leaves, a scheduled tick never marks anything due", async () => {
+    await withTestDb(async (connection) => {
+      const db = serialized(connection);
+      await upsertInstallation(db, reg);
+      const clock = fakeClock();
+      // Polled just now: nothing is due for the next 5 minutes.
+      await db.query(`UPDATE siteminder.installations SET last_polled_at = $2 WHERE id = $1`, [reg.installationId, T0.toISOString()]);
+      await queue(db, { inventory: [inv("R1")] }, T0);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let entered!: () => void;
+      const inFlight = new Promise<void>((resolve) => { entered = resolve; });
+      let polls = 0;
+      const client = () =>
+        ({
+          writeAri: async (): Promise<AriResult> => { entered(); await gate; return { ok: true, nights: 1 }; },
+          changes: async (cursor: string | null) => { polls += 1; return { bookings: [], nextCursor: cursor ?? "c0", hasMore: false }; },
+        }) as unknown as CoreClient;
+      const d: TickDeps = { db, client, now: clock.now, sleep: clock.sleep, pollSeconds: 300 };
+
+      const holder = tick(d, SHORT); // holds the lease, busy sending
+      await inFlight;
+      await tick(d, SHORT); // scheduled: skipped, must not mark the installation due
+      expect((await db.query<{ last_polled_at: Date | null }>(`SELECT last_polled_at FROM siteminder.installations WHERE id = $1`, [reg.installationId])).rows[0]!.last_polled_at).not.toBeNull();
+      await tick(d, { ...SHORT, installationId: reg.installationId }); // the doorbell: skipped, marks it due
+      expect((await db.query<{ last_polled_at: Date | null }>(`SELECT last_polled_at FROM siteminder.installations WHERE id = $1`, [reg.installationId])).rows[0]!.last_polled_at).toBeNull();
+      expect(polls).toBe(0);
+      release();
+      await holder;
+      expect(polls).toBe(1); // polled again by the holder, with no wait for the interval
+    });
+  });
+
   it("warns when the oldest unprocessed message is over 10 minutes old", async () => {
     await withTestDb(async (db) => {
       clearLogs();
