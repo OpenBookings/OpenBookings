@@ -143,4 +143,29 @@ describeWithDb("app installations", () => {
     await db.query(`INSERT INTO app_booking_delivery (installation_id, booking_id, status) VALUES ($1, $2, 'delivered')`, [installation.id, a]);
     expect(await upcomingUndeliveredCount(db, ids.propertyId, "2031-03-01")).toBe(1);
   });
+
+  test("acknowledged bookings keep their row on reconnect and are not counted, even when pending or needs_attention", async () => {
+    const ids = await seedProperty(db);
+    const first = await connectApp(db, { propertyId: ids.propertyId, appKey: "siteminder", userId, sendUpcoming: true, now });
+    const pending = await confirmed(ids, "2031-06-10");
+    const attention = await confirmed(ids, "2031-07-10");
+    const unacked = await confirmed(ids, "2031-08-10");
+    await db.query(
+      `INSERT INTO app_booking_delivery (installation_id, booking_id, status, acknowledged_at) VALUES
+         ($1, $2, 'pending', now()), ($1, $3, 'needs_attention', now())`,
+      [first.installation.id, pending, attention],
+    );
+    await db.query(`INSERT INTO app_booking_delivery (installation_id, booking_id, status) VALUES ($1, $2, 'retrying')`, [
+      first.installation.id,
+      unacked,
+    ]);
+    expect(await upcomingUndeliveredCount(db, ids.propertyId, "2031-03-01")).toBe(1);
+    await disconnectApp(db, { installationId: first.installation.id, now });
+    const second = await connectApp(db, { propertyId: ids.propertyId, appKey: "siteminder", userId, sendUpcoming: false, now });
+    const byBooking = new Map((await deliveryStatuses(second.installation.id)).map((r) => [r.booking_id, r.status]));
+    expect(byBooking.get(pending)).toBe("pending");
+    expect(byBooking.get(attention)).toBe("needs_attention");
+    expect(byBooking.get(unacked)).toBe("not_sent");
+    expect(second.notSentCount).toBe(1);
+  });
 });

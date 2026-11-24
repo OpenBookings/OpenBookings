@@ -80,7 +80,11 @@ const upcomingBookings = (propertyParam: string, todayParam: string) => `
  *
  * A disconnected installation of the same app is reused (same id), so delivery
  * rows and acknowledgements survive a reconnect. With `sendUpcoming` false,
- * every upcoming booking without a `delivered` row is marked `not_sent`.
+ * every upcoming booking the app has not acknowledged is marked `not_sent`.
+ * A booking SiteMinder acknowledged keeps its row whatever its status (a later
+ * change leaves it pending/retrying with acknowledged_at set) so the Modify or
+ * Cancel still goes out. A not-yet-acknowledged pending/retrying/needs_attention
+ * row flips to `not_sent`: the hotel unticked sending, so it counts as not sent.
  */
 export async function connectApp(
   db: Queryable,
@@ -138,7 +142,7 @@ export async function connectApp(
          FROM (${upcomingBookings("$2", "$4")}) u
        ON CONFLICT (installation_id, booking_id) DO UPDATE
           SET status = 'not_sent', detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at
-        WHERE app_booking_delivery.status <> 'delivered'
+        WHERE app_booking_delivery.status <> 'delivered' AND app_booking_delivery.acknowledged_at IS NULL
        RETURNING booking_id`,
       [row.id, i.propertyId, i.now, today],
     );
@@ -186,7 +190,7 @@ export async function upcomingUndeliveredCount(db: Queryable, propertyId: string
          FROM (${upcomingBookings("$1", "$2")}) u
         WHERE NOT EXISTS (
           SELECT 1 FROM app_booking_delivery d
-           WHERE d.booking_id = u.id AND d.status = 'delivered'
+           WHERE d.booking_id = u.id AND (d.status = 'delivered' OR d.acknowledged_at IS NOT NULL)
         )`,
       [propertyId, today],
     )
