@@ -1,0 +1,119 @@
+import { describe, expect, test } from "bun:test";
+import type { AppBooking } from "@openbookings/apps-contract";
+import { afterResult, nextMessage, RETRY_SECONDS, type OutboxRow } from "./outbox";
+
+const booking = (version: number, over: Partial<AppBooking> = {}, roomCancelled = false): AppBooking => ({
+  bookingId: "b1", reference: "OB-B7B0-2A1C", version, cancelled: false, createdAt: "2031-01-01T10:00:00Z", modifiedAt: "2031-01-01T10:00:00Z",
+  checkIn: "2031-05-01", checkOut: "2031-05-02", booker: { givenName: "A", surname: "B" },
+  rooms: [{ reservationId: "r1", roomCode: "DBL", ratePlanCode: "BAR", checkIn: "2031-05-01", checkOut: "2031-05-02", adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, cancelled: roomCancelled, nights: [{ date: "2031-05-01", priceCents: 18650 }], touristTaxCents: 300, payAtPropertyCents: 0 }],
+  roomsTotalCents: 18650, touristTaxCents: 300, commissionCents: 839, ...over,
+});
+const row = (over: Partial<OutboxRow> = {}): OutboxRow => ({ acked: "none", ackedVersion: null, latest: booking(1), latestVersion: 1, status: "waiting", attempts: 0, ...over });
+const fail = (permanent = false) => ({ ok: false as const, permanent, error: "boom" });
+
+describe("nextMessage", () => {
+  test("not_sent -> none", () => {
+    expect(nextMessage(row({ status: "not_sent" }))).toEqual({ send: "none" });
+  });
+  test("never acknowledged -> Commit with the latest booking", () => {
+    const r = row({ latest: booking(3), latestVersion: 3 });
+    expect(nextMessage(r)).toEqual({ send: "Commit", booking: r.latest });
+  });
+  test("never acknowledged and already cancelled -> still Commit first", () => {
+    expect(nextMessage(row({ latest: booking(2, { cancelled: true }), latestVersion: 2 }))).toMatchObject({ send: "Commit" });
+  });
+  test("committed + newer version -> Modify with the latest booking", () => {
+    const r = row({ acked: "committed", ackedVersion: 1, latest: booking(4), latestVersion: 4 });
+    expect(nextMessage(r)).toEqual({ send: "Modify", booking: r.latest });
+  });
+  test("committed + same version -> none", () => {
+    expect(nextMessage(row({ acked: "committed", ackedVersion: 2, latest: booking(2), latestVersion: 2 }))).toEqual({ send: "none" });
+  });
+  test("committed with unknown acked version -> Modify", () => {
+    expect(nextMessage(row({ acked: "committed", ackedVersion: null }))).toMatchObject({ send: "Modify" });
+  });
+  test("committed + latest cancelled -> Cancel, not Modify", () => {
+    const r = row({ acked: "committed", ackedVersion: 1, latest: booking(2, { cancelled: true }), latestVersion: 2 });
+    expect(nextMessage(r)).toEqual({ send: "Cancel", booking: r.latest });
+  });
+  test("every room cancelled but cancelled=false -> Cancel", () => {
+    const r = row({ acked: "committed", ackedVersion: 1, latest: booking(2, {}, true), latestVersion: 2 });
+    expect(nextMessage(r)).toMatchObject({ send: "Cancel" });
+  });
+  test("committed at the cancelled version (Commit of a cancelled booking acked) -> Cancel", () => {
+    const r = row({ acked: "committed", ackedVersion: 2, latest: booking(2, { cancelled: true }), latestVersion: 2 });
+    expect(nextMessage(r)).toMatchObject({ send: "Cancel" });
+  });
+  test("some rooms cancelled -> Modify", () => {
+    const b = booking(2);
+    b.rooms = [{ ...b.rooms[0]!, cancelled: true }, { ...b.rooms[0]!, reservationId: "r2" }];
+    expect(nextMessage(row({ acked: "committed", ackedVersion: 1, latest: b, latestVersion: 2 }))).toMatchObject({ send: "Modify" });
+  });
+  test("cancelled + latest cancelled (even newer) -> none", () => {
+    expect(nextMessage(row({ acked: "cancelled", ackedVersion: 2, latest: booking(3, { cancelled: true }), latestVersion: 3 }))).toEqual({ send: "none" });
+  });
+  test("cancelled + reopened -> needs attention, never Commit", () => {
+    expect(nextMessage(row({ acked: "cancelled", ackedVersion: 2, latest: booking(3), latestVersion: 3 }))).toEqual({
+      needsAttention: "reopened after cancellation — tell the hotel",
+    });
+  });
+  test("a needs_attention row still computes what would be sent", () => {
+    expect(nextMessage(row({ status: "needs_attention", attempts: 5 }))).toMatchObject({ send: "Commit" });
+  });
+});
+
+describe("afterResult", () => {
+  test("success resets attempts and delivers when nothing newer is pending", () => {
+    const out = afterResult(row({ attempts: 3, status: "sending" }), "Commit", { ok: true });
+    expect(out).toEqual({ acked: "committed", ackedVersion: 1, attempts: 0, status: "delivered", retryInSeconds: null });
+  });
+  test("Modify and Cancel success", () => {
+    const m = row({ acked: "committed", ackedVersion: 1, latest: booking(2), latestVersion: 2 });
+    expect(afterResult(m, "Modify", { ok: true })).toMatchObject({ acked: "committed", ackedVersion: 2, status: "delivered" });
+    const c = row({ acked: "committed", ackedVersion: 1, latest: booking(2, { cancelled: true }), latestVersion: 2 });
+    expect(afterResult(c, "Cancel", { ok: true })).toMatchObject({ acked: "cancelled", ackedVersion: 2, status: "delivered" });
+  });
+  test("sent an older version than latest -> waiting, acked at the sent version", () => {
+    const fresh = row({ latest: booking(4), latestVersion: 4, status: "sending" });
+    expect(afterResult(fresh, "Commit", { ok: true }, 2)).toEqual({ acked: "committed", ackedVersion: 2, attempts: 0, status: "waiting", retryInSeconds: null });
+  });
+  test("three changes while undelivered: Commit then one Modify with the latest version", () => {
+    // The Commit is built from the latest booking; if newer versions landed during the send, one Modify follows.
+    let r = row({ latest: booking(3), latestVersion: 3, status: "sending" });
+    const out = afterResult(r, "Commit", { ok: true }, 1);
+    r = { ...r, ...out };
+    expect(out.status).toBe("waiting");
+    expect(nextMessage(r)).toEqual({ send: "Modify", booking: r.latest });
+    expect(r.latestVersion).toBe(3);
+  });
+  test("Commit of an already-cancelled booking -> waiting, then Cancel", () => {
+    const r = row({ latest: booking(2, { cancelled: true }), latestVersion: 2, status: "sending" });
+    const out = afterResult(r, "Commit", { ok: true });
+    expect(out.status).toBe("waiting");
+    expect(nextMessage({ ...r, ...out })).toMatchObject({ send: "Cancel" });
+  });
+  test("Cancel sent, then a reopened version arrived -> waiting, next call reports needs attention", () => {
+    const r = row({ acked: "committed", ackedVersion: 1, latest: booking(3), latestVersion: 3 });
+    const out = afterResult(r, "Cancel", { ok: true }, 2);
+    expect(out.status).toBe("waiting");
+    expect(nextMessage({ ...r, ...out })).toHaveProperty("needsAttention");
+  });
+  test("transient failures follow RETRY_SECONDS, the 5th goes to needs_attention", () => {
+    expect(RETRY_SECONDS).toEqual([5, 15, 30, 60]);
+    const seen: Array<number | null> = [];
+    for (let attempts = 0; attempts < 5; attempts++) {
+      const out = afterResult(row({ attempts, status: "sending" }), "Commit", fail());
+      expect(out.attempts).toBe(attempts + 1);
+      seen.push(out.retryInSeconds);
+      expect(out.status).toBe(attempts < 4 ? "retrying" : "needs_attention");
+    }
+    expect(seen).toEqual([5, 15, 30, 60, null]);
+  });
+  test("permanent failure -> needs_attention at once; a failed Commit leaves acked none", () => {
+    expect(afterResult(row({ status: "sending" }), "Commit", fail(true))).toEqual({ acked: "none", ackedVersion: null, attempts: 1, status: "needs_attention", retryInSeconds: null });
+  });
+  test("failure keeps the acked state", () => {
+    const r = row({ acked: "committed", ackedVersion: 1, latest: booking(2), latestVersion: 2 });
+    expect(afterResult(r, "Modify", fail())).toMatchObject({ acked: "committed", ackedVersion: 1, status: "retrying", retryInSeconds: 5 });
+  });
+});
