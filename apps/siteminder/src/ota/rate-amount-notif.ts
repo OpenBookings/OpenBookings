@@ -73,6 +73,34 @@ function rateAmounts(rate: Record<string, unknown>): Amounts | { error: OtaError
   return amounts;
 }
 
+export type IgnoredAmount = { ratePlanCode?: string; start?: string; end?: string; amountAfterTax?: string };
+
+/**
+ * The Single Guest Discount amounts (`NumberOfGuests="1"` next to a plain base) that `rateAmountNotifToChanges`
+ * ignores, for the log. Reads the message as sent; meant for a message that mapped without error.
+ */
+export function ignoredSingleGuestAmounts(body: Record<string, unknown>): IgnoredAmount[] {
+  const container = single(body, "RateAmountMessages");
+  if (!container) return [];
+  return asArray(container.RateAmountMessage)
+    .map(asNode)
+    .flatMap((message) => {
+      const control = single(message, "StatusApplicationControl") ?? {};
+      const ratesNode = single(message, "Rates");
+      const rate = ratesNode && single(ratesNode, "Rate");
+      const bases = (rate && isRecord(rate.BaseByGuestAmts) ? asArray(rate.BaseByGuestAmts.BaseByGuestAmt) : []).map(asNode);
+      if (!bases.some((node) => attr(node, "NumberOfGuests") === undefined)) return [];
+      return bases
+        .filter((node) => attr(node, "NumberOfGuests") === "1")
+        .map((node) => ({
+          ratePlanCode: attr(control, "RatePlanCode"),
+          start: attr(control, "Start"),
+          end: attr(control, "End"),
+          amountAfterTax: attr(node, "AmountAfterTax"),
+        }));
+    });
+}
+
 /** `OTA_HotelRateAmountNotifRQ` → one rate change per message and date span. Pure: codes are checked by the core. */
 export function rateAmountNotifToChanges(body: Record<string, unknown>): { hotelCode: string; rates: RateChange[] } | { error: OtaError } {
   const container = single(body, "RateAmountMessages");

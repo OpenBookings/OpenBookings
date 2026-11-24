@@ -37,3 +37,17 @@ export async function withTestDb<T>(fn: (client: Queryable) => Promise<T>): Prom
     await client.end();
   }
 }
+
+/**
+ * The test client for code that runs queries concurrently (two ticks, a request and its tick): one connection
+ * runs one query at a time, so queue them as a pool would instead of overlapping calls on the client.
+ */
+export function serialized(client: Queryable): Queryable {
+  let last: Promise<unknown> = Promise.resolve();
+  const query = (...args: unknown[]) => {
+    const run = last.then(() => (client.query as (...a: unknown[]) => Promise<unknown>)(...args));
+    last = run.catch(() => undefined);
+    return run;
+  };
+  return { query } as unknown as Queryable;
+}

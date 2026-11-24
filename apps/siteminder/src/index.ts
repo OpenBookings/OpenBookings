@@ -4,12 +4,18 @@ import { Hono, type Context, type Next } from "hono";
 import { getPool } from "./db/pool";
 import type { Queryable } from "./db/migrate";
 import { assertRequiredEnv, env } from "./env";
+import { inboxHealth } from "./inbox";
 import { removeInstallation, upsertInstallation } from "./installations";
+import { startRunMode } from "./run-mode";
 import { type SoapDeps, defaultSoapDeps, handleSoap } from "./soap/route";
+import { type TickDeps, defaultTickDeps, tick } from "./tick";
 
 // Only when this file is the entrypoint — importing it (tests) must not
 // require the production env set.
 if (import.meta.main) assertRequiredEnv();
+
+/** `POST /tick` (the outside scheduler in scale-to-zero) starts new work for this long. */
+const TICK_ENDPOINT_BUDGET_MS = 50_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,10 +27,22 @@ function hasBearer(header: string | undefined, secret: string): boolean {
   return timingSafeEqual(sha256(presented), sha256(secret));
 }
 
-export function createApp(getDb: () => Queryable = getPool, soapDeps: SoapDeps = defaultSoapDeps) {
+export function createApp(
+  getDb: () => Queryable = getPool,
+  soapDeps: SoapDeps = defaultSoapDeps,
+  tickDeps: () => TickDeps = defaultTickDeps,
+) {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  // Queue depth and the oldest message's age, as SiteMinder asks us to monitor.
+  app.get("/health", async (c) => {
+    try {
+      return c.json({ ok: true, ...(await inboxHealth(getDb(), soapDeps.now())) });
+    } catch (e) {
+      console.error("[siteminder] health check could not read the inbox", { error: e instanceof Error ? e.message : String(e) });
+      return c.json({ ok: false, error: "database unavailable" }, 503);
+    }
+  });
 
   const requireRegistrationSecret = async (c: Context, next: Next) => {
     if (!hasBearer(c.req.header("authorization"), env.registrationSecret)) {
@@ -52,7 +70,14 @@ export function createApp(getDb: () => Queryable = getPool, soapDeps: SoapDeps =
 
   app.post("/soap", (c) => handleSoap(c, getDb, soapDeps));
 
+  app.post("/tick", async (c) => {
+    if (!hasBearer(c.req.header("authorization"), env.tickSecret)) return c.json({ error: "unauthorized" }, 401);
+    return c.json(await tick(tickDeps(), { budgetMs: TICK_ENDPOINT_BUDGET_MS }));
+  });
+
   return app;
 }
+
+if (import.meta.main) startRunMode(defaultTickDeps(), env.runMode, env.pollSeconds);
 
 export default createApp();

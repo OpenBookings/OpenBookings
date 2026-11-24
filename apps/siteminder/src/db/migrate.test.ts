@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { applyMigrations } from "./migrate";
+import { MIGRATIONS_DIR, applyMigrations } from "./migrate";
 import { skipDbTests, withTestDb } from "../testing/db-harness";
 
 describe.skipIf(skipDbTests)("migrations (rolled back)", () => {
@@ -17,9 +17,9 @@ describe.skipIf(skipDbTests)("migrations (rolled back)", () => {
 
   it("record each file with its sha256, and apply nothing twice", async () => {
     await withTestDb(async (db) => {
-      const { rows } = await db.query<{ filename: string; sha256: string }>(`SELECT filename, sha256 FROM siteminder.migrations`);
-      expect(rows.map((r) => r.filename)).toEqual(["0001_init.sql"]);
-      expect(rows[0]!.sha256).toMatch(/^[0-9a-f]{64}$/);
+      const { rows } = await db.query<{ filename: string; sha256: string }>(`SELECT filename, sha256 FROM siteminder.migrations ORDER BY filename`);
+      expect(rows.map((r) => r.filename)).toEqual(["0001_init.sql", "0002_inbox_lease.sql"]);
+      for (const row of rows) expect(row.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(await applyMigrations(db)).toEqual([]);
     });
   });
@@ -71,9 +71,10 @@ describe.skipIf(skipDbTests)("migrations (rolled back)", () => {
   it("leave nothing behind once the harness rolls back", async () => {
     await withTestDb(async () => {});
     await withTestDb(async (db) => {
-      // Fresh transaction: the migrations table was created again, not found.
+      // Fresh transaction: the migrations table was created again (one row per file), not found.
+      const files = (await readdir(MIGRATIONS_DIR)).filter((name) => name.endsWith(".sql"));
       const { rows } = await db.query(`SELECT count(*)::int AS n FROM siteminder.migrations`);
-      expect(rows[0]).toEqual({ n: 1 });
+      expect(rows[0]).toEqual({ n: files.length });
     });
   });
 });

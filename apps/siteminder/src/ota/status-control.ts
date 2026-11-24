@@ -20,7 +20,7 @@ export function single(parent: Record<string, unknown>, name: string): Record<st
 
 // Proleptic Gregorian day numbers with integer arithmetic only (days_from_civil / civil_from_days,
 // H. Hinnant): no JS Date, so no time zone can shift a calendar date.
-function dayNumber(iso: string): number {
+export function dayNumber(iso: string): number {
   const [y0, m, d] = iso.split("-").map(Number) as [number, number, number];
   const y = m <= 2 ? y0 - 1 : y0;
   const era = Math.floor(y / 400);
