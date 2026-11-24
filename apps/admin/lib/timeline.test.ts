@@ -23,9 +23,9 @@ function base() {
       { id: "r2", room_name: "B", rate_plan_name: "Flex", cancelled_at: null },
     ],
     refunds: [
-      { id: "f1", reservation_id: "r1", reason: "room_cancelled", amount: 50, status: "succeeded", created_by: null, created_at: t("11:30:00") },
+      { id: "f1", reservation_id: "r1", reason: "room_cancelled", amount_cents: 50, status: "succeeded", created_by: null, created_at: t("11:30:00") },
     ],
-    transactions: [] as { id: string; type: string; amount: number; status: string; created_at: Date }[],
+    transactions: [] as { id: string; type: string; amount_cents: number; status: string; created_at: Date }[],
     events: [] as BookingEvent[],
   };
 }
@@ -100,8 +100,8 @@ describe("buildTimeline", () => {
       bk.cancelled_at = before(5);
       b.refunds[0].created_at = before(4);
       b.events = [
-        evd("rooms_cancelled", at, { reservationIds: ["r1"], cancelsBooking: true, refundTotal: 50 }),
-        { ...evd("refund_succeeded", new Date(at.getTime() + 2), { refundId: "f1", amount: 50 }), reservationId: "r1" },
+        evd("rooms_cancelled", at, { reservationIds: ["r1"], cancelsBooking: true, refundTotalCents: 50 }),
+        { ...evd("refund_succeeded", new Date(at.getTime() + 2), { refundId: "f1", amountCents: 50 }), reservationId: "r1" },
       ];
       const tl = buildTimeline(b);
       expect(tl.map((e) => e.kind)).toEqual(["created", "confirmed", "rooms_cancelled", "refund_succeeded"]);
@@ -124,17 +124,17 @@ describe("buildTimeline", () => {
 
     test("money that left outside OpenBookings is its own entry, not a refund OpenBookings made", () => {
       const b = base();
-      b.refunds.push({ id: "f3", reservation_id: null, reason: null, source: "dispute", amount: 20, status: "succeeded", created_by: null, created_at: t("12:30:00") } as never);
+      b.refunds.push({ id: "f3", reservation_id: null, reason: null, source: "dispute", amount_cents: 20, status: "succeeded", created_by: null, created_at: t("12:30:00") } as never);
       const outside = buildTimeline(b).filter((e) => e.kind === "outside_refund");
-      expect(outside.map((e) => e.data)).toEqual([{ amount: 20, refundId: "f3", source: "dispute" }]);
-      b.events = [evd("outside_refund", t("12:30:01"), { refundId: "f3", amount: 20 })];
+      expect(outside.map((e) => e.data)).toEqual([{ amountCents: 20, refundId: "f3", source: "dispute" }]);
+      b.events = [evd("outside_refund", t("12:30:01"), { refundId: "f3", amountCents: 20 })];
       expect(buildTimeline(b).filter((e) => e.kind === "outside_refund").map((e) => e.reconstructed)).toEqual([false]);
     });
 
     test("a reconstructed refund is only dropped for the refund a stored event names", () => {
       const b = base();
-      b.refunds.push({ id: "f2", reservation_id: "r2", reason: "x", amount: 5, status: "pending", created_by: null, created_at: t("11:40:00") });
-      b.events = [evd("refund_succeeded", t("11:30:00"), { refundId: "f1", amount: 50 })];
+      b.refunds.push({ id: "f2", reservation_id: "r2", reason: "x", amount_cents: 5, status: "pending", created_by: null, created_at: t("11:40:00") });
+      b.events = [evd("refund_succeeded", t("11:30:00"), { refundId: "f1", amountCents: 50 })];
       b.refunds[0].created_at = new Date(t("11:30:00").getTime() - 2);
       const refunds = buildTimeline(b).filter((e) => e.kind.startsWith("refund_"));
       expect(refunds.map((e) => e.kind)).toEqual(["refund_succeeded"]);

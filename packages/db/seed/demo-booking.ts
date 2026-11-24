@@ -7,8 +7,8 @@
  * inventing one, so the bookings show the real Terme Di Saturnia rows,
  * images and check-in times.
  *
- * Money: every `bigint` amount in this schema is in MAJOR units (whole euros),
- * so `rate_plans.bar` of 109 is €109.
+ * Money: every amount in this schema is integer cents,
+ * so `rate_plans.bar_cents` of 10900 is €109.
  *
  * Run: bun --env-file=../../.env.local packages/db/seed/demo-booking.ts
  */
@@ -37,7 +37,8 @@ const PROPERTY_ID = "44ca5796-7461-488a-9613-be71394d4aaa";
 const ADULTS = 2;
 
 /** Tax-inclusive, like every rate: this is what the guest pays per night. */
-const PRICE_PER_NIGHT = 185;
+/** Cents. */
+const PRICE_PER_NIGHT = 18500;
 const RATES_TAX_INCLUSIVE_DOC_ID = "rates-vat-inclusive@2026-10-30";
 
 async function main() {
@@ -63,11 +64,11 @@ async function main() {
     // commission is the property's commission_rate, on bookings.commission_cents.
     await pool.query(
       `insert into rate_plans
-         (id, room_id, name, bar, currency, is_refundable,
+         (id, room_id, name, bar_cents, currency, is_refundable,
           booking_fee_rate, min_stay, is_active)
        values ($1, $2, 'Flexible', $3, 'EUR', true, 0, 1, true)
        on conflict (id) do update set
-         bar = excluded.bar,
+         bar_cents = excluded.bar_cents,
          is_refundable = true,
          booking_fee_rate = 0,
          updated_at = now()`,
@@ -161,11 +162,11 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
     await client.query(`delete from booking_events where booking_id = $1`, [DEMO_CONFIRMED_BOOKING_ID]);
     await client.query(
       `insert into bookings
-         (id, hotel_id, user_id, check_in_date, check_out_date, status, total_amount, currency)
+         (id, hotel_id, user_id, check_in_date, check_out_date, status, total_cents, currency)
        values ($1, $2, $3, $4, $5, 'pending', $6, 'EUR')
        on conflict (id) do update set
          check_in_date = excluded.check_in_date, check_out_date = excluded.check_out_date,
-         status = 'pending', total_amount = excluded.total_amount, confirmed_at = null,
+         status = 'pending', total_cents = excluded.total_cents, confirmed_at = null,
          cancelled_at = null, cancellation_reason = null, no_show_reported_at = null,
          departed_early_on = null, updated_at = now()`,
       [DEMO_CONFIRMED_BOOKING_ID, PROPERTY_ID, userId, checkIn, checkOut, roomTotal * 2],
@@ -173,11 +174,11 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
     for (const id of DEMO_CONFIRMED_RESERVATION_IDS) {
       await client.query(
         `insert into reservations
-           (id, booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night, total_amount)
+           (id, booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night_cents, total_cents)
          values ($1, $2, $3, $4, $5, 0, $6, $7, $8)
          on conflict (id) do update set
-           total_nights = excluded.total_nights, price_per_night = excluded.price_per_night,
-           total_amount = excluded.total_amount, check_in_at = null, cancelled_at = null`,
+           total_nights = excluded.total_nights, price_per_night_cents = excluded.price_per_night_cents,
+           total_cents = excluded.total_cents, check_in_at = null, cancelled_at = null`,
         [id, DEMO_CONFIRMED_BOOKING_ID, ROOM_ID, DEMO_RATE_PLAN_ID, ADULTS, CONFIRMED_NIGHTS, PRICE_PER_NIGHT, roomTotal],
       );
     }
@@ -189,8 +190,8 @@ async function seedConfirmedBooking(pool: Pool, userId: string) {
            total_cents = r.rooms_cents + r.tax_cents, commission_cents = 0
        from (
          select booking_id,
-                sum((select round(sum((n->>'price')::numeric) * 100) from jsonb_array_elements(nights) n)) as rooms_cents,
-                sum(round(tourist_tax_amount * 100)) as tax_cents
+                sum((select sum((n->>'priceCents')::bigint) from jsonb_array_elements(nights) n)) as rooms_cents,
+                sum(tourist_tax_cents) as tax_cents
          from reservations group by booking_id
        ) r
        where r.booking_id = b.id and b.id = $1`,

@@ -3,7 +3,7 @@
  * (so tests can run them inside a rolled-back transaction) and writes the same
  * columns a host-created row would have, flagged `is_demo`.
  *
- * Money is whole euros, like the rest of the schema.
+ * Money is integer cents, like the rest of the schema.
  */
 
 import { parseBackdropManifest, type Backdrop } from "@openbookings/images";
@@ -46,8 +46,8 @@ export type MealPlan = "room_only" | "breakfast" | "half_board";
 export type DemoRatePlanInput = {
   roomId: string;
   name: string;
-  /** Whole euros, tax-inclusive. */
-  bar: number;
+  /** Cents, tax-inclusive. */
+  barCents: number;
   isRefundable: boolean;
   minStay: number;
   mealPlan: MealPlan;
@@ -129,10 +129,10 @@ export async function insertDemoRatePlan(db: Queryable, r: DemoRatePlanInput): P
   const row = await one(
     db,
     `INSERT INTO rate_plans
-       (room_id, name, bar, currency, is_refundable, min_stay, includes_breakfast, includes_dinner, is_active)
+       (room_id, name, bar_cents, currency, is_refundable, min_stay, includes_breakfast, includes_dinner, is_active)
      VALUES ($1, $2, $3, 'EUR', $4, $5, $6, $7, true)
      RETURNING id`,
-    [r.roomId, r.name, r.bar, r.isRefundable, r.minStay, r.mealPlan !== "room_only", r.mealPlan === "half_board"],
+    [r.roomId, r.name, r.barCents, r.isRefundable, r.minStay, r.mealPlan !== "room_only", r.mealPlan === "half_board"],
   );
   return { ratePlanId: row.id };
 }
@@ -161,18 +161,18 @@ export async function insertAvailabilityOverride(
   );
 }
 
-/** A flat surcharge in euros on the given weekdays (JS `getDay`: 0 = Sunday). */
-export async function insertDayOfWeekModifier(db: Queryable, r: { ratePlanId: string; days: number[]; amount: number }): Promise<void> {
+/** A flat surcharge in cents on the given weekdays (JS `getDay`: 0 = Sunday). */
+export async function insertDayOfWeekModifier(db: Queryable, r: { ratePlanId: string; days: number[]; amountCents: number }): Promise<void> {
   await db.query(
     `INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order)
      VALUES ($1, 'day_of_week', $2::jsonb, 'flat', $3, true, 0)`,
-    [r.ratePlanId, JSON.stringify({ days_of_week: r.days }), r.amount],
+    [r.ratePlanId, JSON.stringify({ days_of_week: r.days }), r.amountCents],
   );
 }
 
-/** One rule in force from the start: a fixed euro amount per person per night. */
-export async function insertTouristTaxRule(db: Queryable, r: { propertyId: string; perPersonPerNight: number }): Promise<void> {
-  const charges = [{ kind: "fixed", amount: r.perPersonPerNight, perPerson: true, perNight: true, perRoom: false }];
+/** One rule in force from the start: a fixed amount in cents per person per night. */
+export async function insertTouristTaxRule(db: Queryable, r: { propertyId: string; perPersonPerNightCents: number }): Promise<void> {
+  const charges = [{ kind: "fixed", amountCents: r.perPersonPerNightCents, perPerson: true, perNight: true, perRoom: false }];
   await db.query(
     `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt, max_nights)
      VALUES ($1, '2000-01-01', $2::jsonb, false, NULL)`,

@@ -89,7 +89,7 @@ describeWithDb("demo hotels", () => {
     const read = async (ids: string[]) =>
       (
         await db.query(
-          `SELECT p.name, p.slug, ST_AsText(p.location) AS location, array_agg(rp.bar ORDER BY r.name, rp.name) AS bars
+          `SELECT p.name, p.slug, ST_AsText(p.location) AS location, array_agg(rp.bar_cents ORDER BY r.name, rp.name) AS bars
            FROM properties p JOIN rooms r ON r.property_id = p.id JOIN rate_plans rp ON rp.room_id = r.id
            WHERE p.id = ANY($1::uuid[]) GROUP BY p.id ORDER BY p.slug`,
           [ids],
@@ -166,7 +166,7 @@ describeWithDb("demo hotels", () => {
       (
         await db.query(
           `SELECT r.id, r.total_units, r.max_adults, r.max_children,
-                  json_agg(json_build_object('bar', rp.bar, 'refundable', rp.is_refundable, 'minStay', rp.min_stay)
+                  json_agg(json_build_object('bar', rp.bar_cents, 'refundable', rp.is_refundable, 'minStay', rp.min_stay)
                            ORDER BY rp.is_refundable DESC) AS plans
            FROM rooms r JOIN rate_plans rp ON rp.room_id = r.id
            WHERE r.property_id = $1 GROUP BY r.id ORDER BY r.name`,
@@ -180,13 +180,13 @@ describeWithDb("demo hotels", () => {
       expect(r.total_units).toBeGreaterThanOrEqual(6);
       expect(r.total_units).toBeLessThanOrEqual(10);
       expect(r.plans.map((p) => p.refundable)).toEqual([true, false]);
-      expect(r.plans[1].bar).toBe(Math.floor(r.plans[0].bar * 0.85));
+      expect(r.plans[1].bar).toBe(Math.floor((r.plans[0].bar * 0.85) / 100) * 100);
     }
 
     const nr = await rooms("non_refundable");
     for (const r of nr) {
       expect(r.plans.map((p) => p.refundable)).toEqual([true, false]);
-      expect(r.plans[1].bar).toBe(Math.floor(r.plans[0].bar * 0.85));
+      expect(r.plans[1].bar).toBe(Math.floor((r.plans[0].bar * 0.85) / 100) * 100);
     }
 
     const lastRoom = await rooms("last_room");
@@ -221,17 +221,17 @@ describeWithDb("demo hotels", () => {
       `SELECT
          (SELECT count(*)::int FROM rate_modifiers m JOIN rate_plans rp ON rp.id = m.rate_plan_id JOIN rooms r ON r.id = rp.room_id
           WHERE r.property_id = $1 AND m.type = 'day_of_week' AND m.trigger_condition = '{"days_of_week":[5,6]}'::jsonb
-            AND m.adjustment_value = 40) AS modifiers,
+            AND m.adjustment_value = 4000) AS modifiers,
          (SELECT count(*)::int FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id WHERE r.property_id = $1) AS plans,
          (SELECT charges FROM tourist_tax_rules WHERE property_id = $1) AS charges`,
       [ids.get("weekend_prices")],
     );
     expect(weekend[0].modifiers).toBe(weekend[0].plans);
-    expect(weekend[0].charges).toEqual([{ kind: "fixed", amount: 3.5, perPerson: true, perNight: true, perRoom: false }]);
+    expect(weekend[0].charges).toEqual([{ kind: "fixed", amountCents: 350, perPerson: true, perNight: true, perRoom: false }]);
 
-    // bar is bigint, so whole euros by type; none may be free.
+    // none may be free.
     const { rows: bars } = await db.query(
-      `SELECT bool_and(rp.bar > 0) AS positive FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id WHERE r.property_id = ANY($1::uuid[])`,
+      `SELECT bool_and(rp.bar_cents > 0) AS positive FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id WHERE r.property_id = ANY($1::uuid[])`,
       [propertyIds],
     );
     expect(bars[0].positive).toBe(true);

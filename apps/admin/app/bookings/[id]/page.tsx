@@ -6,13 +6,14 @@ import { RealActionsPanel } from "./real-actions-panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { refundedSplit } from "@openbookings/db";
+import { formatCents } from "@openbookings/pricing/money";
 import { loadAdminBooking } from "@/lib/booking";
 import { readPool } from "@/lib/db";
 import { buildTimeline } from "@/lib/timeline";
 import { allowedFor } from "@/lib/real-actions";
 import { requireSuperAdmin } from "@/lib/super-admin";
 
-const eur = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
+const eur = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 function fmt(d: Date | string | null, tz: string): string {
   if (!d) return "-";
@@ -43,19 +44,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const timeline = buildTimeline(data);
   const initial = { guest: await allowedFor(id, "guest"), host: await allowedFor(id, "host") };
 
-  const sum = (xs: { amount: number }[]) => xs.reduce((a, x) => a + Number(x.amount), 0);
+  const sum = (xs: { amount_cents: number }[]) => xs.reduce((a, x) => a + Number(x.amount_cents), 0);
   const paid = sum(transactions.filter((t) => t.type === "charge" && t.status === "succeeded"));
   // Money the host refunded in their own Stripe, or lost in a dispute (0053), apart from OpenBookings' own.
   const isOutside = (r: (typeof refunds)[number]) => !!r.source && r.source !== "openbookings";
   const refunded = sum(refunds.filter((r) => r.status === "succeeded" && !isOutside(r)));
   const refundedOutside = sum(refunds.filter((r) => r.status === "succeeded" && isOutside(r)));
-  const touristTaxBooked = rooms.reduce((a, r) => a + Math.round(Number(r.tourist_tax_amount ?? 0) * 100), 0) / 100;
+  const touristTaxBooked = rooms.reduce((a, r) => a + Number(r.tourist_tax_cents ?? 0), 0);
   const refundedParts = refundedSplit(
     refunds.map((r) => ({
       source: r.source ?? "openbookings",
       status: r.status,
-      accommodation: Number(r.accommodation_amount ?? 0),
-      touristTax: Number(r.tourist_tax_amount ?? 0),
+      accommodationCents: Number(r.accommodation_cents ?? 0),
+      touristTaxCents: Number(r.tourist_tax_cents ?? 0),
       explained: !!r.split_explained_at,
     })),
   );
@@ -72,8 +73,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </div>
         <p className="text-sm text-muted-foreground">
           {property.name} · {String(booking.check_in_date)} → {String(booking.check_out_date)} ·{" "}
-          {eur.format(Number(booking.total_cents) / 100)} · Commission{" "}
-          {eur.format(Number(booking.commission_cents ?? 0) / 100)}
+          {eur(Number(booking.total_cents))} · Commission{" "}
+          {eur(Number(booking.commission_cents ?? 0))}
         </p>
         <p className="text-sm">
           Guest: {guest?.name ?? "-"} <span className="text-muted-foreground">{guest?.email}</span>
@@ -115,13 +116,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   {String(r.adults)}A {String(r.children ?? 0)}C
                 </TableCell>
                 <TableCell>{String(r.total_nights)}</TableCell>
-                <TableCell className="text-right">{eur.format(Number(r.price_per_night))}</TableCell>
+                <TableCell className="text-right">{eur(Number(r.price_per_night_cents))}</TableCell>
                 <TableCell>{String(r.cancellation_tier ?? "-")}</TableCell>
                 <TableCell>
                   {r.full_refund_until ? fmt(r.full_refund_until as Date, tz) : "none (non-refundable)"}
                 </TableCell>
-                <TableCell className="text-right">{eur.format(Number(r.tourist_tax_amount ?? 0))}</TableCell>
-                <TableCell className="text-right">{eur.format(Number(r.total_amount))}</TableCell>
+                <TableCell className="text-right">{eur(Number(r.tourist_tax_cents ?? 0))}</TableCell>
+                <TableCell className="text-right">{eur(Number(r.total_cents))}</TableCell>
                 <TableCell>{r.cancelled_at ? fmt(r.cancelled_at, tz) : "-"}</TableCell>
               </TableRow>
             ))}
@@ -131,15 +132,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
       <Section title="Money">
         <p className="text-sm">
-          Paid {eur.format(paid)} · Refunded {eur.format(refunded)}
-          {refundedOutside > 0 ? ` · Refunded outside OpenBookings ${eur.format(refundedOutside)}` : ""} · Pending/failed
-          refunds {eur.format(pending)}
-          {failedCharges > 0 ? ` · Unsuccessful charges ${eur.format(failedCharges)}` : ""}
+          Paid {eur(paid)} · Refunded {eur(refunded)}
+          {refundedOutside > 0 ? ` · Refunded outside OpenBookings ${eur(refundedOutside)}` : ""} · Pending/failed
+          refunds {eur(pending)}
+          {failedCharges > 0 ? ` · Unsuccessful charges ${eur(failedCharges)}` : ""}
         </p>
         <p className="text-sm text-muted-foreground">
-          Tourist tax booked {eur.format(touristTaxBooked)} · refunded {eur.format(refundedParts.touristTax)}
-          {refundedParts.unexplained > 0
-            ? ` · ${eur.format(refundedParts.unexplained)} refunded outside OpenBookings not explained yet (counted as room price)`
+          Tourist tax booked {eur(touristTaxBooked)} · refunded {eur(refundedParts.touristTaxCents)}
+          {refundedParts.unexplainedCents > 0
+            ? ` · ${eur(refundedParts.unexplainedCents)} refunded outside OpenBookings not explained yet (counted as room price)`
             : ""}
         </p>
         <h3 className="text-sm font-medium">Transactions</h3>
@@ -166,7 +167,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   <TableCell>{String(t.provider ?? "-")}</TableCell>
                   <TableCell className="font-mono">{String(t.provider_payment_id ?? "-")}</TableCell>
                   <TableCell>{t.status}</TableCell>
-                  <TableCell className="text-right">{eur.format(Number(t.amount))}</TableCell>
+                  <TableCell className="text-right">{eur(Number(t.amount_cents))}</TableCell>
                   <TableCell>{[t.failure_code, t.failure_message].filter(Boolean).join(": ") || "-"}</TableCell>
                 </TableRow>
               ))}
@@ -199,7 +200,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                         <div>{r.source === "dispute" ? "Lost dispute" : "Refunded outside OpenBookings"}</div>
                         <div className="text-xs text-muted-foreground">
                           {r.split_explained_at
-                            ? `Room ${eur.format(Number(r.accommodation_amount))} · tax ${eur.format(Number(r.tourist_tax_amount))}`
+                            ? `Room ${eur(Number(r.accommodation_cents))} · tax ${eur(Number(r.tourist_tax_cents))}`
                             : "Split not explained"}
                         </div>
                       </>
@@ -211,7 +212,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                   <TableCell className="font-mono">{r.reservation_id?.slice(0, 8) ?? "-"}</TableCell>
                   <TableCell className="font-mono">{String(r.stripe_refund_id ?? "-")}</TableCell>
                   <TableCell>{r.created_by ?? "system"}</TableCell>
-                  <TableCell className="text-right">{eur.format(r.amount)}</TableCell>
+                  <TableCell className="text-right">{eur(r.amount_cents)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -286,7 +287,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           bookingId={booking.id}
           status={String(booking.status)}
           rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
-          refunds={refunds.map((r) => ({ id: r.id, reason: String(r.reason), amount: Number(r.amount), status: String(r.status) }))}
+          refunds={refunds.map((r) => ({ id: r.id, reason: String(r.reason), amountCents: Number(r.amount_cents), status: String(r.status) }))}
         />
       </Section>
 

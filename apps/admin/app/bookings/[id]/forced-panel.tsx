@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCents } from "@openbookings/pricing/money";
 import {
   adminForceCancelRooms,
   adminForceClearMarkers,
@@ -29,7 +30,7 @@ export function ForcedPanel({
   bookingId: string;
   status: string;
   rooms: { id: string; name: string; cancelled: boolean }[];
-  refunds: { id: string; reason: string; amount: number; status: string }[];
+  refunds: { id: string; reason: string; amountCents: number; status: string }[];
 }) {
   const [newStatus, setNewStatus] = useState(status);
   const [selected, setSelected] = useState<string[]>([]);
@@ -120,7 +121,7 @@ export function ForcedPanel({
           {refunds.map((f) => (
             <li key={f.id} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-mono text-xs">{f.id.slice(0, 8)}</span>
-              {f.reason} {f.amount} {f.status}
+              {f.reason} {formatCents(f.amountCents, { whole: "always-decimals" })} {f.status}
               <Button
                 size="sm"
                 variant="destructive"

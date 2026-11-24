@@ -31,7 +31,7 @@ describeWithDb("booking search against Postgres", () => {
     expect(rows.map((r) => r.id)).toEqual([a.bookingId]);
     expect(rows[0].rooms).toBe(1);
     expect(rows[0].guestName).toBe("Test Guest");
-    expect(typeof rows[0].totalAmount).toBe("number");
+    expect(typeof rows[0].totalCents).toBe("number");
     expect(rows[0].checkIn).toBe("2031-11-10");
   });
 

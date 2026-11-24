@@ -50,8 +50,8 @@ describeWithDb("forced edits against Postgres", () => {
   const addRefund = async (id = bookingId) =>
     (
       await db.query(
-        `INSERT INTO refunds (booking_id, reason, accommodation_amount, tourist_tax_amount, amount, idempotency_key)
-         VALUES ($1, 'goodwill', 10, 0, 10, 'test:'||gen_random_uuid()) RETURNING id`,
+        `INSERT INTO refunds (booking_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, idempotency_key)
+         VALUES ($1, 'goodwill', 1000, 0, 1000, 'test:'||gen_random_uuid()) RETURNING id`,
         [id],
       )
     ).rows[0].id as string;

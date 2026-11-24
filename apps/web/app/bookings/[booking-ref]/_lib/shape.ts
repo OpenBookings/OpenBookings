@@ -100,7 +100,7 @@ export function toGuestBooking(row: GuestBookingRow, now: Date): GuestBooking {
           ? `Full refund until ${formatWhen(freeUntil, row.timezone)}.`
           : "The room price isn't refunded. Tourist tax is.",
       cancelledAt: r.cancelled_at,
-      paidCents: r.nights.reduce((sum, n) => sum + n.priceCents + n.touristTaxCents, 0),
+      paidCents: r.nights.reduce((sum, n) => sum + n.priceCents + (n.touristTaxCents ?? 0), 0),
       extras: extrasText(r),
       payAtPropertyCents: Number(r.pay_at_property_cents ?? 0) || 0,
     };

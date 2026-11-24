@@ -1,4 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { previousMonth } from "@/lib/invoice-job-args";
 import { databaseHost, requireSuperAdmin } from "@/lib/super-admin";
@@ -8,7 +9,7 @@ type RunRow = { step: string; period: string; status: string; dry_run: boolean; 
 type InvoiceRow = { number: string | null; period: string; status: string; doc_type: string; gross: string; billing_entity_id: string };
 
 const euro = (cents: string) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(Number(cents) / 100);
+  formatCents(Number(cents), { whole: "always-decimals" });
 
 /** Runs the monthly invoice job by hand, against this app's database and Stripe test key. Dev only. */
 export default async function InvoicesPage() {

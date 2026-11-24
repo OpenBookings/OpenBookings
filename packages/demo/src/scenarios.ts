@@ -103,10 +103,10 @@ export type ScenarioSpec = {
   minStay: number;
   /** An open-ended closed-to-arrival restriction on every plan. */
   closedToArrival: boolean;
-  /** Euros added on Friday and Saturday nights (JS `getDay` 5 and 6). */
-  weekendSurcharge: number | null;
-  /** Euros per person per night. */
-  touristTax: number | null;
+  /** Cents added on Friday and Saturday nights (JS `getDay` 5 and 6). */
+  weekendSurchargeCents: number | null;
+  /** Cents per person per night. */
+  touristTaxCents: number | null;
 };
 
 const BASE: Omit<ScenarioSpec, "tier" | "rooms"> = {
@@ -114,8 +114,8 @@ const BASE: Omit<ScenarioSpec, "tier" | "rooms"> = {
   nonRefundable: false,
   minStay: 1,
   closedToArrival: false,
-  weekendSurcharge: null,
-  touristTax: null,
+  weekendSurchargeCents: null,
+  touristTaxCents: null,
 };
 
 export const SCENARIOS: Readonly<Record<DemoScenario, ScenarioSpec>> = {
@@ -125,15 +125,15 @@ export const SCENARIOS: Readonly<Record<DemoScenario, ScenarioSpec>> = {
   min_stay: { ...BASE, tier: "standard", rooms: [DOUBLE, FAMILY], minStay: 5 },
   no_arrival: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], closedToArrival: true },
   non_refundable: { ...BASE, tier: "standard", rooms: [DOUBLE, TWIN], nonRefundable: true },
-  weekend_prices: { ...BASE, tier: "flex", rooms: [DOUBLE, FAMILY], weekendSurcharge: 40, touristTax: 3.5 },
+  weekend_prices: { ...BASE, tier: "flex", rooms: [DOUBLE, FAMILY], weekendSurchargeCents: 4000, touristTaxCents: 350 },
   small_rooms: { ...BASE, tier: "flex", rooms: [SINGLE, COMPACT_SINGLE], units: 4 },
 };
 
 /**
- * The non-refundable bar for a refundable one: whole euros, 15% off, which
+ * The non-refundable bar for a refundable one: whole euros (in cents), 15% off, which
  * stays clear of Annex B B.4.2 (a non-refundable rate must be at least 10%
  * cheaper than the refundable rate beside it).
  */
-export function nonRefundableBar(refundableBar: number): number {
-  return Math.floor(refundableBar * 0.85);
+export function nonRefundableBar(refundableBarCents: number): number {
+  return Math.floor((refundableBarCents * 0.85) / 100) * 100;
 }

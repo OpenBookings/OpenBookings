@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { bookingRef, loadFlaggedPayments, type FlaggedPayment, type FlagKind } from "@/lib/flagged-payments";
 import { requireSuperAdmin } from "@/lib/super-admin";
@@ -12,7 +13,7 @@ const KIND_LABEL: Record<FlagKind, string> = {
 };
 
 const euro = (cents: number | null) =>
-  cents === null ? "—" : new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(cents / 100);
+  cents === null ? "—" : formatCents(cents, { whole: "always-decimals" });
 
 /**
  * What the booking holds for this money (0053). The webhook writes it there,
