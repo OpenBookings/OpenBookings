@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2 } from "lucide-react";
+import { centsToInput } from "@openbookings/pricing/money";
 import {
   Dialog,
   DialogContent,
@@ -535,7 +536,8 @@ function AddRatePlanDialog({
           createRatePlan({
             roomId,
             name: name.trim(),
-            bar: Number(bar) || 0,
+            // As typed ("89,50"): the server reads it into cents.
+            bar,
             // The server accepts EUR only; every price on the platform is in euros.
             currency: "EUR",
             isRefundable: refundable,
@@ -585,8 +587,7 @@ function AddRatePlanDialog({
           <Label htmlFor="ari-plan-bar">Base rate ({currency})</Label>
           <Input
             id="ari-plan-bar"
-            type="number"
-            min={0}
+            inputMode="decimal"
             value={bar}
             onChange={(e) => setBar(e.target.value)}
             required
@@ -658,14 +659,14 @@ function BaseRateDialog({
   onDone: () => void;
 }) {
   const plan = rooms.flatMap((r) => r.ratePlans).find((p) => p.id === prefill.ratePlanId);
-  const [bar, setBar] = React.useState(plan && plan.bar > 0 ? String(plan.bar) : "");
+  const [bar, setBar] = React.useState(plan && plan.barCents > 0 ? centsToInput(plan.barCents) : "");
   const { pending, error, run } = useAction(onDone);
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void run(() => setBaseRate({ ratePlanId: plan?.id ?? "", bar: Number(bar) || 0 }));
+        void run(() => setBaseRate({ ratePlanId: plan?.id ?? "", bar }));
       }}
     >
       <DialogHeader>
@@ -681,9 +682,7 @@ function BaseRateDialog({
           <Label htmlFor="ari-base-rate">Base rate ({currency})</Label>
           <Input
             id="ari-base-rate"
-            type="number"
-            min={1}
-            step={1}
+            inputMode="decimal"
             value={bar}
             onChange={(e) => setBar(e.target.value)}
             required

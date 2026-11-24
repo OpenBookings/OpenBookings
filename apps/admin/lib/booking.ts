@@ -24,7 +24,7 @@ export type AdminBooking = {
   transactions: (Record<string, unknown> & {
     id: string;
     type: string;
-    amount: number;
+    amount_cents: number;
     status: string;
     created_at: Date;
   })[];
@@ -35,9 +35,9 @@ export type AdminBooking = {
     reason: string | null;
     /** 'openbookings', 'stripe_dashboard' (the host refunded in their own Stripe) or 'dispute' (lost). */
     source?: string;
-    amount: number;
-    accommodation_amount?: number;
-    tourist_tax_amount?: number;
+    amount_cents: number;
+    accommodation_cents?: number;
+    tourist_tax_cents?: number;
     /** When the host's room price / tourist tax split of an outside row was entered; null = not yet. */
     split_explained_at?: Date | null;
     status: string;
@@ -69,9 +69,7 @@ export async function loadAdminBooking(db: Queryable, id: string): Promise<Admin
     `SELECT b.*, to_char(b.check_in_date, 'YYYY-MM-DD') AS check_in_date,
             to_char(b.check_out_date, 'YYYY-MM-DD') AS check_out_date,
             to_char(b.departed_early_on, 'YYYY-MM-DD') AS departed_early_on,
-            -- total_amount is whole euros; total_cents is exact. Bookings from
-            -- before total_cents existed have 0 there, so fall back for those.
-            COALESCE(NULLIF(b.total_cents, 0), b.total_amount * 100)::float8 AS total_cents,
+            b.total_cents::float8 AS total_cents,
             b.commission_cents::float8 AS commission_cents
        FROM bookings b WHERE b.id = $1::uuid`,
     [id],
@@ -84,9 +82,9 @@ export async function loadAdminBooking(db: Queryable, id: string): Promise<Admin
   const [rooms, transactions, refunds, messages, tickets] = await seq([
     () => db.query(
       `SELECT r.*, rm.name AS room_name, rp.name AS rate_plan_name,
-              r.price_per_night::float8 AS price_per_night,
-              r.total_amount::float8 AS total_amount,
-              r.tourist_tax_amount::float8 AS tourist_tax_amount
+              r.price_per_night_cents::float8 AS price_per_night_cents,
+              r.total_cents::float8 AS total_cents,
+              r.tourist_tax_cents::float8 AS tourist_tax_cents
          FROM reservations r
          LEFT JOIN rooms rm ON rm.id = r.room_id
          LEFT JOIN rate_plans rp ON rp.id = r.rate_plan_id
@@ -94,14 +92,14 @@ export async function loadAdminBooking(db: Queryable, id: string): Promise<Admin
       [id],
     ),
     () => db.query(
-      `SELECT t.*, t.amount::float8 AS amount FROM transactions t
+      `SELECT t.*, t.amount_cents::float8 AS amount_cents FROM transactions t
         WHERE t.booking_id = $1::uuid ORDER BY t.created_at, t.id`,
       [id],
     ),
     () => db.query(
-      `SELECT f.*, f.amount::float8 AS amount,
-              f.accommodation_amount::float8 AS accommodation_amount,
-              f.tourist_tax_amount::float8 AS tourist_tax_amount
+      `SELECT f.*, f.amount_cents::float8 AS amount_cents,
+              f.accommodation_cents::float8 AS accommodation_cents,
+              f.tourist_tax_cents::float8 AS tourist_tax_cents
          FROM refunds f WHERE f.booking_id = $1::uuid ORDER BY f.created_at, f.id`,
       [id],
     ),

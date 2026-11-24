@@ -142,7 +142,7 @@ describeWithDb("flagged payments against Postgres", () => {
   const record = async () =>
     (
       await db.query(
-        `SELECT accommodation_amount::float8 AS room, tourist_tax_amount::float8 AS tax, split_explained_at IS NOT NULL AS explained
+        `SELECT accommodation_cents::int AS room, tourist_tax_cents::int AS tax, split_explained_at IS NOT NULL AS explained
            FROM refunds WHERE idempotency_key = 'stripe_dashboard:re_split'`,
       )
     ).rows[0];
@@ -158,11 +158,11 @@ describeWithDb("flagged payments against Postgres", () => {
     expect(await resolvePaymentFlag(db, { flagId: id, note: "Guest left early", split: { roomPriceCents: 4400, touristTaxCents: 600 } })).toEqual({
       ok: true,
     });
-    expect(await record()).toEqual({ room: 44, tax: 6, explained: true });
+    expect(await record()).toEqual({ room: 4400, tax: 600, explained: true });
     const [row] = await ours();
     expect(row!.record).toEqual({ amountCents: 5000, split: { roomPriceCents: 4400, touristTaxCents: 600 } });
     const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "outside_refund_explained");
-    expect(events.map((e) => [e.actorKind, e.data.roomPrice, e.data.touristTax])).toEqual([["admin", 44, 6]]);
+    expect(events.map((e) => [e.actorKind, e.data.roomPriceCents, e.data.touristTaxCents])).toEqual([["admin", 4400, 600]]);
     const detail = (
       await db.query(`SELECT detail FROM audit_log WHERE action = 'payment.flag-resolved' AND detail->>'dedupeKey' = 're_split'`)
     ).rows[0].detail;
@@ -179,7 +179,7 @@ describeWithDb("flagged payments against Postgres", () => {
       ok: false,
       error: "split_negative",
     });
-    expect(await record()).toEqual({ room: 50, tax: 0, explained: false });
+    expect(await record()).toEqual({ room: 5000, tax: 0, explained: false });
     expect((await ours())[0]!.resolvedAt).toBeNull();
   });
 
@@ -189,14 +189,18 @@ describeWithDb("flagged payments against Postgres", () => {
       ok: false,
       error: "split_not_an_amount",
     });
-    expect(await resolvePaymentFlagFromForm(db, { flagId: id, roomPrice: "50,00", touristTax: "" })).toEqual({ ok: true });
-    expect(await record()).toEqual({ room: 50, tax: 0, explained: true });
+    expect(await resolvePaymentFlagFromForm(db, { flagId: id, roomPrice: "1.234", touristTax: "" })).toEqual({
+      ok: false,
+      error: "split_not_an_amount",
+    });
+    expect(await resolvePaymentFlagFromForm(db, { flagId: id, roomPrice: "47,50", touristTax: "2.5" })).toEqual({ ok: true });
+    expect(await record()).toEqual({ room: 4750, tax: 250, explained: true });
   });
 
   test("resolving from the form without amounts leaves the split unexplained", async () => {
     const id = await outsideRefund();
     expect(await resolvePaymentFlagFromForm(db, { flagId: id, note: "asked", roomPrice: " ", touristTax: "" })).toEqual({ ok: true });
-    expect(await record()).toEqual({ room: 50, tax: 0, explained: false });
+    expect(await record()).toEqual({ room: 5000, tax: 0, explained: false });
   });
 
   test("a split needs a booking record: a payment that paid no booking can only be resolved", async () => {

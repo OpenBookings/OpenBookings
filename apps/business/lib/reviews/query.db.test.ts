@@ -43,8 +43,8 @@ describeWithDb("loadHostReviews against Postgres", () => {
   async function addReview(status: string, score = 8, body: string | null = "Lovely.") {
     const bookingId = (
       await one(
-        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-         VALUES ($1, $2, CURRENT_DATE - 10, CURRENT_DATE - 8, 'confirmed', 400) RETURNING id`,
+        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents)
+         VALUES ($1, $2, CURRENT_DATE - 10, CURRENT_DATE - 8, 'confirmed', 40000, 40000) RETURNING id`,
         [propertyId, guest],
       )
     ).id;

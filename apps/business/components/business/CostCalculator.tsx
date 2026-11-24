@@ -2,17 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { animate } from "framer-motion";
+import { formatCents } from "@openbookings/pricing/money";
 import { DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
 
 const OB_RATE = DEFAULT_COMMISSION_RATE;
 const STRIPE_RATE = 0.015;
 const STRIPE_FIXED = 0.25;
 
-const eur = new Intl.NumberFormat("en-IE", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
+/** The calculator works in euros; it shows whole euros. */
+const eur = (euros: number) => formatCents(Math.round(euros) * 100);
 
 const DEFAULTS = { rate: 120, bookings: 40, stay: 3 };
 
@@ -35,7 +33,7 @@ function CountUpEuro({ value, className }: { value: number; className?: string }
     prevRef.current = value;
     return () => controls.stop();
   }, [value]);
-  return <span className={className}>{eur.format(Math.round(display))}</span>;
+  return <span className={className}>{eur(display)}</span>;
 }
 
 export function CostCalculator() {
@@ -154,7 +152,7 @@ export function CostCalculator() {
             </div>
 
             <p className="mt-6 text-[13px] leading-[1.7] text-white/30">
-              That&apos;s <span className="text-white/60 tabular-nums">{eur.format(annualRevenue)}</span> in
+              That&apos;s <span className="text-white/60 tabular-nums">{eur(annualRevenue)}</span> in
               booking revenue per year, across{" "}
               <span className="text-white/60 tabular-nums">{annualBookings.toLocaleString("en-IE")}</span>{" "}
               bookings.
@@ -183,7 +181,7 @@ export function CostCalculator() {
                           row.highlight ? "font-semibold text-spectrum-mint" : "text-white/40"
                         }`}
                       >
-                        {eur.format(row.cost)}
+                        {eur(row.cost)}
                         <span className="ml-1.5 text-[11px] font-normal text-white/25">{row.pct.toFixed(1)}%</span>
                       </span>
                     </div>

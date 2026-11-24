@@ -16,7 +16,8 @@ import { endOfMonth, startOfMonth, type DateRange } from "./period";
 import type { BookingFact, Facts, InventoryFact, IsoDate, SoldNight } from "./types";
 
 /** Bump when the shape or meaning of stored facts changes: old rows are then rebuilt. */
-export const FACTS_CACHE_VERSION = 1;
+/** 2: money in cents (0058). Months cached under 1 were built from euro columns. */
+export const FACTS_CACHE_VERSION = 2;
 
 /** Generations a build started from: the month's, and the hotel-wide sentinel's. */
 export interface MonthGenerations {

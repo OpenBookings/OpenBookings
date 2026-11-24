@@ -29,7 +29,7 @@ export type HostBooking = {
   status: string;
   check_in_date: string;
   check_out_date: string;
-  /** Money in cents; see BOOKING_CENTS_COLUMNS. `bookings.total_amount` is whole euros and never read. */
+  /** Money in cents, as stored; see BOOKING_CENTS_COLUMNS. */
   total_cents: number;
   rooms_total_cents: number | null;
   tourist_tax_cents: number | null;

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { adminResolvePaymentFlag } from "@/lib/flagged-payments-actions";
+import { formatCents } from "@openbookings/pricing/money";
 
 const FAILURES = {
   invalid: "Not a flag id",
@@ -16,8 +17,7 @@ const FAILURES = {
   split_sum_mismatch: "Room price and tourist tax must add up to the amount on the booking",
 } as const;
 
-const euro = (cents: number) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(cents / 100);
+const euro = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 /**
  * Marks a flag as explained by the host. Writes an audit row; nothing is sent

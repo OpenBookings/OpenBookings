@@ -1,4 +1,4 @@
-import { formatEuro } from "@openbookings/mailing";
+import { formatCents } from "@openbookings/pricing/money";
 import { localTimeToUtc, type CancellationTier } from "@openbookings/pricing";
 import type { HostReservationRow } from "./shape";
 
@@ -168,11 +168,14 @@ export function buildHostTimeline(row: HostReservationRow, now: Date): HostTimel
 
   function headline(): HostTimeline["headline"] {
     if (cancelled) {
-      const refunded = Number(row.refunded);
+      const refundedCents = Number(row.refunded_cents);
       return {
         tone: "cancelled",
         eyebrow: "Cancelled",
-        sentence: refunded > 0 ? `${formatEuro(refunded)} was refunded to the guest.` : "Nothing was refunded.",
+        sentence:
+          refundedCents > 0
+            ? `${formatCents(refundedCents, { whole: "always-decimals" })} was refunded to the guest.`
+            : "Nothing was refunded.",
       };
     }
     if (noShow) {

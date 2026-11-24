@@ -110,7 +110,7 @@ describe("pricing rules", () => {
   });
 
   test("try a stay prices only the current hotel's plans", async () => {
-    answer = (sql) => (sql.includes("rp.bar::float8 AS bar, r.base_occupancy") ? { id: PLAN, bar: 100, base_occupancy: 2, timezone: "Europe/Amsterdam" } : undefined);
+    answer = (sql) => (sql.includes("rp.bar_cents::float8 AS bar_cents, r.base_occupancy") ? { id: PLAN, bar_cents: 10000, base_occupancy: 2, timezone: "Europe/Amsterdam" } : undefined);
     const input = { ratePlanId: PLAN, arrival: "2031-03-10", nights: 2, bookedOn: "2031-03-01" };
     expect((await priceTryStay(session, PROP, input)).ok).toBe(true);
     expect(calls).toHaveLength(3);

@@ -274,8 +274,8 @@ describeWithDb("row-level security on guest data", () => {
 
       await db.query("SAVEPOINT forged");
       const forged = db.query(
-        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-         VALUES ($1, $2, '2031-04-01', '2031-04-02', 'pending', 100)`,
+        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_cents)
+         VALUES ($1, $2, '2031-04-01', '2031-04-02', 'pending', 10000)`,
         [f.b1, f.guest2],
       );
       await expect(forged).rejects.toThrow(/row-level security/);

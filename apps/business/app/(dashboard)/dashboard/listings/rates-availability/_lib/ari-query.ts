@@ -46,7 +46,7 @@ import type {
  * 3-night cell rendered €66,399,733 while the 1-night view looked perfect.
  *
  * So the row types say `string`, and every value crosses into the domain
- * through here. Prices are whole currency units well inside 2^53; the precision
+ * through here. Prices are whole cents, well inside 2^53; the precision
  * bigint exists to protect is not in play at the scale of a nightly rate.
  *
  * The availability query needs none of this — its counts are `integer`, and its
@@ -138,8 +138,8 @@ interface RateQueryRow {
   rate_plan_id: string;
   rate_plan_name: string;
   currency: string;
-  /** bigint column — see `toNumber`. */
-  bar: string;
+  /** bigint column, cents — see `toNumber`. */
+  bar_cents: string;
   is_refundable: boolean;
   plan_min_stay: number;
   plan_max_stay: number | null;
@@ -147,8 +147,8 @@ interface RateQueryRow {
   /** Room published and plan active: what guests can actually book. */
   on_sale: boolean;
   date: string;
-  /** bigint column — see `toNumber`. */
-  base_price: string;
+  /** bigint column, cents — see `toNumber`. */
+  base_price_cents: string;
   has_override: boolean;
   override_label: string | null;
   closure_id: string | null;
@@ -308,7 +308,7 @@ WITH dates AS (
 -- ones are not.
 scope_plans AS (
   SELECT
-    rp.id, rp.name, rp.bar, rp.currency, rp.is_refundable,
+    rp.id, rp.name, rp.bar_cents, rp.currency, rp.is_refundable,
     rp.min_stay, rp.max_stay,
     (r.is_active AND rp.is_active) AS on_sale,
     r.id AS room_id, r.name AS room_name, r.base_occupancy
@@ -324,15 +324,15 @@ SELECT
   sp.id                            AS rate_plan_id,
   sp.name                          AS rate_plan_name,
   sp.currency,
-  sp.bar,
+  sp.bar_cents,
   sp.is_refundable,
   sp.min_stay                      AS plan_min_stay,
   sp.max_stay                      AS plan_max_stay,
   sp.base_occupancy,
   sp.on_sale,
   d.d::text                        AS date,
-  COALESCE(o.price_per_night, sp.bar) AS base_price,
-  (o.price_per_night IS NOT NULL)     AS has_override,
+  COALESCE(o.price_per_night_cents, sp.bar_cents) AS base_price_cents,
+  (o.price_per_night_cents IS NOT NULL)          AS has_override,
   o.label                          AS override_label,
   cl.id                            AS closure_id,
   cl.start_date::text              AS closure_start,
@@ -355,7 +355,7 @@ SELECT
 FROM scope_plans sp
 CROSS JOIN dates d
 LEFT JOIN LATERAL (
-  SELECT price_per_night, label
+  SELECT price_per_night_cents, label
   FROM rate_overrides
   WHERE rate_plan_id = sp.id
     AND start_date <= d.d
@@ -441,7 +441,7 @@ WITH scope_rooms AS (
   WHERE ${CURRENT_PROPERTY_SQL} AND r.archived_at IS NULL
 ),
 signatures AS (
-  SELECT 'o' || ro.id::text || ro.price_per_night::text || ro.is_active::text
+  SELECT 'o' || ro.id::text || ro.price_per_night_cents::text || ro.is_active::text
            || ro.start_date::text || ro.end_date::text || ro.priority::text AS sig
   FROM rate_overrides ro
   JOIN rate_plans rp ON rp.id = ro.rate_plan_id
@@ -613,7 +613,7 @@ export async function loadAriGrid(
         onSale: row.on_sale,
         availability: [],
         ratePlans: [],
-        lowestRates: dates.map(() => null),
+        lowestRatesCents: dates.map(() => null),
       };
       rooms.set(row.room_id, room);
     }
@@ -673,7 +673,7 @@ export async function loadAriGrid(
       const resolved = resolveNightlyRates(
         dateRows.map((r) => ({
           date: r.date,
-          base_price: toNumber(r.base_price),
+          base_price_cents: toNumber(r.base_price_cents),
           has_override: r.has_override,
         })),
         modifiers,
@@ -727,9 +727,9 @@ export async function loadAriGrid(
           // summary and the lowest-rate pass need. The resolved figure is kept
           // separately: a closed date still has a rate underneath it, and the
           // cell shows it struck through rather than pretending it is gone.
-          price: status.bookable ? priced.price : null,
-          indicativePrice: priced.price,
-          basePrice: toNumber(r.base_price),
+          priceCents: status.bookable ? priced.price_cents : null,
+          indicativePriceCents: priced.price_cents,
+          basePriceCents: toNumber(r.base_price_cents),
           hasOverride: r.has_override,
           overrideLabel: r.override_label,
           appliedModifiers: priced.applied_modifiers,
@@ -753,7 +753,7 @@ export async function loadAriGrid(
         id: head.rate_plan_id,
         name: head.rate_plan_name,
         currency: head.currency,
-        bar: toNumber(head.bar),
+        barCents: toNumber(head.bar_cents),
         onSale: head.on_sale,
         isRefundable: head.is_refundable,
         minStay: head.plan_min_stay,

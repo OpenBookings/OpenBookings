@@ -24,7 +24,8 @@ describe("modifierSchema", () => {
       type: "day_of_week",
       triggerCondition: { days_of_week: [5, 6] },
       adjustmentType: "flat",
-      adjustmentValue: 30,
+      // A fixed amount is stored in cents.
+      adjustmentValue: 3000,
     });
     expect(modifierSchema.parse(rule({ kind: "length_of_stay", direction: "down", adjustmentType: "percent", amount: "10", minNights: "7" }))).toEqual({
       type: "length_of_stay",
@@ -56,11 +57,19 @@ describe("modifierSchema", () => {
     expect(modifierSchema.safeParse(rule({ kind: "last_minute", daysTillArrival: "3" })).success).toBe(true);
   });
 
-  test("a percentage is 1 to 90, a flat amount 1 to 9999 euros", () => {
+  test("a fixed amount is euros and cents, stored in cents", () => {
+    expect(modifierSchema.parse(rule({ amount: "15.50" })).adjustmentValue).toBe(1550);
+    expect(modifierSchema.parse(rule({ amount: "15,5" })).adjustmentValue).toBe(1550);
+    expect(modifierSchema.parse(rule({ amount: " 9999 " })).adjustmentValue).toBe(999_900);
+  });
+
+  test("a percentage is 1 to 90, a flat amount €0.01 to €9,999", () => {
     expect(errorOn({ adjustmentType: "percent", amount: "95" }, "amount")).toBe("A percentage can be at most 90.");
-    expect(errorOn({ amount: "0" }, "amount")).toBeDefined();
-    expect(errorOn({ amount: "10000" }, "amount")).toBeDefined();
-    expect(errorOn({ amount: "2.5" }, "amount")).toBeDefined();
+    expect(errorOn({ adjustmentType: "percent", amount: "2.5" }, "amount")).toBeDefined();
+    expect(errorOn({ amount: "0" }, "amount")).toBe("Enter an amount from €0.01 to €9,999.");
+    expect(errorOn({ amount: "9999.01" }, "amount")).toBe("Enter an amount from €0.01 to €9,999.");
+    expect(errorOn({ amount: "2.555" }, "amount")).toBe("Use at most two decimals, without a thousands separator");
+    expect(errorOn({ amount: "1.234,50" }, "amount")).toBeDefined();
   });
 
   test("each kind needs its own condition", () => {

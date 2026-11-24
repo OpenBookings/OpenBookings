@@ -31,14 +31,14 @@ export function withAllInPrices(
     ...room,
     rate_plans: room.rate_plans.map((plan) => {
       const t = tonight[plan.id];
-      if (t?.sellable) return { ...plan, price_per_night: t.price };
+      if (t?.sellable) return { ...plan, price_per_night_cents: t.priceCents };
       const tax = calculateTouristTax(rules, {
-        nights: [{ date: today, price: plan.bar }],
+        nights: [{ date: today, priceCents: plan.bar_cents }],
         adults: Math.max(1, room.base_occupancy ?? 1),
         children: 0,
         rooms: 1,
       });
-      return { ...plan, price_per_night: Math.round((plan.bar + tax.total) * 100) / 100, price_from: true };
+      return { ...plan, price_per_night_cents: plan.bar_cents + tax.totalCents, price_from: true };
     }),
   }));
 }
@@ -57,20 +57,21 @@ export function withAllInPrices(
 export function withCancellationTerms(rooms: DbRoom[], tier: PropertyCancellationTier): DbRoom[] {
   return rooms.map((room) => {
     const refundable = room.rate_plans.filter((p) => p.is_refundable);
-    const refundableBars = refundable.map((p) => p.bar);
+    const refundableBars = refundable.map((p) => p.bar_cents);
     const cheapestRefundable = refundable.reduce<number | null>(
-      (min, p) => (min === null ? (p.price_per_night ?? p.bar) : Math.min(min, p.price_per_night ?? p.bar)),
+      (min, p) =>
+        min === null ? (p.price_per_night_cents ?? p.bar_cents) : Math.min(min, p.price_per_night_cents ?? p.bar_cents),
       null,
     );
     return {
       ...room,
       rate_plans: room.rate_plans
-        .filter((p) => p.is_refundable || nonRefundableQualifies(p.bar, refundableBars))
+        .filter((p) => p.is_refundable || nonRefundableQualifies(p.bar_cents, refundableBars))
         .map((p) => ({
           ...p,
           cancellation_tier: snapshotTier(tier, p.is_refundable),
           ...(!p.is_refundable && cheapestRefundable !== null
-            ? { saving_vs_refundable: Math.round((cheapestRefundable - (p.price_per_night ?? p.bar)) * 100) / 100 }
+            ? { saving_vs_refundable_cents: cheapestRefundable - (p.price_per_night_cents ?? p.bar_cents) }
             : {}),
         })),
     };

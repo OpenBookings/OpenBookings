@@ -12,9 +12,9 @@
  * snapshot taken when the room was booked, never the property's current tier,
  * so a host changing tiers never alters a booking that already exists.
  *
- * Money is in major units (euros) like the rest of this package. The arithmetic
- * runs in whole cents, and a refund rounds UP to the cent: Annex B rounds in the
- * guest's favour.
+ * Every amount is an integer number of cents, like the rest of this package.
+ * A refund that is a share of a night rounds UP to the cent: Annex B rounds in
+ * the guest's favour.
  */
 
 import { touristTaxByNight, type TouristTaxRule } from "./tourist-tax";
@@ -26,11 +26,11 @@ export type PropertyCancellationTier = "flex" | "standard";
 /** What a booked room carries. */
 export type CancellationTier = PropertyCancellationTier | "non_refundable";
 
-/** One booked night. `date` is the day the night starts (YYYY-MM-DD). */
+/** One booked night, in cents. `date` is the day the night starts (YYYY-MM-DD). */
 export interface NightValue {
   date: string;
-  price: number;
-  touristTax: number;
+  priceCents: number;
+  touristTaxCents: number;
 }
 
 export interface PolicySnapshot {
@@ -55,10 +55,11 @@ export type RefundRule =
   | "no_show"
   | "full_refund_carve_out";
 
+/** In cents. */
 export interface Amounts {
-  accommodation: number;
-  touristTax: number;
-  total: number;
+  accommodationCents: number;
+  touristTaxCents: number;
+  totalCents: number;
 }
 
 export interface RefundResult {
@@ -161,8 +162,6 @@ export function buildPolicySnapshot(i: {
 
 // ── Refunds ───────────────────────────────────────────────────────────────────
 
-const toCents = (euros: number) => Math.round(euros * 100);
-const toEuros = (cents: number) => cents / 100;
 /** Round a refund up to the cent; the epsilon keeps float noise from adding one. */
 const ceilCents = (cents: number) => Math.max(0, Math.ceil(cents - 1e-6));
 
@@ -170,16 +169,12 @@ const ceilCents = (cents: number) => Math.max(0, Math.ceil(cents - 1e-6));
 const EARLY_DEPARTURE_KEPT_NIGHTS = 7;
 
 function amounts(accommodationCents: number, touristTaxCents: number): Amounts {
-  return {
-    accommodation: toEuros(accommodationCents),
-    touristTax: toEuros(touristTaxCents),
-    total: toEuros(accommodationCents + touristTaxCents),
-  };
+  return { accommodationCents, touristTaxCents, totalCents: accommodationCents + touristTaxCents };
 }
 
 export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: RefundEvent): RefundResult {
-  const paidAccommodation = nights.reduce((sum, n) => sum + toCents(n.price), 0);
-  const paidTax = nights.reduce((sum, n) => sum + toCents(n.touristTax), 0);
+  const paidAccommodation = nights.reduce((sum, n) => sum + n.priceCents, 0);
+  const paidTax = nights.reduce((sum, n) => sum + n.touristTaxCents, 0);
 
   let rule: RefundRule;
   let covered: NightValue[];
@@ -218,9 +213,9 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
       break;
   }
 
-  const exactAccommodation = covered.reduce((sum, n, i) => sum + shares[i] * toCents(n.price), 0);
+  const exactAccommodation = covered.reduce((sum, n, i) => sum + shares[i] * n.priceCents, 0);
   const accommodationCents = Math.min(ceilCents(exactAccommodation), paidAccommodation);
-  const taxCents = refundTax ? covered.reduce((sum, n) => sum + toCents(n.touristTax), 0) : 0;
+  const taxCents = refundTax ? covered.reduce((sum, n) => sum + n.touristTaxCents, 0) : 0;
 
   return {
     rule,
@@ -232,11 +227,11 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
 
 /**
  * Annex B B.4.2: a Non-refundable rate must be at least 10% cheaper than a
- * refundable rate it sits next to. Compared in cents so 90.00 vs 100 is exact.
+ * refundable rate it sits next to. Totals in cents; integer maths, so 9000 vs
+ * 10000 is exact.
  */
-export function nonRefundableQualifies(nonRefundableTotal: number, refundableTotals: number[]): boolean {
-  const nr = toCents(nonRefundableTotal);
-  return refundableTotals.some((r) => nr * 10 <= toCents(r) * 9);
+export function nonRefundableQualifies(nonRefundableTotalCents: number, refundableTotalsCents: number[]): boolean {
+  return refundableTotalsCents.some((r) => nonRefundableTotalCents * 10 <= r * 9);
 }
 
 // ── What can happen to a booking now ──────────────────────────────────────────
@@ -339,7 +334,7 @@ export function freeCancellationUntil(i: {
 
 /**
  * Everything a reserved room stores when its booking is confirmed: the policy
- * snapshot, and each night's price and tourist tax. Refunds read only this.
+ * snapshot, and each night's price and tourist tax in cents. Refunds read only this.
  */
 export function reservationPolicy(i: {
   propertyTier: PropertyCancellationTier;
@@ -348,7 +343,7 @@ export function reservationPolicy(i: {
   checkInTime: string | null;
   arrivalDate: string;
   confirmedAt: Date;
-  nightPrices: { date: string; price: number }[];
+  nightPrices: { date: string; priceCents: number }[];
   touristTaxRules: TouristTaxRule[];
   adults: number;
   children: number;
@@ -370,5 +365,5 @@ export function reservationPolicy(i: {
     // A reservation is one room.
     rooms: 1,
   });
-  return { snapshot, nights: i.nightPrices.map((n, idx) => ({ ...n, touristTax: tax[idx] })) };
+  return { snapshot, nights: i.nightPrices.map((n, idx) => ({ ...n, touristTaxCents: tax[idx] })) };
 }

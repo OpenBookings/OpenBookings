@@ -1,12 +1,12 @@
 import {
   ADMIN_ACTOR,
   outsideRefundKey,
-  parseEuroCents,
   validateSplit,
   type OutsideSplit,
   type Queryable,
   type SplitError,
 } from "@openbookings/db";
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { PAYMENT_FLAG_ACTIONS } from "@openbookings/stripe";
 import { bookingReference } from "@openbookings/db/booking-reference";
 import { UUID_RE } from "./search";
@@ -98,9 +98,9 @@ export async function loadFlaggedPayments(db: Queryable, limit = 200): Promise<F
               WHERE m."organizationId" = a.organization_id AND m.role = 'owner') AS owner_emails,
             b.id AS booking_id,
             r.created_at AS resolved_at, r.reason AS resolved_note,
-            round(rf.amount * 100)::bigint AS record_cents,
-            round(rf.accommodation_amount * 100)::bigint AS record_room_cents,
-            round(rf.tourist_tax_amount * 100)::bigint AS record_tax_cents,
+            rf.amount_cents AS record_cents,
+            rf.accommodation_cents AS record_room_cents,
+            rf.tourist_tax_cents AS record_tax_cents,
             rf.split_explained_at IS NOT NULL AS record_explained
        FROM audit_log a
        LEFT JOIN "organization" o ON o.id = a.organization_id
@@ -165,9 +165,11 @@ export function resolvePaymentFlagFromForm(db: Queryable, i: ResolveInput): Prom
   const room = i.roomPrice?.trim() ?? "";
   const tax = i.touristTax?.trim() ?? "";
   if (room === "" && tax === "") return resolvePaymentFlag(db, { flagId: i.flagId, note: i.note });
-  const roomPriceCents = room === "" ? 0 : parseEuroCents(room);
-  const touristTaxCents = tax === "" ? 0 : parseEuroCents(tax);
-  if (roomPriceCents === null || touristTaxCents === null) return Promise.resolve({ ok: false, error: "split_not_an_amount" });
+  const roomPrice = room === "" ? { ok: true as const, cents: 0 } : parseEuroInput(room);
+  const touristTax = tax === "" ? { ok: true as const, cents: 0 } : parseEuroInput(tax);
+  if (!roomPrice.ok || !touristTax.ok) return Promise.resolve({ ok: false, error: "split_not_an_amount" });
+  const roomPriceCents = roomPrice.cents;
+  const touristTaxCents = touristTax.cents;
   return resolvePaymentFlag(db, { flagId: i.flagId, note: i.note, split: { roomPriceCents, touristTaxCents } });
 }
 
@@ -198,7 +200,7 @@ export async function resolvePaymentFlag(
     if (!flag) return { ok: false, error: "not_found" };
     const { rows: found } = flag.dedupe_key
       ? await db.query(
-          `SELECT id, round(amount * 100)::bigint AS cents FROM refunds WHERE idempotency_key = $1 AND source <> 'openbookings'`,
+          `SELECT id, amount_cents AS cents FROM refunds WHERE idempotency_key = $1 AND source <> 'openbookings'`,
           [outsideRefundKey(SOURCE[flag.action], flag.dedupe_key)],
         )
       : { rows: [] };
@@ -226,15 +228,15 @@ export async function resolvePaymentFlag(
        RETURNING id
      ), explained AS (
        UPDATE refunds
-          SET accommodation_amount = $7::bigint / 100.0, tourist_tax_amount = $8::bigint / 100.0,
+          SET accommodation_cents = $7::bigint, tourist_tax_cents = $8::bigint,
               split_explained_at = NOW(), split_explained_by = $4
         WHERE id = $6::uuid AND EXISTS (SELECT 1 FROM inserted)
-          AND round(amount * 100) = $7::bigint + $8::bigint
+          AND amount_cents = $7::bigint + $8::bigint
        RETURNING id, booking_id
      ), event AS (
        INSERT INTO booking_events (booking_id, kind, actor_kind, actor_id, reason, data, created_at)
        SELECT e.booking_id, 'outside_refund_explained', $9, $4, $5,
-              jsonb_build_object('refundId', e.id, 'roomPrice', $7::bigint / 100.0, 'touristTax', $8::bigint / 100.0),
+              jsonb_build_object('refundId', e.id, 'roomPriceCents', $7::bigint, 'touristTaxCents', $8::bigint),
               clock_timestamp()
          FROM explained e
        RETURNING id

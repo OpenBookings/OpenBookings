@@ -4,6 +4,7 @@ import { mockModules } from "@/lib/mock-modules";
 const captured: unknown[][] = [];
 const refundMails: unknown[][] = [];
 let lifecycle: unknown = { ok: true, refunds: [] };
+const goodwillCalls: unknown[] = [];
 
 await mockModules(import.meta.dir, {
   "next/server": () => ({ after: (task: () => unknown) => void task() }),
@@ -22,7 +23,10 @@ await mockModules(import.meta.dir, {
   "@openbookings/db": () => ({ queryOne: async () => ({ hotel_id: "h1" }) }),
   "@openbookings/db/booking-lifecycle": () => ({
     cancelRooms: async () => lifecycle,
-    issueGoodwillRefund: async () => lifecycle,
+    issueGoodwillRefund: async (_deps: unknown, i: unknown) => {
+      goodwillCalls.push(i);
+      return lifecycle;
+    },
     markCheckedIn: async () => lifecycle,
     markNoShow: async () => lifecycle,
     previewRefund: async () => lifecycle,
@@ -53,6 +57,7 @@ const { hostGoodwillRefund, hostMarkCheckedIn, hostRecordEarlyDeparture, hostRet
 beforeEach(() => {
   captured.length = 0;
   refundMails.length = 0;
+  goodwillCalls.length = 0;
   lifecycle = { ok: true, refunds: [] };
 });
 
@@ -70,12 +75,12 @@ describe("hostMarkCheckedIn outcome event", () => {
 });
 
 describe("refund mails outside a cancellation", () => {
-  const refunds = [{ reservationId: null, amount: 20, status: "succeeded" }];
+  const refunds = [{ reservationId: null, amountCents: 2_000, status: "succeeded" }];
 
   it("mails the guest after an early departure, a goodwill refund and a retry, with what Stripe did", async () => {
     lifecycle = { ok: true, refunds };
     await hostRecordEarlyDeparture("b1", "2031-11-10");
-    await hostGoodwillRefund("b1", 20);
+    await hostGoodwillRefund("b1", "20");
     await hostRetryRefunds("b1");
     expect(refundMails).toEqual([
       ["b1", "early_departure", refunds],
@@ -86,7 +91,21 @@ describe("refund mails outside a cancellation", () => {
 
   it("mails nothing when the lifecycle refuses", async () => {
     lifecycle = { ok: false, error: "not_allowed" };
-    await hostGoodwillRefund("b1", 20);
+    await hostGoodwillRefund("b1", "20");
     expect(refundMails).toEqual([]);
+  });
+});
+
+describe("hostGoodwillRefund amount", () => {
+  it('refunds "12,50" as 1250 cents', async () => {
+    expect(await hostGoodwillRefund("b1", "12,50")).toEqual({ ok: true, refunds: [] });
+    expect(goodwillCalls).toEqual([{ bookingId: "b1", actor: { kind: "host", userId: "host-1" }, amountCents: 1250 }]);
+  });
+
+  it("refuses an amount it can't read, before the lifecycle is asked", async () => {
+    for (const bad of ["abc", "0", "12.505", 12.5 as unknown as string]) {
+      expect(await hostGoodwillRefund("b1", bad)).toEqual({ ok: false, error: "invalid_amount" });
+    }
+    expect(goodwillCalls).toEqual([]);
   });
 });

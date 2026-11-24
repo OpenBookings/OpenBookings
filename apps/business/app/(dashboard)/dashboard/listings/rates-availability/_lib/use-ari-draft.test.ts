@@ -10,11 +10,11 @@ import { editKey, toChanges, type DraftEdit } from "./use-ari-draft";
  * as seven separate ones.
  */
 
-const price = (date: string, value: number | null): DraftEdit => ({
+const price = (date: string, cents: number | null): DraftEdit => ({
   kind: "price",
   ratePlanId: "plan-1",
   date,
-  price: value,
+  priceCents: cents,
 });
 
 const closure = (date: string, note: string | null = null): DraftEdit => ({
@@ -27,14 +27,14 @@ const closure = (date: string, note: string | null = null): DraftEdit => ({
 
 describe("editKey", () => {
   test("one cell holds one edit per kind", () => {
-    expect(editKey(price("2026-07-01", 100))).toBe(
-      editKey(price("2026-07-01", 250)),
+    expect(editKey(price("2026-07-01", 10000))).toBe(
+      editKey(price("2026-07-01", 25000)),
     );
   });
 
   test("different dates are different edits", () => {
-    expect(editKey(price("2026-07-01", 100))).not.toBe(
-      editKey(price("2026-07-02", 100)),
+    expect(editKey(price("2026-07-01", 10000))).not.toBe(
+      editKey(price("2026-07-02", 10000)),
     );
   });
 
@@ -58,36 +58,37 @@ describe("toChanges", () => {
 
   test("the same price across days is one change carrying every date", () => {
     const changes = toChanges([
-      price("2026-07-01", 120),
-      price("2026-07-02", 120),
-      price("2026-07-03", 120),
+      price("2026-07-01", 12025),
+      price("2026-07-02", 12025),
+      price("2026-07-03", 12025),
     ]);
 
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
       type: "price",
       ratePlanId: "plan-1",
-      price: 120,
+      // Sent as the text a host would type; the server reads it into cents.
+      price: "120.25",
       dates: ["2026-07-01", "2026-07-02", "2026-07-03"],
     });
   });
 
   test("different prices stay different changes", () => {
-    const changes = toChanges([price("2026-07-01", 120), price("2026-07-02", 140)]);
+    const changes = toChanges([price("2026-07-01", 12025), price("2026-07-02", 14000)]);
     expect(changes).toHaveLength(2);
   });
 
   test("clearing a price is its own change, distinct from setting one", () => {
-    const changes = toChanges([price("2026-07-01", null), price("2026-07-02", 120)]);
+    const changes = toChanges([price("2026-07-01", null), price("2026-07-02", 12025)]);
     expect(changes).toHaveLength(2);
     expect(changes.find((c) => c.type === "price" && c.price === null)).toBeDefined();
   });
 
   test("dates come back sorted and deduplicated", () => {
     const changes = toChanges([
-      price("2026-07-03", 120),
-      price("2026-07-01", 120),
-      price("2026-07-01", 120),
+      price("2026-07-03", 12025),
+      price("2026-07-01", 12025),
+      price("2026-07-01", 12025),
     ]);
     expect(changes[0].dates).toEqual(["2026-07-01", "2026-07-03"]);
   });
@@ -128,8 +129,8 @@ describe("toChanges", () => {
 
   test("edits on different rate plans never merge", () => {
     const changes = toChanges([
-      price("2026-07-01", 120),
-      { kind: "price", ratePlanId: "plan-2", date: "2026-07-01", price: 120 },
+      price("2026-07-01", 12025),
+      { kind: "price", ratePlanId: "plan-2", date: "2026-07-01", priceCents: 12025 },
     ]);
     expect(changes).toHaveLength(2);
   });

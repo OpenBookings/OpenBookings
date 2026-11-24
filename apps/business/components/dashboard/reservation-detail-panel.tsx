@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@openbookings/pricing/money";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
@@ -15,10 +16,8 @@ const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
 const ticketDate = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 const shortDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
-const currencyFormatter = new Intl.NumberFormat("en-NL", {
-  style: "currency",
-  currency: "EUR",
-});
+/** "€1,234.50": receipts always show the cents. */
+const money = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 const utcDate = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
 const DAY = 86_400_000;
@@ -127,8 +126,8 @@ function StayTicket({ reservation }: { reservation: HostReservation }) {
 function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
   const count = reservation.rooms.length;
   // Refunds OpenBookings made; money that left outside it has lines of its own.
-  const outside = reservation.outsideRefunds.reduce((sum, r) => sum + Math.round(r.amount * 100), 0);
-  const ownRefunded = Math.max(0, Math.round(reservation.refundedAmount * 100) - outside) / 100;
+  const outside = reservation.outsideRefunds.reduce((sum, r) => sum + r.amountCents, 0);
+  const ownRefundedCents = Math.max(0, reservation.refundedCents - outside);
   return (
     <section aria-labelledby="panel-rooms">
       <h3 id="panel-rooms" className="text-muted-foreground text-xs">
@@ -146,7 +145,7 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
                   {room.cancelledAt ? `Cancelled ${shortDate.format(utcDate(room.cancelledAt))}` : `${room.tierLabel} rate`}
                 </p>
               </div>
-              <span className="text-muted-foreground text-sm tabular-nums">{currencyFormatter.format(room.paid)}</span>
+              <span className="text-muted-foreground text-sm tabular-nums">{money(room.paidCents)}</span>
             </div>
           </li>
         ))}
@@ -154,12 +153,12 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
       <dl className="mt-3 flex flex-col gap-1 text-sm">
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Paid</dt>
-          <dd className="font-medium tabular-nums">{currencyFormatter.format(reservation.totalAmount)}</dd>
+          <dd className="font-medium tabular-nums">{money(reservation.totalCents)}</dd>
         </div>
-        {ownRefunded > 0 ? (
+        {ownRefundedCents > 0 ? (
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Refunded</dt>
-            <dd className="tabular-nums">− {currencyFormatter.format(ownRefunded)}</dd>
+            <dd className="tabular-nums">− {money(ownRefundedCents)}</dd>
           </div>
         ) : null}
         {reservation.outsideRefunds.map((r, index) => (
@@ -169,25 +168,25 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
                 {r.kind === "dispute" ? "Lost dispute" : "Refunded outside OpenBookings"} ·{" "}
                 {shortDate.format(new Date(r.at))}
               </dt>
-              <dd className="tabular-nums">− {currencyFormatter.format(r.amount)}</dd>
+              <dd className="tabular-nums">− {money(r.amountCents)}</dd>
             </div>
             <p className="text-muted-foreground text-xs">
               {r.split
-                ? `Room price ${currencyFormatter.format(r.split.roomPrice)} · tourist tax ${currencyFormatter.format(r.split.touristTax)}`
+                ? `Room price ${money(r.split.roomPriceCents)} · tourist tax ${money(r.split.touristTaxCents)}`
                 : "Not explained yet: OpenBookings support will ask you what it was for."}
             </p>
           </div>
         ))}
-        {reservation.atHotelAmount > 0 ? (
+        {reservation.atHotelCents > 0 ? (
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">To collect at check-in</dt>
-            <dd className="tabular-nums">{currencyFormatter.format(reservation.atHotelAmount)}</dd>
+            <dd className="tabular-nums">{money(reservation.atHotelCents)}</dd>
           </div>
         ) : null}
       </dl>
       {reservation.extrasLabel ? (
         <p className="text-muted-foreground mt-2 text-xs">
-          {reservation.atHotelAmount > 0
+          {reservation.atHotelCents > 0
             ? "Cots and extra beds are paid at your property, not online. This amount is not in your payout."
             : "Cots and extra beds booked here are free."}
         </p>

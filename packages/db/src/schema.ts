@@ -104,8 +104,8 @@ export const properties = pgTable(
     country: char("country", { length: 2 }).notNull(),
     /** Sets the VAT rates for the split (0045). */
     accommodationType: text("accommodation_type").notNull().default("hotel"),
-    /** Euros per person per night, VAT-inclusive, for the breakfast part of the split (0045). */
-    breakfastValue: numeric("breakfast_value", { precision: 10, scale: 2 }),
+    /** Cents per person per night, VAT-inclusive, for the breakfast part of the split (0045, cents since 0058). */
+    breakfastValueCents: bigint("breakfast_value_cents", { mode: "number" }),
     timezone: varchar("timezone", { length: 50 }).notNull(),
     location: geographyPoint("location").notNull(),
     /**
@@ -144,6 +144,7 @@ export const properties = pgTable(
     index("idx_hotels_is_active").on(table.isActive),
     index("idx_hotels_owner_user_id").on(table.ownerUserId),
     index("idx_properties_is_demo").on(table.isDemo).where(sql`${table.isDemo}`),
+    check("properties_breakfast_value_cents_check", sql`${table.breakfastValueCents} >= 0`),
   ],
 );
 
@@ -151,7 +152,8 @@ export const properties = pgTable(
  * Tourist tax rules (0026). Added on top of the room price; never
  * commissioned. A rule applies from `effectiveFrom` until the next one starts,
  * and is not edited once it has started. `charges` holds TouristTaxCharge[]
- * from @openbookings/pricing; empty = no tourist tax from this date.
+ * from @openbookings/pricing (a fixed charge's `amountCents`, a percent
+ * charge's `percent`, since 0058); empty = no tourist tax from this date.
  */
 export const touristTaxRules = pgTable(
   "tourist_tax_rules",
@@ -219,18 +221,18 @@ export const rooms = pgTable(
     /** Up to six of `amenityKeys`, featured on the guest room card (0023). */
     featuredAmenityKeys: text("featured_amenity_keys").array().notNull().default(sql`'{}'::text[]`),
     /**
-     * Per extra guest per night, whole euros (0040). Guests above
+     * Per extra guest per night, cents (0040, cents since 0058). Guests above
      * `baseOccupancy` pay it, adults filling the included places first.
      * NULL = not charged. Never discounted.
      */
-    extraAdultFee: bigint("extra_adult_fee", { mode: "number" }),
-    extraChildFee: bigint("extra_child_fee", { mode: "number" }),
+    extraAdultFeeCents: bigint("extra_adult_fee_cents", { mode: "number" }),
+    extraChildFeeCents: bigint("extra_child_fee_cents", { mode: "number" }),
     /** How many cots fit (0040). 0 = not offered. */
     cotsMax: smallint("cots_max").notNull().default(0),
-    /** Per cot per night, whole euros; 0 = free, NULL when not offered (0040). */
-    cotFee: bigint("cot_fee", { mode: "number" }),
+    /** Per cot per night, cents; 0 = free, NULL when not offered (0040). */
+    cotFeeCents: bigint("cot_fee_cents", { mode: "number" }),
     extraBedsMax: smallint("extra_beds_max").notNull().default(0),
-    extraBedFee: bigint("extra_bed_fee", { mode: "number" }),
+    extraBedFeeCents: bigint("extra_bed_fee_cents", { mode: "number" }),
     /** false = a guest gets cots or extra beds, not both (0040). */
     cotAndExtraBedTogether: boolean("cot_and_extra_bed_together").notNull().default(true),
   },
@@ -243,6 +245,10 @@ export const rooms = pgTable(
       "rooms_base_occupancy_within_max",
       sql`${table.baseOccupancy} <= ${table.maxAdults} + ${table.maxChildren}`,
     ),
+    check("rooms_extra_adult_fee_cents_check", sql`${table.extraAdultFeeCents} >= 0`),
+    check("rooms_extra_child_fee_cents_check", sql`${table.extraChildFeeCents} >= 0`),
+    check("rooms_cot_fee_cents_check", sql`${table.cotFeeCents} >= 0`),
+    check("rooms_extra_bed_fee_cents_check", sql`${table.extraBedFeeCents} >= 0`),
   ],
 );
 
@@ -254,7 +260,8 @@ export const ratePlans = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 100 }).notNull(),
-    bar: bigint("bar", { mode: "number" }).notNull(),
+    /** Best available rate per night, cents, VAT-inclusive (cents since 0058). */
+    barCents: bigint("bar_cents", { mode: "number" }).notNull(),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     /** true = follows the property's cancellation tier; false = a Non-refundable rate (0027). */
     isRefundable: boolean("is_refundable").notNull(),
@@ -286,6 +293,7 @@ export const ratePlans = pgTable(
     check("rate_plans_currency_eur", sql`${table.currency} = 'EUR'`),
     index("idx_rate_plans_room_id").on(table.roomId, table.isActive),
     check("rate_plans_archived_not_active", sql`${table.archivedAt} IS NULL OR NOT ${table.isActive}`),
+    check("rate_plans_base_price_positive", sql`${table.barCents} >= 0`),
   ],
 );
 
@@ -299,7 +307,8 @@ export const rateOverrides = pgTable(
     label: varchar("label", { length: 100 }),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
-    pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
+    /** Cents (since 0058). */
+    pricePerNightCents: bigint("price_per_night_cents", { mode: "number" }).notNull(),
     priority: integer("priority").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     isActive: boolean("is_active").notNull().default(true),
@@ -314,7 +323,10 @@ export const rateOverrides = pgTable(
      */
     createdBy: text("created_by"),
   },
-  (table) => [index("idx_rate_overrides_plan_dates").on(table.ratePlanId, table.startDate, table.endDate)],
+  (table) => [
+    index("idx_rate_overrides_plan_dates").on(table.ratePlanId, table.startDate, table.endDate),
+    check("rate_overrides_price_positive", sql`${table.pricePerNightCents} >= 0`),
+  ],
 );
 
 export const rateModifiers = pgTable(
@@ -327,6 +339,7 @@ export const rateModifiers = pgTable(
     type: rateModifierTypeEnum("type").notNull(),
     triggerCondition: jsonb("trigger_condition").notNull(),
     adjustmentType: adjustmentTypeEnum("adjustment_type").notNull(),
+    /** A percentage for `percent` rules; cents per night for `flat` rules (since 0058). */
     adjustmentValue: bigint("adjustment_value", { mode: "number" }).notNull(),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: smallint("sort_order").notNull().default(0),
@@ -641,9 +654,7 @@ export const bookings = pgTable(
     checkInDate: date("check_in_date").notNull(),
     checkOutDate: date("check_out_date").notNull(),
     status: bookingStatusEnum("status").notNull().default("pending"),
-    totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
-    bookingFeeAmount: bigint("booking_fee_amount", { mode: "number" }).notNull().default(0),
-    // The exact money split, in cents (0035). `totalAmount` is whole euros; read these instead.
+    // The exact money split, in cents (0035). The whole-euro total_amount and booking_fee_amount went in 0058.
     /** The stay, VAT included. Commission is taken on this. */
     roomsTotalCents: bigint("rooms_total_cents", { mode: "number" }).notNull().default(0),
     /** Passed through to the host for their town; never commissioned. */
@@ -703,16 +714,18 @@ export const reservations = pgTable(
     /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
     cots: smallint("cots").notNull().default(0),
     extraBeds: smallint("extra_beds").notNull().default(0),
-    /** What the guest owes the hotel for the cots and extra beds, fixed at booking. Not in `totalAmount` (0042). */
-    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
-    /** VAT inside each night, copied from the intent. Null for bookings from before 0045. */
+    /** What the guest owes the hotel for the cots and extra beds, fixed at booking, cents. Not in `totalCents` (0042). */
+    payAtPropertyCents: bigint("pay_at_property_cents", { mode: "number" }).notNull().default(0),
+    /** VAT inside each night (`grossCents`/`vatCents`), copied from the intent. Null for bookings from before 0045. */
     vatSplit: jsonb("vat_split"),
     totalNights: integer("total_nights").notNull(),
-    pricePerNight: bigint("price_per_night", { mode: "number" }).notNull(),
-    totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
-    /** Tourist tax owed, fixed at booking time (0026). Not part of `totalAmount`. */
-    touristTaxAmount: numeric("tourist_tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
-    /** The TouristTaxLine[] breakdown shown at booking time (0026). */
+    /** The stay's average night, cents. */
+    pricePerNightCents: bigint("price_per_night_cents", { mode: "number" }).notNull(),
+    /** The stay, cents, VAT-inclusive, excl. tourist tax. */
+    totalCents: bigint("total_cents", { mode: "number" }).notNull(),
+    /** Tourist tax owed, fixed at booking time, cents (0026). Not part of `totalCents`. */
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull().default(0),
+    /** The TouristTaxLine[] breakdown shown at booking time, `amountCents` per line (0026). */
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Policy snapshot (0027), written at confirmation. NULL while pending.
@@ -721,7 +734,7 @@ export const reservations = pgTable(
     checkInAt: timestamp("check_in_at", { withTimezone: true }),
     /** The cancellation deadline: free cancellation up to here. NULL = Non-refundable. */
     fullRefundUntil: timestamp("full_refund_until", { withTimezone: true }),
-    /** NightValue[] — `{ date, price, touristTax }` per night, major units (0027). */
+    /** NightValue[] — `{ date, priceCents, touristTaxCents }` per night (0027, cents since 0058). */
     nights: jsonb("nights").notNull().default(sql`'[]'::jsonb`),
     /** Which wording of Annex B the guest agreed to (0027). */
     policyVersion: text("policy_version"),
@@ -732,6 +745,9 @@ export const reservations = pgTable(
     index("idx_reservations_booking_id").on(table.bookingId),
     index("idx_reservations_room_id").on(table.roomId),
     check("reservations_nights_array", sql`jsonb_typeof(${table.nights}) = 'array'`),
+    check("reservations_price_positive", sql`${table.pricePerNightCents} >= 0`),
+    check("reservations_total_positive", sql`${table.totalCents} >= 0`),
+    check("reservations_pay_at_property_cents_check", sql`${table.payAtPropertyCents} >= 0`),
   ],
 );
 
@@ -754,13 +770,14 @@ export const refunds = pgTable(
      * Who moved the money (0053): 'openbookings', or outside it — 'stripe_dashboard'
      * (the host refunded in their own Stripe) or 'dispute' (lost). An outside row
      * is `succeeded`, keyed '<source>:<Stripe id>', and until explained holds its
-     * whole amount as `accommodationAmount` (`splitExplainedAt` NULL).
+     * whole amount as `accommodationCents` (`splitExplainedAt` NULL).
      */
     source: text("source").$type<RefundSource>().notNull().default("openbookings"),
-    accommodationAmount: numeric("accommodation_amount", { precision: 10, scale: 2 }).notNull(),
-    touristTaxAmount: numeric("tourist_tax_amount", { precision: 10, scale: 2 }).notNull(),
-    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-    /** The calculator's RefundResult, so host and guest can see why. */
+    // Cents (since 0058). `amountCents` = accommodation + tourist tax.
+    accommodationCents: bigint("accommodation_cents", { mode: "number" }).notNull(),
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    /** The calculator's RefundResult (amounts in `…Cents`), so host and guest can see why. */
     breakdown: jsonb("breakdown").notNull().default(sql`'{}'::jsonb`),
     status: paymentStatusEnum("status").notNull().default("pending"),
     stripeRefundId: varchar("stripe_refund_id", { length: 255 }),
@@ -778,16 +795,11 @@ export const refunds = pgTable(
     index("idx_refunds_booking_id").on(table.bookingId),
     check(
       "refunds_amount_sum",
-      sql`${table.amount} = ${table.accommodationAmount} + ${table.touristTaxAmount} AND ${table.amount} >= 0`,
+      sql`${table.amountCents} = ${table.accommodationCents} + ${table.touristTaxCents} AND ${table.amountCents} >= 0`,
     ),
-    // NaN satisfies the check above; see drizzle/0030_refunds_reject_nan.sql.
     check("refunds_source_check", sql`${table.source} IN ('openbookings', 'stripe_dashboard', 'dispute')`),
     check("refunds_reason_by_source", sql`(${table.source} = 'openbookings') = (${table.reason} IS NOT NULL)`),
     check("refunds_split_explained", sql`${table.splitExplainedAt} IS NULL OR ${table.source} <> 'openbookings'`),
-    check(
-      "refunds_amounts_finite",
-      sql`${table.amount} <> 'NaN'::numeric AND ${table.accommodationAmount} <> 'NaN'::numeric AND ${table.touristTaxAmount} <> 'NaN'::numeric`,
-    ),
   ],
 );
 
@@ -801,7 +813,8 @@ export const transactions = pgTable(
     type: transactionTypeEnum("type").notNull(),
     provider: varchar("provider", { length: 50 }).notNull().default("stripe"),
     providerPaymentId: varchar("provider_payment_id", { length: 255 }).notNull(),
-    amount: bigint("amount", { mode: "number" }).notNull(),
+    /** Cents (since 0058; whole euros before). */
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     status: paymentStatusEnum("status").notNull().default("pending"),
     failureCode: varchar("failure_code", { length: 100 }),
@@ -811,6 +824,7 @@ export const transactions = pgTable(
   },
   (table) => [
     check("transactions_currency_eur", sql`${table.currency} = 'EUR'`),
+    check("transactions_amount_positive", sql`${table.amountCents} > 0`),
     index("idx_transactions_booking_id").on(table.bookingId),
     index("idx_transactions_provider_payment").on(table.providerPaymentId),
     index("idx_transactions_status").on(table.status),
@@ -831,10 +845,11 @@ export const bookingIntents = pgTable(
     checkOutDate: date("check_out_date").notNull(),
     status: text("status").notNull().default("open"),
     holdExpiresAt: timestamp("hold_expires_at", { withTimezone: true }).notNull(),
+    /** IntentSnapshot, amounts in `…Cents` (since 0058). */
     snapshot: jsonb("snapshot").notNull(),
-    totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
-    touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-    commissionCents: integer("commission_cents").notNull().default(0),
+    totalCents: bigint("total_cents", { mode: "number" }).notNull(),
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull().default(0),
+    commissionCents: bigint("commission_cents", { mode: "number" }).notNull().default(0),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
     paymentProvider: text("payment_provider").notNull().default("stripe"),
     paymentSessionId: text("payment_session_id").unique(),
@@ -899,22 +914,24 @@ export const bookingIntentRooms = pgTable(
     /** Cots and extra beds booked with the room (0040), paid at the property (0042). */
     cots: smallint("cots").notNull().default(0),
     extraBeds: smallint("extra_beds").notNull().default(0),
-    /** What the guest owes the hotel for the cots and extra beds. Not in `stayTotal` (0042). */
-    payAtPropertyAmount: numeric("pay_at_property_amount", { precision: 10, scale: 2 }).notNull().default("0"),
-    /** The stay discount already in `stayTotal`, for checkout: "Weekly discount", 42.00 (0042). */
+    // Money in cents (since 0058), JSON amounts in `…Cents` keys.
+    /** What the guest owes the hotel for the cots and extra beds. Not in `stayTotalCents` (0042). */
+    payAtPropertyCents: bigint("pay_at_property_cents", { mode: "number" }).notNull().default(0),
+    /** The stay discount already in `stayTotalCents`, for checkout: "Weekly discount", 4200 (0042). */
     discountLabel: text("discount_label"),
-    discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }),
+    discountCents: bigint("discount_cents", { mode: "number" }),
+    /** `{ date, priceCents }` per night. */
     nights: jsonb("nights").notNull(),
     /** Base rate per night, before extra guests and discount, for checkout (0044). Empty on older intents. */
     rateNights: jsonb("rate_nights").notNull().default(sql`'[]'::jsonb`),
-    /** Guests above base occupancy, already in `stayTotal` (0044). */
+    /** Guests above base occupancy, already in `stayTotalCents` (0044). */
     extraGuests: jsonb("extra_guests").notNull().default(sql`'[]'::jsonb`),
-    /** Cot and extra bed lines behind `payAtPropertyAmount` (0044). */
+    /** Cot and extra bed lines behind `payAtPropertyCents` (0044). */
     payAtPropertyLines: jsonb("pay_at_property_lines").notNull().default(sql`'[]'::jsonb`),
     /** VAT inside each night, room and breakfast, for the host's books. Null when unknown (0045). */
     vatSplit: jsonb("vat_split"),
-    stayTotal: numeric("stay_total", { precision: 12, scale: 2 }).notNull(),
-    touristTaxAmount: numeric("tourist_tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+    stayTotalCents: bigint("stay_total_cents", { mode: "number" }).notNull(),
+    touristTaxCents: bigint("tourist_tax_cents", { mode: "number" }).notNull().default(0),
     touristTaxLines: jsonb("tourist_tax_lines").notNull().default(sql`'[]'::jsonb`),
     sortOrder: integer("sort_order").notNull().default(0),
   },
@@ -922,6 +939,8 @@ export const bookingIntentRooms = pgTable(
     index("idx_booking_intent_rooms_room").on(table.roomId),
     index("idx_booking_intent_rooms_intent").on(table.intentId),
     check("booking_intent_rooms_nights_array", sql`jsonb_typeof(${table.nights}) = 'array'`),
+    check("booking_intent_rooms_pay_at_property_cents_check", sql`${table.payAtPropertyCents} >= 0`),
+    check("booking_intent_rooms_discount_cents_check", sql`${table.discountCents} > 0`),
   ],
 );
 

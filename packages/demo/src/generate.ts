@@ -132,7 +132,7 @@ async function buildScenario(
   i: { propertyId: string; spec: ScenarioSpec; ctaRange: { startDate: string; endDate: string } },
 ): Promise<void> {
   const { spec, ctaRange } = i;
-  const basePrice = rng.int(70, 180);
+  const basePrice = rng.int(70, 180) * 100;
   for (const t of spec.rooms) {
     const { roomId } = await insertDemoRoom(tx, {
       propertyId: i.propertyId,
@@ -148,23 +148,24 @@ async function buildScenario(
     });
 
     const mealPlan = rng.pick(MEAL_PLANS);
-    const bar = Math.round(basePrice * t.priceFactor);
-    const plans = [{ name: MEAL_PLAN_NAMES[mealPlan], bar, isRefundable: true }];
+    // Whole euros, in cents.
+    const barCents = Math.round((basePrice * t.priceFactor) / 100) * 100;
+    const plans = [{ name: MEAL_PLAN_NAMES[mealPlan], barCents, isRefundable: true }];
     if (spec.nonRefundable) {
-      plans.push({ name: `${MEAL_PLAN_NAMES[mealPlan]}, non-refundable`, bar: nonRefundableBar(bar), isRefundable: false });
+      plans.push({ name: `${MEAL_PLAN_NAMES[mealPlan]}, non-refundable`, barCents: nonRefundableBar(barCents), isRefundable: false });
     }
     for (const plan of plans) {
       const { ratePlanId } = await insertDemoRatePlan(tx, { roomId, ...plan, minStay: spec.minStay, mealPlan });
       if (spec.closedToArrival) {
         await insertRestriction(tx, { ratePlanId, ...ctaRange, closedToArrival: true });
       }
-      if (spec.weekendSurcharge !== null) {
-        await insertDayOfWeekModifier(tx, { ratePlanId, days: [5, 6], amount: spec.weekendSurcharge });
+      if (spec.weekendSurchargeCents !== null) {
+        await insertDayOfWeekModifier(tx, { ratePlanId, days: [5, 6], amountCents: spec.weekendSurchargeCents });
       }
     }
   }
-  if (spec.touristTax !== null) {
-    await insertTouristTaxRule(tx, { propertyId: i.propertyId, perPersonPerNight: spec.touristTax });
+  if (spec.touristTaxCents !== null) {
+    await insertTouristTaxRule(tx, { propertyId: i.propertyId, perPersonPerNightCents: spec.touristTaxCents });
   }
 }
 

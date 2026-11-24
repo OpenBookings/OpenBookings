@@ -35,7 +35,7 @@ WHERE ${CURRENT_PROPERTY_SQL}`;
 
 /** Rate plans that can carry a rule: not archived, on rooms that are not archived. */
 const PLANS_SQL = `
-SELECT rp.id::text AS id, rp.name, rp.bar::float8 AS bar, r.id::text AS room_id, r.name AS room_name
+SELECT rp.id::text AS id, rp.name, rp.bar_cents::float8 AS bar_cents, r.id::text AS room_id, r.name AS room_name
 FROM rate_plans rp
 JOIN rooms r      ON r.id = rp.room_id
 JOIN properties p ON p.id = r.property_id
@@ -99,13 +99,19 @@ export async function loadPricingRules(
   if (!property) return null;
 
   const [plans, rows] = await Promise.all([
-    scoped.query<{ id: string; name: string; bar: number; room_id: string; room_name: string }>(PLANS_SQL),
+    scoped.query<{ id: string; name: string; bar_cents: number; room_id: string; room_name: string }>(PLANS_SQL),
     scoped.query<ModifierRow>(MODIFIERS_SQL),
   ]);
 
   return {
     property,
-    plans: plans.map((p) => ({ id: p.id, name: p.name, bar: Number(p.bar), roomId: p.room_id, roomName: p.room_name })),
+    plans: plans.map((p) => ({
+      id: p.id,
+      name: p.name,
+      barCents: Number(p.bar_cents),
+      roomId: p.room_id,
+      roomName: p.room_name,
+    })),
     rules: groupRules(rows),
   };
 }

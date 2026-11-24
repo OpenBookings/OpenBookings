@@ -5,7 +5,8 @@ const rule = (over: Partial<PricingRule>): PricingRule => ({
   id: "r1",
   type: "day_of_week",
   adjustmentType: "flat",
-  adjustmentValue: 30,
+  // Cents for a fixed amount.
+  adjustmentValue: 3000,
   triggerCondition: { days_of_week: [5, 6] },
   active: true,
   ...over,
@@ -23,12 +24,16 @@ describe("ruleSentence", () => {
     expect(ruleSentence(rule({ type: "early_bird", adjustmentType: "percent", adjustmentValue: -15, triggerCondition: { days_before_arrival: 60 } }))).toBe(
       "Booked 60+ days ahead: −15%",
     );
-    expect(ruleSentence(rule({ type: "last_minute", adjustmentValue: 20, triggerCondition: { days_till_arrival: 3 } }))).toBe(
+    expect(ruleSentence(rule({ type: "last_minute", adjustmentValue: 2000, triggerCondition: { days_till_arrival: 3 } }))).toBe(
       "Booked within 3 days of arrival: +€20 per night",
     );
     expect(ruleSentence(rule({ type: "last_minute", adjustmentType: "percent", adjustmentValue: -10, triggerCondition: { days_till_arrival: 0 } }))).toBe(
       "Booked on the day of arrival: −10%",
     );
+  });
+
+  test("a fixed amount shows its cents", () => {
+    expect(ruleSentence(rule({ adjustmentValue: 1550 }))).toBe("Fri, Sat: +€15.50 per night");
   });
 
   test("weekdays are listed Monday first", () => {
@@ -54,6 +59,10 @@ describe("ruleForm", () => {
       amount: "10",
       minNights: "7",
     });
+  });
+
+  test("a fixed amount opens as euros and cents", () => {
+    expect(ruleForm(rule({ adjustmentValue: 1550 })).amount).toBe("15.50");
   });
 
   test("a new rule starts as a weekend surcharge on Friday and Saturday", () => {

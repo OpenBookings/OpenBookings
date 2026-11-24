@@ -18,7 +18,7 @@ export const EXPORT_QUERIES = {
                     "ipAddress" AS ip_address, "userAgent" AS user_agent
              FROM session WHERE "userId" = $1 ORDER BY "createdAt" DESC`,
   bookings: `SELECT b.id, b.status, b.check_in_date::text AS check_in_date, b.check_out_date::text AS check_out_date,
-                    b.total_amount, b.currency, b.guest_notes, b.cancellation_reason, b.cancelled_at,
+                    b.total_cents, b.currency, b.guest_notes, b.cancellation_reason, b.cancelled_at,
                     b.confirmed_at, b.created_at, p.name AS property, p.city,
                     COALESCE((SELECT json_agg(json_build_object(
                       'room', rm.name, 'adults', r.adults, 'children', r.children, 'nights', r.nights,
@@ -26,7 +26,7 @@ export const EXPORT_QUERIES = {
                     ) ORDER BY r.created_at) FROM reservations r JOIN rooms rm ON rm.id = r.room_id
                     WHERE r.booking_id = b.id), '[]'::json) AS rooms,
                     COALESCE((SELECT json_agg(json_build_object(
-                      'amount', rf.amount, 'reason', rf.reason, 'status', rf.status, 'created_at', rf.created_at
+                      'amount_cents', rf.amount_cents, 'reason', rf.reason, 'status', rf.status, 'created_at', rf.created_at
                     ) ORDER BY rf.created_at) FROM refunds rf WHERE rf.booking_id = b.id), '[]'::json) AS refunds
              FROM bookings b JOIN properties p ON p.id = b.hotel_id
              WHERE b.user_id = $1 AND b.status <> 'pending'

@@ -1,4 +1,5 @@
-import type { ExtraGuestLine, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine, VatSplit } from "@openbookings/pricing";
+import { roundHalfUp } from "@openbookings/pricing/money";
+import type { ExtraGuestLine, NightPrice, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine, VatSplit } from "@openbookings/pricing";
 import { loadStayAvailability } from "./availability";
 import { recordBookingEvent } from "./booking-events";
 import type { VatTreatment } from "./billing-types";
@@ -8,7 +9,7 @@ import { confirmBookingPolicy, type Queryable } from "./reservation-policy";
 
 /**
  * One room of a guest's selection, priced on the server for its own party.
- * Amounts are euros (major units); `nights` sum to `stayTotal`.
+ * Amounts are integer cents; `nights` sum to `stayTotalCents`.
  */
 export type IntentRoomInput = {
   roomId: string;
@@ -20,33 +21,33 @@ export type IntentRoomInput = {
   /** Cots and extra beds booked with the room (0040). */
   cots: number;
   extraBeds: number;
-  /** What the cots and extra beds cost, paid at the property: never in `nights` or `stayTotal` (0042). */
-  payAtProperty: number;
+  /** What the cots and extra beds cost, paid at the property: never in `nights` or `stayTotalCents` (0042). */
+  payAtPropertyCents: number;
   /** The stay discount already in `nights`, for checkout to show (0042). */
-  discount: { label: string; amount: number } | null;
+  discount: { label: string; amountCents: number } | null;
   /** Base rate per night, before extra guests and discount (0044). */
-  rateNights: { date: string; price: number }[];
-  /** Guests above base occupancy, already in `stayTotal` (0044). */
+  rateNights: NightPrice[];
+  /** Guests above base occupancy, already in `stayTotalCents` (0044). */
   extraGuests: ExtraGuestLine[];
-  /** The lines behind `payAtProperty` (0044). */
+  /** The lines behind `payAtPropertyCents` (0044). */
   payAtPropertyLines: PayAtPropertyLine[];
-  nights: { date: string; price: number }[];
-  stayTotal: number;
-  touristTax: number;
+  nights: NightPrice[];
+  stayTotalCents: number;
+  touristTaxCents: number;
   touristTaxLines: TouristTaxLine[];
   /** VAT inside each night, for the host's books; null when the country has no rates (0045). */
   vatSplit: VatSplit | null;
 };
 
 /**
- * What the guest was shown when the intent was made. `commissionCents` is on
- * `roomsTotal` only (never the tourist tax), and 0 while the application fee
- * is switched off.
+ * What the guest was shown when the intent was made, in integer cents.
+ * `commissionCents` is on `roomsTotalCents` only (never the tourist tax), and 0
+ * while the application fee is switched off.
  */
 export type IntentSnapshot = {
-  roomsTotal: number;
-  touristTaxTotal: number;
-  total: number;
+  roomsTotalCents: number;
+  touristTaxTotalCents: number;
+  totalCents: number;
   commissionCents: number;
   /**
    * The split of `commissionCents` into net and VAT, fixed when the intent was
@@ -187,7 +188,7 @@ export async function createBookingIntent(
       const { rows: intentRows } = await tx.query(
         `INSERT INTO booking_intents
            (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at,
-            snapshot, total_amount, tourist_tax_amount, commission_cents, currency)
+            snapshot, total_cents, tourist_tax_cents, commission_cents, currency)
          VALUES ($1, $2, $3::date, $4::date, 'open', $5, $6::jsonb, $7, $8, $9, $10)
          RETURNING id`,
         [
@@ -197,8 +198,8 @@ export async function createBookingIntent(
           i.checkOut,
           holdExpiresAt,
           JSON.stringify(i.snapshot),
-          i.snapshot.total,
-          i.snapshot.touristTaxTotal,
+          i.snapshot.totalCents,
+          i.snapshot.touristTaxTotalCents,
           i.snapshot.commissionCents,
           i.snapshot.currency,
         ],
@@ -208,9 +209,9 @@ export async function createBookingIntent(
       for (const [sortOrder, r] of i.rooms.entries()) {
         await tx.query(
           `INSERT INTO booking_intent_rooms
-             (intent_id, room_id, rate_plan_id, adults, children, nights, stay_total,
-              tourist_tax_amount, tourist_tax_lines, sort_order, cots, extra_beds,
-              infants, pay_at_property_amount, discount_label, discount_amount,
+             (intent_id, room_id, rate_plan_id, adults, children, nights, stay_total_cents,
+              tourist_tax_cents, tourist_tax_lines, sort_order, cots, extra_beds,
+              infants, pay_at_property_cents, discount_label, discount_cents,
               rate_nights, extra_guests, pay_at_property_lines, vat_split)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16,
                    $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb)`,
@@ -221,16 +222,16 @@ export async function createBookingIntent(
             r.adults,
             r.children,
             JSON.stringify(r.nights),
-            r.stayTotal,
-            r.touristTax,
+            r.stayTotalCents,
+            r.touristTaxCents,
             JSON.stringify(r.touristTaxLines),
             sortOrder,
             r.cots,
             r.extraBeds,
             r.infants,
-            r.payAtProperty,
+            r.payAtPropertyCents,
             r.discount?.label ?? null,
-            r.discount?.amount ?? null,
+            r.discount?.amountCents ?? null,
             JSON.stringify(r.rateNights),
             JSON.stringify(r.extraGuests),
             JSON.stringify(r.payAtPropertyLines),
@@ -263,7 +264,7 @@ type IntentRow = {
   rooms: (IntentRoomInput & { id: string })[];
 };
 
-/** One intent with its rooms; `$where` filters `bi`. Numerics come back through JSON as numbers. */
+/** One intent with its rooms; `$where` filters `bi`. The bigint cents come back through JSON as numbers. */
 const INTENT_SQL = (where: string) => `
 SELECT
   bi.id, bi.user_id, bi.property_id, p.slug AS property_slug,
@@ -280,15 +281,15 @@ SELECT
       'infants',         r.infants,
       'cots',            r.cots,
       'extraBeds',       r.extra_beds,
-      'payAtProperty',   r.pay_at_property_amount,
+      'payAtPropertyCents', r.pay_at_property_cents,
       'discount',        CASE WHEN r.discount_label IS NULL THEN NULL
-                              ELSE json_build_object('label', r.discount_label, 'amount', r.discount_amount) END,
+                              ELSE json_build_object('label', r.discount_label, 'amountCents', r.discount_cents) END,
       'rateNights',      r.rate_nights,
       'extraGuests',     r.extra_guests,
       'payAtPropertyLines', r.pay_at_property_lines,
       'nights',          r.nights,
-      'stayTotal',       r.stay_total,
-      'touristTax',      r.tourist_tax_amount,
+      'stayTotalCents',  r.stay_total_cents,
+      'touristTaxCents', r.tourist_tax_cents,
       'touristTaxLines', r.tourist_tax_lines,
       'vatSplit',        r.vat_split
     ) ORDER BY r.sort_order, r.id)
@@ -515,7 +516,8 @@ export class PaymentMismatchError extends Error {
  * Turn a paid intent into a confirmed booking, exactly once.
  *
  * Only for a session the platform made for this intent (`attachPaymentSession`),
- * paid on the account it was made on, for the amount it was made for. Anything
+ * paid on the account it was made on, for the amount it was made for, which
+ * must be the intent's `total_cents` to the cent. Anything
  * else is a `PaymentMismatchError`, checked before the `paid` and `oversold`
  * answers so that it never passes for a redelivery or a second payment either.
  *
@@ -548,12 +550,12 @@ export async function convertIntentToBooking(
   return db.transaction(async (tx) => {
     const { rows: locked } = UUID.test(i.intentId)
       ? await tx.query(
-          `SELECT status, booking_id, payment_reference FROM booking_intents WHERE id = $1::uuid FOR UPDATE`,
+          `SELECT status, booking_id, payment_reference, total_cents FROM booking_intents WHERE id = $1::uuid FOR UPDATE`,
           [i.intentId],
         )
       : { rows: [] };
     const current = locked[0] as
-      | { status: BookingIntentStatus; booking_id: string | null; payment_reference: string | null }
+      | { status: BookingIntentStatus; booking_id: string | null; payment_reference: string | null; total_cents: string }
       | undefined;
     if (!current) throw new IntentNotFoundError(i.intentId);
 
@@ -565,6 +567,8 @@ export async function convertIntentToBooking(
     if (!platform) throw new PaymentMismatchError(i.intentId, "session");
     if (platform.account_id !== i.accountId) throw new PaymentMismatchError(i.intentId, "account");
     if (Number(platform.amount_cents) !== i.amountCents) throw new PaymentMismatchError(i.intentId, "amount");
+    // Cents against cents, no conversion: the session must charge exactly what the guest agreed to.
+    if (Number(current.total_cents) !== i.amountCents) throw new PaymentMismatchError(i.intentId, "amount");
 
     if (current.status === "paid") {
       // Never a second booking for one intent, even if the first was deleted.
@@ -609,11 +613,11 @@ export async function convertIntentToBooking(
     const { rows: bookingRows } = await tx.query(
       `INSERT INTO bookings
          (hotel_id, user_id, check_in_date, check_out_date, status, confirmed_at,
-          total_amount, booking_fee_amount, currency, stripe_payment_intent_id,
+          currency, stripe_payment_intent_id,
           rooms_total_cents, tourist_tax_cents, total_cents, commission_cents,
           commission_rate, commission_vat_treatment, commission_net_cents, commission_vat_cents)
-       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, 0, $7, $8, $9::bigint, $10::bigint, $9::bigint + $10::bigint, $11,
-               $12::numeric, $13, $14::bigint, $15::bigint)
+       VALUES ($1, $2, $3::date, $4::date, 'confirmed', $5, $6, $7, $8::bigint, $9::bigint, $8::bigint + $9::bigint, $10,
+               $11::numeric, $12, $13::bigint, $14::bigint)
        RETURNING id`,
       [
         intent.propertyId,
@@ -621,11 +625,10 @@ export async function convertIntentToBooking(
         intent.checkIn,
         intent.checkOut,
         i.now,
-        Math.round(intent.snapshot.total),
         intent.snapshot.currency,
         i.paymentIntentId,
-        Math.round(intent.snapshot.roomsTotal * 100),
-        Math.round(intent.snapshot.touristTaxTotal * 100),
+        intent.snapshot.roomsTotalCents,
+        intent.snapshot.touristTaxTotalCents,
         intent.snapshot.commissionCents,
         // Read defensively: intents made before the split existed lack these.
         intent.snapshot.commissionRate ?? null,
@@ -636,15 +639,15 @@ export async function convertIntentToBooking(
     );
     const bookingId = (bookingRows[0] as { id: string }).id;
 
-    const nightPrices: Record<string, { date: string; price: number }[]> = {};
-    const touristTax: Record<string, number> = {};
+    const nightPrices: Record<string, NightPrice[]> = {};
+    const touristTaxCents: Record<string, number> = {};
     const policy: Record<string, { tier?: PropertyCancellationTier; isRefundable?: boolean }> = {};
     for (const r of intent.rooms) {
       const { rows: reservationRows } = await tx.query(
         `INSERT INTO reservations
-           (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night,
-            total_amount, tourist_tax_amount, tourist_tax_lines, cots, extra_beds,
-            infants, pay_at_property_amount, vat_split)
+           (booking_id, room_id, rate_plan_id, adults, children, total_nights, price_per_night_cents,
+            total_cents, tourist_tax_cents, tourist_tax_lines, cots, extra_beds,
+            infants, pay_at_property_cents, vat_split)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15::jsonb)
          RETURNING id`,
         [
@@ -654,20 +657,21 @@ export async function convertIntentToBooking(
           r.adults,
           r.children,
           r.nights.length,
-          Math.round(r.stayTotal / r.nights.length),
-          Math.round(r.stayTotal),
-          r.touristTax,
+          // The average night, rounded half up; `nights` keeps each night's exact cents.
+          roundHalfUp(r.stayTotalCents / r.nights.length),
+          r.stayTotalCents,
+          r.touristTaxCents,
           JSON.stringify(r.touristTaxLines),
           r.cots,
           r.extraBeds,
           r.infants,
-          r.payAtProperty,
+          r.payAtPropertyCents,
           r.vatSplit && JSON.stringify(r.vatSplit),
         ],
       );
       const reservationId = (reservationRows[0] as { id: string }).id;
       nightPrices[reservationId] = r.nights;
-      touristTax[reservationId] = r.touristTax;
+      touristTaxCents[reservationId] = r.touristTaxCents;
       // Same room and rate, same terms: which of two identical rooms it was does not matter.
       const shown = intent.snapshot.rooms?.find((s) => s.roomId === r.roomId && s.ratePlanId === r.ratePlanId);
       if (shown) policy[reservationId] = { tier: shown.cancellationTier, isRefundable: shown.isRefundable };
@@ -675,26 +679,25 @@ export async function convertIntentToBooking(
 
     // The tax the guest was charged, not what the rules say now: they may have changed before a late payment.
     // Likewise the cancellation terms the guest was shown, not the ones the host has set since.
-    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices, touristTax, policy });
+    await confirmBookingPolicy(tx, { bookingId, confirmedAt: i.now, nightPrices, touristTaxCents, policy });
     await recordBookingEvent(tx, {
       bookingId,
       kind: "confirmed",
       actor: { kind: "system", id: null },
-      // The bigint totals are whole euros; these keep the exact charge.
       data: {
         intentId: intent.id,
         paymentIntentId: i.paymentIntentId,
         amountCents: i.amountCents,
-        snapshotTotal: intent.snapshot.total,
+        snapshotTotalCents: intent.snapshot.totalCents,
       },
     });
     await tx.query(
-      `INSERT INTO transactions (booking_id, type, provider, provider_payment_id, amount, currency, status, metadata)
+      `INSERT INTO transactions (booking_id, type, provider, provider_payment_id, amount_cents, currency, status, metadata)
        VALUES ($1, 'charge', 'stripe', $2, $3, $4, 'succeeded', $5::jsonb)`,
       [
         bookingId,
         i.paymentIntentId,
-        Math.round(i.amountCents / 100),
+        i.amountCents,
         intent.snapshot.currency,
         JSON.stringify({ amountCents: i.amountCents }),
       ],

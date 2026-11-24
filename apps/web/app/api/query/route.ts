@@ -134,13 +134,13 @@ candidate_rooms AS (
     r.max_adults,
     r.max_children,
     -- bigint comes back as a string from node-postgres; the resolver adds these.
-    r.extra_adult_fee::int,
-    r.extra_child_fee::int,
-    r.cot_fee::int,
-    r.extra_bed_fee::int,
+    r.extra_adult_fee_cents::int,
+    r.extra_child_fee_cents::int,
+    r.cot_fee_cents::int,
+    r.extra_bed_fee_cents::int,
     rp.id            AS rate_plan_id,
     rp.name          AS rate_plan_name,
-    rp.bar,
+    rp.bar_cents,
     rp.currency,
     rp.is_refundable,
     p.cancellation_tier,
@@ -154,7 +154,7 @@ candidate_rooms AS (
    AND r.is_active
   CROSS JOIN user_input u
   JOIN LATERAL (
-    SELECT id, name, bar, currency, is_refundable, min_stay, max_stay
+    SELECT id, name, bar_cents, currency, is_refundable, min_stay, max_stay
     FROM rate_plans
     WHERE room_id = r.id
       AND is_active
@@ -181,12 +181,12 @@ nightly_pricing AS (
     cr.room_id,
     cr.rate_plan_id,
     sd.stay_date,
-    COALESCE(o.price_per_night, cr.bar) AS base_price,
-    (o.price_per_night IS NOT NULL)     AS has_override
+    COALESCE(o.price_per_night_cents, cr.bar_cents) AS base_price_cents,
+    (o.price_per_night_cents IS NOT NULL)           AS has_override
   FROM candidate_rooms cr
   CROSS JOIN stay_dates sd
   LEFT JOIN LATERAL (
-    SELECT price_per_night
+    SELECT price_per_night_cents
     FROM rate_overrides
     WHERE rate_plan_id = cr.rate_plan_id
       AND start_date  <= sd.stay_date
@@ -208,7 +208,7 @@ room_nights AS (
     jsonb_agg(
       jsonb_build_object(
         'date',         stay_date,
-        'base_price',   base_price,
+        'base_price_cents', base_price_cents,
         'has_override', has_override
       )
       ORDER BY stay_date
@@ -255,10 +255,10 @@ SELECT
   cr.base_occupancy,
   cr.max_adults,
   cr.max_children,
-  cr.extra_adult_fee,
-  cr.extra_child_fee,
-  cr.cot_fee,
-  cr.extra_bed_fee,
+  cr.extra_adult_fee_cents,
+  cr.extra_child_fee_cents,
+  cr.cot_fee_cents,
+  cr.extra_bed_fee_cents,
   cr.rate_plan_id,
   cr.rate_plan_name,
   cr.currency,

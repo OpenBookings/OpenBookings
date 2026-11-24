@@ -1,3 +1,4 @@
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { z } from "zod";
 
 /**
@@ -8,7 +9,8 @@ import { z } from "zod";
  * rule it reads differently from how it was entered. Discount kinds always
  * go down: the database refuses a positive one (0041). Anything that lowers
  * the price is a percentage; a fixed amount is only a per-night surcharge
- * (0042).
+ * (0042). A percentage is a whole number; a fixed amount is typed in euros
+ * ("15.50", "15,5") and stored in cents.
  */
 
 const RULE_KINDS = ["weekend", "length_of_stay", "early_bird", "last_minute"] as const;
@@ -25,7 +27,8 @@ const DISCOUNT_KINDS = new Set<RuleKind>(["length_of_stay", "early_bird"]);
 
 export const RULE_LIMITS = {
   percent: { min: 1, max: 90 },
-  flat: { min: 1, max: 9999 },
+  /** Cents: €0.01 to €9,999 a night. */
+  flat: { min: 1, max: 999_900 },
   minNights: { min: 2, max: 60 },
   daysBeforeArrival: { min: 1, max: 365 },
   daysTillArrival: { min: 0, max: 30 },
@@ -38,6 +41,13 @@ const whole = (v: unknown) => {
 };
 
 const inRange = (n: number, r: { min: number; max: number }) => Number.isInteger(n) && n >= r.min && n <= r.max;
+
+/** The amount field: a whole percentage, or a euro amount read into cents. */
+function readAmount(adjustmentType: "flat" | "percent", v: unknown): { value: number; error?: string } {
+  if (adjustmentType === "percent") return { value: whole(v) };
+  const parsed = parseEuroInput(String(v ?? ""));
+  return parsed.ok ? { value: parsed.cents } : { value: Number.NaN, error: parsed.error };
+}
 
 export const modifierSchema = z
   .object({
@@ -57,14 +67,18 @@ export const modifierSchema = z
     const lowers = DISCOUNT_KINDS.has(v.kind) || v.direction === "down";
     if (lowers && v.adjustmentType === "flat") issue("adjustmentType", "A discount is a percentage.");
 
-    const amount = whole(v.amount);
+    const amount = readAmount(v.adjustmentType, v.amount);
     const limits = RULE_LIMITS[v.adjustmentType];
-    if (!inRange(amount, limits)) {
+    if (amount.error) {
+      issue("amount", amount.error);
+    } else if (!inRange(amount.value, limits)) {
       issue(
         "amount",
-        v.adjustmentType === "percent" && amount > limits.max
-          ? `A percentage can be at most ${limits.max}.`
-          : `Enter a whole number from ${limits.min} to ${limits.max}.`,
+        v.adjustmentType === "flat"
+          ? "Enter an amount from €0.01 to €9,999."
+          : amount.value > limits.max
+            ? `A percentage can be at most ${limits.max}.`
+            : `Enter a whole number from ${limits.min} to ${limits.max}.`,
       );
     }
 
@@ -87,7 +101,7 @@ export const modifierSchema = z
   })
   .transform((v) => {
     const down = DISCOUNT_KINDS.has(v.kind) || v.direction === "down";
-    const amount = whole(v.amount);
+    const amount = readAmount(v.adjustmentType, v.amount).value;
     const triggerCondition: Record<string, unknown> =
       v.kind === "weekend"
         ? { days_of_week: [...new Set(v.daysOfWeek.map(whole))].sort((a, b) => a - b) }

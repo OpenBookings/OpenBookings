@@ -18,6 +18,7 @@ import type {
   RateCell,
   RoomTypeRow,
 } from "../_lib/types";
+import { formatCents } from "@openbookings/pricing/money";
 import { availabilityLevel } from "../_lib/derive";
 import type { DraftEdit } from "../_lib/use-ari-draft";
 import { buildRuns, openPlanSummary } from "../_lib/runs";
@@ -26,7 +27,6 @@ import {
   formatAdjustment,
   formatDateRange,
   formatFullDate,
-  formatMoney,
   isWeekend,
   modifierLabel,
 } from "../_lib/format";
@@ -206,7 +206,6 @@ export function AriGrid({
               rowIndex={rowIndex}
               onSelect={onSelect}
               selection={selection}
-              currency={data.currency}
               stayLength={data.stayLength}
               draftEditFor={draftEditFor}
               onRangeSelect={onRangeSelect}
@@ -715,7 +714,6 @@ function RatePlanRowView({
   registerCell,
   gridTemplate,
   today,
-  currency,
   stayLength,
   draftEditFor,
   onRangeSelect,
@@ -723,7 +721,6 @@ function RatePlanRowView({
 }: RowCommonProps & {
   room: RoomTypeRow;
   plan: RatePlanRow;
-  currency: string;
   stayLength: number;
   onSelect: (selection: AriSelection) => void;
   selection: AriSelection | null;
@@ -778,7 +775,6 @@ function RatePlanRowView({
           onFocusCell={onFocusCell}
           registerCell={registerCell}
           onSelect={onSelect}
-          currency={currency}
           stayLength={stayLength}
           draftEditFor={draftEditFor}
           onRangeSelect={onRangeSelect}
@@ -820,7 +816,6 @@ function RunCell({
   onFocusCell,
   registerCell,
   onSelect,
-  currency,
   stayLength,
   draftEditFor,
   onRangeSelect,
@@ -836,7 +831,6 @@ function RunCell({
   onFocusCell: (next: { row: number; col: number }) => void;
   registerCell: (row: number, col: number, node: HTMLElement | null) => void;
   onSelect: (selection: AriSelection) => void;
-  currency: string;
   stayLength: number;
   draftEditFor: DraftEditLookup;
   onRangeSelect: AriGridProps["onRangeSelect"];
@@ -908,7 +902,7 @@ function RunCell({
           <button
             type="button"
             {...commonProps}
-            aria-label={`${rateCellLabel(plan, first, currency)}${
+            aria-label={`${rateCellLabel(plan, first)}${
               staged ? ", unpublished change" : ""
             }`}
             className={cn(
@@ -921,7 +915,7 @@ function RunCell({
           >
             <span className="flex items-baseline gap-1">
               <span className="font-semibold text-sm tabular-nums">
-                {first.price === null ? "—" : formatMoney(first.price, currency)}
+                {first.priceCents === null ? "—" : formatCents(first.priceCents)}
               </span>
               {/* When a restriction has taken the chip slot, the fact that the
                   price also moved survives as a dot. Dropping it entirely
@@ -952,12 +946,7 @@ function RunCell({
           </button>
         </HoverCardTrigger>
         <HoverCardContent align="center" className="w-72">
-          <RateHoverSummary
-            plan={plan}
-            cell={first}
-            currency={currency}
-            stayLength={stayLength}
-          />
+          <RateHoverSummary plan={plan} cell={first} stayLength={stayLength} />
         </HoverCardContent>
       </HoverCard>
     );
@@ -989,7 +978,7 @@ function RunCell({
         )}
       >
         <span className="font-semibold text-muted-foreground text-sm line-through tabular-nums">
-          {formatMoney(first.indicativePrice, currency)}
+          {formatCents(first.indicativePriceCents)}
         </span>
         <Chip tone={staged ? "unsaved" : "sold_out"}>
           {staged ? "Unsaved" : "Sold out"}
@@ -1025,7 +1014,7 @@ function RunCell({
       </span>
       {span > 1 && (
         <span className="ml-auto shrink-0 text-[10px] line-through opacity-70 tabular-nums">
-          {formatMoney(first.indicativePrice, currency)}
+          {formatCents(first.indicativePriceCents)}
         </span>
       )}
     </button>
@@ -1060,13 +1049,8 @@ function NoRatePlansRow({ gridTemplate }: { gridTemplate: string }) {
  * full — the chip abbreviates it to fit the column, which is not a constraint
  * a listener shares.
  */
-function rateCellLabel(
-  plan: RatePlanRow,
-  cell: RateCell,
-  currency: string,
-): string {
-  const price =
-    cell.price === null ? "no rate" : formatMoney(cell.price, currency);
+function rateCellLabel(plan: RatePlanRow, cell: RateCell): string {
+  const price = cell.priceCents === null ? "no rate" : formatCents(cell.priceCents);
   const restrictions =
     cell.reasons.length > 0 ? `, ${reasonsPhrase(cell.reasons)}` : "";
   return `${plan.name}, ${formatFullDate(cell.date)}: ${price}${restrictions}`;
@@ -1099,12 +1083,10 @@ function barLabel(plan: RatePlanRow, run: CellRun, note: string | null): string 
 function RateHoverSummary({
   plan,
   cell,
-  currency,
   stayLength,
 }: {
   plan: RatePlanRow;
   cell: RateCell;
-  currency: string;
   stayLength: number;
 }) {
   return (
@@ -1126,16 +1108,13 @@ function RateHoverSummary({
               {step.label}
               {step.modifier_type && (
                 <span className="tabular-nums">
-                  {formatAdjustment(
-                    step.op === "percent" ? "percent" : "flat",
-                    step.value,
-                    currency,
-                  )}
+                  {/* `value` is a percentage on a percent step and cents on the others. */}
+                  {formatAdjustment(step.op === "percent" ? "percent" : "flat", step.value)}
                 </span>
               )}
             </span>
             <span className="text-xs tabular-nums">
-              {formatMoney(step.result, currency)}
+              {formatCents(step.result_cents)}
             </span>
           </li>
         ))}

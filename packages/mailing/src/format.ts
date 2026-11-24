@@ -1,8 +1,8 @@
-const euros = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" });
+import { formatCents } from "@openbookings/pricing/money";
 
-/** "€1,234.50": British English, as the host's refund sentences read. */
-export function formatEuro(amount: number): string {
-  return euros.format(amount);
+/** Cents as a mail shows them: "€1,234.50", always two decimals. */
+export function mailCents(cents: number): string {
+  return formatCents(cents, { whole: "always-decimals" });
 }
 
 const stayDate = new Intl.DateTimeFormat("en-GB", {

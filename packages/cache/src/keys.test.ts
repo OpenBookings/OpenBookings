@@ -3,7 +3,16 @@ import { CACHE_SCHEMA_VERSION, propertyPageKey, propertyReviewsKey } from "./key
 
 describe("propertyPageKey", () => {
   test("uses the ob:<version>:prop-page:<slug> shape", () => {
-    expect(propertyPageKey("terme-di-saturnia")).toBe("ob:v1:prop-page:terme-di-saturnia");
+    expect(propertyPageKey("terme-di-saturnia")).toBe("ob:v1:prop-page:p2:terme-di-saturnia");
+  });
+
+  /**
+   * Before the cents change the page payload held euros (`bar`, `cot_fee`…).
+   * Entries cached under the old key would show prices 100x off for up to a
+   * day after the deploy, so the new payload must never be read from them.
+   */
+  test("differs from the key of the euro-era payload, so those entries are never read", () => {
+    expect(propertyPageKey("terme-di-saturnia")).not.toBe("ob:v1:prop-page:terme-di-saturnia");
   });
 
   /**

@@ -19,20 +19,20 @@ import {
  * the host who checks the arithmetic.
  */
 
-const nightsFrom = (dates: string[], price: number): Night[] =>
-  dates.map((date) => ({ date, base_price: price, has_override: false }));
+const nightsFrom = (dates: string[], priceCents: number): Night[] =>
+  dates.map((date) => ({ date, base_price_cents: priceCents, has_override: false }));
 
-/** Sum of the printed deltas must land on the printed total. */
-function expectAddsUp(trace: PriceStep[], total: number) {
-  const summed = trace.reduce((sum, step) => sum + step.delta, 0);
-  expect(Number(summed.toFixed(2))).toBe(total);
-  expect(trace[trace.length - 1].result).toBe(total);
+/** Sum of the printed deltas must land on the printed total, in whole cents. */
+function expectAddsUp(trace: PriceStep[], totalCents: number) {
+  const summed = trace.reduce((sum, step) => sum + step.delta_cents, 0);
+  expect(summed).toBe(totalCents);
+  expect(trace[trace.length - 1].result_cents).toBe(totalCents);
 }
 
 const weekendSurcharge: Modifier = {
   type: "day_of_week",
   adjustment_type: "flat",
-  adjustment_value: 20,
+  adjustment_value: 2000,
   // 2026-07-04 is a Saturday.
   trigger_condition: { days_of_week: [0, 6] },
   sort_order: 10,
@@ -56,7 +56,7 @@ const earlyBird: Modifier = {
 
 describe("base step", () => {
   test("an unmodified night is one step, and it is the price", () => {
-    const [cell] = resolveNightlyRates(nightsFrom(["2026-07-01"], 100), [], {
+    const [cell] = resolveNightlyRates(nightsFrom(["2026-07-01"], 10000), [], {
       baseOccupancy: 2,
       today: "2026-06-01",
     });
@@ -65,15 +65,15 @@ describe("base step", () => {
     expect(cell.trace[0]).toMatchObject({
       label: "Base rate",
       op: "base",
-      delta: 100,
-      result: 100,
+      delta_cents: 10000,
+      result_cents: 10000,
     });
-    expectAddsUp(cell.trace, cell.total);
+    expectAddsUp(cell.trace, cell.total_cents);
   });
 
   test("an overridden night says so rather than calling it the BAR", () => {
     const [cell] = resolveNightlyRates(
-      [{ date: "2026-07-01", base_price: 180, has_override: true }],
+      [{ date: "2026-07-01", base_price_cents: 18000, has_override: true }],
       [],
       { baseOccupancy: 2, today: "2026-06-01" },
     );
@@ -82,15 +82,15 @@ describe("base step", () => {
     expect(cell.trace[0]).toMatchObject({
       label: "Rate override",
       op: "set",
-      result: 180,
+      result_cents: 18000,
     });
   });
 
   test("a probe spanning an override splits the base into two steps", () => {
     const [cell] = resolveNightlyRates(
       [
-        { date: "2026-07-01", base_price: 100, has_override: false },
-        { date: "2026-07-02", base_price: 180, has_override: true },
+        { date: "2026-07-01", base_price_cents: 10000, has_override: false },
+        { date: "2026-07-02", base_price_cents: 18000, has_override: true },
       ],
       [],
       { baseOccupancy: 2, stayLength: 2, today: "2026-06-01" },
@@ -100,15 +100,15 @@ describe("base step", () => {
       "Base rate",
       "Rate override",
     ]);
-    expect(cell.trace[1].result).toBe(280);
-    expectAddsUp(cell.trace, cell.total);
+    expect(cell.trace[1].result_cents).toBe(28000);
+    expectAddsUp(cell.trace, cell.total_cents);
   });
 });
 
 describe("modifier steps", () => {
   test("a surcharge that fires is one step, named and signed", () => {
     const cells = resolveNightlyRates(
-      nightsFrom(["2026-07-03", "2026-07-04"], 100),
+      nightsFrom(["2026-07-03", "2026-07-04"], 10000),
       [weekendSurcharge],
       { baseOccupancy: 2, today: "2026-06-01" },
     );
@@ -117,23 +117,23 @@ describe("modifier steps", () => {
 
     // Friday: eligible rule, no matching night, so no line in the build-up.
     expect(friday.trace).toHaveLength(1);
-    expect(friday.price).toBe(100);
+    expect(friday.price_cents).toBe(10000);
 
     expect(saturday.trace).toHaveLength(2);
     expect(saturday.trace[1]).toMatchObject({
       label: "Day of week",
       op: "flat",
-      value: 20,
-      delta: 20,
-      result: 120,
+      value: 2000,
+      delta_cents: 2000,
+      result_cents: 12000,
       modifier_type: "day_of_week",
     });
-    expectAddsUp(saturday.trace, saturday.total);
+    expectAddsUp(saturday.trace, saturday.total_cents);
   });
 
   test("steps appear in the order they were applied", () => {
     const [cell] = resolveNightlyRates(
-      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 100),
+      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 10000),
       [weekendSurcharge, threeNightDiscount],
       { baseOccupancy: 2, stayLength: 3, today: "2026-06-01" },
     );
@@ -144,14 +144,14 @@ describe("modifier steps", () => {
       "Day of week",
       "Length of stay",
     ]);
-    expect(cell.trace[1].delta).toBe(40);
-    expect(cell.trace[2].delta).toBe(-34);
-    expectAddsUp(cell.trace, cell.total);
+    expect(cell.trace[1].delta_cents).toBe(4000);
+    expect(cell.trace[2].delta_cents).toBe(-3400);
+    expectAddsUp(cell.trace, cell.total_cents);
   });
 
   test("a modifier excluded by mutual exclusivity leaves no step", () => {
     const [cell] = resolveNightlyRates(
-      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 100),
+      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 10000),
       [threeNightDiscount, earlyBird],
       { baseOccupancy: 2, stayLength: 3, today: "2026-01-01" },
     );
@@ -163,12 +163,12 @@ describe("modifier steps", () => {
       "Base rate",
       "Length of stay",
     ]);
-    expectAddsUp(cell.trace, cell.total);
+    expectAddsUp(cell.trace, cell.total_cents);
   });
 
   test("a modifier that never matches leaves no step at all", () => {
     const [cell] = resolveNightlyRates(
-      nightsFrom(["2026-07-01"], 100),
+      nightsFrom(["2026-07-01"], 10000),
       [threeNightDiscount],
       { baseOccupancy: 2, today: "2026-06-01" },
     );
@@ -180,9 +180,9 @@ describe("modifier steps", () => {
 
 describe("rounding", () => {
   test("the printed deltas sum to the printed total even when steps round", () => {
-    // 3 × 33.33 = 99.99, less 7.5% = 92.49075 — every step lands off a cent.
+    // 3 × €33.33, less 7.5%: 249.975 a night, rounded half up to 250 each.
     const [cell] = resolveNightlyRates(
-      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 33.33),
+      nightsFrom(["2026-07-03", "2026-07-04", "2026-07-05"], 3333),
       [
         {
           type: "length_of_stay",
@@ -195,10 +195,12 @@ describe("rounding", () => {
       { baseOccupancy: 2, stayLength: 3, today: "2026-06-01" },
     );
 
-    expectAddsUp(cell.trace, cell.total);
+    expectAddsUp(cell.trace, cell.total_cents);
+    expect(cell.total_cents).toBe(9249);
+    expect(cell.trace[1].delta_cents).toBe(-750);
     for (const step of cell.trace) {
-      expect(step.result).toBe(Number(step.result.toFixed(2)));
-      expect(step.delta).toBe(Number(step.delta.toFixed(2)));
+      expect(Number.isInteger(step.result_cents)).toBe(true);
+      expect(Number.isInteger(step.delta_cents)).toBe(true);
     }
   });
 });
@@ -223,7 +225,7 @@ describe("search results carry the same build-up", () => {
     is_refundable: true,
     min_stay: 1,
     max_stay: null,
-    nights: nightsFrom(["2026-07-03", "2026-07-04"], 100),
+    nights: nightsFrom(["2026-07-03", "2026-07-04"], 10000),
     modifiers: [weekendSurcharge],
   };
 
@@ -234,7 +236,7 @@ describe("search results carry the same build-up", () => {
       "2026-06-01",
     );
 
-    expectAddsUp(resolved.trace, resolved.total_price);
+    expectAddsUp(resolved.trace, resolved.total_price_cents);
     expect(resolved.trace.map((s) => s.label)).toEqual([
       "Base rate",
       "Day of week",

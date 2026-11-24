@@ -60,7 +60,7 @@ describeWithDb("demo factories", () => {
     const { ratePlanId } = await insertDemoRatePlan(db, {
       roomId,
       name: "Flexible",
-      bar: 120,
+      barCents: 12000,
       isRefundable: true,
       minStay: 1,
       mealPlan: "breakfast",
@@ -89,8 +89,8 @@ describeWithDb("demo factories", () => {
 
     expect((await db.query(`SELECT count(*)::int AS n FROM room_images WHERE room_id = $1`, [roomId])).rows[0].n).toBe(1);
 
-    const rp = (await db.query(`SELECT bar, includes_breakfast, includes_dinner FROM rate_plans WHERE id = $1`, [ratePlanId])).rows[0];
-    expect(Number(rp.bar)).toBe(120);
+    const rp = (await db.query(`SELECT bar_cents, includes_breakfast, includes_dinner FROM rate_plans WHERE id = $1`, [ratePlanId])).rows[0];
+    expect(Number(rp.bar_cents)).toBe(12000);
     expect(rp.includes_breakfast).toBe(true);
     expect(rp.includes_dinner).toBe(false);
   });
@@ -99,8 +99,8 @@ describeWithDb("demo factories", () => {
     const { propertyId, roomId, ratePlanId } = await build();
     await insertRestriction(db, { ratePlanId, startDate: "2027-01-01", endDate: "2027-01-05", closedToArrival: true, minStay: 3 });
     await insertAvailabilityOverride(db, { roomId, startDate: "2027-01-01", endDate: "2027-01-03", available: 0 });
-    await insertDayOfWeekModifier(db, { ratePlanId, days: [5, 6], amount: 20 });
-    await insertTouristTaxRule(db, { propertyId, perPersonPerNight: 2.5 });
+    await insertDayOfWeekModifier(db, { ratePlanId, days: [5, 6], amountCents: 2000 });
+    await insertTouristTaxRule(db, { propertyId, perPersonPerNightCents: 250 });
 
     const r = (await db.query(`SELECT closed_to_arrival, min_stay, is_closed FROM rate_plan_restrictions WHERE rate_plan_id = $1`, [ratePlanId])).rows[0];
     expect(r).toEqual({ closed_to_arrival: true, min_stay: 3, is_closed: false });
@@ -112,10 +112,10 @@ describeWithDb("demo factories", () => {
     const m = (await db.query(`SELECT type, adjustment_type, adjustment_value, trigger_condition FROM rate_modifiers WHERE rate_plan_id = $1`, [ratePlanId])).rows[0];
     expect(m.type).toBe("day_of_week");
     expect(m.adjustment_type).toBe("flat");
-    expect(Number(m.adjustment_value)).toBe(20);
+    expect(Number(m.adjustment_value)).toBe(2000);
     expect(m.trigger_condition).toEqual({ days_of_week: [5, 6] });
 
     const t = (await db.query(`SELECT charges, children_exempt FROM tourist_tax_rules WHERE property_id = $1`, [propertyId])).rows[0];
-    expect(t.charges).toEqual([{ kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false }]);
+    expect(t.charges).toEqual([{ kind: "fixed", amountCents: 250, perPerson: true, perNight: true, perRoom: false }]);
   });
 });

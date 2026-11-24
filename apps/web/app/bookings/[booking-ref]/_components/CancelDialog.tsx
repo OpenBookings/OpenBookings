@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarX2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatCents } from '@openbookings/pricing/money';
 import { cn } from '@/lib/utils';
 import { GLASS_ICON_BUTTON, Hint } from './hint';
 import { guestCancelRooms, guestPreviewCancel } from '../_lib/actions';
 
-const euros = new Intl.NumberFormat('en-NL', { style: 'currency', currency: 'EUR' });
+const euros = (cents: number) => formatCents(cents, { whole: 'always-decimals' });
 
-type Preview = { refund: number; retained: number };
+type Preview = { refundCents: number; retainedCents: number };
 
 /**
  * Cancel one room (`reservationIds`) or the whole booking (`null`). The exact
@@ -76,9 +77,9 @@ export function CancelDialog({
     return (
       <div className="w-full basis-full rounded-xl border border-white/15 bg-white/5 p-4 text-sm">
         <p className="font-medium text-white">
-          {preview.refund > 0
-            ? `You'll get ${euros.format(preview.refund)} back. The hotel keeps ${euros.format(preview.retained)}.`
-            : `You won't get anything back. The hotel keeps ${euros.format(preview.retained)}.`}
+          {preview.refundCents > 0
+            ? `You'll get ${euros(preview.refundCents)} back. The hotel keeps ${euros(preview.retainedCents)}.`
+            : `You won't get anything back. The hotel keeps ${euros(preview.retainedCents)}.`}
         </p>
         <div className="mt-3 flex gap-2">
           <Button variant="destructive" size="sm" onClick={confirm}>

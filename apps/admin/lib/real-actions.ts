@@ -15,6 +15,7 @@ import {
   type LifecycleResult,
 } from "@openbookings/db/booking-lifecycle";
 import type { BookingAction } from "@openbookings/pricing";
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { findRefundForRow, isDefiniteRefundFailure, refundPayment } from "@openbookings/stripe";
 import { sendBookingCancelled as sendCancellation, sendRefundIssued } from "@openbookings/mailing/booking-send";
 import { actorFor, type ActAs } from "./actor";
@@ -120,13 +121,15 @@ export async function adminRecordEarlyDeparture(bookingId: string, as: ActAs, la
   });
 }
 
-/** Always as host. */
-export async function adminGoodwillRefund(bookingId: string, amount: number) {
+/** Always as host. `amount` is the euros staff typed ("12,50"), read into cents here. */
+export async function adminGoodwillRefund(bookingId: string, amount: string) {
   requireSuperAdmin();
   if (badIds(bookingId, null)) return invalid;
-  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
+  const typed = typeof amount === "string" ? parseEuroInput(amount) : null;
+  if (!typed?.ok || typed.cents <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
+  const amountCents = typed.cents;
   return run(bookingId, "host", async (actor) => {
-    const result = await issueGoodwillRefund(deps(), { bookingId, actor, amount });
+    const result = await issueGoodwillRefund(deps(), { bookingId, actor, amountCents });
     if (result.ok) await sendRefundIssued(bookingId, { reason: "goodwill", refunds: result.refunds }, undefined, mailDeps());
     return result;
   });

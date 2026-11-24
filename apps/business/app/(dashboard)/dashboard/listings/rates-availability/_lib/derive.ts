@@ -239,12 +239,12 @@ export function applyLowestRates(
       // on sale — a draft room, a switched-off rate — has no say in it.
       if (!plan.onSale) continue;
       for (const cell of plan.cells) {
-        if (cell.price === null) continue;
+        if (cell.priceCents === null) continue;
         const index = dateIndex.get(cell.date);
         if (index === undefined) continue;
-        const current = room.lowestRates[index];
-        if (current === null || cell.price < current) {
-          room.lowestRates[index] = cell.price;
+        const current = room.lowestRatesCents[index];
+        if (current === null || cell.priceCents < current) {
+          room.lowestRatesCents[index] = cell.priceCents;
         }
       }
     }

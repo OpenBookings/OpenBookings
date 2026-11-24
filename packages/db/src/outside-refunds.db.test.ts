@@ -65,7 +65,7 @@ describeWithDb("outside refunds on the booking", () => {
     await db.query(`UPDATE properties SET stripe_account_id = $2 WHERE id = $1`, [ids.propertyId, `acct_${crypto.randomUUID()}`]);
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges) VALUES ($1, '2026-01-01', $2::jsonb)`,
-      [ids.propertyId, JSON.stringify([{ kind: "fixed", amount: 3, perPerson: false, perNight: true, perRoom: true }])],
+      [ids.propertyId, JSON.stringify([{ kind: "fixed", amountCents: 300, perPerson: false, perNight: true, perRoom: true }])],
     );
     ({ bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 3, rooms: 2 }));
     await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
@@ -82,8 +82,8 @@ describeWithDb("outside refunds on the booking", () => {
     expect(await recordOutsideRefund(db, outside())).toEqual({ recorded: false, why: "duplicate" });
 
     const { rows } = await db.query(
-      `SELECT source, reason, status, amount::float8 AS amount, accommodation_amount::float8 AS accommodation,
-              tourist_tax_amount::float8 AS tourist_tax, stripe_refund_id, idempotency_key, created_at, split_explained_at
+      `SELECT source, reason, status, amount_cents::int AS amount_cents, accommodation_cents::int AS accommodation_cents,
+              tourist_tax_cents::int AS tourist_tax_cents, stripe_refund_id, idempotency_key, created_at, split_explained_at
          FROM refunds WHERE booking_id = $1`,
       [bookingId],
     );
@@ -92,10 +92,10 @@ describeWithDb("outside refunds on the booking", () => {
         source: "stripe_dashboard",
         reason: null,
         status: "succeeded",
-        amount: 100,
+        amount_cents: 10_000,
         // Unexplained: all of it counts against the room price for now.
-        accommodation: 100,
-        tourist_tax: 0,
+        accommodation_cents: 10_000,
+        tourist_tax_cents: 0,
         stripe_refund_id: "re_dash_1",
         idempotency_key: "stripe_dashboard:re_dash_1",
         created_at: new Date("2031-10-20T09:00:00Z"),
@@ -103,9 +103,9 @@ describeWithDb("outside refunds on the booking", () => {
       },
     ]);
     const events = await loadBookingEvents(db, bookingId);
-    expect(events.filter((e) => e.kind === "outside_refund")).toHaveLength(1);
+    expect(events.filter((e) => e.kind === "outside_refund").map((e) => e.data.amountCents)).toEqual([10_000]);
     expect(await loadOutsideRefunds(db, bookingId)).toEqual([
-      { id: (first as { refundId: string }).refundId, source: "stripe_dashboard", amount: 100, at: new Date("2031-10-20T09:00:00Z"), split: null },
+      { id: (first as { refundId: string }).refundId, source: "stripe_dashboard", amountCents: 10_000, at: new Date("2031-10-20T09:00:00Z"), split: null },
     ]);
   });
 
@@ -137,17 +137,17 @@ describeWithDb("outside refunds on the booking", () => {
     await recordOutsideRefund(db, outside({ amountCents: 50_000 }));
     const result = await cancelRooms(deps(), { bookingId, actor: { kind: "host", userId: "h" }, reservationIds: null });
     // €618 paid, €500 refunded in the Dashboard: €118 is all Stripe still holds.
-    expect(result.ok && result.cancelled?.refundTotal).toBe(118);
+    expect(result.ok && result.cancelled?.refundTotalCents).toBe(11_800);
     expect(calls.map((c) => c.amountCents)).toEqual([11_800]);
 
-    const goodwill = await issueGoodwillRefund(deps(), { bookingId, actor: { kind: "host", userId: "h" }, amount: 10 });
+    const goodwill = await issueGoodwillRefund(deps(), { bookingId, actor: { kind: "host", userId: "h" }, amountCents: 1_000 });
     expect(goodwill).toEqual({ ok: false, error: "nothing_to_refund" });
   });
 
   test("a goodwill refund after a Dashboard refund is capped too", async () => {
     await recordOutsideRefund(db, outside({ amountCents: 60_000 }));
-    const result = await issueGoodwillRefund(deps(), { bookingId, actor: { kind: "host", userId: "h" }, amount: 100 });
-    expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([18]);
+    const result = await issueGoodwillRefund(deps(), { bookingId, actor: { kind: "host", userId: "h" }, amountCents: 10_000 });
+    expect(result.ok && result.refunds.map((r) => r.amountCents)).toEqual([1_800]);
   });
 
   test("a retry never sends an outside row to Stripe", async () => {
@@ -161,10 +161,26 @@ describeWithDb("outside refunds on the booking", () => {
   test("the database refuses an outside row with a reason", async () => {
     await expect(
       db.query(
-        `INSERT INTO refunds (booking_id, reason, source, accommodation_amount, tourist_tax_amount, amount, idempotency_key)
-         VALUES ($1, 'goodwill', 'dispute', 1, 0, 1, 'x:1')`,
+        `INSERT INTO refunds (booking_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents, idempotency_key)
+         VALUES ($1, 'goodwill', 'dispute', 100, 0, 100, 'x:1')`,
         [bookingId],
       ),
     ).rejects.toThrow("refunds_reason_by_source");
+  });
+  test("an explained outside refund reads back in cents", async () => {
+    const first = (await recordOutsideRefund(db, outside({ amountCents: 18_650 }))) as { refundId: string };
+    await db.query(
+      `UPDATE refunds SET accommodation_cents = 17_438, tourist_tax_cents = 1_212, split_explained_at = NOW() WHERE id = $1`,
+      [first.refundId],
+    );
+    expect(await loadOutsideRefunds(db, bookingId)).toEqual([
+      {
+        id: first.refundId,
+        source: "stripe_dashboard",
+        amountCents: 18_650,
+        at: new Date("2031-10-20T09:00:00Z"),
+        split: { roomPriceCents: 17_438, touristTaxCents: 1_212 },
+      },
+    ]);
   });
 });

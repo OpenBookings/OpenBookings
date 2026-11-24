@@ -7,16 +7,15 @@
  * rooms were held — so nothing is re-priced here; the property and room rows
  * only supply what the page shows around them.
  *
- * Money: every amount in the schema is in MAJOR units — a night of 109 means
- * €109. Minor units exist only at the Stripe boundary, produced by the `*Cents`
- * fields below.
+ * Money: every amount is in integer cents (EUR), as stored, so what Stripe is
+ * asked to charge is the stored cents with no conversion.
  */
 
 import { getPool, loadIntent, type BookingIntentStatus, type Queryable } from '@openbookings/db';
 import { RATES_TAX_INCLUSIVE_DOC_ID } from '@openbookings/authz/rates-doc';
 import { isTestingMode } from '@openbookings/demo';
 import { buildIntentLines, type BookingLine } from './booking-lines';
-import type { ExtraGuestLine, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine } from '@openbookings/pricing';
+import type { ExtraGuestLine, NightPrice, PayAtPropertyLine, PropertyCancellationTier, TouristTaxLine } from '@openbookings/pricing';
 import { checkoutCancellationTerms, type CheckoutCancellationTerms } from './cancellation-terms';
 
 export type { BookingLine } from './booking-lines';
@@ -42,16 +41,16 @@ export type StayRoom = {
   cots: number;
   extraBeds: number;
   nights: number;
-  /** Euros, the nights summed. */
-  stayTotal: number;
+  /** Cents, the nights summed. */
+  stayTotalCents: number;
   /** Base rate per night, before extra guests and discount. Empty on intents made before 0044. */
-  rateNights: { date: string; price: number }[];
-  /** Guests above base occupancy, already in `stayTotal`. Empty on older intents. */
+  rateNights: NightPrice[];
+  /** Guests above base occupancy, already in `stayTotalCents`. Empty on older intents. */
   extraGuests: ExtraGuestLine[];
-  /** The stay discount already in `stayTotal`, if any. */
-  discount: { label: string; amount: number } | null;
-  /** Euros the guest pays the hotel for cots and extra beds; not in `stayTotal`. */
-  payAtProperty: number;
+  /** The stay discount already in `stayTotalCents`, if any. */
+  discount: { label: string; amountCents: number } | null;
+  /** Cents the guest pays the hotel for cots and extra beds; not in `stayTotalCents`. */
+  payAtPropertyCents: number;
   payAtPropertyLines: PayAtPropertyLine[];
   touristTaxLines: TouristTaxLine[];
   includesBreakfast: boolean;
@@ -92,10 +91,10 @@ export type StaySummary = {
   checkOutTime: string | null;
 
   lines: BookingLine[];
-  /** Euros, what the guest agreed to when the rooms were held; `lines` must add up to it. */
-  intentTotal: number;
-  /** Euros, every room's tourist tax; already in `lines`. */
-  touristTaxTotal: number;
+  /** Cents, what the guest agreed to when the rooms were held; `lines` must add up to it. */
+  intentTotalCents: number;
+  /** Cents, every room's tourist tax; already in `lines`. */
+  touristTaxTotalCents: number;
   platformFeeCents: number;
   currency: string;
 
@@ -268,12 +267,12 @@ export async function getBookingSummary(
       cots: room.cots,
       extraBeds: room.extraBeds,
       nights: room.nights.length,
-      stayTotal: room.stayTotal,
+      stayTotalCents: room.stayTotalCents,
       // Intents made before 0044 have none of these: they read as empty.
       rateNights: room.rateNights ?? [],
       extraGuests: room.extraGuests ?? [],
       discount: room.discount,
-      payAtProperty: room.payAtProperty,
+      payAtPropertyCents: room.payAtPropertyCents,
       payAtPropertyLines: room.payAtPropertyLines ?? [],
       touristTaxLines: room.touristTaxLines,
       includesBreakfast: plan.includes_breakfast === true,
@@ -325,8 +324,8 @@ export async function getBookingSummary(
     checkOutTime: trimSeconds(property.check_out_time),
 
     lines,
-    intentTotal: intent.snapshot.total,
-    touristTaxTotal: intent.snapshot.touristTaxTotal,
+    intentTotalCents: intent.snapshot.totalCents,
+    touristTaxTotalCents: intent.snapshot.touristTaxTotalCents,
     // OpenBookings' commission on the stay, excluding tourist tax, in the
     // units Stripe wants: the one the intent recorded when the rooms were held,
     // not one from today's rate. Zero until the fee is switched on for this

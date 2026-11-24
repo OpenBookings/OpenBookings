@@ -89,18 +89,18 @@ describeWithDb("demo membership and reset", () => {
       totalUnits: 2,
       imageUrl: "https://example.test/r.jpg",
     });
-    const { ratePlanId } = await insertDemoRatePlan(db, { roomId, name: "Room only", bar: 100, isRefundable: true, minStay: 1, mealPlan: "room_only" });
+    const { ratePlanId } = await insertDemoRatePlan(db, { roomId, name: "Room only", barCents: 10000, isRefundable: true, minStay: 1, mealPlan: "room_only" });
     const guest = await seedGuest(db);
     const intent = await createBookingIntent(lifecycleDb(), {
       userId: guest,
       propertyId: demo.propertyId,
       checkIn: "2031-11-10",
       checkOut: "2031-11-11",
-      rooms: [{ roomId, ratePlanId, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, payAtProperty: 0, discount: null, rateNights: [{ date: "2031-11-10", price: 100 }], extraGuests: [], payAtPropertyLines: [], nights: [{ date: "2031-11-10", price: 100 }], stayTotal: 100, touristTax: 0, touristTaxLines: [], vatSplit: null }],
+      rooms: [{ roomId, ratePlanId, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, payAtPropertyCents: 0, discount: null, rateNights: [{ date: "2031-11-10", priceCents: 10000 }], extraGuests: [], payAtPropertyLines: [], nights: [{ date: "2031-11-10", priceCents: 10000 }], stayTotalCents: 10000, touristTaxCents: 0, touristTaxLines: [], vatSplit: null }],
       snapshot: {
-        roomsTotal: 100,
-        touristTaxTotal: 0,
-        total: 100,
+        roomsTotalCents: 10000,
+        touristTaxTotalCents: 0,
+        totalCents: 10000,
         commissionCents: 0,
         commissionRate: 0.1,
         commissionVatTreatment: null,

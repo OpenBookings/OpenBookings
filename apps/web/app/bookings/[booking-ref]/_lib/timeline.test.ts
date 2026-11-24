@@ -9,8 +9,8 @@ const room = (id: string, extra: Partial<GuestBookingRow["rooms"][number]> = {})
   check_in_at: "2031-11-10T14:00:00+00:00",
   full_refund_until: "2031-11-03T14:00:00+00:00",
   nights: [
-    { date: "2031-11-10", price: 185, touristTax: 3 },
-    { date: "2031-11-11", price: 185, touristTax: 3 },
+    { date: "2031-11-10", priceCents: 18500, touristTaxCents: 300 },
+    { date: "2031-11-11", priceCents: 18500, touristTaxCents: 300 },
   ],
   cancelled_at: null,
   ...extra,
@@ -28,7 +28,7 @@ const row = (extra: Partial<GuestBookingRow> = {}): GuestBookingRow => ({
   check_out_time: "11:00",
   check_in_until: "22:00",
   confirmed_at: "2031-10-01T10:00:00+00:00",
-  refunded: 0,
+  refunded_cents: 0,
   rooms: [room("1")],
   ...extra,
 });
@@ -94,14 +94,14 @@ describe("buildTimeline", () => {
 
   test("a cancelled booking: booked, cancelled, the refund, no details", () => {
     const t = buildTimeline(
-      row({ status: "cancelled", refunded: 376, rooms: [room("1", { cancelled_at: "2031-10-15T09:00:00+00:00" })] }),
+      row({ status: "cancelled", refunded_cents: 37650, rooms: [room("1", { cancelled_at: "2031-10-15T09:00:00+00:00" })] }),
       new Date("2031-10-20T10:00:00Z"),
     );
     expect(labels(t)).toEqual(["Booked", "Cancelled"]);
     expect(t.steps[1].tone).toBe("cancelled");
     expect(details(t)).toEqual([]);
     expect(t.trip.countdown).toBeNull();
-    expect(t.headline.sentence).toContain("€376.00 is refunded to your card.");
+    expect(t.headline.sentence).toContain("€376.50 is refunded to your card.");
   });
 
   test("a stay longer than 7 nights keeps only the next 7 on leaving early", () => {

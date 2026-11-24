@@ -44,8 +44,8 @@ const cell = (
   return {
     date,
     state,
-    price: state === "open" ? 100 : null,
-    basePrice: 100,
+    priceCents: state === "open" ? 10000 : null,
+    basePriceCents: 10000,
     hasOverride: false,
     overrideLabel: null,
     appliedModifiers: [],
@@ -79,7 +79,7 @@ const cell = (
         ]
       : [],
     bookable: state === "open" || state === "restricted",
-    indicativePrice: 100,
+    indicativePriceCents: 10000,
     trace: [],
   };
 };
@@ -217,7 +217,7 @@ describe("openPlanSummary", () => {
     id,
     name: id,
     currency: "EUR",
-    bar: 100,
+    barCents: 10000,
     onSale,
     isRefundable: true,
     minStay: 1,
@@ -237,7 +237,7 @@ describe("openPlanSummary", () => {
     onSale: true,
     availability: [],
     ratePlans,
-    lowestRates: [],
+    lowestRatesCents: [],
   });
 
   test("counts plans with bookable dates", () => {

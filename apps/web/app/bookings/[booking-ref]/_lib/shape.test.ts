@@ -8,8 +8,8 @@ const room = (id: string, extra: Partial<GuestBookingRow["rooms"][number]> = {})
   check_in_at: "2031-11-10T14:00:00+00:00",
   full_refund_until: "2031-11-09T14:00:00+00:00",
   nights: [
-    { date: "2031-11-10", price: 185, touristTax: 3 },
-    { date: "2031-11-11", price: 185, touristTax: 3 },
+    { date: "2031-11-10", priceCents: 18500, touristTaxCents: 300 },
+    { date: "2031-11-11", priceCents: 18500, touristTaxCents: 300 },
   ],
   cancelled_at: null,
   ...extra,
@@ -27,7 +27,7 @@ const row = (extra: Partial<GuestBookingRow> = {}): GuestBookingRow => ({
   check_out_time: "11:00",
   check_in_until: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
-  refunded: 0,
+  refunded_cents: 0,
   rooms: [room("r1"), room("r2")],
   ...extra,
 });
@@ -40,29 +40,49 @@ describe("toGuestBooking", () => {
     expect(b.reference).toBe("OB-B000-0000");
     expect(b.canCancel).toBe(true);
     expect(b.rooms).toHaveLength(2);
-    expect(b.rooms[0]).toMatchObject({ tierLabel: "Flex", paid: 376, cancelledAt: null });
+    expect(b.rooms[0]).toMatchObject({ tierLabel: "Flex", paidCents: 37600, cancelledAt: null });
     expect(b.timeline.steps[0].label).toBe("Booked");
     expect(b.rooms[0].cancelHint).toBe("Full refund until Sun 9 Nov, 15:00.");
     expect(b.cancelHint).toBe("Full refund until Sun 9 Nov, 15:00.");
-    expect(b.totalPaid).toBe(752);
+    expect(b.totalPaidCents).toBe(75200);
   });
 
   test("cots, extra beds and infants show on the room, and what is owed at the hotel on the booking", () => {
     const b = toGuestBooking(
       row({
         rooms: [
-          room("r1", { cots: 1, extra_beds: 1, infants: 1, pay_at_property_amount: "37.50" }),
-          room("r2", { cots: 1, pay_at_property_amount: 15, cancelled_at: "2031-10-20T10:00:00+00:00" }),
+          room("r1", { cots: 1, extra_beds: 1, infants: 1, pay_at_property_cents: "3750" }),
+          room("r2", { cots: 1, pay_at_property_cents: 1500, cancelled_at: "2031-10-20T10:00:00+00:00" }),
         ],
       }),
       NOW,
     );
-    expect(b.rooms[0]).toMatchObject({ extras: "1 cot · 1 extra bed · 1 infant", payAtProperty: 37.5 });
+    expect(b.rooms[0]).toMatchObject({ extras: "1 cot · 1 extra bed · 1 infant", payAtPropertyCents: 3750 });
     // The cancelled room's cot is no longer owed; nothing at the hotel is in what was paid.
-    expect(b.payAtProperty).toBe(37.5);
-    expect(b.totalPaid).toBe(752);
-    expect(toGuestBooking(row(), NOW)).toMatchObject({ payAtProperty: 0 });
+    expect(b.payAtPropertyCents).toBe(3750);
+    expect(b.totalPaidCents).toBe(75200);
+    expect(toGuestBooking(row(), NOW)).toMatchObject({ payAtPropertyCents: 0 });
     expect(toGuestBooking(row(), NOW).rooms[0].extras).toBeNull();
+  });
+
+  test("odd cents add up exactly, and the refunded amount comes through as cents", () => {
+    const b = toGuestBooking(
+      row({
+        refunded_cents: "19862",
+        rooms: [
+          room("r1", {
+            nights: [
+              { date: "2031-11-10", priceCents: 9325, touristTaxCents: 606 },
+              { date: "2031-11-11", priceCents: 9325, touristTaxCents: 606 },
+            ],
+          }),
+        ],
+      }),
+      NOW,
+    );
+    expect(b.rooms[0]!.paidCents).toBe(19862);
+    expect(b.totalPaidCents).toBe(19862);
+    expect(b.refundedCents).toBe(19862);
   });
 
   test("past the deadline, cancelling keeps the room price", () => {

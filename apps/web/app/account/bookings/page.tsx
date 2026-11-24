@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarDays, ChevronRight, Hotel, Star } from "lucide-react";
 import { query } from "@openbookings/db";
 import { bookingReference } from "@openbookings/db/booking-reference";
+import { formatCents } from "@openbookings/pricing/money";
 import { getServerSession } from "@/lib/auth";
 import { todayInEurope } from "@/lib/account/deletion";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import {
 export const metadata: Metadata = { title: "Bookings" };
 export const dynamic = "force-dynamic";
 
-const euros = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
+const euros = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 const dayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const fmtDay = (iso: string) => dayFmt.format(new Date(`${iso}T00:00:00Z`));
 
@@ -73,7 +74,7 @@ function BookingCard({ booking, review }: { booking: GuestBookingListRow; review
             </p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
               {plural(booking.rooms, "room", "rooms")} · {plural(booking.guests, "guest", "guests")} ·{" "}
-              {euros.format(booking.total_paid)} · {bookingReference(booking.booking_id)}
+              {euros(booking.total_paid_cents)} · {bookingReference(booking.booking_id)}
             </p>
           </div>
           {review ? (

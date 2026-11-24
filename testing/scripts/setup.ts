@@ -74,8 +74,8 @@ async function seedBookings(db: Client): Promise<number> {
     await confirmBookingPolicy(db, { bookingId: booking.id, confirmedAt: booking.confirmed_at });
 
     const { rows } = await db.query<{ rooms_cents: string; tax_cents: string }>(
-      `SELECT COALESCE(sum((SELECT round(sum((n->>'price')::numeric) * 100) FROM jsonb_array_elements(nights) n)), 0) AS rooms_cents,
-              COALESCE(sum(round(tourist_tax_amount * 100)), 0) AS tax_cents
+      `SELECT COALESCE(sum((SELECT sum((n->>'priceCents')::bigint) FROM jsonb_array_elements(nights) n)), 0) AS rooms_cents,
+              COALESCE(sum(tourist_tax_cents), 0) AS tax_cents
          FROM reservations WHERE booking_id = $1`,
       [booking.id],
     );
@@ -87,7 +87,6 @@ async function seedBookings(db: Client): Promise<number> {
     await db.query(
       `UPDATE bookings
           SET rooms_total_cents = $2, tourist_tax_cents = $3, total_cents = $2::bigint + $3::bigint,
-              total_amount = round(($2::bigint + $3::bigint) / 100.0),
               commission_cents = $4, commission_rate = $5, commission_vat_treatment = 'NL_DOMESTIC',
               commission_net_cents = $6, commission_vat_cents = $7
         WHERE id = $1`,

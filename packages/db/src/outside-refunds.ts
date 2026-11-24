@@ -11,7 +11,7 @@
  *
  * OpenBookings cannot tell how much of it was room price and how much tourist
  * tax until the host explains. Until then the whole amount sits in
- * `accommodation_amount` (tourist tax 0) and `split_explained_at` is NULL:
+ * `accommodation_cents` (tourist tax 0) and `split_explained_at` is NULL:
  * revenue and consideration go down by all of it, the tourist tax owed stays
  * as booked, and pages say the split is not explained yet. Staff enter the
  * host's split when they resolve the flag (`explainOutsideRefund`).
@@ -53,14 +53,13 @@ export type OutsideRefundRecorded =
 
 /**
  * What the guest paid on a booking, cents: its nights (price and tourist tax),
- * else `total_cents`, else whole-euro `total_amount`. `b` is the bookings alias.
+ * else `total_cents`. `b` is the bookings alias.
  */
 const PAID_CENTS_SQL = `COALESCE(
-  NULLIF((SELECT SUM(round((n->>'price')::numeric * 100) + round(COALESCE(n->>'touristTax', '0')::numeric * 100))
+  NULLIF((SELECT SUM((n->>'priceCents')::bigint + COALESCE((n->>'touristTaxCents')::bigint, 0))
             FROM reservations r CROSS JOIN LATERAL jsonb_array_elements(r.nights) n
            WHERE r.booking_id = b.id), 0),
-  NULLIF(b.total_cents, 0),
-  b.total_amount * 100
+  b.total_cents
 )::bigint`;
 
 /**
@@ -79,19 +78,19 @@ export async function recordOutsideRefund(db: Queryable, i: OutsideRefundInput):
      ), room AS (
        SELECT b.id,
               GREATEST(0, ${PAID_CENTS_SQL}
-                - COALESCE((SELECT round(SUM(rf.amount) * 100) FROM refunds rf
+                - COALESCE((SELECT SUM(rf.amount_cents) FROM refunds rf
                              WHERE rf.booking_id = b.id AND rf.status = 'succeeded'), 0))::bigint AS left_cents
          FROM target t JOIN bookings b ON b.id = t.id
      ), inserted AS (
        INSERT INTO refunds
-         (booking_id, reservation_id, reason, source, accommodation_amount, tourist_tax_amount, amount,
+         (booking_id, reservation_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents,
           breakdown, status, stripe_refund_id, idempotency_key, created_by, created_at)
-       SELECT r.id, NULL, NULL, $2, LEAST($3::bigint, r.left_cents) / 100.0, 0, LEAST($3::bigint, r.left_cents) / 100.0,
+       SELECT r.id, NULL, NULL, $2, LEAST($3::bigint, r.left_cents), 0, LEAST($3::bigint, r.left_cents),
               $4::jsonb, 'succeeded', $5, $6, NULL, $7::timestamptz
          FROM room r
         WHERE LEAST($3::bigint, r.left_cents) > 0
        ON CONFLICT (idempotency_key) DO NOTHING
-       RETURNING id, booking_id, round(amount * 100)::bigint AS amount_cents
+       RETURNING id, booking_id, amount_cents
      )
      SELECT (SELECT id FROM room) AS booking_id,
             (SELECT left_cents FROM room) AS left_cents,
@@ -133,7 +132,7 @@ export async function recordOutsideRefund(db: Queryable, i: OutsideRefundInput):
     bookingId: row.booking_id,
     kind: "outside_refund",
     actor: { kind: "system", id: null },
-    data: { refundId: row.refund_id, source: i.source, stripeId: i.stripeId, amount: amountCents / 100 },
+    data: { refundId: row.refund_id, source: i.source, stripeId: i.stripeId, amountCents },
   });
   return { recorded: true, bookingId: row.booking_id, refundId: row.refund_id, amountCents };
 }
@@ -152,29 +151,22 @@ export function validateSplit(amountCents: number, split: OutsideSplit): { ok: t
   return { ok: true };
 }
 
-/** Euros as typed by staff ("12,50", "12.5", "") → cents, or null when it isn't an amount. */
-export function parseEuroCents(input: string): number | null {
-  const s = input.trim().replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-  return Math.round(Number(s) * 100);
-}
-
-/** One outside refund as a booking page shows it. */
+/** One outside refund as a booking page shows it, in cents. */
 export type OutsideRefundLine = {
   id: string;
   source: OutsideSource;
-  amount: number;
+  amountCents: number;
   /** When Stripe made it, or the dispute was lost. */
   at: Date;
   /** Null until the host's split is entered. */
-  split: { roomPrice: number; touristTax: number } | null;
+  split: OutsideSplit | null;
 };
 
 /** The outside refund rows of a booking, oldest first. */
 export async function loadOutsideRefunds(db: Queryable, bookingId: string): Promise<OutsideRefundLine[]> {
   const { rows } = await db.query(
-    `SELECT id, source, amount::float8 AS amount, created_at,
-            accommodation_amount::float8 AS accommodation, tourist_tax_amount::float8 AS tourist_tax,
+    `SELECT id, source, amount_cents::float8 AS amount_cents, created_at,
+            accommodation_cents::float8 AS accommodation_cents, tourist_tax_cents::float8 AS tourist_tax_cents,
             split_explained_at
        FROM refunds WHERE booking_id = $1::uuid AND source <> 'openbookings'
       ORDER BY created_at, id`,
@@ -184,40 +176,39 @@ export async function loadOutsideRefunds(db: Queryable, bookingId: string): Prom
     rows as {
       id: string;
       source: OutsideSource;
-      amount: number;
+      amount_cents: number;
       created_at: Date;
-      accommodation: number;
-      tourist_tax: number;
+      accommodation_cents: number;
+      tourist_tax_cents: number;
       split_explained_at: Date | null;
     }[]
   ).map((r) => ({
     id: r.id,
     source: r.source,
-    amount: r.amount,
+    amountCents: r.amount_cents,
     at: r.created_at,
-    split: r.split_explained_at ? { roomPrice: r.accommodation, touristTax: r.tourist_tax } : null,
+    split: r.split_explained_at ? { roomPriceCents: r.accommodation_cents, touristTaxCents: r.tourist_tax_cents } : null,
   }));
 }
 
 /**
  * What a booking's refunds took off the room price and off the tourist tax,
- * euros, and how much of it is outside money not explained yet (counted as
+ * cents, and how much of it is outside money not explained yet (counted as
  * room price until it is). For revenue and tourist-tax figures: the tourist
  * tax a host owes is the booked tax less `touristTax`, with `unexplained` to
  * be split once the host says how.
  */
 export function refundedSplit(
-  refunds: { source: string; status: string; accommodation: number; touristTax: number; explained: boolean }[],
-): { roomPrice: number; touristTax: number; unexplained: number } {
-  const c = (n: number) => Math.round(n * 100);
+  refunds: { source: string; status: string; accommodationCents: number; touristTaxCents: number; explained: boolean }[],
+): { roomPriceCents: number; touristTaxCents: number; unexplainedCents: number } {
   let room = 0;
   let tax = 0;
   let unexplained = 0;
   for (const r of refunds) {
     if (r.status !== "succeeded") continue;
-    room += c(r.accommodation);
-    tax += c(r.touristTax);
-    if (r.source !== "openbookings" && !r.explained) unexplained += c(r.accommodation) + c(r.touristTax);
+    room += r.accommodationCents;
+    tax += r.touristTaxCents;
+    if (r.source !== "openbookings" && !r.explained) unexplained += r.accommodationCents + r.touristTaxCents;
   }
-  return { roomPrice: room / 100, touristTax: tax / 100, unexplained: unexplained / 100 };
+  return { roomPriceCents: room, touristTaxCents: tax, unexplainedCents: unexplained };
 }

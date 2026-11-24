@@ -222,7 +222,8 @@ describe("the owner (control)", () => {
     expect(state.errors).toBeNull();
     const update = calls.find((c) => /UPDATE rooms/.test(c.sql))!;
     expect(update.sql).toContain("base_occupancy");
-    expect(update.values).toEqual(expect.arrayContaining([2, 20, 10, 1, 0, 25, false]));
+    expect(update.sql).toContain("extra_adult_fee_cents");
+    expect(update.values).toEqual(expect.arrayContaining([2, 2000, 1000, 1, 0, 2500, false]));
   });
 
   test("a new rate cannot be created active, because it has no price", async () => {

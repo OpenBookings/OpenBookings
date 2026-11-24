@@ -1,9 +1,20 @@
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { z } from "zod";
 
 /**
- * A goodwill refund amount from the browser. The dialog builds it with
- * Number(text), so "abc" arrives as NaN. NaN would sail through `<= 0` guards
- * (NaN <= 0 is false) into the refunds table, where it satisfies the CHECK and
- * turns every later SUM(amount) on the booking into NaN.
+ * A goodwill refund amount from the browser: the text the host typed ("12,50",
+ * "12.5"), read into cents on the server. Anything else is refused: a number
+ * (the browser is trusted for nothing), junk, three decimals, a thousands
+ * separator, or zero.
  */
-export const goodwillAmount = z.number().finite().positive();
+export const goodwillAmount = z
+  .string()
+  .transform((text, ctx) => {
+    const parsed = parseEuroInput(text);
+    if (!parsed.ok) {
+      ctx.addIssue({ code: "custom", message: parsed.error });
+      return z.NEVER;
+    }
+    return parsed.cents;
+  })
+  .pipe(z.number().int().positive());

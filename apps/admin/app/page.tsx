@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { searchBookings } from "@/lib/search";
 import { requireSuperAdmin } from "@/lib/super-admin";
@@ -34,11 +35,6 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     db.query("SELECT id, name FROM properties ORDER BY name"),
   ]);
   const properties = props.rows as { id: string; name: string }[];
-  const eur = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  });
 
   return (
     <div className="space-y-6">
@@ -105,7 +101,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <TableCell>
                   <Badge variant="secondary">{r.status}</Badge>
                 </TableCell>
-                <TableCell className="text-right">{eur.format(r.totalAmount)}</TableCell>
+                <TableCell className="text-right">{formatCents(r.totalCents, { whole: "always-decimals" })}</TableCell>
               </TableRow>
             ))}
           </TableBody>

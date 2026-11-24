@@ -97,7 +97,7 @@ export function buildTimeline(b: Input): TimelineEntry[] {
   for (const r of b.refunds) {
     // Money the host refunded in their own Stripe, or lost in a dispute (0053).
     if (r.source && r.source !== "openbookings") {
-      facts.push(rec(r.created_at, "outside_refund", { actorKind: "system", data: { amount: r.amount, refundId: r.id, source: r.source } }));
+      facts.push(rec(r.created_at, "outside_refund", { actorKind: "system", data: { amountCents: r.amount_cents, refundId: r.id, source: r.source } }));
       continue;
     }
     facts.push(
@@ -106,12 +106,12 @@ export function buildTimeline(b: Input): TimelineEntry[] {
         actorId: r.created_by,
         reason: r.reason,
         reservationId: r.reservation_id,
-        data: { amount: r.amount, refundId: r.id },
+        data: { amountCents: r.amount_cents, refundId: r.id },
       }),
     );
   }
   for (const t of b.transactions) {
-    facts.push(rec(t.created_at, `transaction_${t.type}`, { data: { amount: t.amount, status: t.status } }));
+    facts.push(rec(t.created_at, `transaction_${t.type}`, { data: { amountCents: t.amount_cents, status: t.status } }));
   }
 
   const stored = b.events.map(fromEvent);

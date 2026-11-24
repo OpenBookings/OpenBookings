@@ -113,7 +113,13 @@ describeWithDb("admin console as its own database roles", () => {
     await applyPendingMigrations(db);
     // Again, even where CI applied it up front: a database rebuilt from a
     // schema dump has the roles without BYPASSRLS. Rolled back with the rest.
-    await db.query(pendingMigrationSql("0054_admin_roles.sql"));
+    // 0058 renamed the refund columns 0054 grants on; replay its grants on the new names.
+    await db.query(
+      pendingMigrationSql("0054_admin_roles.sql").replace(
+        "accommodation_amount, tourist_tax_amount",
+        "accommodation_cents, tourist_tax_cents",
+      ),
+    );
 
     const suffix = crypto.randomUUID().slice(0, 8);
     const orgId = `test-org-${suffix}`;
@@ -172,7 +178,7 @@ describeWithDb("admin console as its own database roles", () => {
       // The booking page's "what may happen" and the refund preview.
       expect(await actorFor(db, bookingId, "host")).toEqual({ kind: "host", userId: ownerId, via: "admin" });
       expect((await loadBookingState(db, bookingId, TEN_DAYS_BEFORE, false, "guest"))?.actions).toContain("cancel");
-      expect((await previewRefund({ bookingId, reservationIds: null }, { db: lifecycleDb(), now: () => TEN_DAYS_BEFORE }))?.total).toBeGreaterThan(0);
+      expect((await previewRefund({ bookingId, reservationIds: null }, { db: lifecycleDb(), now: () => TEN_DAYS_BEFORE }))?.totalCents).toBeGreaterThan(0);
 
       // The invoices page.
       await db.query(`SELECT step, status, report, started_at, finished_at FROM invoice_runs LIMIT 1`);
@@ -208,13 +214,13 @@ describeWithDb("admin console as its own database roles", () => {
       expect(cancelled.ok).toBe(true);
       if (cancelled.ok && cancelled.cancelled) await sendBookingCancelled(bookingId, cancelled.cancelled, report, mail);
 
-      const goodwill = await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 10 });
+      const goodwill = await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: 1_000 });
       expect(goodwill.ok).toBe(true);
       if (goodwill.ok) await sendRefundIssued(bookingId, { reason: "goodwill", refunds: goodwill.refunds }, report, mail);
 
       // A refund Stripe refused, then retried.
       const failing = { ...deps(), refund: async () => Promise.reject(new Error("card_declined")) };
-      expect((await issueGoodwillRefund(failing, { bookingId, actor: host, amount: 5 })).ok).toBe(true);
+      expect((await issueGoodwillRefund(failing, { bookingId, actor: host, amountCents: 500 })).ok).toBe(true);
       expect((await retryRefunds({ ...deps(), findRefund: async () => null }, { bookingId, via: "admin" })).ok).toBe(true);
 
       const during = new Date(CHECK_IN_AT + 3_600_000);
@@ -236,8 +242,8 @@ describeWithDb("admin console as its own database roles", () => {
   test("the forced edits run as ob_admin_write", async () => {
     const refundId = (
       await db.query(
-        `INSERT INTO refunds (booking_id, reason, accommodation_amount, tourist_tax_amount, amount, idempotency_key)
-         VALUES ($1, 'goodwill', 10, 0, 10, 'test:'||gen_random_uuid()) RETURNING id`,
+        `INSERT INTO refunds (booking_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, idempotency_key)
+         VALUES ($1, 'goodwill', 1000, 0, 1000, 'test:'||gen_random_uuid()) RETURNING id`,
         [bookingId],
       )
     ).rows[0].id as string;
@@ -263,8 +269,8 @@ describeWithDb("admin console as its own database roles", () => {
     const dedupeKey = (await db.query(`SELECT detail->>'dedupeKey' AS k FROM audit_log WHERE id = $1`, [flagId])).rows[0].k as string;
     const refundId = (
       await db.query(
-        `INSERT INTO refunds (booking_id, reason, source, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-         VALUES ($1, NULL, 'dispute', 1, 0, 1, 'succeeded', 'dispute:' || $2) RETURNING id`,
+        `INSERT INTO refunds (booking_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+         VALUES ($1, NULL, 'dispute', 100, 0, 100, 'succeeded', 'dispute:' || $2) RETURNING id`,
         [bookingId, dedupeKey],
       )
     ).rows[0].id as string;
@@ -273,16 +279,16 @@ describeWithDb("admin console as its own database roles", () => {
     });
     const row = (
       await db.query(
-        `SELECT accommodation_amount::float8 AS room, tourist_tax_amount::float8 AS tax, split_explained_at IS NOT NULL AS explained
+        `SELECT accommodation_cents::int AS room, tourist_tax_cents::int AS tax, split_explained_at IS NOT NULL AS explained
            FROM refunds WHERE id = $1`,
         [refundId],
       )
     ).rows[0];
-    expect(row).toEqual({ room: 0.6, tax: 0.4, explained: true });
+    expect(row).toEqual({ room: 60, tax: 40, explained: true });
   });
 
   test("ob_admin_write cannot touch what no action changes", async () => {
-    expect(await denied("ob_admin_write", () => db.query(`UPDATE bookings SET total_amount = 1 WHERE id = $1`, [bookingId]))).toBe(true);
+    expect(await denied("ob_admin_write", () => db.query(`UPDATE bookings SET total_cents = 1 WHERE id = $1`, [bookingId]))).toBe(true);
     expect(await denied("ob_admin_write", () => db.query(`SELECT 1 FROM messages LIMIT 1`))).toBe(true);
   });
 });

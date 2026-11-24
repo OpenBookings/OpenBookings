@@ -102,8 +102,8 @@ function dealExtras(room: DbRoom, units: Unit[], wanted: RoomExtras): void {
   }
 }
 
-/** What the guest pays at the hotel for the picked rooms' cots and extra beds, for the stay. */
-export function atHotelTotal(
+/** What the guest pays at the hotel, in cents, for the picked rooms' cots and extra beds, for the stay. */
+export function atHotelTotalCents(
   rooms: DbRoom[],
   sel: Record<string, number>,
   extras: Record<string, RoomExtras>,
@@ -114,13 +114,13 @@ export function atHotelTotal(
     const picked = room.rate_plans.some((rate) => (sel[rate.id] ?? 0) > 0);
     const e = extras[room.id] ?? NONE;
     if (!picked) continue;
-    total += (e.cots * (room.cot_fee ?? 0) + e.extraBeds * (room.extra_bed_fee ?? 0)) * nights;
+    total += (e.cots * (room.cot_fee_cents ?? 0) + e.extraBeds * (room.extra_bed_fee_cents ?? 0)) * nights;
   }
-  return Math.round(total * 100) / 100;
+  return total;
 }
 
 export type Booking =
-  | { ok: true; rooms: SelectedRoom[]; expectedTotal: number }
+  | { ok: true; rooms: SelectedRoom[]; expectedTotalCents: number }
   | { ok: false; reason: "unpriced" }
   | Extract<SplitResult, { ok: false }>;
 
@@ -167,9 +167,9 @@ export function buildBooking(
     // The quote prices every party a room can be given. Should one be
     // missing, the largest share's price stands in and booking answers
     // "price changed".
-    total += priced?.partyTotals[partyKey(r)] ?? priced?.total ?? 0;
+    total += priced?.partyTotals[partyKey(r)] ?? priced?.totalCents ?? 0;
   }
-  return { ok: true, rooms: split.rooms, expectedTotal: Math.round(total * 100) / 100 };
+  return { ok: true, rooms: split.rooms, expectedTotalCents: total };
 }
 
 /**
@@ -213,7 +213,7 @@ export function bookingMessage(
 export type BookOutcome =
   | { kind: "go"; checkoutUrl: string }
   | { kind: "sign_in" }
-  | { kind: "price_changed"; total: number }
+  | { kind: "price_changed"; totalCents: number }
   | { kind: "unavailable"; roomIds: string[]; message: string }
   | { kind: "error"; message: string };
 
@@ -231,8 +231,8 @@ export function interpretBookResponse(status: number, body: unknown): BookOutcom
   }
   if (status === 401) return { kind: "sign_in" };
   if (status === 409 && b.error === "price_changed") {
-    const total = isObject(b.quote) ? b.quote.total : undefined;
-    return typeof total === "number" && Number.isFinite(total) ? { kind: "price_changed", total } : SOMETHING_WENT_WRONG;
+    const totalCents = isObject(b.quote) ? b.quote.totalCents : undefined;
+    return typeof totalCents === "number" && Number.isInteger(totalCents) ? { kind: "price_changed", totalCents } : SOMETHING_WENT_WRONG;
   }
   if (status === 409 && b.error === "unavailable") {
     const roomIds = Array.isArray(b.roomIds) ? b.roomIds.filter((id): id is string => typeof id === "string") : [];
@@ -246,5 +246,7 @@ export function interpretBookResponse(status: number, body: unknown): BookOutcom
     // The same words as the checkout page's config_error.
     return { kind: "error", message: "This property can't take bookings right now." };
   }
+  // A page loaded before a deploy can post a body the server no longer accepts.
+  if (status === 400) return { kind: "error", message: "This page is out of date. Reload it and try again." };
   return SOMETHING_WENT_WRONG;
 }

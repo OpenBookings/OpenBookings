@@ -62,7 +62,7 @@ const fixture: PropertyPagePayload = {
         {
           id: "33333333-3333-3333-3333-333333333333",
           name: "Flexible",
-          bar: 240,
+          bar_cents: 24000,
           currency: "EUR",
         },
       ],

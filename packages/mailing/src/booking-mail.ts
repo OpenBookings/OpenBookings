@@ -1,12 +1,12 @@
 import { REFUND_TIMING_LINE } from "@openbookings/pricing";
 import { composeActionMail, type ActionMail } from "./action-mail";
-import { formatEuro, formatStayDate } from "./format";
+import { formatStayDate, mailCents } from "./format";
 import { escapeHtml } from "./template";
 
 /**
  * One booked room as the mail lists it. `guests` and the dates are plain text.
- * `nights` are what each night cost (euros, VAT included); `touristTaxLines`
- * are the charges the guest was shown at booking.
+ * `nights` are what each night cost (cents, VAT included); `touristTaxLines`
+ * are the charges the guest was shown at booking, in cents.
  */
 export type MailRoom = {
   name: string;
@@ -18,8 +18,8 @@ export type MailRoom = {
   refundable: boolean;
   /** Null once the free-cancellation deadline has passed (or for a non-refundable rate). */
   freeCancellationUntil: string | null;
-  nights: { date: string; price: number }[];
-  touristTaxLines: { label: string; amount: number }[];
+  nights: { date: string; priceCents: number }[];
+  touristTaxLines: { label: string; amountCents: number }[];
 };
 
 /**
@@ -37,8 +37,7 @@ export type MailSeller = { legalName: string | null; vatNumber: string | null };
 const STRONG = (text: string) => `<strong style="color:#DDDDDD;">${escapeHtml(text)}</strong>`;
 const FOOTNOTE = 'Questions? Email <a href="mailto:support@openbookings.co" style="color:#AAAAAA;text-decoration:underline;">support@openbookings.co</a>.';
 
-const cents = (euros: number) => Math.round(euros * 100);
-const euro = (amountCents: number) => formatEuro(amountCents / 100);
+const euro = mailCents;
 
 const roomNames = (rooms: string[]) => rooms.map(STRONG).join(", ");
 
@@ -75,12 +74,12 @@ function table(rows: Row[]): string {
  * 2 nights × €100.00". A discount spread over the stay can give every night
  * its own price, and then every night gets its own line.
  */
-export function nightRuns(nights: { date: string; price: number }[]): { label: string; amountCents: number }[] {
+export function nightRuns(nights: { date: string; priceCents: number }[]): { label: string; amountCents: number }[] {
   const runs: { from: string; count: number; priceCents: number }[] = [];
   for (const n of nights) {
     const last = runs[runs.length - 1];
-    if (last && last.priceCents === cents(n.price)) last.count += 1;
-    else runs.push({ from: n.date, count: 1, priceCents: cents(n.price) });
+    if (last && last.priceCents === n.priceCents) last.count += 1;
+    else runs.push({ from: n.date, count: 1, priceCents: n.priceCents });
   }
   return runs.map((r) => ({
     label: `${formatStayDate(r.from)} · ${r.count === 1 ? "1 night" : `${r.count} nights × ${euro(r.priceCents)}`}`,
@@ -100,8 +99,8 @@ function roomRows(rooms: MailRoom[]): Row[] {
       { label: escapeHtml([r.ratePlan, r.guests, r.extras, cancel].filter(Boolean).join(", ")), kind: "note" as const },
       ...nightRuns(r.nights).map((n) => ({ label: escapeHtml(n.label), amount: euro(n.amountCents) })),
       ...r.touristTaxLines
-        .filter((t) => t.amount > 0)
-        .map((t) => ({ label: escapeHtml(`Tourist tax (${t.label})`), amount: euro(cents(t.amount)) })),
+        .filter((t) => t.amountCents > 0)
+        .map((t) => ({ label: escapeHtml(`Tourist tax (${t.label})`), amount: euro(t.amountCents) })),
     ];
   });
 }

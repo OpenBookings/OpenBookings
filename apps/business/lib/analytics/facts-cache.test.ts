@@ -228,3 +228,9 @@ describe("assembleFacts", () => {
     }
   });
 });
+
+describe("the facts cache version", () => {
+  test("is 2: months cached while money was in euros are rebuilt in cents", () => {
+    expect(FACTS_CACHE_VERSION).toBe(2);
+  });
+});

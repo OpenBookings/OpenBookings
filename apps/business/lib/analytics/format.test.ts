@@ -52,6 +52,11 @@ describe("formatCents", () => {
     expect(formatCents(0)).toBe("€0.00");
   });
 
+  test("an average between cents rounds half up to the cent; a negative gets a real minus", () => {
+    expect(formatCents(12_345.5)).toBe("€123.46");
+    expect(formatCents(-400)).toBe("−€4.00");
+  });
+
   test("a missing value is an em dash, never €0", () => {
     // €0 says they earned nothing; the em dash says we cannot say.
     expect(formatCents(null)).toBe("—");

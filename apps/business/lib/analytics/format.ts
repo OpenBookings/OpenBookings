@@ -1,27 +1,18 @@
+import { formatCents as money, roundHalfUp } from "@openbookings/pricing/money";
 import type { IsoDate, Point } from "./types";
 
 /** An absent number is an em dash everywhere. €0 and "we cannot say" are different claims. */
 export const EM_DASH = "—";
 
-/**
- * en-GB, not en-NL. "en-NL" is a hybrid CLDR resolves differently per engine:
- * Bun renders "€ 4.523,90" and Node "€4,523.90" from the same call, and a
- * browser is a third implementation — which would mismatch hydration on every
- * money figure on the page, and make the unit tests describe something the host
- * never sees. en-GB is stable across all three and matches what this app already
- * renders on the server today.
- */
-const money = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const counts = new Intl.NumberFormat("en-GB");
 
+/**
+ * "€4,523.90" for tables. Averages can fall between cents, so they
+ * round half up to the cent first. The shared formatter is plain string
+ * arithmetic: no Intl locale that Bun, Node and the browser resolve differently.
+ */
 export function formatCents(cents: number | null): string {
-  return cents === null ? EM_DASH : money.format(cents / 100);
+  return cents === null ? EM_DASH : money(roundHalfUp(cents), { whole: "always-decimals" });
 }
 
 export function formatPercent(value: number | null, digits = 1): string {
@@ -89,16 +80,9 @@ export function trendSentence(
   return `${label} ${verb} from ${format(first.value)} on ${first.label} to ${format(last.value)} on ${last.label}.`;
 }
 
-const wholeEuros = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
-
 /** Stats and chart axes. Cents belong in tables and the CSV: use formatCents there. */
 export function formatEuros(cents: number | null): string {
-  return cents === null ? EM_DASH : wholeEuros.format(Math.round(cents / 100));
+  return cents === null ? EM_DASH : money(roundHalfUp(cents / 100) * 100);
 }
 
 /** "2026-10-01" -> "1 Oct 2026". */

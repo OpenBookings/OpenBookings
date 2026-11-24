@@ -6,6 +6,7 @@ import { CircleCheck, CircleX, Star } from 'lucide-react';
 import { getPool } from '@openbookings/db';
 import { getReviewContext } from '@openbookings/db/reviews';
 import { REFUND_TIMING_LINE } from '@openbookings/pricing';
+import { formatCents } from '@openbookings/pricing/money';
 import { BACKDROP_COOKIE } from '@openbookings/images';
 import { getBackdrop } from '@openbookings/images/server';
 import { getServerSession } from '@/lib/auth';
@@ -22,10 +23,7 @@ import { loadGuestBooking } from './_lib/load';
 export const metadata: Metadata = { title: 'Your booking' };
 export const dynamic = 'force-dynamic';
 
-const euros = new Intl.NumberFormat('en-NL', {
-  style: 'currency',
-  currency: 'EUR',
-});
+const euros = (cents: number) => formatCents(cents, { whole: 'always-decimals' });
 const day = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'short',
@@ -200,7 +198,7 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
                           />
                         </WhenEditing>
                       ) : null}
-                      <span className="text-sm text-white/60 tabular-nums">{euros.format(room.paid)}</span>
+                      <span className="text-sm text-white/60 tabular-nums">{euros(room.paidCents)}</span>
                     </div>
                   </li>
                 ))}
@@ -210,21 +208,21 @@ export default async function BookingPage({ params }: { params: Promise<{ 'booki
               <dl className="mt-3 flex flex-col gap-1 text-sm">
                 <div className="flex justify-between gap-4">
                   <dt className="text-white/55">Paid</dt>
-                  <dd className="font-medium tabular-nums">{euros.format(booking.totalPaid)}</dd>
+                  <dd className="font-medium tabular-nums">{euros(booking.totalPaidCents)}</dd>
                 </div>
-                {booking.payAtProperty > 0 ? (
+                {booking.payAtPropertyCents > 0 ? (
                   <div className="flex justify-between gap-4">
                     <dt className="text-white/55">To pay at the hotel (cots and extra beds)</dt>
-                    <dd className="tabular-nums">{euros.format(booking.payAtProperty)}</dd>
+                    <dd className="tabular-nums">{euros(booking.payAtPropertyCents)}</dd>
                   </div>
                 ) : null}
-                {booking.refunded > 0 ? (
+                {booking.refundedCents > 0 ? (
                   <div className="flex justify-between gap-4">
                     <dt className="text-white/55">
                       Refunded
                       <span className="block text-xs text-white/40">{REFUND_TIMING_LINE}</span>
                     </dt>
-                    <dd className="tabular-nums">{euros.format(booking.refunded)}</dd>
+                    <dd className="tabular-nums">{euros(booking.refundedCents)}</dd>
                   </div>
                 ) : null}
               </dl>

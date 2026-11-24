@@ -40,7 +40,8 @@ describeWithDb("Tourist tax rules against Postgres", () => {
 
   const rule = (effectiveFrom: string, extra: { childrenExempt?: boolean; infantsTaxed?: boolean } = {}) => ({
     effectiveFrom,
-    charges: [{ kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false }],
+    // As the dialog sends it: the amount as typed.
+    charges: [{ kind: "fixed", amount: "2,50", perPerson: true, perNight: true, perRoom: false }],
     childrenExempt: true,
     maxNights: 7,
     ...extra,
@@ -109,7 +110,7 @@ describeWithDb("Tourist tax rules against Postgres", () => {
     expect(row).toEqual({
       effective_from: today,
       charges: [
-        { kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false, vatIncludedPercent: null },
+        { kind: "fixed", amountCents: 250, perPerson: true, perNight: true, perRoom: false, vatIncludedPercent: null },
       ],
       children_exempt: true,
       infants_taxed: false,

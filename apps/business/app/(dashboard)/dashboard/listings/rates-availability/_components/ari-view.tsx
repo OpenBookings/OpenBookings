@@ -311,7 +311,6 @@ export function AriView({ data, startDate, windowDays, rates }: AriViewProps) {
 
       <AriDetailPanel
         selection={selection}
-        currency={data.currency}
         stayLength={data.stayLength}
         onClose={() => setSelection(null)}
         onEditAvailability={(prefill) => openDialog("availability", prefill)}

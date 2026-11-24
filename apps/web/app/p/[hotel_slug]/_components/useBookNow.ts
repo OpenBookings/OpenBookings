@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatCents } from "@openbookings/pricing/money";
 import { authClient } from "@/lib/auth-client";
 import type { DbRoom } from "./constants";
 import type { QuoteState, RoomView } from "../_lib/merge-quote";
 import { pruneQuantities } from "../_lib/merge-quote";
 import { guestsLabel, stayToParams, type Stay } from "../_lib/stay";
 import {
-  atHotelTotal,
+  atHotelTotalCents,
   bookingMessage,
   buildBooking,
   encodeSelection,
@@ -20,9 +21,7 @@ import {
 } from "../_lib/book";
 
 /** A line for the bar that holds while the selection and stay stay as they were. */
-type Notice = { key: string; text: string; total?: number };
-
-const EURO = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
+type Notice = { key: string; text: string; totalCents?: number };
 
 /**
  * Book now: hold the picked rooms through POST /api/booking-intents and open
@@ -74,7 +73,8 @@ export function useBookNow(i: {
 
     const key = keyOf(sel);
     // After "the price changed", the guest has now seen the new total.
-    const expectedTotal = notice?.key === key && notice.total !== undefined ? notice.total : booking.expectedTotal;
+    const expectedTotalCents =
+      notice?.key === key && notice.totalCents !== undefined ? notice.totalCents : booking.expectedTotalCents;
     const askSignIn = () => {
       const params = new URLSearchParams(searchKey);
       params.set("book", encodeSelection(sel));
@@ -89,7 +89,7 @@ export function useBookNow(i: {
       const res = await fetch("/api/booking-intents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId, checkIn: stay.checkIn, checkOut: stay.checkOut, rooms: booking.rooms, expectedTotal }),
+        body: JSON.stringify({ propertyId, checkIn: stay.checkIn, checkOut: stay.checkOut, rooms: booking.rooms, expectedTotalCents }),
       });
       outcome = interpretBookResponse(res.status, await res.json().catch(() => null));
     } catch {
@@ -102,7 +102,7 @@ export function useBookNow(i: {
 
     if (outcome.kind === "sign_in") return askSignIn();
     if (outcome.kind === "price_changed") {
-      setNotice({ key, text: `The price changed to ${EURO.format(outcome.total)}. Press Book now to continue.`, total: outcome.total });
+      setNotice({ key, text: `The price changed to ${formatCents(outcome.totalCents, { whole: "always-decimals" })}. Press Book now to continue.`, totalCents: outcome.totalCents });
       return;
     }
     if (outcome.kind === "unavailable") {
@@ -162,17 +162,17 @@ export function useBookNow(i: {
       pickGuests[rateId] = [guestsLabel(g), ...beds].join(" · ");
     }
   }
-  const atHotel = anyExtras && stay ? atHotelTotal(shownRooms, quantities, extras, stay.nights) : null;
+  const atHotel = anyExtras && stay ? atHotelTotalCents(shownRooms, quantities, extras, stay.nights) : null;
   const problem = booking && stay ? bookingMessage(booking, shownRooms, shownViews, quantities, stay) : null;
 
   return {
     bar: {
       pickGuests,
       message: shownNotice?.text ?? problem,
-      total: booking?.ok ? booking.expectedTotal : null,
-      totalOverride: shownNotice?.total ?? null,
+      totalCents: booking?.ok ? booking.expectedTotalCents : null,
+      totalOverrideCents: shownNotice?.totalCents ?? null,
       keepOpen: shownNotice !== null,
-      atHotel,
+      atHotelCents: atHotel,
       // Without dates Book now asks for them; with dates the selection must be bookable.
       canBook: booking === null || booking.ok,
       pending,

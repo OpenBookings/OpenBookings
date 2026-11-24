@@ -44,6 +44,8 @@ an id taken from a request must go through it.
 
 ## Money columns
 
-Older money columns hold **whole euros** (`bigint`), and newer ones end in `_cents`. A booking
-carries both: `total_amount` in euros and `rooms_total_cents`, `tourist_tax_cents` and
-`total_cents` for the exact split. New columns always use cents.
+All money is stored as integer **cents** (`bigint`), and every money column ends in `_cents`
+(`rate_plans.bar_cents`, `reservations.total_cents`, `refunds.amount_cents`, and so on). A booking
+carries `rooms_total_cents`, `tourist_tax_cents` and `total_cents` for the exact split. Money
+inside JSON follows the same rule, with keys such as `priceCents` and `amountCents`. New money
+columns always use cents.

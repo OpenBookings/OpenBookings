@@ -1,3 +1,4 @@
+import { formatCents } from "@openbookings/pricing/money";
 import { DEFAULT_COMMISSION_LABEL, DEFAULT_COMMISSION_RATE } from "@openbookings/stripe/commission-rate";
 
 // The worked example: 3 nights at €120. Stripe's standard EEA card price.
@@ -11,8 +12,7 @@ const stripeFeeCents = Math.round(guestPaysCents * STRIPE_PERCENT) + STRIPE_FIXE
 const commissionCents = Math.round(guestPaysCents * DEFAULT_COMMISSION_RATE);
 const youReceiveCents = guestPaysCents - stripeFeeCents - commissionCents;
 
-const eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
-const money = (cents: number) => eur.format(cents / 100);
+const money = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 const absentFees = [
   { label: "Pay-to-rank placement", note: "Search order is never for sale" },

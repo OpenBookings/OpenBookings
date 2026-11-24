@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { AriChange } from "./actions";
+import { centsToInput } from "@openbookings/pricing/money";
+import type { AriChangeInput } from "./actions";
 
 /**
  * Staged edits, held until the host publishes them.
@@ -19,7 +20,8 @@ import type { AriChange } from "./actions";
  */
 
 export type DraftEdit =
-  | { kind: "price"; ratePlanId: string; date: string; price: number | null }
+  /** Cents, already read from what the host typed; null clears the date's own price. */
+  | { kind: "price"; ratePlanId: string; date: string; priceCents: number | null }
   | {
       kind: "closure";
       ratePlanId: string;
@@ -129,8 +131,8 @@ export function useAriDraft() {
  * identical drafts look different in a log, and makes this function a pain to
  * test.
  */
-export function toChanges(edits: DraftEdit[]): AriChange[] {
-  const grouped = new Map<string, { change: AriChange; dates: string[] }>();
+export function toChanges(edits: DraftEdit[]): AriChangeInput[] {
+  const grouped = new Map<string, { change: AriChangeInput; dates: string[] }>();
 
   for (const edit of edits) {
     const { signature, build } = describe(edit);
@@ -157,17 +159,19 @@ export function toChanges(edits: DraftEdit[]): AriChange[] {
  */
 function describe(edit: DraftEdit): {
   signature: string;
-  build: () => AriChange;
+  build: () => AriChangeInput;
 } {
   switch (edit.kind) {
     case "price":
       return {
-        signature: `price|${edit.ratePlanId}|${edit.price}`,
+        signature: `price|${edit.ratePlanId}|${edit.priceCents}`,
         build: () => ({
           type: "price",
           ratePlanId: edit.ratePlanId,
           dates: [],
-          price: edit.price,
+          // The server reads prices from text, as a host types them, so the
+          // cents go back to the text that means exactly them.
+          price: edit.priceCents === null ? null : centsToInput(edit.priceCents),
           label: null,
         }),
       };

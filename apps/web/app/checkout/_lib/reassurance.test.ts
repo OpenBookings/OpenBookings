@@ -70,17 +70,20 @@ describe("payReassurance", () => {
 });
 
 describe("payAtPropertyLine", () => {
-  const room = (payAtProperty: number, cots: number, extraBeds: number) => ({ payAtProperty, cots, extraBeds });
+  const room = (payAtPropertyCents: number, cots: number, extraBeds: number) => ({ payAtPropertyCents, cots, extraBeds });
   test("nothing paid there", () => {
     expect(payAtPropertyLine([room(0, 0, 0)])).toBeNull();
   });
   test("one extra bed", () => {
-    expect(payAtPropertyLine([room(75, 0, 1)])).toBe("+ €75.00 at the property for the extra bed");
+    expect(payAtPropertyLine([room(7500, 0, 1)])).toBe("+ €75.00 at the property for the extra bed");
   });
   test("sums across rooms, plural", () => {
-    expect(payAtPropertyLine([room(75, 0, 1), room(60, 0, 1)])).toBe("+ €135.00 at the property for the extra beds");
+    expect(payAtPropertyLine([room(7500, 0, 1), room(6000, 0, 1)])).toBe("+ €135.00 at the property for the extra beds");
   });
   test("cot and extra bed", () => {
-    expect(payAtPropertyLine([room(90, 1, 1)])).toBe("+ €90.00 at the property for the cot and extra bed");
+    expect(payAtPropertyLine([room(9000, 1, 1)])).toBe("+ €90.00 at the property for the cot and extra bed");
+  });
+  test("cents are kept", () => {
+    expect(payAtPropertyLine([room(1550, 1, 0)])).toBe("+ €15.50 at the property for the cot");
   });
 });

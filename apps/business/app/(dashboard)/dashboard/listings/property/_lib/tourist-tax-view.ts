@@ -38,8 +38,8 @@ export interface ExampleInput {
   commissionRate: number;
   arrival: string;
   nights: number;
-  /** Per room per night, incl. VAT, excl. tourist tax — what the host enters as a rate. */
-  pricePerNight: number;
+  /** Per room per night in cents, incl. VAT, excl. tourist tax — what the host enters as a rate. */
+  pricePerNightCents: number;
   adults: number;
   children: number;
   /** Under 2. Pay only where the rule says so. */
@@ -47,20 +47,21 @@ export interface ExampleInput {
   rooms: number;
 }
 
+/** Every amount in cents. */
 export interface ExampleResult {
-  stay: number;
+  stayCents: number;
   touristTax: TouristTaxResult;
-  guestTotal: number;
-  commission: number;
-  hostReceives: number;
+  guestTotalCents: number;
+  commissionCents: number;
+  hostReceivesCents: number;
 }
 
 const EMPTY: ExampleResult = {
-  stay: 0,
-  touristTax: { total: 0, lines: [] },
-  guestTotal: 0,
-  commission: 0,
-  hostReceives: 0,
+  stayCents: 0,
+  touristTax: { totalCents: 0, lines: [] },
+  guestTotalCents: 0,
+  commissionCents: 0,
+  hostReceivesCents: 0,
 };
 
 const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
@@ -68,12 +69,14 @@ const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 
 export function exampleStay(input: ExampleInput): ExampleResult {
   const nights = whole(input.nights);
   const rooms = Math.max(1, whole(input.rooms));
-  const unitCents = Math.round(input.pricePerNight * 100);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.arrival) || nights === 0 || !(unitCents > 0)) return EMPTY;
+  const unitCents = input.pricePerNightCents;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.arrival) || nights === 0 || !Number.isSafeInteger(unitCents) || unitCents <= 0) {
+    return EMPTY;
+  }
 
-  const nightPrice = (unitCents * rooms) / 100;
+  const nightCents = unitCents * rooms;
   const touristTax = calculateTouristTax(input.rules, {
-    nights: Array.from({ length: nights }, (_, i) => ({ date: addDays(input.arrival, i), price: nightPrice })),
+    nights: Array.from({ length: nights }, (_, i) => ({ date: addDays(input.arrival, i), priceCents: nightCents })),
     adults: whole(input.adults),
     children: whole(input.children),
     infants: whole(input.infants ?? 0),
@@ -82,16 +85,16 @@ export function exampleStay(input: ExampleInput): ExampleResult {
 
   try {
     const split = bookingSplitCents({
-      stayCents: unitCents * rooms * nights,
-      touristTaxCents: Math.round(touristTax.total * 100),
+      stayCents: nightCents * nights,
+      touristTaxCents: touristTax.totalCents,
       rate: input.commissionRate,
     });
     return {
-      stay: (unitCents * rooms * nights) / 100,
+      stayCents: nightCents * nights,
       touristTax,
-      guestTotal: split.guestTotalCents / 100,
-      commission: split.commissionCents / 100,
-      hostReceives: split.hostReceivesCents / 100,
+      guestTotalCents: split.guestTotalCents,
+      commissionCents: split.commissionCents,
+      hostReceivesCents: split.hostReceivesCents,
     };
   } catch {
     return EMPTY;

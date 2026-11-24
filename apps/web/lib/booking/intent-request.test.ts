@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseIntentRequest } from "./intent-request";
+import { parseIntentRequest, priceChanged } from "./intent-request";
 
 const ROOM = "11111111-1111-4111-8111-111111111111";
 const PLAN = "22222222-2222-4222-8222-222222222222";
@@ -8,7 +8,7 @@ const valid = {
   checkIn: "2031-11-10",
   checkOut: "2031-11-12",
   rooms: [{ roomId: ROOM, ratePlanId: PLAN, adults: 2, children: 1, infants: 1, cots: 1, extraBeds: 0 }],
-  expectedTotal: 206.5,
+  expectedTotalCents: 20650,
 };
 
 describe("parseIntentRequest", () => {
@@ -39,8 +39,13 @@ describe("parseIntentRequest", () => {
       [],
       { ...valid, propertyId: "x" },
       { ...valid, checkIn: "10-11-2031" },
-      { ...valid, expectedTotal: "206.5" },
-      { ...valid, expectedTotal: Number.NaN },
+      { ...valid, expectedTotalCents: "20650" },
+      { ...valid, expectedTotalCents: Number.NaN },
+      // Cents are whole: a euro amount is not a total in cents.
+      { ...valid, expectedTotalCents: 206.5 },
+      { ...valid, expectedTotalCents: -1 },
+      // The euro-era key alone is no longer accepted.
+      { propertyId: valid.propertyId, checkIn: valid.checkIn, checkOut: valid.checkOut, rooms: valid.rooms, expectedTotal: 206.5 },
       { ...valid, rooms: [{ ...valid.rooms[0], adults: 0 }] },
       { ...valid, rooms: [{ ...valid.rooms[0], adults: 1.5 }] },
       { ...valid, rooms: [{ ...valid.rooms[0], children: -1 }] },
@@ -48,5 +53,18 @@ describe("parseIntentRequest", () => {
     ]) {
       expect(parseIntentRequest(bad).ok).toBe(false);
     }
+  });
+});
+
+describe("priceChanged", () => {
+  const quote = { roomsTotalCents: 37450, touristTaxTotalCents: 1200, totalCents: 38650 };
+
+  test("the exact total in cents books", () => {
+    expect(priceChanged(38650, quote)).toBeNull();
+  });
+
+  test("one cent off either way is a price change, with the server's quote", () => {
+    expect(priceChanged(38651, quote)).toEqual({ error: "price_changed", quote });
+    expect(priceChanged(38649, quote)).toEqual({ error: "price_changed", quote });
   });
 });

@@ -17,15 +17,15 @@ export interface ReservationRow {
   bookingCancelledAt: string | null;
   roomId: string;
   ratePlanId: string;
-  /** Major units, the fallback when nightsJson is empty. */
-  pricePerNight: number;
-  /** Major units, VAT included. */
-  nightsJson: { date: IsoDate; price: number }[];
+  /** Cents, the fallback when nightsJson is empty. */
+  pricePerNightCents: number;
+  /** Cents, VAT included. */
+  nightsJson: { date: IsoDate; priceCents: number }[];
   vatSplit: {
-    nights: { date: IsoDate; room: { vat: number }; breakfast: { vat: number } | null }[];
+    nights: { date: IsoDate; room: { vatCents: number }; breakfast: { vatCents: number } | null }[];
   } | null;
-  /** Major units, VAT included. */
-  discountAmount: number | null;
+  /** Cents, VAT included. */
+  discountCents: number | null;
   /** This reservation's share basis: the sum of its night prices in cents. */
   roomsTotalCents: number;
 }
@@ -53,8 +53,6 @@ export interface InventoryOverrideRow {
   blockedRooms: number;
 }
 
-const toCents = (major: number) => Math.round(major * 100);
-
 /**
  * Split `total` over `weights` pro rata, whole cents only. Remainder cents go to
  * the first entry (callers pass them sorted by sortIndex). Zero weights: all to the first.
@@ -81,14 +79,14 @@ function buildNights(row: ReservationRow): Built {
       ? row.nightsJson
       : Array.from({ length: row.totalNights }, (_, i) => ({
           date: addDays(row.checkIn, i),
-          price: row.pricePerNight,
+          priceCents: row.pricePerNightCents,
         }));
   const vatByDate = new Map<IsoDate, number>();
   for (const n of row.vatSplit?.nights ?? []) {
-    vatByDate.set(n.date, toCents(n.room.vat) + toCents(n.breakfast?.vat ?? 0));
+    vatByDate.set(n.date, n.room.vatCents + (n.breakfast?.vatCents ?? 0));
   }
-  const netNights = priced.map((n) => toCents(n.price) - (vatByDate.get(n.date) ?? 0));
-  const grossTotal = priced.reduce((a, n) => a + toCents(n.price), 0);
+  const netNights = priced.map((n) => n.priceCents - (vatByDate.get(n.date) ?? 0));
+  const grossTotal = priced.reduce((a, n) => a + n.priceCents, 0);
   return { row, dates: priced.map((n) => n.date), netNights, grossTotal };
 }
 
@@ -149,7 +147,7 @@ export function mapBookings(
       : row.bookingStatus === "checked_in"
         ? "confirmed"
         : (row.bookingStatus as BookingFact["status"]);
-    const discountCents = Math.round(toCents(row.discountAmount ?? 0) * ratio);
+    const discountCents = Math.round((row.discountCents ?? 0) * ratio);
 
     bookings.push({
       id: row.reservationId,

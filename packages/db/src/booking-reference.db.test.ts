@@ -27,8 +27,8 @@ describeWithDb("booking reference uniqueness (0056)", () => {
 
   const insertWithId = async (id: string) =>
     db.query(
-      `INSERT INTO bookings (id, hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-       VALUES ($1, $2, $3, '2031-12-01', '2031-12-02', 'pending', 100)`,
+      `INSERT INTO bookings (id, hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents)
+       VALUES ($1, $2, $3, '2031-12-01', '2031-12-02', 'pending', 10000, 10000)`,
       [id, ids.propertyId, await seedGuest(db)],
     );
 

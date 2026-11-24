@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { formatCents } from "@openbookings/pricing/money";
 import { SectionHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,9 +13,8 @@ import { tryStayAction } from "../_lib/actions";
 import { TRY_STAY_MAX_NIGHTS, type PlanOption } from "../_lib/rule-model";
 import type { TryStayResult } from "../_lib/try-stay";
 
-const euro = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
-const money = (n: number) => euro.format(n);
-const signed = (n: number) => (n < 0 ? `−${money(-n)}` : `+${money(n)}`);
+const money = (cents: number) => formatCents(cents, { whole: "always-decimals" });
+const signed = (cents: number) => (cents < 0 ? `−${money(-cents)}` : `+${money(cents)}`);
 
 /** Today in the browser's calendar, as YYYY-MM-DD. */
 function today(): string {
@@ -113,20 +113,20 @@ export function TryAStay({ plans, defaultPlanId }: { plans: PlanOption[]; defaul
         <div aria-live="polite" className="flex flex-col gap-1.5 border-t pt-3 text-sm">
           <Line
             label={`${result.nights} ${result.nights === 1 ? "night" : "nights"}${result.hasDatePrices ? ", with prices set for some dates" : ""}`}
-            value={money(result.base)}
+            value={money(result.baseCents)}
           />
           {result.adjustments.map((line) => (
-            <Line key={line.label} label={line.label} value={signed(line.amount)} />
+            <Line key={line.label} label={line.label} value={signed(line.amountCents)} />
           ))}
           {result.discount && (
-            <Line label={result.discount.label} value={signed(result.discount.amount)} className="text-(--green-11)" />
+            <Line label={result.discount.label} value={signed(result.discount.amountCents)} className="text-(--green-11)" />
           )}
           {result.discount && result.beaten.length > 0 && (
             <p className="text-muted-foreground text-xs">
-              Beats {result.beaten.map((b) => `${b.label} (${signed(b.amount)})`).join(", ")}. Only the biggest applies.
+              Beats {result.beaten.map((b) => `${b.label} (${signed(b.amountCents)})`).join(", ")}. Only the biggest applies.
             </p>
           )}
-          <Line label="Guest pays" value={money(result.total)} className="mt-1 border-t pt-2 font-semibold" />
+          <Line label="Guest pays" value={money(result.totalCents)} className="mt-1 border-t pt-2 font-semibold" />
           <p className="text-muted-foreground text-xs">Plus tourist tax. Priced for the room&apos;s standard occupancy.</p>
         </div>
       )}

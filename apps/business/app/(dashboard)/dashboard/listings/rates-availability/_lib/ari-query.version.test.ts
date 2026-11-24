@@ -78,7 +78,7 @@ describeWithDb("VERSION_SQL", () => {
     roomId = room.rows[0].id;
 
     const ratePlan = await db.query<{ id: string }>(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable)
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable)
        VALUES ($1, 'Standard', 10000, true)
        RETURNING id`,
       [roomId],
@@ -111,7 +111,7 @@ describeWithDb("VERSION_SQL", () => {
 
   test("the same state digests the same twice", async () => {
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-10', '2031-03-11', 12000)`,
       [ratePlanId],
     );
@@ -121,7 +121,7 @@ describeWithDb("VERSION_SQL", () => {
   test("adding an override changes it", async () => {
     const before = await version();
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-10', '2031-03-11', 12000)`,
       [ratePlanId],
     );
@@ -130,14 +130,14 @@ describeWithDb("VERSION_SQL", () => {
 
   test("repricing an existing override changes it", async () => {
     const override = await db.query<{ id: string }>(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-10', '2031-03-11', 12000)
        RETURNING id`,
       [ratePlanId],
     );
     const before = await version();
 
-    await db.query(`UPDATE rate_overrides SET price_per_night = 13000 WHERE id = $1`, [
+    await db.query(`UPDATE rate_overrides SET price_per_night_cents = 13000 WHERE id = $1`, [
       override.rows[0].id,
     ]);
 
@@ -207,7 +207,7 @@ describeWithDb("VERSION_SQL", () => {
     // next winter, and learns to click through the warning.
     const before = await version();
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-06-01', '2031-06-07', 12000)`,
       [ratePlanId],
     );
@@ -217,7 +217,7 @@ describeWithDb("VERSION_SQL", () => {
   test("a rule overlapping only the window's edge still counts", async () => {
     const before = await version();
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-01', '2031-03-09', 12000)`,
       [ratePlanId],
     );
@@ -226,7 +226,7 @@ describeWithDb("VERSION_SQL", () => {
 
   test("a different window digests independently", async () => {
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-10', '2031-03-11', 12000)`,
       [ratePlanId],
     );
@@ -235,7 +235,7 @@ describeWithDb("VERSION_SQL", () => {
 
   test("another host's window is not visible", async () => {
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night)
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents)
        VALUES ($1, '2031-03-10', '2031-03-11', 12000)`,
       [ratePlanId],
     );

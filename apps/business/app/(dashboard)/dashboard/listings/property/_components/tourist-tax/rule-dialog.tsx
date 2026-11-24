@@ -25,7 +25,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { addTouristTaxRule } from "../../_lib/actions";
-import { MAX_CHARGES, touristTaxRuleSchema } from "../../_lib/tourist-tax-schema";
+import {
+  MAX_CHARGES,
+  touristTaxChargeSchema,
+  touristTaxRuleSchema,
+  type TouristTaxChargeInput,
+} from "../../_lib/tourist-tax-schema";
 import { ExampleCalculator } from "./example-calculator";
 
 /** A charge as typed: numbers stay strings until they are saved. */
@@ -64,15 +69,22 @@ const longDate = (value: string) =>
 /** "" → null, anything else → a number (NaN included, so the schema can say so). */
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
 
-function toCharge(c: ChargeDraft): TouristTaxCharge {
+/** The charge as the schema reads it: the amount stays the text the host typed. */
+function toCharge(c: ChargeDraft): TouristTaxChargeInput {
   return {
     kind: c.kind,
-    amount: num(c.amount) ?? Number.NaN,
+    amount: c.amount,
     perPerson: c.perPerson,
     perNight: c.perNight,
     perRoom: c.perRoom,
     vatIncludedPercent: c.kind === "percent" && c.vatOff ? num(c.vat) : null,
   };
+}
+
+/** The charge as the calculator prices it, once its amount reads; else why not. */
+function readCharge(c: ChargeDraft): { ok: true; charge: TouristTaxCharge } | { ok: false; error: string } {
+  const read = touristTaxChargeSchema.safeParse(toCharge(c));
+  return read.success ? { ok: true, charge: read.data } : { ok: false, error: read.error.issues[0].message };
 }
 
 interface RuleDialogProps {
@@ -133,7 +145,10 @@ export function RuleDialog({
   // shows as nothing rather than as NaN.
   const previewRule: TouristTaxRule = {
     effectiveFrom,
-    charges: draft.charges.filter((c) => Number.isFinite(c.amount) && c.amount > 0),
+    charges: charges.flatMap((c) => {
+      const read = readCharge(c);
+      return read.ok ? [read.charge] : [];
+    }),
     childrenExempt,
     infantsTaxed: draft.infantsTaxed,
     maxNights: draft.maxNights && draft.maxNights >= 1 ? Math.floor(draft.maxNights) : null,
@@ -156,7 +171,8 @@ export function RuleDialog({
     }
     setError(null);
     startTransition(async () => {
-      const result = await addTouristTaxRule(propertyId, parsed.data);
+      // The amounts go as typed; the server reads them into cents again.
+      const result = await addTouristTaxRule(propertyId, draft);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -334,9 +350,10 @@ interface ChargeEditorProps {
 
 function ChargeEditor({ index, charge, defaultVat, disabled, onChange, onRemove }: ChargeEditorProps) {
   const id = `tt-charge-${charge.key}`;
-  const amount = num(charge.amount);
-  const summary =
-    amount && amount > 0 ? describeCharge({ ...toCharge(charge), amount }) : null;
+  const read = readCharge(charge);
+  const summary = read.ok ? describeCharge(read.charge) : null;
+  // A typed amount that doesn't read says why, under the field.
+  const amountError = !read.ok && charge.amount.trim() !== "" ? read.error : null;
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border p-4">
@@ -373,15 +390,13 @@ function ChargeEditor({ index, charge, defaultVat, disabled, onChange, onRemove 
         )}
         <InputGroupInput
           id={`${id}-amount`}
-          type="number"
-          min={0}
-          step="0.01"
           inputMode="decimal"
           placeholder={charge.kind === "fixed" ? "2.50" : "12.5"}
           value={charge.amount}
           onChange={(e) => onChange({ amount: e.target.value })}
           disabled={disabled}
           aria-label={`Charge ${index + 1} amount`}
+          aria-invalid={amountError !== null}
         />
         {charge.kind === "percent" && (
           <InputGroupAddon align="inline-end">
@@ -452,8 +467,8 @@ function ChargeEditor({ index, charge, defaultVat, disabled, onChange, onRemove 
         )}
       </div>
 
-      <p className="text-muted-foreground text-xs" aria-live="polite">
-        {summary ?? "Enter an amount."}
+      <p className={amountError ? "text-(--red-9) text-xs" : "text-muted-foreground text-xs"} aria-live="polite">
+        {summary ?? amountError ?? "Enter an amount."}
         {charge.kind === "fixed" && !charge.perPerson && !charge.perRoom && !charge.perNight && summary
           ? " Charged once for the whole booking."
           : ""}

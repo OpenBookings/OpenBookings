@@ -143,8 +143,8 @@ describeWithDb("reconciling the commission ledger against Stripe", () => {
       await db.query(
         `INSERT INTO booking_intents
            (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot,
-            total_amount, commission_cents)
-         VALUES ('u', $1, '2100-12-01', '2100-12-04', $2, now(), '{"roomsTotal": 240}'::jsonb, 240, 1080)
+            total_cents, commission_cents)
+         VALUES ('u', $1, '2100-12-01', '2100-12-04', $2, now(), '{"roomsTotalCents": 24000}'::jsonb, 24000, 1080)
          RETURNING id`,
         [propertyId, status],
       )

@@ -9,11 +9,11 @@ export function partyFacts(r: { adults: number; children: number; infants: numbe
   return facts;
 }
 
-type PayAtPropertyRoom = { payAtProperty: number; cots: number; extraBeds: number };
+type PayAtPropertyRoom = { payAtPropertyCents: number; cots: number; extraBeds: number };
 
 /** What is paid at the property: "cot", "extra beds", "cot and extra bed"; null when nothing is. */
 export function payAtPropertyNoun(rooms: PayAtPropertyRoom[]): { text: string; plural: boolean } | null {
-  const paying = rooms.filter((r) => r.payAtProperty > 0);
+  const paying = rooms.filter((r) => r.payAtPropertyCents > 0);
   if (paying.length === 0) return null;
   const cots = paying.reduce((n, r) => n + r.cots, 0);
   const beds = paying.reduce((n, r) => n + r.extraBeds, 0);

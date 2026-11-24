@@ -22,7 +22,7 @@ const NOW = new Date("2031-10-01T10:00:00Z");
 /** Well after any hold made at NOW has run out. */
 const LATE = new Date("2031-10-01T12:00:00Z");
 
-/** Uneven nights, so the exact prices and the rounded columns differ. Tax: €3 × 2 adults × 2 nights. */
+/** Uneven nights in cents (€99.50 and €120). Tax: €3 × 2 adults × 2 nights = 1200 cents. */
 const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   roomId,
   ratePlanId,
@@ -31,28 +31,28 @@ const room = (roomId: string, ratePlanId: string): IntentRoomInput => ({
   infants: 1,
   cots: 1,
   extraBeds: 0,
-  payAtProperty: 20,
-  discount: { label: "Weekly discount", amount: 10 },
+  payAtPropertyCents: 2000,
+  discount: { label: "Weekly discount", amountCents: 1000 },
   rateNights: [
-    { date: "2031-11-10", price: 99.5 },
-    { date: "2031-11-11", price: 120 },
+    { date: "2031-11-10", priceCents: 9950 },
+    { date: "2031-11-11", priceCents: 12000 },
   ],
   extraGuests: [],
-  payAtPropertyLines: [{ label: "Cots", count: 1, fee_per_night: 10, nights: 2, amount: 20 }],
+  payAtPropertyLines: [{ label: "Cots", count: 1, feePerNightCents: 1000, nights: 2, amountCents: 2000 }],
   nights: [
-    { date: "2031-11-10", price: 99.5 },
-    { date: "2031-11-11", price: 120 },
+    { date: "2031-11-10", priceCents: 9950 },
+    { date: "2031-11-11", priceCents: 12000 },
   ],
-  stayTotal: 219.5,
-  touristTax: 12,
-  touristTaxLines: [{ label: "€3.00 per person per night", amount: 12, effectiveFrom: "2026-01-01" }],
+  stayTotalCents: 21950,
+  touristTaxCents: 1200,
+  touristTaxLines: [{ label: "€3.00 per person per night", amountCents: 1200, effectiveFrom: "2026-01-01" }],
   vatSplit: null,
 });
 
 const snapshot = (rooms: IntentRoomInput[]): IntentSnapshot => ({
-  roomsTotal: 219.5 * rooms.length,
-  touristTaxTotal: 12 * rooms.length,
-  total: 231.5 * rooms.length,
+  roomsTotalCents: 21950 * rooms.length,
+  touristTaxTotalCents: 1200 * rooms.length,
+  totalCents: 23150 * rooms.length,
   commissionCents: 0,
   commissionRate: 0.1,
   commissionVatTreatment: null,
@@ -106,7 +106,7 @@ describeWithDb("converting a paid booking intent", () => {
     ids = await seedProperty(db);
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges) VALUES ($1, '2026-01-01', $2::jsonb)`,
-      [ids.propertyId, JSON.stringify([{ kind: "fixed", amount: 3, perPerson: true, perNight: true, perRoom: false }])],
+      [ids.propertyId, JSON.stringify([{ kind: "fixed", amountCents: 300, perPerson: true, perNight: true, perRoom: false }])],
     );
     guest = await seedGuest(db);
   });
@@ -131,9 +131,7 @@ describeWithDb("converting a paid booking intent", () => {
 
   /** What the platform charges for the intent, in cents, as its Checkout Session is made for. */
   const chargedCents = async (intentId: string) =>
-    Number(
-      (await db.query(`SELECT round(total_amount * 100) AS cents FROM booking_intents WHERE id = $1`, [intentId])).rows[0].cents,
-    );
+    Number((await db.query(`SELECT total_cents FROM booking_intents WHERE id = $1`, [intentId])).rows[0].total_cents);
 
   /** A Checkout Session the platform made for the intent, on the host's account, as checkout records it. */
   const attach = async (intentId: string, sessionId = "cs_convert") =>
@@ -213,7 +211,7 @@ describeWithDb("converting a paid booking intent", () => {
         [result.bookingId],
       )
     ).rows[0];
-    // 2 × €219.50 rooms and 2 × €12 tax: whole-euro rounding would lose the 50 cents.
+    // 2 × €219.50 rooms and 2 × €12 tax, straight from the snapshot's cents.
     expect(Number(booking.rooms_total_cents)).toBe(43900);
     expect(Number(booking.tourist_tax_cents)).toBe(2400);
     expect(Number(booking.total_cents)).toBe(46300);
@@ -225,12 +223,12 @@ describeWithDb("converting a paid booking intent", () => {
       nights: [
         {
           date: "2031-11-10",
-          room: { gross: 81.5, rate: 9, vat: 6.73 },
-          breakfast: { gross: 18, rate: 9, vat: 1.49 },
+          room: { grossCents: 8150, rate: 9, vatCents: 673 },
+          breakfast: { grossCents: 1800, rate: 9, vatCents: 149 },
         },
-        { date: "2031-11-11", room: { gross: 120, rate: 9, vat: 9.91 }, breakfast: null },
+        { date: "2031-11-11", room: { grossCents: 12000, rate: 9, vatCents: 991 }, breakfast: null },
       ],
-      totals: [{ part: "accommodation", gross: 201.5, rate: 9, vat: 16.64 }],
+      totals: [{ part: "accommodation", grossCents: 20150, rate: 9, vatCents: 1664 }],
       breakfastValueMissing: false,
     };
     const rooms = [{ ...room(ids.roomId, ids.ratePlanId), vatSplit }];
@@ -321,7 +319,7 @@ describeWithDb("converting a paid booking intent", () => {
     const booking = (
       await db.query(
         `SELECT hotel_id, user_id, check_in_date::text AS check_in, check_out_date::text AS check_out, status,
-                confirmed_at, total_amount, booking_fee_amount, currency, stripe_payment_intent_id
+                confirmed_at, rooms_total_cents, tourist_tax_cents, total_cents, currency, stripe_payment_intent_id
          FROM bookings WHERE id = $1`,
         [result.bookingId],
       )
@@ -336,13 +334,14 @@ describeWithDb("converting a paid booking intent", () => {
       stripe_payment_intent_id: "pi_convert",
     });
     expect((booking.confirmed_at as Date).getTime()).toBe(NOW.getTime());
-    expect(Number(booking.total_amount)).toBe(Math.round(snap.total));
-    expect(Number(booking.booking_fee_amount)).toBe(0);
+    expect(Number(booking.rooms_total_cents)).toBe(snap.roomsTotalCents);
+    expect(Number(booking.tourist_tax_cents)).toBe(snap.touristTaxTotalCents);
+    expect(Number(booking.total_cents)).toBe(snap.totalCents);
 
     const reservations = (
       await db.query(
-        `SELECT room_id, rate_plan_id, adults, children, infants, cots, extra_beds, pay_at_property_amount, total_nights, price_per_night, total_amount,
-                tourist_tax_amount, tourist_tax_lines, cancellation_tier, nights
+        `SELECT room_id, rate_plan_id, adults, children, infants, cots, extra_beds, pay_at_property_cents, total_nights,
+                price_per_night_cents, total_cents, tourist_tax_cents, tourist_tax_lines, cancellation_tier, nights
          FROM reservations WHERE booking_id = $1`,
         [result.bookingId],
       )
@@ -360,31 +359,32 @@ describeWithDb("converting a paid booking intent", () => {
         total_nights: 2,
       });
       // Paid at the hotel: kept apart from what was charged.
-      expect(Number(r.pay_at_property_amount)).toBe(20);
-      expect(Number(r.price_per_night)).toBe(Math.round(219.5 / 2));
-      expect(Number(r.total_amount)).toBe(Math.round(219.5));
-      expect(Number(r.tourist_tax_amount)).toBe(12);
+      expect(Number(r.pay_at_property_cents)).toBe(2000);
+      // 21950 over 2 nights is 10975 exactly; the total is the nights' cents, never rounded to euros.
+      expect(Number(r.price_per_night_cents)).toBe(10975);
+      expect(Number(r.total_cents)).toBe(21950);
+      expect(Number(r.tourist_tax_cents)).toBe(1200);
       expect(r.tourist_tax_lines).toEqual(rooms[0].touristTaxLines);
       expect(r.cancellation_tier).not.toBeNull();
-      expect((r.nights as { date: string; price: number }[]).map(({ date, price }) => ({ date, price }))).toEqual(
-        rooms[0].nights,
-      );
+      expect(r.nights).toEqual([
+        { date: "2031-11-10", priceCents: 9950, touristTaxCents: 600 },
+        { date: "2031-11-11", priceCents: 12000, touristTaxCents: 600 },
+      ]);
     }
 
     const events = (await db.query(`SELECT kind, actor_kind, data FROM booking_events WHERE booking_id = $1`, [result.bookingId]))
       .rows;
-    // The bigint totals are rounded; the event and the charge keep the exact amounts.
     expect(events).toEqual([
       {
         kind: "confirmed",
         actor_kind: "system",
-        data: { intentId, paymentIntentId: "pi_convert", amountCents: 46300, snapshotTotal: snap.total },
+        data: { intentId, paymentIntentId: "pi_convert", amountCents: 46300, snapshotTotalCents: 46300 },
       },
     ]);
 
     const charges = (
       await db.query(
-        `SELECT type, provider, provider_payment_id, amount, currency, status, metadata FROM transactions WHERE booking_id = $1`,
+        `SELECT type, provider, provider_payment_id, amount_cents, currency, status, metadata FROM transactions WHERE booking_id = $1`,
         [result.bookingId],
       )
     ).rows;
@@ -397,7 +397,7 @@ describeWithDb("converting a paid booking intent", () => {
       status: "succeeded",
       metadata: { amountCents: 46300 },
     });
-    expect(Number(charges[0].amount)).toBe(463);
+    expect(Number(charges[0].amount_cents)).toBe(46300);
 
     expect(await intentRow(intentId)).toMatchObject({ status: "paid", booking_id: result.bookingId, payment_reference: "pi_convert" });
     // The rooms are booked now, not held: counted once.
@@ -592,15 +592,71 @@ describeWithDb("converting a paid booking intent", () => {
     // €5 pp/pn now: the current rules would say €20 for the room, the guest paid €12.
     await db.query(`UPDATE tourist_tax_rules SET charges = $2::jsonb WHERE property_id = $1`, [
       ids.propertyId,
-      JSON.stringify([{ kind: "fixed", amount: 5, perPerson: true, perNight: true, perRoom: false }]),
+      JSON.stringify([{ kind: "fixed", amountCents: 500, perPerson: true, perNight: true, perRoom: false }]),
     ]);
     const result = await convert(intentId, LATE);
     if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
 
     const res = (
-      await db.query(`SELECT tourist_tax_amount::float8 AS tax, nights FROM reservations WHERE booking_id = $1`, [result.bookingId])
-    ).rows[0] as { tax: number; nights: { touristTax: number }[] };
-    expect(res.tax).toBe(12);
-    expect(res.nights.map((n) => n.touristTax)).toEqual([6, 6]);
+      await db.query(`SELECT tourist_tax_cents::int AS tax, nights FROM reservations WHERE booking_id = $1`, [result.bookingId])
+    ).rows[0] as { tax: number; nights: { touristTaxCents: number }[] };
+    expect(res.tax).toBe(1200);
+    expect(res.nights.map((n) => n.touristTaxCents)).toEqual([600, 600]);
+  });
+
+  /** One room whose snapshot total is 38650 cents (€386.50): nights 18650 + 18800, tax 1200. */
+  const intentAt38650 = async () => {
+    const rooms: IntentRoomInput[] = [
+      {
+        ...room(ids.roomId, ids.ratePlanId),
+        rateNights: [
+          { date: "2031-11-10", priceCents: 18650 },
+          { date: "2031-11-11", priceCents: 18800 },
+        ],
+        nights: [
+          { date: "2031-11-10", priceCents: 18650 },
+          { date: "2031-11-11", priceCents: 18800 },
+        ],
+        stayTotalCents: 37450,
+      },
+    ];
+    const snap: IntentSnapshot = { ...snapshot(rooms), roomsTotalCents: 37450, touristTaxTotalCents: 1200, totalCents: 38650 };
+    const created = await createBookingIntent(lifecycleDb(), {
+      userId: guest,
+      propertyId: ids.propertyId,
+      checkIn: CHECK_IN,
+      checkOut: CHECK_OUT,
+      rooms,
+      snapshot: snap,
+      now: NOW,
+    });
+    if (!created.ok) throw new Error(`expected an intent, got ${created.error}`);
+    return created.intentId;
+  };
+
+  test("a snapshot of 38650 cents confirms against a Stripe amount_total of 38650", async () => {
+    const intentId = await intentAt38650();
+    expect(await chargedCents(intentId)).toBe(38650);
+    await attachPaymentSession(db, { intentId, sessionId: "cs_convert", accountId: "acct_host", amountCents: 38650 });
+    const result = await pay(intentId, { amountCents: 38650 });
+    if (result.outcome !== "confirmed") throw new Error(`expected confirmed, got ${result.outcome}`);
+    const booking = (
+      await db.query(`SELECT rooms_total_cents, tourist_tax_cents, total_cents FROM bookings WHERE id = $1`, [result.bookingId])
+    ).rows[0];
+    expect([booking.rooms_total_cents, booking.tourist_tax_cents, booking.total_cents].map(Number)).toEqual([37450, 1200, 38650]);
+  });
+
+  test("a payment of 38651 on a 38650 session is refused", async () => {
+    const intentId = await intentAt38650();
+    await attachPaymentSession(db, { intentId, sessionId: "cs_convert", accountId: "acct_host", amountCents: 38650 });
+    expect(await refusal(pay(intentId, { amountCents: 38651 }))).toBe("amount");
+    await expectNothingWritten(intentId);
+  });
+
+  test("a session made for 38651 against a 38650 snapshot is refused, even paid in full", async () => {
+    const intentId = await intentAt38650();
+    await attachPaymentSession(db, { intentId, sessionId: "cs_convert", accountId: "acct_host", amountCents: 38651 });
+    expect(await refusal(pay(intentId, { amountCents: 38651 }))).toBe("amount");
+    await expectNothingWritten(intentId);
   });
 });

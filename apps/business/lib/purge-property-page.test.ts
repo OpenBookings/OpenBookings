@@ -102,6 +102,7 @@ describe("purgePropertyPage", () => {
       { queryOne, purge: async (keys) => void purged.push(keys) },
     );
 
-    expect(purged).toEqual([["ob:v1:prop-page:terme-di-saturnia"]]);
+    expect(purged).toEqual([[propertyPageKey("terme-di-saturnia")]]);
+    expect(purged[0][0]).toEndWith(":terme-di-saturnia");
   });
 });

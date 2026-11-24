@@ -84,8 +84,8 @@ describeWithDb("live analytics facts", () => {
       date: new Date(Date.parse(`${checkIn}T00:00:00Z`) + i * 86_400_000)
         .toISOString()
         .slice(0, 10),
-      price: 100,
-      touristTax: 0,
+      priceCents: 10_000,
+      touristTaxCents: 0,
     }));
     await db.query(
       `UPDATE reservations SET nights = $2::jsonb WHERE booking_id = $1`,
@@ -142,12 +142,12 @@ describeWithDb("live analytics facts", () => {
     const made = await booked(a, "2031-03-10", 2, "2031-03-01");
     const insert = (status: string, amount: number, key: string) =>
       db.query(
-        `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
+        `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
          VALUES ($1, $2, 'guest_cancellation', $3, 0, $3, $4::payment_status, $5)`,
         [made.bookingId, made.reservationIds[0], amount, status, key],
       );
-    await insert("succeeded", 50, `t-${crypto.randomUUID()}`);
-    await insert("pending", 70, `t-${crypto.randomUUID()}`);
+    await insert("succeeded", 5_000, `t-${crypto.randomUUID()}`);
+    await insert("pending", 7_000, `t-${crypto.randomUUID()}`);
     const facts = await loadWindowFacts(a.propertyId, {
       from: "2031-03-01",
       to: "2031-03-31",
@@ -190,16 +190,16 @@ describeWithDb("live analytics facts", () => {
       [made.bookingId],
     );
     const nj = JSON.stringify([
-      { date: "2031-03-10", price: 100, touristTax: 0 },
-      { date: "2031-03-11", price: 100, touristTax: 0 },
+      { date: "2031-03-10", priceCents: 10_000, touristTaxCents: 0 },
+      { date: "2031-03-11", priceCents: 10_000, touristTaxCents: 0 },
     ]);
     await db.query(
       `UPDATE reservations SET nights = $2::jsonb WHERE booking_id = $1`,
       [made.bookingId, nj],
     );
     await db.query(
-      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-       VALUES ($1, NULL, 'guest_cancellation', 100, 0, 100, 'succeeded', $2)`,
+      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, NULL, 'guest_cancellation', 10000, 0, 10000, 'succeeded', $2)`,
       [made.bookingId, `t-${crypto.randomUUID()}`],
     );
     const facts = await loadWindowFacts(a.propertyId, {
@@ -266,15 +266,15 @@ describeWithDb("live analytics facts", () => {
     );
     const intent = (
       await db.query(
-        `INSERT INTO booking_intents (user_id, property_id, check_in_date, check_out_date, hold_expires_at, snapshot, total_amount, booking_id, status)
-           VALUES ($1, $2, '2031-03-10', '2031-03-12', now(), '{}'::jsonb, 200, $3, 'paid') RETURNING id`,
+        `INSERT INTO booking_intents (user_id, property_id, check_in_date, check_out_date, hold_expires_at, snapshot, total_cents, booking_id, status)
+           VALUES ($1, $2, '2031-03-10', '2031-03-12', now(), '{}'::jsonb, 20000, $3, 'paid') RETURNING id`,
         [guest, a.propertyId, made.bookingId],
       )
     ).rows[0] as { id: string };
     for (const r of rooms) {
       await db.query(
-        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total, discount_amount, sort_order)
-           VALUES ($1, $2, $3, 2, '[]'::jsonb, 200, $4, $5)`,
+        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total_cents, discount_cents, sort_order)
+           VALUES ($1, $2, $3, 2, '[]'::jsonb, 20000, $4, $5)`,
         [intent.id, a.roomId, a.ratePlanId, r.discount, r.sort],
       );
     }
@@ -285,14 +285,14 @@ describeWithDb("live analytics facts", () => {
   }
 
   test("intent discount: a one-to-one match carries the discount", async () => {
-    const facts = await withIntent([{ discount: 10, sort: 0 }]);
+    const facts = await withIntent([{ discount: 1000, sort: 0 }]);
     expect(facts.bookings[0].discountCents).toBe(1000);
   });
 
   test("intent discount: two intent rooms for one reservation cannot be paired: no discount", async () => {
     const facts = await withIntent([
-      { discount: 10, sort: 0 },
-      { discount: 20, sort: 1 },
+      { discount: 1000, sort: 0 },
+      { discount: 2000, sort: 1 },
     ]);
     expect(facts.bookings[0].discountCents).toBe(0);
   });
@@ -300,8 +300,8 @@ describeWithDb("live analytics facts", () => {
   test("intent discount: equal counts pair by order", async () => {
     const facts = await withIntent(
       [
-        { discount: 10, sort: 0 },
-        { discount: 20, sort: 1 },
+        { discount: 1000, sort: 0 },
+        { discount: 2000, sort: 1 },
       ],
       2,
     );
@@ -358,7 +358,7 @@ describeWithDb("live analytics facts", () => {
     const made = await booked(a, "2031-03-10", 2, "2031-03-01");
     await db.query(`UPDATE reservations SET nights = $2::jsonb WHERE booking_id = $1`, [
       made.bookingId,
-      JSON.stringify([{ date: "2031-03-10", price: 100 }, { date: "2031-03-11", price: "n/a" }]),
+      JSON.stringify([{ date: "2031-03-10", priceCents: 10_000 }, { date: "2031-03-11", priceCents: "n/a" }]),
     ]);
     const facts = await loadWindowFacts(a.propertyId, { from: "2031-03-01", to: "2031-03-31" });
     expect(facts.bookings[0].nightlyNetCents).toEqual([10_000, 0]);

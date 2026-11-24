@@ -28,9 +28,10 @@ const hostReservationsSql = (testing: boolean = isTestingMode()) => `
     COALESCE((SELECT SUM(r.infants) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS infants,
     COALESCE((SELECT SUM(r.cots) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS cots,
     COALESCE((SELECT SUM(r.extra_beds) FROM reservations r WHERE r.booking_id = b.id), 0)::int AS extra_beds,
-    COALESCE((SELECT SUM(r.pay_at_property_amount) FROM reservations r
-              WHERE r.booking_id = b.id AND r.cancelled_at IS NULL), 0)::float8 AS pay_at_property,
-    b.total_amount::float8 AS total_amount,
+    -- Money in cents throughout (0058). bigint sums come back as text, hence ::float8.
+    COALESCE((SELECT SUM(r.pay_at_property_cents) FROM reservations r
+              WHERE r.booking_id = b.id AND r.cancelled_at IS NULL), 0)::float8 AS pay_at_property_cents,
+    b.total_cents::float8 AS total_cents,
     -- The viewer's role at this booking's property, so the list offers only
     -- the actions they may take (the server actions re-check every one). A
     -- pre-org property is readable only by its owner_user_id, who is its owner.
@@ -49,8 +50,8 @@ const hostReservationsSql = (testing: boolean = isTestingMode()) => `
     to_char(p.check_out_time, 'HH24:MI') AS check_out_time,
     b.departed_early_on::text AS departed_early_on,
     b.confirmed_at,
-    COALESCE((SELECT SUM(rf.amount) FROM refunds rf
-              WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::float8 AS refunded,
+    COALESCE((SELECT SUM(rf.amount_cents) FROM refunds rf
+              WHERE rf.booking_id = b.id AND rf.status <> 'failed'), 0)::float8 AS refunded_cents,
     (SELECT COUNT(*) FROM refunds rf
      WHERE rf.booking_id = b.id AND rf.status IN ('pending', 'failed'))::int AS unsettled_refunds,
     -- Money the host refunded in their own Stripe, or lost in a dispute (0053).
@@ -58,10 +59,10 @@ const hostReservationsSql = (testing: boolean = isTestingMode()) => `
     COALESCE((
       SELECT json_agg(json_build_object(
         'source', rf.source,
-        'amount', rf.amount::float8,
+        'amount_cents', rf.amount_cents,
         'at', rf.created_at,
-        'room_price', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.accommodation_amount::float8 END,
-        'tourist_tax', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.tourist_tax_amount::float8 END
+        'room_price_cents', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.accommodation_cents END,
+        'tourist_tax_cents', CASE WHEN rf.split_explained_at IS NOT NULL THEN rf.tourist_tax_cents END
       ) ORDER BY rf.created_at, rf.id)
       FROM refunds rf WHERE rf.booking_id = b.id AND rf.source <> 'openbookings' AND rf.status = 'succeeded'
     ), '[]'::json) AS outside_refunds,

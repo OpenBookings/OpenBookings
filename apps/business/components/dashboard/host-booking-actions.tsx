@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { LifecycleResult } from "@openbookings/db/booking-lifecycle";
+import { formatCents, parseEuroInput } from "@openbookings/pricing/money";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,7 +31,8 @@ import {
 } from "@/lib/reservations/actions";
 import type { HostReservation } from "@/lib/reservations/shape";
 
-const euros = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
+/** "€12.50": a refund amount in cents, always with cents. */
+const refundText = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 const nightLabel = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 const ERRORS: Record<string, string> = {
@@ -77,7 +79,7 @@ export function HostBookingActions({ reservation }: { reservation: HostReservati
   }
 
   const canRetry = reservation.refundIssue && reservation.canRetryRefunds;
-  const canGoodwill = can("goodwill_refund") && reservation.totalAmount > reservation.refundedAmount;
+  const canGoodwill = can("goodwill_refund") && reservation.totalCents > reservation.refundedCents;
   // The one thing due now leads: checking the guest in, else a refund that
   // didn't go through. The rest are outline icons; Cancel sits apart.
   const primary = can("mark_checked_in") ? "check_in" : canRetry ? "retry" : null;
@@ -218,14 +220,14 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
   const nights = reservation.rooms.find((r) => !r.cancelledAt)?.nights.slice(0, -1) ?? [];
   const [lastNight, setLastNight] = React.useState(nights[0] ?? "");
   // Keyed by night, so a stale answer for a previous pick is never shown.
-  const [preview, setPreview] = React.useState<{ night: string; total: number } | null>(null);
-  const refund = preview?.night === lastNight ? preview.total : null;
+  const [preview, setPreview] = React.useState<{ night: string; totalCents: number } | null>(null);
+  const refundCents = preview?.night === lastNight ? preview.totalCents : null;
 
   React.useEffect(() => {
     if (!lastNight) return;
     let live = true;
     hostPreviewEarlyDeparture(reservation.id, lastNight).then((p) => {
-      if (live) setPreview({ night: lastNight, total: p?.total ?? 0 });
+      if (live) setPreview({ night: lastNight, totalCents: p?.totalCents ?? 0 });
     });
     return () => {
       live = false;
@@ -236,9 +238,9 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
     <Confirm
       title="Guest left early?"
       body="Pick the last night they stayed. The nights after it are refunded by the booking's cancellation policy, and the tourist tax for them in full."
-      action={refund === null ? "Record departure" : `Record and refund ${euros.format(refund)}`}
+      action={refundCents === null ? "Record departure" : `Record and refund ${refundText(refundCents)}`}
       busy={busy}
-      disabled={!lastNight || refund === null}
+      disabled={!lastNight || refundCents === null}
       onConfirm={() =>
         perform(() => hostRecordEarlyDeparture(reservation.id, lastNight), "Early departure recorded")
       }
@@ -267,9 +269,9 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
 function CancelRooms({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
   const active = reservation.rooms.filter((r) => !r.cancelledAt);
   const [chosen, setChosen] = React.useState<string[]>(() => active.map((r) => r.reservationId));
-  const left = Math.max(0, reservation.totalAmount - reservation.refundedAmount);
+  const leftCents = Math.max(0, reservation.totalCents - reservation.refundedCents);
   const picked = active.filter((r) => chosen.includes(r.reservationId));
-  const refund = Math.min(left, Math.round(picked.reduce((sum, r) => sum + r.paid, 0) * 100) / 100);
+  const refundCents = Math.min(leftCents, picked.reduce((sum, r) => sum + r.paidCents, 0));
   const everything = picked.length === active.length;
   const several = active.length > 1;
 
@@ -277,8 +279,8 @@ function CancelRooms({ reservation, busy, perform }: { reservation: HostReservat
     picked.length === 0
       ? "Pick a room"
       : everything
-        ? `Cancel ${several ? "all rooms" : "booking"} and refund ${euros.format(refund)}`
-        : `Cancel ${picked.length} ${picked.length === 1 ? "room" : "rooms"} and refund ${euros.format(refund)}`;
+        ? `Cancel ${several ? "all rooms" : "booking"} and refund ${refundText(refundCents)}`
+        : `Cancel ${picked.length} ${picked.length === 1 ? "room" : "rooms"} and refund ${refundText(refundCents)}`;
 
   return (
     <Confirm
@@ -326,14 +328,14 @@ function CancelRooms({ reservation, busy, perform }: { reservation: HostReservat
                     <span className="font-medium">{room.roomName}</span>
                     <span className="text-xs text-muted-foreground">{room.tierLabel}</span>
                   </span>
-                  <span className="tabular-nums">{euros.format(room.paid)}</span>
+                  <span className="tabular-nums">{refundText(room.paidCents)}</span>
                 </label>
               );
             })
           : null}
         <div className="flex items-baseline justify-between rounded-md bg-muted px-3 py-2.5 text-sm font-semibold">
           <span>Guest gets back</span>
-          <span className="tabular-nums">{euros.format(refund)}</span>
+          <span className="tabular-nums">{refundText(refundCents)}</span>
         </div>
       </div>
     </Confirm>
@@ -341,18 +343,20 @@ function CancelRooms({ reservation, busy, perform }: { reservation: HostReservat
 }
 
 function Goodwill({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
-  const left = Math.round((reservation.totalAmount - reservation.refundedAmount) * 100) / 100;
+  const leftCents = Math.max(0, reservation.totalCents - reservation.refundedCents);
   const [amount, setAmount] = React.useState("");
-  const value = Number(amount.replace(",", "."));
-  const valid = Number.isFinite(value) && value > 0 && value <= left;
+  const typed = parseEuroInput(amount);
+  const cents = typed.ok ? typed.cents : null;
+  const valid = cents !== null && cents > 0 && cents <= leftCents;
   return (
     <Confirm
       title="Refund booking"
-      body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${euros.format(left)} is left to refund.`}
-      action={valid ? `Refund ${euros.format(value)}` : "Refund"}
+      body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${refundText(leftCents)} is left to refund.`}
+      action={valid ? `Refund ${refundText(cents)}` : "Refund"}
       busy={busy}
       disabled={!valid}
-      onConfirm={() => perform(() => hostGoodwillRefund(reservation.id, value), "Refund sent")}
+      // The server reads the typed text into cents again: the browser is trusted for nothing.
+      onConfirm={() => perform(() => hostGoodwillRefund(reservation.id, amount), "Refund sent")}
     >
       <Input
         inputMode="decimal"

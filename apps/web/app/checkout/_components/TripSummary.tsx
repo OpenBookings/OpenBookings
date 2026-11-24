@@ -7,7 +7,8 @@ import * as Sentry from '@sentry/nextjs';
 import { useCheckoutElements } from '@stripe/react-stripe-js/checkout';
 import type { PolicyStep } from '@openbookings/pricing';
 import { partyFacts } from '../_lib/party';
-import { buildLedger, formatMoney, ledgerPayNowCents, type LedgerRoom } from '../_lib/ledger';
+import { formatCents } from '@openbookings/pricing/money';
+import { buildLedger, ledgerPayNowCents, type LedgerRoom } from '../_lib/ledger';
 
 /**
  * The left half of checkout: what the guest is about to buy.
@@ -347,6 +348,9 @@ function LedgerSkeleton() {
   );
 }
 
+/** "€185.00"; a discount reads "−€60.00". */
+const money = (cents: number) => formatCents(cents, { whole: 'always-decimals' });
+
 /**
  * The total is Stripe's. The rows come from our own snapshot of the booking and
  * are shown only when they add up to it to the cent; otherwise Stripe's own
@@ -410,24 +414,24 @@ function Ledger({ propertyName, ledgerRooms }: { propertyName: string; ledgerRoo
     <div>
       <div className="space-y-3.5">
         {ledger.rows.map((row, i) => (
-          <LedgerRow key={`${row.kind}-${i}`} name={row.label} detail={row.detail} amount={formatMoney(row.amount)} />
+          <LedgerRow key={`${row.kind}-${i}`} name={row.label} detail={row.detail} amount={money(row.amountCents)} />
         ))}
       </div>
 
       <div className="mt-5 flex items-baseline justify-between gap-6 border-t border-white/20 pt-5">
         <span className="text-[15px] font-medium text-white/70">Total for your stay</span>
         <span className="font-serif text-3xl leading-none text-white tabular-nums sm:text-4xl">
-          {formatMoney(ledger.totalForStay)}
+          {money(ledger.totalForStayCents)}
         </span>
       </div>
 
       {ledger.atProperty && (
         <div className="mt-5 space-y-3 rounded-2xl border border-white/15 bg-white/[0.06] p-5 backdrop-blur-md">
-          <LedgerRow name={`Pay now · charged by ${propertyName}`} amount={formatMoney(ledger.payNow)} />
+          <LedgerRow name={`Pay now · charged by ${propertyName}`} amount={money(ledger.payNowCents)} />
           <LedgerRow
             name={ledger.atProperty.label}
             detail={ledger.atProperty.detail}
-            amount={formatMoney(ledger.atProperty.amount)}
+            amount={money(ledger.atProperty.amountCents)}
           />
         </div>
       )}

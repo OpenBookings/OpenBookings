@@ -9,18 +9,20 @@ import {
   type TouristTaxStay,
 } from "./tourist-tax";
 
-const fixed = (amount: number, per: Partial<TouristTaxCharge> = {}): TouristTaxCharge => ({
+type Flags = Partial<Pick<TouristTaxCharge, "perPerson" | "perNight" | "perRoom" | "vatIncludedPercent">>;
+
+const fixed = (amountCents: number, per: Flags = {}): TouristTaxCharge => ({
   kind: "fixed",
-  amount,
+  amountCents,
   perPerson: false,
   perNight: false,
   perRoom: false,
   ...per,
 });
 
-const percent = (amount: number, extra: Partial<TouristTaxCharge> = {}): TouristTaxCharge => ({
+const percent = (pct: number, extra: Flags = {}): TouristTaxCharge => ({
   kind: "percent",
-  amount,
+  percent: pct,
   perPerson: false,
   perNight: false,
   perRoom: false,
@@ -38,9 +40,9 @@ const rule = (charges: TouristTaxCharge[], extra: Partial<TouristTaxRule> = {}):
 /** Three nights from 1 July 2026 at €100 a night, two adults, one room. */
 const stay = (extra: Partial<TouristTaxStay> = {}): TouristTaxStay => ({
   nights: [
-    { date: "2026-07-01", price: 100 },
-    { date: "2026-07-02", price: 100 },
-    { date: "2026-07-03", price: 100 },
+    { date: "2026-07-01", priceCents: 10000 },
+    { date: "2026-07-02", priceCents: 10000 },
+    { date: "2026-07-03", priceCents: 10000 },
   ],
   adults: 2,
   children: 0,
@@ -50,128 +52,152 @@ const stay = (extra: Partial<TouristTaxStay> = {}): TouristTaxStay => ({
 
 describe("calculateTouristTax", () => {
   test("no rules means no tourist tax", () => {
-    expect(calculateTouristTax([], stay())).toEqual({ total: 0, lines: [] });
+    expect(calculateTouristTax([], stay())).toEqual({ totalCents: 0, lines: [] });
   });
 
   test("a fixed amount with no 'per' is charged once per booking", () => {
-    expect(calculateTouristTax([rule([fixed(5)])], stay()).total).toBe(5);
+    expect(calculateTouristTax([rule([fixed(500)])], stay()).totalCents).toBe(500);
   });
 
   test("per person per night multiplies by guests and nights", () => {
     const result = calculateTouristTax(
-      [rule([fixed(2.5, { perPerson: true, perNight: true })])],
+      [rule([fixed(250, { perPerson: true, perNight: true })])],
       stay(),
     );
     // €2.50 × 2 guests × 3 nights
-    expect(result.total).toBe(15);
+    expect(result.totalCents).toBe(1500);
   });
 
   test("per room per night multiplies by rooms and nights", () => {
     const result = calculateTouristTax(
-      [rule([fixed(3, { perRoom: true, perNight: true })])],
+      [rule([fixed(300, { perRoom: true, perNight: true })])],
       stay({ rooms: 2 }),
     );
-    expect(result.total).toBe(18);
+    expect(result.totalCents).toBe(1800);
   });
 
   test("per person without per night is charged once per guest", () => {
-    const result = calculateTouristTax([rule([fixed(4, { perPerson: true })])], stay());
-    expect(result.total).toBe(8);
+    const result = calculateTouristTax([rule([fixed(400, { perPerson: true })])], stay());
+    expect(result.totalCents).toBe(800);
   });
 
   test("a percentage is taken of every night's room price", () => {
     const result = calculateTouristTax(
       [rule([percent(12.5)])],
-      stay({ nights: [{ date: "2026-07-01", price: 100 }, { date: "2026-07-02", price: 140 }] }),
+      stay({ nights: [{ date: "2026-07-01", priceCents: 10000 }, { date: "2026-07-02", priceCents: 14000 }] }),
     );
-    expect(result.total).toBe(30);
+    expect(result.totalCents).toBe(3000);
   });
 
   test("a percentage can leave VAT out of the room price first", () => {
     // €109 incl. 9% VAT is €100 before VAT; 10% of that is €10 a night.
     const result = calculateTouristTax(
       [rule([percent(10, { vatIncludedPercent: 9 })])],
-      stay({ nights: [{ date: "2026-07-01", price: 109 }] }),
+      stay({ nights: [{ date: "2026-07-01", priceCents: 10900 }] }),
     );
-    expect(result.total).toBe(10);
+    expect(result.totalCents).toBe(1000);
   });
 
   test("charges in one rule add up", () => {
     // Amsterdam-style: a percentage plus an amount per person per night.
     const result = calculateTouristTax(
-      [rule([percent(7), fixed(3, { perPerson: true, perNight: true })])],
+      [rule([percent(7), fixed(300, { perPerson: true, perNight: true })])],
       stay(),
     );
     // 7% of €300 = €21, plus €3 × 2 × 3 = €18
-    expect(result.total).toBe(39);
-    expect(result.lines.map((l) => l.amount)).toEqual([21, 18]);
+    expect(result.totalCents).toBe(3900);
+    expect(result.lines.map((l) => l.amountCents)).toEqual([2100, 1800]);
   });
 
   test("children can be exempt from per-person charges", () => {
     const result = calculateTouristTax(
-      [rule([fixed(2, { perPerson: true, perNight: true })], { childrenExempt: true })],
+      [rule([fixed(200, { perPerson: true, perNight: true })], { childrenExempt: true })],
       stay({ adults: 2, children: 2 }),
     );
-    expect(result.total).toBe(12);
+    expect(result.totalCents).toBe(1200);
   });
 
   test("children pay per-person charges unless the rule exempts them", () => {
     const result = calculateTouristTax(
-      [rule([fixed(2, { perPerson: true, perNight: true })])],
+      [rule([fixed(200, { perPerson: true, perNight: true })])],
       stay({ adults: 2, children: 2 }),
     );
-    expect(result.total).toBe(24);
+    expect(result.totalCents).toBe(2400);
   });
 
   test("a maximum number of nights caps per-night charges", () => {
     const result = calculateTouristTax(
-      [rule([fixed(2, { perPerson: true, perNight: true }), percent(10)], { maxNights: 2 })],
+      [rule([fixed(200, { perPerson: true, perNight: true }), percent(10)], { maxNights: 2 })],
       stay(),
     );
     // Only the first two nights: €2 × 2 × 2 = €8, plus 10% of €200 = €20
-    expect(result.total).toBe(28);
+    expect(result.totalCents).toBe(2800);
   });
 
   test("each night uses the rule in force on that night", () => {
     const rules = [
-      rule([fixed(2, { perPerson: true, perNight: true })], { effectiveFrom: "2026-01-01" }),
-      rule([fixed(4, { perPerson: true, perNight: true })], { effectiveFrom: "2026-07-03" }),
+      rule([fixed(200, { perPerson: true, perNight: true })], { effectiveFrom: "2026-01-01" }),
+      rule([fixed(400, { perPerson: true, perNight: true })], { effectiveFrom: "2026-07-03" }),
     ];
     // 1 and 2 July at €2 × 2, 3 July at €4 × 2
-    expect(calculateTouristTax(rules, stay()).total).toBe(16);
+    expect(calculateTouristTax(rules, stay()).totalCents).toBe(1600);
   });
 
   test("a per-booking charge uses the rule in force on arrival", () => {
     const rules = [
-      rule([fixed(5)], { effectiveFrom: "2026-01-01" }),
-      rule([fixed(9)], { effectiveFrom: "2026-07-02" }),
+      rule([fixed(500)], { effectiveFrom: "2026-01-01" }),
+      rule([fixed(900)], { effectiveFrom: "2026-07-02" }),
     ];
-    expect(calculateTouristTax(rules, stay()).total).toBe(5);
+    expect(calculateTouristTax(rules, stay()).totalCents).toBe(500);
   });
 
   test("nights before the first rule are not taxed", () => {
-    const rules = [rule([fixed(2, { perNight: true })], { effectiveFrom: "2026-07-02" })];
-    expect(calculateTouristTax(rules, stay()).total).toBe(4);
+    const rules = [rule([fixed(200, { perNight: true })], { effectiveFrom: "2026-07-02" })];
+    expect(calculateTouristTax(rules, stay()).totalCents).toBe(400);
   });
 
   test("a rule with no charges stops tourist tax from its date", () => {
     const rules = [
-      rule([fixed(2, { perNight: true })], { effectiveFrom: "2026-01-01" }),
+      rule([fixed(200, { perNight: true })], { effectiveFrom: "2026-01-01" }),
       rule([], { effectiveFrom: "2026-07-02" }),
     ];
-    expect(calculateTouristTax(rules, stay()).total).toBe(2);
+    expect(calculateTouristTax(rules, stay()).totalCents).toBe(200);
   });
 
   test("amounts are rounded to cents, and the lines add up to the total", () => {
     const result = calculateTouristTax(
       [rule([percent(7.333), percent(1.111)])],
-      stay({ nights: [{ date: "2026-07-01", price: 99.99 }] }),
+      stay({ nights: [{ date: "2026-07-01", priceCents: 9999 }] }),
     );
-    for (const line of result.lines) {
-      expect(line.amount).toBe(Math.round(line.amount * 100) / 100);
-    }
-    const sum = result.lines.reduce((s, l) => s + l.amount, 0);
-    expect(Math.round(sum * 100)).toBe(Math.round(result.total * 100));
+    // 733.23 and 111.09 cents, each rounded half up.
+    expect(result.lines.map((l) => l.amountCents)).toEqual([733, 111]);
+    const sum = result.lines.reduce((s, l) => s + l.amountCents, 0);
+    expect(sum).toBe(result.totalCents);
+  });
+
+  test("6.5% of €186.50 is 1212 cents (1212.25 rounded half up)", () => {
+    const result = calculateTouristTax(
+      [rule([percent(6.5)])],
+      stay({ nights: [{ date: "2026-07-01", priceCents: 18650 }] }),
+    );
+    expect(result.totalCents).toBe(1212);
+    expect(result.lines).toEqual([
+      { label: "6.5% of the room price", amountCents: 1212, effectiveFrom: "2026-01-01" },
+    ]);
+  });
+
+  test("a percentage rounds per night, half up, and the nights add up to the total", () => {
+    // 4.5% of 3333 = 149.985 a night: 150 each, so 450 — not 449.955 rounded once.
+    const rules = [rule([percent(4.5)])];
+    const s = stay({
+      nights: [
+        { date: "2026-07-01", priceCents: 3333 },
+        { date: "2026-07-02", priceCents: 3333 },
+        { date: "2026-07-03", priceCents: 3333 },
+      ],
+    });
+    expect(touristTaxByNight(rules, s)).toEqual([150, 150, 150]);
+    expect(calculateTouristTax(rules, s).totalCents).toBe(450);
   });
 
   test("lines describe each charge in words", () => {
@@ -179,9 +205,9 @@ describe("calculateTouristTax", () => {
       [
         rule([
           percent(12.5, { vatIncludedPercent: 9 }),
-          fixed(2.5, { perPerson: true, perNight: true }),
-          fixed(3, { perRoom: true, perNight: true }),
-          fixed(5),
+          fixed(250, { perPerson: true, perNight: true }),
+          fixed(300, { perRoom: true, perNight: true }),
+          fixed(500),
         ]),
       ],
       stay(),
@@ -195,7 +221,7 @@ describe("calculateTouristTax", () => {
   });
 
   test("a charge that adds nothing leaves no line", () => {
-    const rules = [rule([fixed(2, { perNight: true })], { effectiveFrom: "2026-08-01" })];
+    const rules = [rule([fixed(200, { perNight: true })], { effectiveFrom: "2026-08-01" })];
     expect(calculateTouristTax(rules, stay()).lines).toEqual([]);
   });
 });
@@ -222,51 +248,51 @@ describe("ruleInForce", () => {
 
 describe("touristTaxByNight", () => {
   test("a per-person-per-night charge lands on each night", () => {
-    const rules = [rule([fixed(3, { perPerson: true, perNight: true })])];
-    expect(touristTaxByNight(rules, stay())).toEqual([6, 6, 6]);
+    const rules = [rule([fixed(300, { perPerson: true, perNight: true })])];
+    expect(touristTaxByNight(rules, stay())).toEqual([600, 600, 600]);
   });
 
   test("a once-per-stay charge goes on the first night", () => {
-    const rules = [rule([fixed(3, { perPerson: true, perNight: true }), fixed(5)])];
-    expect(touristTaxByNight(rules, stay())).toEqual([11, 6, 6]);
+    const rules = [rule([fixed(300, { perPerson: true, perNight: true }), fixed(500)])];
+    expect(touristTaxByNight(rules, stay())).toEqual([1100, 600, 600]);
   });
 
   test("the nights add up to the stay's total to the cent", () => {
     const rules = [rule([percent(12.5)])];
     const s = stay({
       nights: [
-        { date: "2026-07-01", price: 99.99 },
-        { date: "2026-07-02", price: 99.99 },
-        { date: "2026-07-03", price: 99.99 },
+        { date: "2026-07-01", priceCents: 9999 },
+        { date: "2026-07-02", priceCents: 9999 },
+        { date: "2026-07-03", priceCents: 9999 },
       ],
     });
     const perNight = touristTaxByNight(rules, s);
-    const sumCents = perNight.reduce((sum, n) => sum + Math.round(n * 100), 0);
-    expect(sumCents).toBe(Math.round(calculateTouristTax(rules, s).total * 100));
+    for (const n of perNight) expect(Number.isInteger(n)).toBe(true);
+    expect(perNight.reduce((sum, n) => sum + n, 0)).toBe(calculateTouristTax(rules, s).totalCents);
   });
 
   test("nights past the cap owe nothing", () => {
-    const rules = [rule([fixed(3, { perPerson: true, perNight: true })], { maxNights: 2 })];
-    expect(touristTaxByNight(rules, stay())).toEqual([6, 6, 0]);
+    const rules = [rule([fixed(300, { perPerson: true, perNight: true })], { maxNights: 2 })];
+    expect(touristTaxByNight(rules, stay())).toEqual([600, 600, 0]);
   });
 });
 
 describe("infants", () => {
-  const perPerson = [fixed(2, { perPerson: true, perNight: true })];
+  const perPerson = [fixed(200, { perPerson: true, perNight: true })];
 
   test("don't pay unless the rule says so", () => {
-    expect(calculateTouristTax([rule(perPerson)], stay({ infants: 1 })).total).toBe(12);
-    expect(calculateTouristTax([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 })).total).toBe(18);
+    expect(calculateTouristTax([rule(perPerson)], stay({ infants: 1 })).totalCents).toBe(1200);
+    expect(calculateTouristTax([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 })).totalCents).toBe(1800);
   });
 
   test("don't pay when children don't", () => {
     const r = rule(perPerson, { childrenExempt: true, infantsTaxed: true });
-    expect(calculateTouristTax([r], stay({ children: 1, infants: 1 })).total).toBe(12);
+    expect(calculateTouristTax([r], stay({ children: 1, infants: 1 })).totalCents).toBe(1200);
   });
 
   test("are left out of per-night refunds the same way", () => {
-    expect(touristTaxByNight([rule(perPerson)], stay({ infants: 1 }))).toEqual([4, 4, 4]);
-    expect(touristTaxByNight([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 }))).toEqual([6, 6, 6]);
+    expect(touristTaxByNight([rule(perPerson)], stay({ infants: 1 }))).toEqual([400, 400, 400]);
+    expect(touristTaxByNight([rule(perPerson, { infantsTaxed: true })], stay({ infants: 1 }))).toEqual([600, 600, 600]);
   });
 
   describe("infantsPayTouristTax", () => {

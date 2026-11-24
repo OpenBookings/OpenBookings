@@ -10,7 +10,7 @@ import {
   type CancellationTier,
   type NightValue,
 } from "@openbookings/pricing";
-import { roomPaid } from "@openbookings/db/booking-lifecycle";
+import { roomPaidCents } from "@openbookings/db/booking-lifecycle";
 import { bookingReference } from "@openbookings/db/booking-reference";
 import { buildHostTimeline, type HostTimeline } from "./timeline";
 import type { ReservationStatus, ReservationSummary } from "@/components/dashboard/reservation-types";
@@ -70,30 +70,30 @@ export type HostReservationRow = {
   infants: number;
   cots: number;
   extra_beds: number;
-  /** What the guest owes the hotel for cots and extra beds, fixed at booking (0042). Not in total_amount. */
-  pay_at_property: number;
-  total_amount: number;
+  /** What the guest owes the hotel for cots and extra beds in cents, fixed at booking (0042). Not in total_cents. */
+  pay_at_property_cents: number;
+  total_cents: number;
   timezone: string;
   check_in_time: string | null;
   check_in_until: string | null;
   check_out_time: string | null;
   departed_early_on: string | null;
   confirmed_at: string | null;
-  /** Refunded so far on the booking (rows that did not fail), euros. */
-  refunded: number;
+  /** Refunded so far on the booking (rows that did not fail), cents. */
+  refunded_cents: number;
   /** Refund rows still pending or failed: money the guest is owed but hasn't had. */
   unsettled_refunds: number;
   /**
    * Refunds the host made in their own Stripe Dashboard and lost disputes
-   * (0053), also in `refunded`. `room_price` and `tourist_tax` are null until
-   * the host's split is entered.
+   * (0053), also in `refunded_cents`. `room_price_cents` and `tourist_tax_cents`
+   * are null until the host's split is entered.
    */
   outside_refunds?: {
     source: "stripe_dashboard" | "dispute";
-    amount: number;
+    amount_cents: number;
     at: string;
-    room_price: number | null;
-    tourist_tax: number | null;
+    room_price_cents: number | null;
+    tourist_tax_cents: number | null;
   }[];
   rooms: {
     reservation_id: string;
@@ -112,8 +112,8 @@ type HostReservationRoom = {
   tierLabel: string;
   policyLines: string[];
   cancelledAt: string | null;
-  /** What the guest paid for this room, tourist tax included. */
-  paid: number;
+  /** What the guest paid for this room in cents, tourist tax included. */
+  paidCents: number;
   /** Nights of the stay, for picking the last night stayed. */
   nights: string[];
 };
@@ -121,11 +121,11 @@ type HostReservationRoom = {
 /** Money that left outside OpenBookings: a refund in the host's own Stripe, or a lost dispute. */
 export type OutsideRefund = {
   kind: "refund" | "dispute";
-  amount: number;
+  amountCents: number;
   /** ISO instant: when Stripe made the refund, or the dispute was lost. */
   at: string;
-  /** Null until the host has told OpenBookings what it was for. */
-  split: { roomPrice: number; touristTax: number } | null;
+  /** Null until the host has told OpenBookings what it was for. Cents. */
+  split: { roomPriceCents: number; touristTaxCents: number } | null;
 };
 
 export type HostReservation = ReservationSummary & {
@@ -133,17 +133,17 @@ export type HostReservation = ReservationSummary & {
   partyLabel: string;
   /** "1 cot · 1 extra bed", or null when none were booked. */
   extrasLabel: string | null;
-  /** Collected at the hotel for cots and extra beds; never part of what was paid online. */
-  atHotelAmount: number;
+  /** Collected at the hotel for cots and extra beds, cents; never part of what was paid online. */
+  atHotelCents: number;
   timezone: string;
   /** The property's check-in and check-out times ("15:00"), when it states them. */
   checkInTime: string | null;
   checkOutTime: string | null;
   /** What applies right now, then the milestones (booked, deadlines, check-in, check-out). */
   timeline: HostTimeline;
-  /** Everything refunded so far, outside refunds included: what is left to refund is paid less this. */
-  refundedAmount: number;
-  /** The part of `refundedAmount` that left outside OpenBookings, one line each. */
+  /** Everything refunded so far in cents, outside refunds included: what is left to refund is paid less this. */
+  refundedCents: number;
+  /** The part of `refundedCents` that left outside OpenBookings, one line each. */
   outsideRefunds: OutsideRefund[];
   refundIssue: boolean;
   departedEarlyOn: string | null;
@@ -187,7 +187,7 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
           )
         : [],
       cancelledAt: r.cancelled_at,
-      paid: roomPaid(r),
+      paidCents: roomPaidCents(r),
       nights: r.nights.map((n) => n.date),
     };
   });
@@ -224,24 +224,22 @@ export function toHostReservation(row: HostReservationRow, now: Date): HostReser
     guests: row.guests,
     partyLabel: partyLabel(row),
     extrasLabel: extrasLabel(row),
-    atHotelAmount: Number(row.pay_at_property),
+    atHotelCents: Number(row.pay_at_property_cents),
     status: DISPLAY_STATUS[row.status],
-    totalAmount: snapshotted
-      ? rooms.reduce((sum, r) => sum + Math.round(r.paid * 100), 0) / 100
-      : Number(row.total_amount),
+    totalCents: snapshotted ? rooms.reduce((sum, r) => sum + r.paidCents, 0) : Number(row.total_cents),
     timezone: row.timezone,
     checkInTime: row.check_in_time,
     checkOutTime: row.check_out_time,
     timeline: buildHostTimeline(row, now),
-    refundedAmount: Number(row.refunded),
+    refundedCents: Number(row.refunded_cents),
     outsideRefunds: (row.outside_refunds ?? []).map((r) => ({
       kind: r.source === "dispute" ? "dispute" : "refund",
-      amount: Number(r.amount),
+      amountCents: Number(r.amount_cents),
       at: r.at,
       split:
-        r.room_price === null || r.tourist_tax === null
+        r.room_price_cents === null || r.tourist_tax_cents === null
           ? null
-          : { roomPrice: Number(r.room_price), touristTax: Number(r.tourist_tax) },
+          : { roomPriceCents: Number(r.room_price_cents), touristTaxCents: Number(r.tourist_tax_cents) },
     })),
     refundIssue: Number(row.unsettled_refunds) > 0,
     departedEarlyOn: row.departed_early_on,

@@ -14,7 +14,6 @@ import {
   seedProperty,
 } from "@openbookings/db/testing";
 import { BookingNotFoundError, getBookingSummary, totalCents } from "./booking";
-import { toCents } from "./booking-lines";
 
 const CHECK_IN = "2031-11-10";
 const CHECK_OUT = "2031-11-12"; // 2 nights
@@ -68,8 +67,8 @@ describeWithDb("checkout summary of a booking intent", () => {
     );
     suiteId = (suite.rows[0] as { id: string }).id;
     const nr = await db.query(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active)
-       VALUES ($1, 'Non-refundable', 140, false, true) RETURNING id`,
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active)
+       VALUES ($1, 'Non-refundable', 14000, false, true) RETURNING id`,
       [suiteId],
     );
     nrPlanId = (nr.rows[0] as { id: string }).id;
@@ -85,7 +84,8 @@ describeWithDb("checkout summary of a booking intent", () => {
     else process.env.STRIPE_APPLICATION_FEE_ENABLED = feeFlag;
   });
 
-  const room = (roomId: string, ratePlanId: string, price: number, tax: number): IntentRoomInput => ({
+  /** `priceCents` a night and `taxCents` of tourist tax for the stay. */
+  const room = (roomId: string, ratePlanId: string, priceCents: number, taxCents: number): IntentRoomInput => ({
     roomId,
     ratePlanId,
     adults: 2,
@@ -93,25 +93,25 @@ describeWithDb("checkout summary of a booking intent", () => {
     infants: 0,
     cots: 0,
     extraBeds: 0,
-    payAtProperty: 0,
+    payAtPropertyCents: 0,
     discount: null,
-    rateNights: NIGHTS.map((date) => ({ date, price })),
+    rateNights: NIGHTS.map((date) => ({ date, priceCents })),
     extraGuests: [],
     payAtPropertyLines: [],
-    nights: NIGHTS.map((date) => ({ date, price })),
-    stayTotal: price * NIGHTS.length,
-    touristTax: tax,
-    touristTaxLines: [{ label: "€3.25 per person per night", amount: tax, effectiveFrom: "2031-01-01" }],
+    nights: NIGHTS.map((date) => ({ date, priceCents })),
+    stayTotalCents: priceCents * NIGHTS.length,
+    touristTaxCents: taxCents,
+    touristTaxLines: [{ label: "€3.25 per person per night", amountCents: taxCents, effectiveFrom: "2031-01-01" }],
     vatSplit: null,
   });
 
   /** A Double on "Room only" and a Garden Suite on "Non-refundable", in that order. */
   async function twoRoomIntent(userId = guest, commissionCents = 0): Promise<{ intentId: string; snapshot: IntentSnapshot }> {
-    const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13), room(suiteId, nrPlanId, 140, 13)];
+    const rooms = [room(ids.roomId, ids.ratePlanId, 10000, 1300), room(suiteId, nrPlanId, 14000, 1300)];
     const snapshot: IntentSnapshot = {
-      roomsTotal: 480,
-      touristTaxTotal: 26,
-      total: 506,
+      roomsTotalCents: 48000,
+      touristTaxTotalCents: 2600,
+      totalCents: 50600,
       commissionCents,
       commissionRate: 0.1,
       commissionVatTreatment: null,
@@ -152,26 +152,27 @@ describeWithDb("checkout summary of a booking intent", () => {
     expect(s.intentId).toBe(intentId);
     expect(s.status).toBe("open");
     expect(s.rooms.length).toBe(2);
-    expect(s.rooms.map((r) => [r.roomName, r.roomType, r.ratePlanName, r.isRefundable, r.nights, r.stayTotal])).toEqual([
-      ["Double", null, "Room only", true, 2, 200],
-      ["Garden", "Suite", "Non-refundable", false, 2, 280],
+    expect(s.rooms.map((r) => [r.roomName, r.roomType, r.ratePlanName, r.isRefundable, r.nights, r.stayTotalCents])).toEqual([
+      ["Double", null, "Room only", true, 2, 20000],
+      ["Garden", "Suite", "Non-refundable", false, 2, 28000],
     ]);
     expect(s.rooms[1]).toMatchObject({ bedType: "King", sizeSqm: 32, roomImageUrl: "https://img.test/garden.jpg" });
     expect(s.rooms[0]!.cancellation.requiresNonRefundableConsent).toBe(false);
     expect(s.rooms[1]!.cancellation.requiresNonRefundableConsent).toBe(true);
     expect(s.nights).toBe(2);
     expect(s.lines.length).toBe(4);
-    expect(totalCents(s.lines)).toBe(toCents(snapshot.total));
-    expect(s.intentTotal).toBe(snapshot.total);
+    expect(totalCents(s.lines)).toBe(snapshot.totalCents);
+    expect(s.intentTotalCents).toBe(50600);
+    expect(s.touristTaxTotalCents).toBe(2600);
     expect(s.currency).toBe("eur");
   });
 
   test("the cancellation terms are the ones held on the intent, not the host's current ones", async () => {
-    const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13)];
+    const rooms = [room(ids.roomId, ids.ratePlanId, 10000, 1300)];
     const snapshot: IntentSnapshot = {
-      roomsTotal: 200,
-      touristTaxTotal: 13,
-      total: 213,
+      roomsTotalCents: 20000,
+      touristTaxTotalCents: 1300,
+      totalCents: 21300,
       commissionCents: 0,
       commissionRate: 0.1,
       commissionVatTreatment: null,
@@ -221,18 +222,18 @@ describeWithDb("checkout summary of a booking intent", () => {
   test("getBookingSummary returns includesBreakfast and the breakdown per room", async () => {
     await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [nrPlanId]);
     const extra = {
-      ...room(suiteId, nrPlanId, 140, 13),
+      ...room(suiteId, nrPlanId, 14000, 1300),
       adults: 3,
       infants: 1,
       cots: 1,
       extraBeds: 1,
-      payAtProperty: 70,
-      discount: { label: "Weekly discount", amount: 28 },
-      rateNights: NIGHTS.map((date) => ({ date, price: 150 })),
-      extraGuests: [{ kind: "adult" as const, count: 1, per_night: 10, nights: 2, amount: 20 }],
-      payAtPropertyLines: [{ label: "Cots" as const, count: 1, fee_per_night: 10, nights: 2, amount: 20 }],
+      payAtPropertyCents: 7000,
+      discount: { label: "Weekly discount", amountCents: 2800 },
+      rateNights: NIGHTS.map((date) => ({ date, priceCents: 15000 })),
+      extraGuests: [{ kind: "adult" as const, count: 1, perNightCents: 1000, nights: 2, amountCents: 2000 }],
+      payAtPropertyLines: [{ label: "Cots" as const, count: 1, feePerNightCents: 1000, nights: 2, amountCents: 2000 }],
     };
-    const rooms = [room(ids.roomId, ids.ratePlanId, 100, 13), extra];
+    const rooms = [room(ids.roomId, ids.ratePlanId, 10000, 1300), extra];
     const created = await createBookingIntent(savepointDb(db), {
       userId: guest,
       propertyId: ids.propertyId,
@@ -240,9 +241,9 @@ describeWithDb("checkout summary of a booking intent", () => {
       checkOut: CHECK_OUT,
       rooms,
       snapshot: {
-        roomsTotal: 480,
-        touristTaxTotal: 26,
-        total: 506,
+        roomsTotalCents: 48000,
+        touristTaxTotalCents: 2600,
+        totalCents: 50600,
         commissionCents: 0,
         commissionRate: 0.1,
         commissionVatTreatment: null,
@@ -255,14 +256,14 @@ describeWithDb("checkout summary of a booking intent", () => {
     });
     if (!created.ok) throw new Error("intent not created");
     const s = await summary(created.intentId);
-    expect(s.rooms[0]).toMatchObject({ includesBreakfast: false, rateNights: rooms[0]!.rateNights, discount: null, payAtProperty: 0 });
+    expect(s.rooms[0]).toMatchObject({ includesBreakfast: false, rateNights: rooms[0]!.rateNights, discount: null, payAtPropertyCents: 0 });
     expect(s.rooms[1]).toMatchObject({
       includesBreakfast: true,
       infants: 1,
       cots: 1,
       extraBeds: 1,
-      payAtProperty: 70,
-      discount: { label: "Weekly discount", amount: 28 },
+      payAtPropertyCents: 7000,
+      discount: { label: "Weekly discount", amountCents: 2800 },
       rateNights: extra.rateNights,
       extraGuests: extra.extraGuests,
       payAtPropertyLines: extra.payAtPropertyLines,

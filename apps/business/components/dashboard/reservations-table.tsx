@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCents } from "@openbookings/pricing/money";
 import {
   Table,
   TableBody,
@@ -14,12 +15,6 @@ import type { ReservationSummary as MockReservation } from "@/components/dashboa
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",
-});
-
-const currencyFormatter = new Intl.NumberFormat("en-NL", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
 });
 
 export function ReservationsTable({
@@ -87,10 +82,10 @@ export function ReservationsTable({
                   <ReservationStatusBadge status={reservation.status} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {currencyFormatter.format(reservation.totalAmount)}
-                  {reservation.atHotelAmount ? (
+                  {formatCents(reservation.totalCents)}
+                  {reservation.atHotelCents ? (
                     <span className="text-muted-foreground block text-xs">
-                      + {currencyFormatter.format(reservation.atHotelAmount)} at the hotel
+                      + {formatCents(reservation.atHotelCents)} at the hotel
                     </span>
                   ) : null}
                 </TableCell>

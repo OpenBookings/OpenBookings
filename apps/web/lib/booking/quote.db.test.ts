@@ -57,20 +57,44 @@ describeWithDb("stay quote against Postgres", () => {
     ...over,
   });
 
-  async function nrPlan(bar: number): Promise<string> {
+  async function nrPlan(barCents: number): Promise<string> {
     const { rows } = await db.query(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, $2, $3, false, true) RETURNING id`,
-      [ids.roomId, `Non-refundable ${bar}`, bar],
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, $2, $3, false, true) RETURNING id`,
+      [ids.roomId, `Non-refundable ${barCents}`, barCents],
     );
     return (rows[0] as { id: string }).id;
   }
 
   test("a guest above base occupancy pays the room's extra-adult fee every night", async () => {
-    await db.query(`UPDATE rooms SET max_adults = 3, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rooms SET max_adults = 3, extra_adult_fee_cents = 2000 WHERE id = $1`, [ids.roomId]);
     const q = await quoteStay(db, { propertyId: ids.propertyId, stay: { ...STAY, adults: 3 }, now: NOW, testing: false });
     const plan = q!.rooms[0].ratePlans[0];
-    expect(plan.stayTotal).toBe(3 * (100 + 20));
-    expect(plan.nights.map((n) => n.price)).toEqual([120, 120, 120]);
+    expect(plan.stayTotalCents).toBe(3 * (10000 + 2000));
+    expect(plan.nights.map((n) => n.priceCents)).toEqual([12000, 12000, 12000]);
+  });
+
+  test("a plan priced at €186.50 quotes 18650 cents for one night, to the cent", async () => {
+    await db.query(`UPDATE rate_plans SET bar_cents = 18650 WHERE id = $1`, [ids.ratePlanId]);
+    const stay = { ...STAY, checkOut: "2031-11-11" };
+    const plan = (await quoteStay(db, { propertyId: ids.propertyId, stay, now: NOW, testing: false }))!.rooms[0].ratePlans[0];
+    expect(plan.nights).toEqual([{ date: "2031-11-10", priceCents: 18650 }]);
+    expect(plan.stayTotalCents).toBe(18650);
+    expect(plan.totalCents).toBe(18650);
+    expect(Number.isInteger(plan.totalCents)).toBe(true);
+  });
+
+  test("tourist tax of 6.5% on a €186.50 night is 1212 cents, in the quote's tax lines", async () => {
+    await db.query(`UPDATE rate_plans SET bar_cents = 18650 WHERE id = $1`, [ids.ratePlanId]);
+    await db.query(
+      `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
+       VALUES ($1, '2031-01-01', '[{"kind":"percent","percent":6.5,"perPerson":false,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+      [ids.propertyId],
+    );
+    const stay = { ...STAY, checkOut: "2031-11-11" };
+    const plan = (await quoteStay(db, { propertyId: ids.propertyId, stay, now: NOW, testing: false }))!.rooms[0].ratePlans[0];
+    expect(plan.touristTax.totalCents).toBe(1212);
+    expect(plan.touristTax.lines.map((l) => l.amountCents)).toEqual([1212]);
+    expect(plan.totalCents).toBe(18650 + 1212);
   });
 
   test("an override of 2 and one confirmed booking leave one unit", async () => {
@@ -95,15 +119,15 @@ describeWithDb("stay quote against Postgres", () => {
     const hold = async (userId: string) => {
       const { rows } = await db.query(
         `INSERT INTO booking_intents
-           (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_amount)
-         VALUES ($1, $2, $3::date, $3::date + 1, 'open', $4::timestamptz + INTERVAL '10 minutes', '{}'::jsonb, 100)
+           (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_cents)
+         VALUES ($1, $2, $3::date, $3::date + 1, 'open', $4::timestamptz + INTERVAL '10 minutes', '{}'::jsonb, 10000)
          RETURNING id`,
         [userId, ids.propertyId, CHECK_IN, NOW],
       );
       const intentId = (rows[0] as { id: string }).id;
       await db.query(
-        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total)
-         VALUES ($1, $2, $3, 2, '[]'::jsonb, 100)`,
+        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total_cents)
+         VALUES ($1, $2, $3, 2, '[]'::jsonb, 10000)`,
         [intentId, ids.roomId, ids.ratePlanId],
       );
       return intentId;
@@ -126,7 +150,7 @@ describeWithDb("stay quote against Postgres", () => {
   test("prices every night and the tourist tax for the per-room party", async () => {
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
-       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amountCents":250,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
       [ids.propertyId],
     );
     const plan = (await quote())!.rooms[0].ratePlans[0];
@@ -135,66 +159,67 @@ describeWithDb("stay quote against Postgres", () => {
       name: "Room only",
       isRefundable: true,
       mealPlan: null,
-      stayTotal: 300,
+      stayTotalCents: 30000,
       reasons: [],
     });
     expect(plan.nights).toEqual([
-      { date: "2031-11-10", price: 100 },
-      { date: "2031-11-11", price: 100 },
-      { date: "2031-11-12", price: 100 },
+      { date: "2031-11-10", priceCents: 10000 },
+      { date: "2031-11-11", priceCents: 10000 },
+      { date: "2031-11-12", priceCents: 10000 },
     ]);
-    expect(plan.touristTax.total).toBe(15); // 2 adults × 3 nights × €2.50
+    expect(plan.touristTax.totalCents).toBe(1500); // 2 adults × 3 nights × €2.50
+    expect(plan.totalCents).toBe(31500);
     expect(plan.freeCancellationUntil).not.toBeNull();
   });
 
   test("an uneven party: the quote prices each share, and they add up to what the selection charges", async () => {
     // 3 adults in 2 rooms: one room gets 2, the other 1. Base occupancy 1 with
     // an extra-adult fee and a per-person tourist tax, so the shares differ.
-    await db.query(`UPDATE rooms SET base_occupancy = 1, max_adults = 2, extra_adult_fee = 20 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rooms SET base_occupancy = 1, max_adults = 2, extra_adult_fee_cents = 2000 WHERE id = $1`, [ids.roomId]);
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
-       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amountCents":250,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
       [ids.propertyId],
     );
     const stay = { ...STAY, adults: 3, rooms: 2 };
     const plan = (await quoteStay(db, { propertyId: ids.propertyId, stay, now: NOW, testing: false }))!.rooms[0].ratePlans[0];
     // The rate row is for the larger share.
-    expect(plan.stayTotal + plan.touristTax.total).toBe(3 * 120 + 2 * 3 * 2.5);
-    expect(plan.partyTotals["2/0/0"]).toBe(375);
-    expect(plan.partyTotals["1/0/0"]).toBe(307.5);
+    expect(plan.totalCents).toBe(3 * 12000 + 2 * 3 * 250);
+    expect(plan.partyTotals["2/0/0"]).toBe(37500);
+    expect(plan.partyTotals["1/0/0"]).toBe(30750);
 
     const priced = await select([double({ adults: 2 }), double({ adults: 1 })]);
-    expect(priced.ok && priced.snapshot.total).toBe(375 + 307.5);
+    expect(priced.ok && priced.snapshot.totalCents).toBe(37500 + 30750);
   });
 
   test("tonight's listing price is the quote's: an override and the tourist tax count", async () => {
     const today = "2031-10-01"; // NOW in Europe/Amsterdam
     await db.query(
-      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night) VALUES ($1, $2, $2, 140)`,
+      `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents) VALUES ($1, $2, $2, 14000)`,
       [ids.ratePlanId, today],
     );
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt)
-       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amount":2.5,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
+       VALUES ($1, '2031-01-01', '[{"kind":"fixed","amountCents":250,"perPerson":true,"perNight":true,"perRoom":false}]'::jsonb, true)`,
       [ids.propertyId],
     );
     const tonight = await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW);
     // 140 for the night, plus 2 adults (base occupancy) × €2.50.
-    expect(tonight[ids.ratePlanId]).toEqual({ price: 145, sellable: true });
+    expect(tonight[ids.ratePlanId]).toEqual({ priceCents: 14500, sellable: true });
   });
 
   test("tonight's listing price: a rate that can't be sold for one night says so", async () => {
     await db.query(`UPDATE rate_plans SET min_stay = 2 WHERE id = $1`, [ids.ratePlanId]);
-    await db.query(`UPDATE rate_plans SET is_active = false, archived_at = now() WHERE id = $1`, [await nrPlan(80)]);
+    await db.query(`UPDATE rate_plans SET is_active = false, archived_at = now() WHERE id = $1`, [await nrPlan(8000)]);
     const tonight = await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW);
-    expect(tonight[ids.ratePlanId]).toEqual({ price: 100, sellable: false });
+    expect(tonight[ids.ratePlanId]).toEqual({ priceCents: 10000, sellable: false });
     // An archived rate is not priced at all.
     expect(Object.keys(tonight)).toEqual([ids.ratePlanId]);
   });
 
   test("a Non-refundable rate not at least 10% cheaper is left out", async () => {
-    const tooDear = await nrPlan(95);
-    const cheapEnough = await nrPlan(90);
+    const tooDear = await nrPlan(9500);
+    const cheapEnough = await nrPlan(9000);
     const plans = (await quote())!.rooms[0].ratePlans.map((p) => p.ratePlanId);
     expect(plans).toContain(ids.ratePlanId);
     expect(plans).toContain(cheapEnough);
@@ -203,7 +228,7 @@ describeWithDb("stay quote against Postgres", () => {
 
   test("a Non-refundable rate is left out when the refundable one beside it is restricted", async () => {
     await db.query(`UPDATE rate_plans SET min_stay = 5 WHERE id = $1`, [ids.ratePlanId]);
-    const nr = await nrPlan(85);
+    const nr = await nrPlan(8500);
     const plans = (await quote())!.rooms[0].ratePlans;
     expect(plans.map((p) => p.ratePlanId)).toEqual([ids.ratePlanId]);
     expect(plans[0].reasons).toEqual(["min_stay"]);
@@ -243,7 +268,7 @@ describeWithDb("stay quote against Postgres", () => {
   });
 
   test("selection: a hidden Non-refundable rate is invalid", async () => {
-    const tooDear = await nrPlan(95);
+    const tooDear = await nrPlan(9500);
     expect(await select([double({ ratePlanId: tooDear })])).toMatchObject({ ok: false, error: "invalid_selection" });
   });
 
@@ -259,7 +284,7 @@ describeWithDb("stay quote against Postgres", () => {
   });
 
   test("selection: more cots or extra beds than the room takes are invalid", async () => {
-    await db.query(`UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 0 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rooms SET cots_max = 1, cot_fee_cents = 0, extra_beds_max = 0 WHERE id = $1`, [ids.roomId]);
     const tooManyCots = await select([double({ cots: 2 })]);
     expect(tooManyCots).toMatchObject({ ok: false, error: "invalid_selection", detail: "Double: at most 1 cot" });
     const noBeds = await select([double({ extraBeds: 1 })]);
@@ -268,7 +293,7 @@ describeWithDb("stay quote against Postgres", () => {
 
   test("selection: a cot and an extra bed together only where the room allows it", async () => {
     await db.query(
-      `UPDATE rooms SET cots_max = 1, cot_fee = 0, extra_beds_max = 1, extra_bed_fee = 25,
+      `UPDATE rooms SET cots_max = 1, cot_fee_cents = 0, extra_beds_max = 1, extra_bed_fee_cents = 2500,
                         cot_and_extra_bed_together = false WHERE id = $1`,
       [ids.roomId],
     );
@@ -281,23 +306,23 @@ describeWithDb("stay quote against Postgres", () => {
   });
 
   test("selection: an extra bed is kept on the intent room and paid at the property, not charged", async () => {
-    await db.query(`UPDATE rooms SET extra_beds_max = 1, extra_bed_fee = 25 WHERE id = $1`, [ids.roomId]);
+    await db.query(`UPDATE rooms SET extra_beds_max = 1, extra_bed_fee_cents = 2500 WHERE id = $1`, [ids.roomId]);
     const r = await select([double({ extraBeds: 1 })]);
     if (!r.ok) throw new Error(r.detail);
-    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotal: 300, payAtProperty: 75 });
-    expect(r.rooms[0].nights.map((n) => n.price)).toEqual([100, 100, 100]);
-    expect(r.snapshot.roomsTotal).toBe(300);
-    expect(r.snapshot.total).toBe(300);
+    expect(r.rooms[0]).toMatchObject({ cots: 0, extraBeds: 1, stayTotalCents: 30000, payAtPropertyCents: 7500 });
+    expect(r.rooms[0].nights.map((n) => n.priceCents)).toEqual([10000, 10000, 10000]);
+    expect(r.snapshot.roomsTotalCents).toBe(30000);
+    expect(r.snapshot.totalCents).toBe(30000);
   });
 
   test("selection: an infant needs no free place and pays nothing", async () => {
     const r = await select([double({ infants: 1 })]);
     if (!r.ok) throw new Error(r.detail);
-    expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotal: 300 });
+    expect(r.rooms[0]).toMatchObject({ adults: 2, infants: 1, stayTotalCents: 30000 });
   });
 
   test("selection: stores a VAT split for an NL breakfast rate", async () => {
-    await db.query(`UPDATE properties SET breakfast_value = 18 WHERE id = $1`, [ids.propertyId]);
+    await db.query(`UPDATE properties SET breakfast_value_cents = 1800 WHERE id = $1`, [ids.propertyId]);
     await db.query(`UPDATE rooms SET max_children = 1 WHERE id = $1`, [ids.roomId]);
     await db.query(`UPDATE rate_plans SET includes_breakfast = true WHERE id = $1`, [ids.ratePlanId]);
     const r = await select([double({ children: 1, infants: 1 })]);
@@ -306,7 +331,7 @@ describeWithDb("stay quote against Postgres", () => {
     expect(split).not.toBeNull();
     expect(split!.nights).toHaveLength(3);
     // 3 people (infants don't count) x EUR 18 = 54 of the night's price goes to breakfast.
-    expect(split!.nights[0].breakfast!.gross).toBe(54);
+    expect(split!.nights[0].breakfast!.grossCents).toBe(5400);
     expect(split!.breakfastValueMissing).toBe(false);
   });
 
@@ -324,7 +349,7 @@ describeWithDb("stay quote against Postgres", () => {
       [ids.ratePlanId],
     );
     const plan = (await quote())!.rooms[0].ratePlans[0];
-    expect(plan.discount).toEqual({ label: "3+ night discount", percent: 10, amount: 30 });
+    expect(plan.discount).toEqual({ label: "3+ night discount", percent: 10, amountCents: 3000 });
   });
 
   test("selection: the discount that applied is kept for checkout", async () => {
@@ -335,7 +360,7 @@ describeWithDb("stay quote against Postgres", () => {
     );
     const r = await select([double()]);
     if (!r.ok) throw new Error(r.detail);
-    expect(r.rooms[0]).toMatchObject({ stayTotal: 270, discount: { label: "3+ night discount", amount: 30 } });
+    expect(r.rooms[0]).toMatchObject({ stayTotalCents: 27000, discount: { label: "3+ night discount", amountCents: 3000 } });
   });
 
   test("selection: two units of a room with one left is unavailable", async () => {
@@ -362,16 +387,16 @@ describeWithDb("stay quote against Postgres", () => {
     expect(r.rooms).toHaveLength(2);
     expect(r.rooms.map((x) => x.adults)).toEqual([2, 1]);
     expect(r.rooms[0].nights).toHaveLength(3);
-    const sum = r.rooms.reduce((s, x) => s + x.stayTotal, 0);
-    expect(r.snapshot.roomsTotal).toBe(sum);
-    expect(r.snapshot.total).toBe(r.snapshot.roomsTotal + r.snapshot.touristTaxTotal);
+    const sum = r.rooms.reduce((s, x) => s + x.stayTotalCents, 0);
+    expect(r.snapshot.roomsTotalCents).toBe(sum);
+    expect(r.snapshot.totalCents).toBe(r.snapshot.roomsTotalCents + r.snapshot.touristTaxTotalCents);
     expect(r.snapshot.currency).toBe("EUR");
     const rate = Number(
       ((await db.query(`SELECT commission_rate FROM properties WHERE id = $1`, [ids.propertyId])).rows[0] as {
         commission_rate: string;
       }).commission_rate,
     );
-    expect(r.snapshot.commissionCents).toBe(applicationFeeCents(Math.round(r.snapshot.roomsTotal * 100), rate));
+    expect(r.snapshot.commissionCents).toBe(applicationFeeCents(r.snapshot.roomsTotalCents, rate));
     expect(r.snapshot.commissionCents).toBeGreaterThan(0);
     expect(r.snapshot.rooms[0]).toMatchObject({
       roomId: ids.roomId,

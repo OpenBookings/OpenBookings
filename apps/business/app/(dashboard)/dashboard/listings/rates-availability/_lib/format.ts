@@ -1,17 +1,5 @@
 import type { ModifierType } from "@openbookings/pricing";
-
-/**
- * `bar` and `price_per_night` are stored in whole currency units, not cents —
- * apps/web renders them as `€{bar}` directly. Formatting here matches.
- */
-export function formatMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-NL", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
+import { formatCents } from "@openbookings/pricing/money";
 
 const fullDateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -70,15 +58,9 @@ export function modifierLabel(type: ModifierType): string {
   return MODIFIER_LABELS[type] ?? type;
 }
 
-/** "−10%" / "+€15" — signed so the direction reads without the tooltip. */
-export function formatAdjustment(
-  adjustmentType: "flat" | "percent",
-  value: number,
-  currency: string,
-): string {
+/** "−10%" / "+€15" / "+€15.50" — signed so the direction reads without the tooltip. A flat value is cents. */
+export function formatAdjustment(adjustmentType: "flat" | "percent", value: number): string {
   const sign = value < 0 ? "−" : "+";
   const magnitude = Math.abs(value);
-  return adjustmentType === "percent"
-    ? `${sign}${magnitude}%`
-    : `${sign}${formatMoney(magnitude, currency)}`;
+  return adjustmentType === "percent" ? `${sign}${magnitude}%` : `${sign}${formatCents(magnitude)}`;
 }

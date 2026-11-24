@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { roundHalfUp } from "@openbookings/pricing/money";
 import { buildMockAriGrid } from "./mock-ari";
 import { buildRuns } from "./runs";
 import type { CellState, RatePlanStatus } from "./types";
@@ -85,8 +86,8 @@ describe("buildMockAriGrid", () => {
     const closed = allCells.filter((c) => !c.bookable);
     expect(closed.length).toBeGreaterThan(0);
     for (const cell of closed) {
-      expect(cell.price).toBeNull();
-      expect(cell.indicativePrice).toBeGreaterThan(0);
+      expect(cell.priceCents).toBeNull();
+      expect(cell.indicativePriceCents).toBeGreaterThan(0);
     }
   });
 
@@ -104,12 +105,12 @@ describe("buildMockAriGrid", () => {
     }
   });
 
-  test("the build-up adds up to the price on the cell", () => {
+  test("the build-up adds up to the price on the cell, in whole cents", () => {
     for (const cell of allCells) {
-      const summed = cell.trace.reduce((total, step) => total + step.delta, 0);
-      expect(Number(summed.toFixed(2))).toBe(
-        Number((cell.indicativePrice * grid.stayLength).toFixed(2)),
-      );
+      const summed = cell.trace.reduce((total, step) => total + step.delta_cents, 0);
+      expect(Number.isInteger(summed)).toBe(true);
+      expect(summed).toBe(cell.trace.at(-1)?.result_cents ?? 0);
+      expect(roundHalfUp(summed / grid.stayLength)).toBe(cell.indicativePriceCents);
     }
   });
 
@@ -124,19 +125,19 @@ describe("buildMockAriGrid", () => {
   test("unsellable cells carry no price, sellable ones do", () => {
     for (const cell of allCells) {
       if (!cell.bookable) {
-        expect(cell.price).toBeNull();
+        expect(cell.priceCents).toBeNull();
       } else {
-        expect(cell.price).toBeGreaterThan(0);
+        expect(cell.priceCents).toBeGreaterThan(0);
       }
     }
   });
 
   test("the collapsed row is the cheapest sellable rate, or null", () => {
     for (const room of grid.rooms) {
-      room.lowestRates.forEach((lowest, index) => {
+      room.lowestRatesCents.forEach((lowest, index) => {
         const date = grid.dates[index];
         const prices = room.ratePlans
-          .map((p) => p.cells.find((c) => c.date === date)?.price)
+          .map((p) => p.cells.find((c) => c.date === date)?.priceCents)
           .filter((p): p is number => p != null);
         expect(lowest).toBe(prices.length === 0 ? null : Math.min(...prices));
       });

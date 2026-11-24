@@ -118,15 +118,15 @@ describe("spaceSchema", () => {
   test("an extra-guest fee is kept only where an extra guest can come", () => {
     // Base 2 = max adults 2, no children: nobody can be extra.
     const full = spaceSchema.parse(space({ extraAdultFee: "20", extraChildFee: "10" }));
-    expect([full.extraAdultFee, full.extraChildFee]).toEqual([null, null]);
+    expect([full.extraAdultFeeCents, full.extraChildFeeCents]).toEqual([null, null]);
 
     const roomy = spaceSchema.parse(space({ maxAdults: "3", maxChildren: "1", extraAdultFee: "20", extraChildFee: "" }));
-    expect([roomy.extraAdultFee, roomy.extraChildFee]).toEqual([20, 0]);
+    expect([roomy.extraAdultFeeCents, roomy.extraChildFeeCents]).toEqual([2000, 0]);
   });
 
   test("cots and extra beds switched off store nothing, whatever was posted", () => {
     const d = spaceSchema.parse(space({ cotsMax: "2", cotFee: "15", extraBedsMax: "1", extraBedFee: "25" }));
-    expect(d).toMatchObject({ cotsMax: 0, cotFee: null, extraBedsMax: 0, extraBedFee: null });
+    expect(d).toMatchObject({ cotsMax: 0, cotFeeCents: null, extraBedsMax: 0, extraBedFeeCents: null });
   });
 
   test("cots and extra beds switched on need a count; a blank fee is free", () => {
@@ -136,7 +136,7 @@ describe("spaceSchema", () => {
     );
     expect(errorOn({ cotsOn: "on", cotsMax: "5" }, "cotsMax")).toBeDefined();
     const d = spaceSchema.parse(space({ cotsOn: "on", cotsMax: "2", cotFee: "", extraBedsOn: "on", extraBedsMax: "1", extraBedFee: "25" }));
-    expect(d).toMatchObject({ cotsMax: 2, cotFee: 0, extraBedsMax: 1, extraBedFee: 25 });
+    expect(d).toMatchObject({ cotsMax: 2, cotFeeCents: 0, extraBedsMax: 1, extraBedFeeCents: 2500 });
   });
 
   test("a cot and an extra bed can be combined unless both are on and the host says no", () => {
@@ -147,9 +147,16 @@ describe("spaceSchema", () => {
     expect(spaceSchema.parse(space({ cotsOn: "on", cotsMax: "1" })).cotAndExtraBedTogether).toBe(true);
   });
 
-  test("fees are whole euros up to 9999", () => {
-    expect(errorOn({ maxAdults: "3", extraAdultFee: "10000" }, "extraAdultFee")).toBeDefined();
-    expect(errorOn({ maxAdults: "3", extraAdultFee: "12.5" }, "extraAdultFee")).toBeDefined();
+  test("fees are euros and cents up to €9,999.99, stored in cents", () => {
+    expect(spaceSchema.parse(space({ maxAdults: "3", extraAdultFee: "17.5" })).extraAdultFeeCents).toBe(1750);
+    expect(spaceSchema.parse(space({ maxAdults: "3", extraAdultFee: "12,50" })).extraAdultFeeCents).toBe(1250);
+    expect(spaceSchema.parse(space({ maxAdults: "3", extraAdultFee: "9999.99" })).extraAdultFeeCents).toBe(999_999);
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "10000" }, "extraAdultFee")).toBe(
+      "The extra adult fee can be at most €9,999.99.",
+    );
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "12.555" }, "extraAdultFee")).toBe("Use at most two decimals, without a thousands separator");
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "1.234,50" }, "extraAdultFee")).toBeDefined();
+    expect(errorOn({ maxAdults: "3", extraAdultFee: "-5" }, "extraAdultFee")).toBeDefined();
   });
 });
 

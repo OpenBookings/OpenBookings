@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { DbRoom } from "../_components/constants";
 import {
-  atHotelTotal,
+  atHotelTotalCents,
   bookingMessage,
   buildBooking,
   decodeSelection,
@@ -83,19 +83,19 @@ describe("buildBooking", () => {
     images: [],
     tags: [],
     rate_plans: [
-      { id: FLEX, name: "Flexible", bar: 100, currency: "EUR", is_refundable: true, meal_plan: null },
-      { id: NR, name: "Non-refundable", bar: 90, currency: "EUR", is_refundable: false, meal_plan: null },
+      { id: FLEX, name: "Flexible", bar_cents: 10000, currency: "EUR", is_refundable: true, meal_plan: null },
+      { id: NR, name: "Non-refundable", bar_cents: 9000, currency: "EUR", is_refundable: false, meal_plan: null },
     ],
   };
-  const priced = (ratePlanId: string, total: number, partyTotals: Record<string, number> = {}) => ({
+  const priced = (ratePlanId: string, totalCents: number, partyTotals: Record<string, number> = {}) => ({
     ratePlanId,
-    stayTotal: total,
-    touristTax: 0,
-    total,
-    perNight: total / 3,
+    stayTotalCents: totalCents,
+    touristTaxCents: 0,
+    totalCents,
+    perNightCents: Math.round(totalCents / 3),
     discount: null,
     freeCancellationUntil: null,
-    saving: 0,
+    savingCents: 0,
     partyTotals,
   });
   const view: RoomView = {
@@ -106,7 +106,7 @@ describe("buildBooking", () => {
     othersBooking: false,
     maxAdults: 2,
     maxChildren: 1,
-    rates: { [FLEX]: priced(FLEX, 300.1), [NR]: priced(NR, 270.2) },
+    rates: { [FLEX]: priced(FLEX, 30010), [NR]: priced(NR, 27020) },
   };
 
   test("splits the party over the picked rooms and adds up the total shown", () => {
@@ -116,7 +116,7 @@ describe("buildBooking", () => {
         { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0 },
         { roomId: ROOM_A, ratePlanId: NR, adults: 1, children: 0, infants: 0, cots: 0, extraBeds: 0 },
       ],
-      expectedTotal: 570.3,
+      expectedTotalCents: 57030,
     });
   });
 
@@ -124,24 +124,24 @@ describe("buildBooking", () => {
     // 3 adults in 2 rooms: the quote's rate is for the larger share (2 adults,
     // with an extra-guest fee or per-person tourist tax in it); the second
     // room only has 1 adult and costs less.
-    const uneven: RoomView = { ...view, rates: { [FLEX]: priced(FLEX, 330, { "2/0/0": 330, "1/0/0": 291 }) } };
+    const uneven: RoomView = { ...view, rates: { [FLEX]: priced(FLEX, 33000, { "2/0/0": 33000, "1/0/0": 29100 }) } };
     expect(buildBooking([room], [uneven], { [FLEX]: 2 }, { adults: 3, children: 0 })).toEqual({
       ok: true,
       rooms: [
         { roomId: ROOM_A, ratePlanId: FLEX, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0 },
         { roomId: ROOM_A, ratePlanId: FLEX, adults: 1, children: 0, infants: 0, cots: 0, extraBeds: 0 },
       ],
-      expectedTotal: 621,
+      expectedTotalCents: 62100,
     });
   });
 
   test("infants count in the party a room is priced for", () => {
     const withInfant: RoomView = {
       ...view,
-      rates: { [FLEX]: priced(FLEX, 330, { "1/0/1": 300, "1/0/0": 291 }) },
+      rates: { [FLEX]: priced(FLEX, 33000, { "1/0/1": 30000, "1/0/0": 29100 }) },
     };
     const b = buildBooking([room], [withInfant], { [FLEX]: 2 }, { adults: 2, children: 0, infants: 1 });
-    expect(b).toMatchObject({ ok: true, expectedTotal: 591 });
+    expect(b).toMatchObject({ ok: true, expectedTotalCents: 59100 });
   });
 
   test("unpriced picks cannot be booked", () => {
@@ -193,10 +193,17 @@ describe("interpretBookResponse", () => {
     expect(interpretBookResponse(401, { error: "auth_required" })).toEqual({ kind: "sign_in" });
   });
 
+  test("400 tells a guest on an old page to reload", () => {
+    expect(interpretBookResponse(400, { error: "invalid_body" })).toEqual({
+      kind: "error",
+      message: "This page is out of date. Reload it and try again.",
+    });
+  });
+
   test("409 price_changed carries the new total", () => {
-    expect(interpretBookResponse(409, { error: "price_changed", quote: { total: 412.5, roomsTotal: 400 } })).toEqual({
+    expect(interpretBookResponse(409, { error: "price_changed", quote: { totalCents: 41250, roomsTotalCents: 40000 } })).toEqual({
       kind: "price_changed",
-      total: 412.5,
+      totalCents: 41250,
     });
   });
 
@@ -215,7 +222,7 @@ describe("interpretBookResponse", () => {
 
   test("anything else is a plain error, never a code", () => {
     const error = { kind: "error" as const, message: "Something went wrong. Please try again." };
-    expect(interpretBookResponse(400, { error: "invalid_request", errors: ["x"] })).toEqual(error);
+    expect(interpretBookResponse(422, { error: "invalid_request", errors: ["x"] })).toEqual(error);
     expect(interpretBookResponse(429, { error: "rate_limited" })).toEqual(error);
     expect(interpretBookResponse(500, { error: "server_error" })).toEqual(error);
     expect(interpretBookResponse(409, { error: "price_changed" })).toEqual(error);
@@ -234,11 +241,11 @@ describe("cots and extra beds", () => {
     max_occupancy: 3,
     images: [],
     tags: [],
-    rate_plans: [{ id: FLEX, name: "Flexible", bar: 100, currency: "EUR", is_refundable: true, meal_plan: null }],
+    rate_plans: [{ id: FLEX, name: "Flexible", bar_cents: 10000, currency: "EUR", is_refundable: true, meal_plan: null }],
     cots_max: 1,
-    cot_fee: 0,
+    cot_fee_cents: 0,
     extra_beds_max: 1,
-    extra_bed_fee: 25,
+    extra_bed_fee_cents: 2500,
     cot_and_extra_bed_together: false,
     ...over,
   });
@@ -270,7 +277,7 @@ describe("cots and extra beds", () => {
       maxAdults: 2,
       maxChildren: 1,
       rates: {
-        [FLEX]: { ratePlanId: FLEX, stayTotal: 200, touristTax: 0, total: 200, perNight: 100, freeCancellationUntil: null, saving: 0, discount: null, partyTotals: {} },
+        [FLEX]: { ratePlanId: FLEX, stayTotalCents: 20000, touristTaxCents: 0, totalCents: 20000, perNightCents: 10000, freeCancellationUntil: null, savingCents: 0, discount: null, partyTotals: {} },
       },
     };
     const b = buildBooking([room()], [view], { [FLEX]: 2 }, { adults: 2, children: 0, infants: 1 }, { [ROOM_A]: { cots: 1, extraBeds: 1 } });
@@ -282,9 +289,9 @@ describe("cots and extra beds", () => {
 
   test("what is due at the hotel: each picked room's extras, per night", () => {
     const sel = { [FLEX]: 1 };
-    expect(atHotelTotal([room()], sel, { [ROOM_A]: { cots: 1, extraBeds: 0 } }, 3)).toBe(0);
-    expect(atHotelTotal([room({ cot_and_extra_bed_together: true })], sel, { [ROOM_A]: { cots: 1, extraBeds: 1 } }, 3)).toBe(75);
+    expect(atHotelTotalCents([room()], sel, { [ROOM_A]: { cots: 1, extraBeds: 0 } }, 3)).toBe(0);
+    expect(atHotelTotalCents([room({ cot_and_extra_bed_together: true })], sel, { [ROOM_A]: { cots: 1, extraBeds: 1 } }, 3)).toBe(7500);
     // Extras on a room that isn't picked don't count.
-    expect(atHotelTotal([room()], {}, { [ROOM_A]: { cots: 0, extraBeds: 1 } }, 3)).toBe(0);
+    expect(atHotelTotalCents([room()], {}, { [ROOM_A]: { cots: 0, extraBeds: 1 } }, 3)).toBe(0);
   });
 });

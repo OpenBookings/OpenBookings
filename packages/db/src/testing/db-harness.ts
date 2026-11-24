@@ -42,6 +42,32 @@ export async function applyPendingMigrations(db: Client): Promise<void> {
 }
 
 /**
+ * Whether a suite can see the schema as it was before a pending migration.
+ * False in CI, which applies every pending migration once up front: such a
+ * suite (a migration's own test) skips itself there.
+ */
+export const canReplayPendingMigrations = process.env.PENDING_MIGRATIONS_APPLIED !== "1";
+
+/**
+ * Replay the pending migrations strictly before `file`, inside the caller's
+ * transaction, so a migration's own test can write rows in the old shape and
+ * then run `pendingMigrationSql(file)` itself. Same lock as
+ * applyPendingMigrations. Throws when `file` is not pending, or in CI where
+ * the migrations were already applied (see canReplayPendingMigrations).
+ */
+export async function applyPendingMigrationsBefore(db: Client, file: string): Promise<void> {
+  const at = PENDING_MIGRATIONS.indexOf(file);
+  if (at < 0) throw new Error(`${file} is not in PENDING_MIGRATIONS`);
+  if (!canReplayPendingMigrations) {
+    throw new Error(`Pending migrations were applied up front (PENDING_MIGRATIONS_APPLIED=1); ${file} already ran`);
+  }
+  await db.query("SELECT pg_advisory_xact_lock($1)", [PENDING_MIGRATIONS_LOCK]);
+  for (const earlier of PENDING_MIGRATIONS.slice(0, at)) {
+    await db.query(pendingMigrationSql(earlier));
+  }
+}
+
+/**
  * For suites that COMMIT (separate connections, a real pool), which cannot
  * replay the pending migrations inside a transaction that is rolled back:
  * whether the database has this branch's schema, so the suite can run.
@@ -102,8 +128,8 @@ export async function seedProperty(
     [property.id],
   );
   const rate = await one(
-    `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active)
-     VALUES ($1, 'Room only', 100, $2, true) RETURNING id`,
+    `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active)
+     VALUES ($1, 'Room only', 10000, $2, true) RETURNING id`,
     [room.id, opts.isRefundable ?? true],
   );
   return { propertyId: property.id, roomId: room.id, ratePlanId: rate.id };
@@ -123,7 +149,7 @@ export async function seedGuest(db: Client): Promise<string> {
   return id;
 }
 
-/** A booking in `pending` with `rooms` reservations of `nights` nights at €100. */
+/** A booking in `pending` with `rooms` reservations of `nights` nights at €100 (10000 cents). */
 export async function seedBooking(
   db: Client,
   ids: { propertyId: string; roomId: string; ratePlanId: string },
@@ -136,18 +162,19 @@ export async function seedBooking(
     .slice(0, 10);
   const booking = (
     await db.query(
-      `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount, stripe_payment_intent_id)
-       VALUES ($1, $2, $3, $4, 'pending', $5, 'pi_test') RETURNING id`,
-      [ids.propertyId, userId, opts.checkIn, checkOut, 100 * opts.nights * rooms],
+      `INSERT INTO bookings
+         (hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents, stripe_payment_intent_id)
+       VALUES ($1, $2, $3, $4, 'pending', $5, $5, 'pi_test') RETURNING id`,
+      [ids.propertyId, userId, opts.checkIn, checkOut, 10000 * opts.nights * rooms],
     )
   ).rows[0] as { id: string };
   const reservationIds: string[] = [];
   for (let i = 0; i < rooms; i += 1) {
     const res = (
       await db.query(
-        `INSERT INTO reservations (booking_id, room_id, rate_plan_id, adults, total_nights, price_per_night, total_amount)
-         VALUES ($1, $2, $3, 2, $4, 100, $5) RETURNING id`,
-        [booking.id, ids.roomId, ids.ratePlanId, opts.nights, 100 * opts.nights],
+        `INSERT INTO reservations (booking_id, room_id, rate_plan_id, adults, total_nights, price_per_night_cents, total_cents)
+         VALUES ($1, $2, $3, 2, $4, 10000, $5) RETURNING id`,
+        [booking.id, ids.roomId, ids.ratePlanId, opts.nights, 10000 * opts.nights],
       )
     ).rows[0] as { id: string };
     reservationIds.push(res.id);

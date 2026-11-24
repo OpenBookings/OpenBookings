@@ -17,7 +17,7 @@ import type {
  * without being joined back to both.
  *
  * `size_sqm` is numeric and node-postgres hands numerics back as strings, so
- * it crosses into the domain through `num`. `bar` is never read as a price
+ * it crosses into the domain through `num`. `bar_cents` is never read as a price
  * here — only as "has R&A priced this yet".
  */
 
@@ -128,12 +128,12 @@ interface RoomRow {
   max_children: number;
   total_units: number;
   base_occupancy: number;
-  extra_adult_fee: number | null;
-  extra_child_fee: number | null;
+  extra_adult_fee_cents: number | null;
+  extra_child_fee_cents: number | null;
   cots_max: number;
-  cot_fee: number | null;
+  cot_fee_cents: number | null;
   extra_beds_max: number;
-  extra_bed_fee: number | null;
+  extra_bed_fee_cents: number | null;
   cot_and_extra_bed_together: boolean;
   amenity_keys: string[] | null;
   featured_amenity_keys: string[];
@@ -193,7 +193,7 @@ const RATE_COLUMNS = `
   rp.id, rp.room_id, rp.name, rp.description,
   rp.includes_breakfast, rp.includes_lunch, rp.includes_dinner,
   rp.extras, rp.other_inclusion, rp.min_advance_booking, rp.max_advance_booking,
-  rp.is_refundable, rp.is_active, (rp.bar > 0) AS priced, rp.sort_order`;
+  rp.is_refundable, rp.is_active, (rp.bar_cents > 0) AS priced, rp.sort_order`;
 
 /**
  * Two queries, for the same reason the Property editor uses two: the second
@@ -219,8 +219,8 @@ export async function loadRoomEditor(
        r.name, r.description, r.size_sqm, r.bed_config, r.bed_type,
        r.max_adults, r.max_children, r.total_units, r.base_occupancy,
        -- bigint comes back as a string from node-postgres
-       r.extra_adult_fee::int, r.extra_child_fee::int, r.cots_max, r.cot_fee::int,
-       r.extra_beds_max, r.extra_bed_fee::int, r.cot_and_extra_bed_together,
+       r.extra_adult_fee_cents::int, r.extra_child_fee_cents::int, r.cots_max, r.cot_fee_cents::int,
+       r.extra_beds_max, r.extra_bed_fee_cents::int, r.cot_and_extra_bed_together,
        r.amenity_keys, r.featured_amenity_keys, r.sort_order,
        r.is_active, r.archived_at
      FROM rooms r
@@ -271,12 +271,12 @@ export async function loadRoomEditor(
       maxChildren: room.max_children,
       units: room.total_units,
       baseOccupancy: room.base_occupancy,
-      extraAdultFee: room.extra_adult_fee,
-      extraChildFee: room.extra_child_fee,
+      extraAdultFeeCents: room.extra_adult_fee_cents,
+      extraChildFeeCents: room.extra_child_fee_cents,
       cotsMax: room.cots_max,
-      cotFee: room.cot_fee,
+      cotFeeCents: room.cot_fee_cents,
       extraBedsMax: room.extra_beds_max,
-      extraBedFee: room.extra_bed_fee,
+      extraBedFeeCents: room.extra_bed_fee_cents,
       cotAndExtraBedTogether: room.cot_and_extra_bed_together,
       amenityKeys: amenities.amenityKeys,
       featuredAmenityKeys: amenities.featuredAmenityKeys,

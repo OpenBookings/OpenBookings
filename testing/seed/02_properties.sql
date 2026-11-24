@@ -96,21 +96,21 @@ INSERT INTO room_images (room_id, url, sort_order, alt_text) VALUES
 
 -- Rate plans. "Non-refundable" ignores the property's tier.
 INSERT INTO rate_plans
-  (id, room_id, name, description, bar, currency, is_refundable, min_stay,
+  (id, room_id, name, description, bar_cents, currency, is_refundable, min_stay,
    includes_breakfast, sort_order, is_active)
 VALUES
-  ('5eed3000-0000-4000-8000-000000000001', '5eed2000-0000-4000-8000-000000000001', 'Flexible',        NULL,                    165, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     149, 'EUR', false, 1, false, 1, true),
-  ('5eed3000-0000-4000-8000-000000000003', '5eed2000-0000-4000-8000-000000000002', 'Flexible',        NULL,                    215, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000004', '5eed2000-0000-4000-8000-000000000003', 'Bed and breakfast','Breakfast for everyone', 260, 'EUR', true,  2, true,  0, true),
-  ('5eed3000-0000-4000-8000-000000000005', '5eed2000-0000-4000-8000-000000000004', 'Flexible',        NULL,                    145, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000006', '5eed2000-0000-4000-8000-000000000005', 'Flexible',        NULL,                    230, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000007', '5eed2000-0000-4000-8000-000000000006', 'Flexible',        NULL,                    180, 'EUR', true,  1, false, 0, true)
+  ('5eed3000-0000-4000-8000-000000000001', '5eed2000-0000-4000-8000-000000000001', 'Flexible',        NULL,                    16500, 'EUR', true,  1, false, 0, true),
+  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     14900, 'EUR', false, 1, false, 1, true),
+  ('5eed3000-0000-4000-8000-000000000003', '5eed2000-0000-4000-8000-000000000002', 'Flexible',        NULL,                    21500, 'EUR', true,  1, false, 0, true),
+  ('5eed3000-0000-4000-8000-000000000004', '5eed2000-0000-4000-8000-000000000003', 'Bed and breakfast','Breakfast for everyone', 26000, 'EUR', true,  2, true,  0, true),
+  ('5eed3000-0000-4000-8000-000000000005', '5eed2000-0000-4000-8000-000000000004', 'Flexible',        NULL,                    14500, 'EUR', true,  1, false, 0, true),
+  ('5eed3000-0000-4000-8000-000000000006', '5eed2000-0000-4000-8000-000000000005', 'Flexible',        NULL,                    23000, 'EUR', true,  1, false, 0, true),
+  ('5eed3000-0000-4000-8000-000000000007', '5eed2000-0000-4000-8000-000000000006', 'Flexible',        NULL,                    18000, 'EUR', true,  1, false, 0, true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Fridays and Saturdays cost €30 more at the Amsterdam hotel's Classic Double.
 INSERT INTO rate_modifiers (rate_plan_id, type, trigger_condition, adjustment_type, adjustment_value, is_active, sort_order) VALUES
-  ('5eed3000-0000-4000-8000-000000000001', 'day_of_week', '{"days_of_week": [5, 6]}', 'flat', 30, true, 0);
+  ('5eed3000-0000-4000-8000-000000000001', 'day_of_week', '{"days_of_week": [5, 6]}', 'flat', 3000, true, 0);
 
 -- Rules on the grid, relative to today so they never run out:
 --   * the Dom View Suite is closed for three nights two months out (maintenance),
@@ -129,8 +129,8 @@ ON CONFLICT (room_id, date) DO NOTHING;
 -- Utrecht: a fixed amount per person per night. (Illustrative rates.)
 INSERT INTO tourist_tax_rules (property_id, effective_from, charges, children_exempt, max_nights, created_by) VALUES
   ('5eed1000-0000-4000-8000-000000000001', '2000-01-01',
-   '[{"kind": "percent", "amount": 12.5, "perPerson": false, "perNight": false, "perRoom": false, "vatIncludedPercent": 21}]',
+   '[{"kind": "percent", "percent": 12.5, "perPerson": false, "perNight": false, "perRoom": false, "vatIncludedPercent": 21}]',
    false, NULL, 'seed-user-owner'),
   ('5eed1000-0000-4000-8000-000000000002', '2000-01-01',
-   '[{"kind": "fixed", "amount": 3.5, "perPerson": true, "perNight": true, "perRoom": false}]',
+   '[{"kind": "fixed", "amountCents": 350, "perPerson": true, "perNight": true, "perRoom": false}]',
    true, NULL, 'seed-user-owner');
