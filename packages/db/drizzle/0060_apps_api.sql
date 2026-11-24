@@ -3,7 +3,7 @@
 --   channel_code      properties, rooms and rate_plans get a stable, public code
 --                     (letters and digits only) that a channel manager maps its
 --                     own inventory to. Set on INSERT from the row id
---                     ('H' / 'R' / 'P' + 11 upper-case hex characters), backfilled
+--                     ('OB' + 10, 'R' + 11, 'P' + 11 upper-case hex characters), backfilled
 --                     for existing rows, never changed afterwards.
 --   app_installations one app per property at a time (partial unique index);
 --                     only a hash of the app key is stored.
@@ -32,7 +32,7 @@ ALTER TABLE properties ADD COLUMN IF NOT EXISTS channel_code text;
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS channel_code text;
 ALTER TABLE rate_plans ADD COLUMN IF NOT EXISTS channel_code text;
 
-UPDATE properties SET channel_code = 'H' || upper(left(replace(id::text, '-', ''), 11)) WHERE channel_code IS NULL;
+UPDATE properties SET channel_code = 'OB' || upper(left(replace(id::text, '-', ''), 10)) WHERE channel_code IS NULL;
 UPDATE rooms SET channel_code = 'R' || upper(left(replace(id::text, '-', ''), 11)) WHERE channel_code IS NULL;
 UPDATE rate_plans SET channel_code = 'P' || upper(left(replace(id::text, '-', ''), 11)) WHERE channel_code IS NULL;
 
@@ -61,7 +61,7 @@ SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF NEW.channel_code IS NULL THEN
-    NEW.channel_code := TG_ARGV[0] || upper(left(replace(NEW.id::text, '-', ''), 11));
+    NEW.channel_code := TG_ARGV[0] || upper(left(replace(NEW.id::text, '-', ''), TG_ARGV[1]::int));
   END IF;
   RETURN NEW;
 END
@@ -81,13 +81,13 @@ $$;
 
 DROP TRIGGER IF EXISTS channel_code_default ON properties;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON properties
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('H');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('OB', '10');
 DROP TRIGGER IF EXISTS channel_code_default ON rooms;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON rooms
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('R');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('R', '11');
 DROP TRIGGER IF EXISTS channel_code_default ON rate_plans;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON rate_plans
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('P');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('P', '11');
 
 DROP TRIGGER IF EXISTS channel_code_immutable ON properties;
 CREATE TRIGGER channel_code_immutable BEFORE UPDATE OF channel_code ON properties

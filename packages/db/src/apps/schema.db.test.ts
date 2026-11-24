@@ -54,9 +54,9 @@ describeWithDb("apps schema (0060)", () => {
       await code("rooms", a.roomId),
       await code("rate_plans", a.ratePlanId),
     ];
-    expect(aCodes[0]).toMatch(/^H[A-Z0-9]{11}$/);
-    expect(aCodes[1]).toMatch(/^R[A-Z0-9]{11}$/);
-    expect(aCodes[2]).toMatch(/^P[A-Z0-9]{11}$/);
+    expect(aCodes[0]).toMatch(/^OB[0-9A-F]{10}$/);
+    expect(aCodes[1]).toMatch(/^R[0-9A-F]{11}$/);
+    expect(aCodes[2]).toMatch(/^P[0-9A-F]{11}$/);
     expect(await code("properties", b.propertyId)).not.toBe(aCodes[0]);
     await rejects(`UPDATE properties SET channel_code = $1 WHERE id = $2`, [aCodes[0], b.propertyId]);
   });
