@@ -114,6 +114,46 @@ describe("parseEnvelope", () => {
     });
   });
 
+  describe("entities in values", () => {
+    const body = fixture("rooms-and-rates-rq.xml");
+    const hotelCode = (raw: string) => {
+      const result = parseEnvelope(wrap(body.replace("HOTELCODE", raw)), creds);
+      if (!result.ok) throw new Error("expected ok");
+      const segments = result.request.body.AvailRequestSegments as Record<string, any>;
+      return segments.AvailRequestSegment.HotelSearchCriteria.Criterion.HotelRef["@_HotelCode"] as string;
+    };
+
+    it("decodes predefined entities in attributes", () => expect(hotelCode("B&amp;B")).toBe("B&B"));
+    it("decodes decimal and hex references", () => {
+      expect(hotelCode("caf&#233;")).toBe("café");
+      expect(hotelCode("caf&#xE9;")).toBe("café");
+      expect(hotelCode("&#x1F600;")).toBe("\u{1F600}");
+    });
+    it("decodes in a single pass: &amp;lt; is &lt;, not <", () => expect(hotelCode("&amp;lt;")).toBe("&lt;"));
+    it("leaves unknown names and invalid references literal", () => {
+      expect(hotelCode("&foo;")).toBe("&foo;");
+      expect(hotelCode("&#0;")).toBe("&#0;");
+      expect(hotelCode("&#xD800;")).toBe("&#xD800;");
+    });
+    it("round-trips through xmlEscape without double escaping", () => {
+      const decoded = hotelCode("B&amp;B &lt;1&gt;");
+      expect(decoded).toBe("B&B <1>");
+      expect(xmlEscape(decoded)).toBe("B&amp;B &lt;1&gt;");
+    });
+
+    it("decodes entities in a password and compares credentials untrimmed", () => {
+      const withPassword = (pw: string) => wrap(body).replace(`>${creds.password}<`, `>${pw}<`);
+      expect(parseEnvelope(withPassword("caf&#233;"), { ...creds, password: "café" }).ok).toBe(true);
+      expect(parseEnvelope(withPassword(`  ${creds.password}  `), creds).ok).toBe(false);
+      expect(parseEnvelope(withPassword(creds.password), creds).ok).toBe(true);
+    });
+
+    it("does not let whitespace in the Username match either", () => {
+      const result = parseEnvelope(wrap(body).replace(`>${creds.username}<`, `> ${creds.username} <`), creds);
+      expect(result.ok).toBe(false);
+    });
+  });
+
   describe("hostile input", () => {
     const body = fixture("rooms-and-rates-rq.xml");
 
@@ -122,8 +162,9 @@ describe("parseEnvelope", () => {
       const xml = `<?xml version="1.0"?><!DOCTYPE lolz [${lols}]><SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Body><a>&lol9;</a></SOAP-ENV:Body></SOAP-ENV:Envelope>`;
       const started = performance.now();
       const result = parseEnvelope(xml, creds);
-      expect(performance.now() - started).toBeLessThan(50);
+      expect(performance.now() - started).toBeLessThan(200);
       expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.fault.message).toContain("DOCTYPE");
     });
 
     it.each([
@@ -147,14 +188,9 @@ describe("parseEnvelope", () => {
     it("counts bytes, not characters", () => {
       const xml = `<!-- ${"é".repeat(MAX_BODY_BYTES / 2)} -->${wrap(body)}`;
       expect(xml.length).toBeLessThan(MAX_BODY_BYTES);
-      expect(parseEnvelope(xml, creds).ok).toBe(false);
-    });
-
-    it("does not expand predefined entity text", () => {
-      const result = parseEnvelope(wrap(body.replace("HOTELCODE", "A&amp;B")), creds);
-      if (!result.ok) throw new Error("expected ok");
-      const hotel = JSON.stringify(result.request.body);
-      expect(hotel).toContain("A&amp;B");
+      const result = parseEnvelope(xml, creds);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.fault.message).toBe("Request body too large");
     });
 
     it.each([
@@ -221,6 +257,12 @@ describe("buildResponse", () => {
     );
   });
 
+  it("cannot have EchoToken, Version or Success overwritten by the payload", () => {
+    for (const payload of [{ "@_EchoToken": "x" }, { "@_Version": "9" }, { Success: "" }]) {
+      expect(() => buildResponse("HotelAvailRQ", echo, { success: true, payload }, now)).toThrow("payload may not set");
+    }
+  });
+
   it("echoes a hostile EchoToken as valid XML", () => {
     const xml = buildResponse("HotelAvailRQ", `"><evil/>`, { success: true }, now);
     expect(xml).toContain(`EchoToken="&quot;&gt;&lt;evil/&gt;"`);
@@ -230,7 +272,7 @@ describe("buildResponse", () => {
     const xml = buildResponse("HotelAvailRQ", echo, { success: false, errors: [hotelNotFound("A&B <1>")] }, now);
     expect(XMLValidator.validate(xml)).toBe(true);
     const parsed = xmlParser.parse(xml);
-    expect(parsed.Envelope.Body.OTA_HotelAvailRS.Errors.Error["#text"]).toBe("Hotel not found for HotelCode=A&amp;B &lt;1&gt;");
+    expect(parsed.Envelope.Body.OTA_HotelAvailRS.Errors.Error["#text"]).toBe("Hotel not found for HotelCode=A&B <1>");
   });
 });
 

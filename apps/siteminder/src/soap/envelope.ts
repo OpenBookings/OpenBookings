@@ -82,6 +82,14 @@ export function parseEnvelope(xml: string, expected: Credentials): EnvelopeResul
   return { ok: true, request: { kind, echoToken, timeStamp, body: root } };
 }
 
+/** A payload may not carry attributes or `Success`: those belong to the envelope and would overwrite it. */
+function checkedPayload(payload: Record<string, unknown> | undefined): Record<string, unknown> {
+  for (const key of Object.keys(payload ?? {})) {
+    if (key.startsWith("@_") || key === "Success") throw new Error(`buildResponse payload may not set ${key}`);
+  }
+  return payload ?? {};
+}
+
 export function buildResponse(
   kind: OtaRequest["kind"],
   echoToken: string,
@@ -89,7 +97,7 @@ export function buildResponse(
   now: Date,
 ): string {
   const inner: Record<string, unknown> = content.success
-    ? { Success: "", ...content.payload }
+    ? { Success: "", ...checkedPayload(content.payload) }
     : {
         Errors: {
           Error: content.errors.map((e) => ({
