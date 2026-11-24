@@ -12,14 +12,19 @@ export const MAX_NAME_LENGTH = 50;
 
 export type Names = { firstName: string; lastName: string };
 
+/** Trim and collapse any run of whitespace (NBSP and other Unicode spaces included) to one space. */
+export function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function clean(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value.replace(/\s+/g, " ").trim().slice(0, MAX_NAME_LENGTH).trim();
+  return normalizeWhitespace(value).slice(0, MAX_NAME_LENGTH).trim();
 }
 
 /** The DB's legacy split rule: last token = last name, the rest = first name. */
 export function splitFullName(full: unknown): Names {
-  const text = typeof full === "string" ? full.replace(/\s+/g, " ").trim() : "";
+  const text = typeof full === "string" ? normalizeWhitespace(full) : "";
   if (!text) return { firstName: "", lastName: "" };
   const at = text.lastIndexOf(" ");
   if (at === -1) return { firstName: clean(text), lastName: "" };

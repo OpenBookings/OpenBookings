@@ -20,7 +20,8 @@ export default async function PersonalDetailsPage() {
     <div className="flex w-full max-w-[640px] flex-col gap-6">
       <PageHeader title="Personal details" />
       <PersonalDetailsForm
-        name={session.user.name ?? ""}
+        firstName={session.user.firstName ?? ""}
+        lastName={session.user.lastName ?? ""}
         phone={splitPhone(phone, address?.country ?? "NL")}
         address={address}
         countries={COUNTRIES}

@@ -38,11 +38,17 @@ export const dynamic = 'force-dynamic';
  * bypassed; the real refusal lives in `POST /api/checkout`, which reads the
  * session itself and will not create a Session without one.
  */
-async function getViewer(): Promise<(GateViewer & { id: string }) | null> {
+async function getViewer(): Promise<(GateViewer & { id: string; firstName: string; lastName: string }) | null> {
   try {
     const session = await getServerSession();
     if (!session?.user?.email || !session.user.id) return null;
-    return { id: session.user.id, email: session.user.email, name: session.user.name ?? null };
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name ?? null,
+      firstName: session.user.firstName ?? '',
+      lastName: session.user.lastName ?? '',
+    };
   } catch {
     // A session that cannot be read is a session we do not have. The gate
     // asks for sign-in, which is the right outcome either way.
@@ -91,7 +97,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ inten
   // so the card is filled on first paint.
   const profile = await readGuestProfile(viewer.id);
   const guestDetails = prefillFromProfile({
-    name: viewer.name ?? '',
+    firstName: viewer.firstName,
+    lastName: viewer.lastName,
     email: viewer.email,
     phone: profile.phone,
     address: profile.address,

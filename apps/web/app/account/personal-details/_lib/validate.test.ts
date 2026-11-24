@@ -5,7 +5,7 @@ import {
   parseAddress,
   parseCheckoutDetails,
   parseDetails,
-  parseName,
+  parseNames,
   parsePhone,
 } from "./validate";
 
@@ -15,13 +15,48 @@ function form(entries: Record<string, string>): FormData {
   return f;
 }
 
-describe("parseName", () => {
-  test("trims and accepts 1–100 characters", () => {
-    expect(parseName(form({ name: "  Anna de Vries  " }))).toEqual({ ok: true, value: "Anna de Vries" });
+describe("parseNames", () => {
+  test("keeps particles and diacritics exactly as typed", () => {
+    expect(parseNames(form({ firstName: "José María", lastName: "García" }))).toEqual({
+      ok: true,
+      firstName: "José María",
+      lastName: "García",
+    });
+    expect(parseNames(form({ firstName: "Anna de", lastName: "Vries" }))).toEqual({
+      ok: true,
+      firstName: "Anna de",
+      lastName: "Vries",
+    });
   });
-  test("rejects empty and over-long names", () => {
-    expect(parseName(form({ name: "   " }))).toEqual({ ok: false, errors: { name: "Enter your name." } });
-    expect(parseName(form({ name: "a".repeat(101) })).ok).toBe(false);
+  test("trims, and treats NBSP and other Unicode whitespace as whitespace", () => {
+    expect(parseNames(form({ firstName: "\u00a0 Anna\u00a0 de ", lastName: "\u2003Vries\u3000" }))).toEqual({
+      ok: true,
+      firstName: "Anna de",
+      lastName: "Vries",
+    });
+  });
+  test("whitespace-only is rejected on the field", () => {
+    expect(parseNames(form({ firstName: "  ", lastName: "Vries" }))).toEqual({
+      ok: false,
+      field: "firstName",
+      error: "Enter your first name",
+    });
+    expect(parseNames(form({ firstName: "Anna", lastName: "\u00a0\u00a0" }))).toEqual({
+      ok: false,
+      field: "lastName",
+      error: "Enter your last name",
+    });
+  });
+  test("accepts 50 characters, rejects 51", () => {
+    expect(parseNames(form({ firstName: "a".repeat(50), lastName: "b" })).ok).toBe(true);
+    expect(parseNames(form({ firstName: "a", lastName: "b".repeat(51) }))).toEqual({
+      ok: false,
+      field: "lastName",
+      error: "Use 50 characters or fewer",
+    });
+  });
+  test("counts length after trimming", () => {
+    expect(parseNames(form({ firstName: "  " + "a".repeat(50) + "  ", lastName: "b" })).ok).toBe(true);
   });
 });
 
@@ -76,7 +111,8 @@ describe("parseAddress", () => {
 
 describe("parseDetails", () => {
   const full = {
-    name: "Anna de Vries",
+    firstName: "Anna de",
+    lastName: "Vries",
     phone: "06 1234 5678",
     phoneCountry: "NL",
     line1: "Oudegracht 1",
@@ -90,7 +126,8 @@ describe("parseDetails", () => {
     expect(parseDetails(form(full))).toEqual({
       ok: true,
       value: {
-        name: "Anna de Vries",
+        firstName: "Anna de",
+        lastName: "Vries",
         phone: "+31 6 12345678",
         address: { line1: "Oudegracht 1", line2: null, postalCode: "3511 AA", city: "Utrecht", country: "NL" },
       },
@@ -100,14 +137,15 @@ describe("parseDetails", () => {
     const empty = { ...full, phone: "", line1: "", postalCode: "", city: "", country: "" };
     expect(parseDetails(form(empty))).toEqual({
       ok: true,
-      value: { name: "Anna de Vries", phone: null, address: null },
+      value: { firstName: "Anna de", lastName: "Vries", phone: null, address: null },
     });
   });
   test("errors from every part are reported at once", () => {
-    expect(parseDetails(form({ ...full, name: "", phone: "call me", city: "" }))).toEqual({
+    expect(parseDetails(form({ ...full, firstName: "", lastName: " ", phone: "call me", city: "" }))).toEqual({
       ok: false,
       errors: {
-        name: "Enter your name.",
+        firstName: "Enter your first name",
+        lastName: "Enter your last name",
         phone: PHONE_ERROR,
         city: "Enter a city.",
       },
@@ -117,7 +155,8 @@ describe("parseDetails", () => {
 
 describe("parseCheckoutDetails", () => {
   const complete = {
-    name: "Sanne de Vries",
+    firstName: "Sanne",
+    lastName: "de Vries",
     phone: "6 23456789",
     phoneCountry: "NL",
     line1: "Oudegracht 112",
@@ -161,11 +200,11 @@ describe("parseCheckoutDetails", () => {
   });
 
   test("reports every missing part at once", () => {
-    const parsed = parseCheckoutDetails(form({ ...complete, name: "", phone: "" }));
-    expect(parsed).toEqual({ ok: false, errors: { name: "Enter your name.", phone: PHONE_REQUIRED } });
+    const parsed = parseCheckoutDetails(form({ ...complete, firstName: "", phone: "" }));
+    expect(parsed).toEqual({ ok: false, errors: { firstName: "Enter your first name", phone: PHONE_REQUIRED } });
   });
 
   test("the account page still treats phone and address as optional", () => {
-    expect(parseDetails(form({ name: "Sanne de Vries", phone: "", phoneCountry: "NL" })).ok).toBe(true);
+    expect(parseDetails(form({ firstName: "Sanne", lastName: "de Vries", phone: "", phoneCountry: "NL" })).ok).toBe(true);
   });
 });

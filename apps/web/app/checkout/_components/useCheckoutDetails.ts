@@ -12,7 +12,7 @@ import { saveCheckoutDetails } from '../_lib/details-actions';
 import { isCompleteForCheckout, prefillToFormData, type GuestDetailsPrefill } from '../_lib/guest-details';
 
 /** Page order: the first field with an error gets focus. */
-const FIELD_ORDER: DetailsField[] = ['name', 'phone', 'line1', 'line2', 'postalCode', 'city', 'country'];
+const FIELD_ORDER: DetailsField[] = ['firstName', 'lastName', 'phone', 'line1', 'line2', 'postalCode', 'city', 'country'];
 
 export type CheckoutDetailsController = {
   mode: 'summary' | 'form';
@@ -46,7 +46,8 @@ export type SaveOutcome =
 
 function toPrefill(details: CheckoutDetails, email: string): GuestDetailsPrefill {
   return {
-    name: details.name,
+    firstName: details.firstName,
+    lastName: details.lastName,
     email,
     phone: splitPhone(details.phone, details.address.country),
     address: details.address,

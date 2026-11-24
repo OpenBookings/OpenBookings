@@ -9,7 +9,8 @@ import {
 } from "./guest-details";
 
 const complete: GuestDetailsPrefill = {
-  name: "Sanne de Vries",
+  firstName: "Sanne",
+  lastName: "de Vries",
   email: "sanne.devries@example.com",
   phone: { country: "NL", number: "6 23456789" },
   address: { line1: "Oudegracht 112", line2: null, postalCode: "3511 AV", city: "Utrecht", country: "NL" },
@@ -23,7 +24,10 @@ describe("isCompleteForCheckout", () => {
   test("anything required missing opens the form", () => {
     expect(isCompleteForCheckout({ ...complete, address: null })).toBe(false);
     expect(isCompleteForCheckout({ ...complete, phone: { country: "NL", number: "" } })).toBe(false);
-    expect(isCompleteForCheckout({ ...complete, name: "" })).toBe(false);
+    expect(isCompleteForCheckout({ ...complete, firstName: "" })).toBe(false);
+    // Magic-link sign-ups have no names yet: both are asked at checkout.
+    expect(isCompleteForCheckout({ ...complete, firstName: "", lastName: "" })).toBe(false);
+    expect(isCompleteForCheckout({ ...complete, lastName: "" })).toBe(false);
   });
 
   test("a number saved before the picker that doesn't parse opens the form", () => {
@@ -32,7 +36,8 @@ describe("isCompleteForCheckout", () => {
 
   test("a first booking with no saved details: form, Dutch dialling code by default", () => {
     const firstTime: GuestDetailsPrefill = {
-      name: "Sanne de Vries",
+      firstName: "Sanne",
+      lastName: "de Vries",
       email: "sanne.devries@example.com",
       phone: splitPhone(null, "NL"),
       address: null,
@@ -45,7 +50,9 @@ describe("isCompleteForCheckout", () => {
 describe("prefillToFormData", () => {
   test("uses the account form's field names, empty for what's missing", () => {
     const data = prefillToFormData({ ...complete, address: null });
-    expect(data.get("name")).toBe("Sanne de Vries");
+    expect(data.get("firstName")).toBe("Sanne");
+    expect(data.get("lastName")).toBe("de Vries");
+    expect(data.has("name")).toBe(false);
     expect(data.get("phone")).toBe("6 23456789");
     expect(data.get("phoneCountry")).toBe("NL");
     expect(data.get("line1")).toBe("");
@@ -57,7 +64,8 @@ describe("toStripeContact", () => {
   test("maps the saved details to Stripe's billing address and an E.164 phone", () => {
     expect(
       toStripeContact({
-        name: "Sanne de Vries",
+        firstName: "Sanne",
+        lastName: "de Vries",
         phone: "+31 6 23456789",
         address: { line1: "Oudegracht 112", line2: null, postalCode: "3511 AV", city: "Utrecht", country: "NL" },
       }),
@@ -75,20 +83,20 @@ describe("prefillFromProfile", () => {
   const address = { line1: "Hauptstraße 1", line2: null, postalCode: "10115", city: "Berlin", country: "DE" };
 
   test("a number saved without its + code is never trusted: the form opens on it", () => {
-    const prefill = prefillFromProfile({ name: "Sanne de Vries", email: "s@example.com", phone: "0612345678", address });
+    const prefill = prefillFromProfile({ firstName: "Sanne", lastName: "de Vries", email: "s@example.com", phone: "0612345678", address });
     expect(prefill.phone.needsCheck).toBe(true);
     expect(prefill.phone.number).toBe("0612345678");
     expect(isCompleteForCheckout(prefill)).toBe(false);
   });
 
   test("a number saved in international format is split for the picker as usual", () => {
-    const prefill = prefillFromProfile({ name: "Sanne de Vries", email: "s@example.com", phone: "+31 6 23456789", address });
+    const prefill = prefillFromProfile({ firstName: "Sanne", lastName: "de Vries", email: "s@example.com", phone: "+31 6 23456789", address });
     expect(prefill.phone).toEqual({ country: "NL", number: "6 23456789" });
     expect(isCompleteForCheckout(prefill)).toBe(true);
   });
 
   test("no saved number: an empty field on the address country, or NL", () => {
-    expect(prefillFromProfile({ name: "A", email: "a@example.com", phone: null, address }).phone).toEqual({ country: "DE", number: "" });
-    expect(prefillFromProfile({ name: "A", email: "a@example.com", phone: null, address: null }).phone).toEqual({ country: "NL", number: "" });
+    expect(prefillFromProfile({ firstName: "A", lastName: "B", email: "a@example.com", phone: null, address }).phone).toEqual({ country: "DE", number: "" });
+    expect(prefillFromProfile({ firstName: "A", lastName: "B", email: "a@example.com", phone: null, address: null }).phone).toEqual({ country: "NL", number: "" });
   });
 });

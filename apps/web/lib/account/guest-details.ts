@@ -5,11 +5,11 @@ import type { Address, Details } from "@/app/account/personal-details/_lib/valid
 
 /**
  * Writes a guest's personal details: phone and address to `guest_profile`
- * (which hosts read for their bookings), the name through Better Auth so the
+ * (which hosts read for their bookings), the first and last name through Better Auth so the
  * session's cached user follows. Shared by the account page and checkout.
  * Throws when either write fails; callers turn that into copy.
  */
-export async function saveGuestDetails(userId: string, currentName: string | null, details: Details): Promise<void> {
+export async function saveGuestDetails(userId: string, current: { firstName: string; lastName: string }, details: Details): Promise<void> {
   const { phone, address: a } = details;
   await query(
     `INSERT INTO guest_profile (user_id, phone, address_line1, address_line2, postal_code, city, country)
@@ -21,8 +21,12 @@ export async function saveGuestDetails(userId: string, currentName: string | nul
        updated_at = now()`,
     [userId, phone, a?.line1 ?? null, a?.line2 ?? null, a?.postalCode ?? null, a?.city ?? null, a?.country ?? null],
   );
-  if (details.name !== currentName) {
-    await auth.api.updateUser({ headers: await headers(), body: { name: details.name } });
+  // Names go through Better Auth only: the database derives `name` from them.
+  if (details.firstName !== current.firstName || details.lastName !== current.lastName) {
+    await auth.api.updateUser({
+      headers: await headers(),
+      body: { firstName: details.firstName, lastName: details.lastName },
+    });
   }
 }
 

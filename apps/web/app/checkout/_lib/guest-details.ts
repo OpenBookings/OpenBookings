@@ -12,7 +12,8 @@ import {
  * when it is complete.
  */
 export type GuestDetailsPrefill = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   /**
    * `needsCheck`: the stored number had no "+" code (saved before the country
@@ -26,7 +27,8 @@ export type GuestDetailsPrefill = {
 /** The same field names the account page's form posts. */
 export function prefillToFormData(p: GuestDetailsPrefill): FormData {
   const data = new FormData();
-  data.set("name", p.name);
+  data.set("firstName", p.firstName);
+  data.set("lastName", p.lastName);
   data.set("phone", p.phone.number);
   data.set("phoneCountry", p.phone.country);
   data.set("line1", p.address?.line1 ?? "");
@@ -39,7 +41,8 @@ export function prefillToFormData(p: GuestDetailsPrefill): FormData {
 
 /** The prefill for a guest, from what their account stores. */
 export function prefillFromProfile(profile: {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string | null;
   address: Address | null;
@@ -49,7 +52,8 @@ export function prefillFromProfile(profile: {
   // splitPhone has pinned it to the fallback, which may be wrong.
   const needsCheck = profile.phone !== null && profile.phone.trim() !== "" && !parsePhoneNumberFromString(profile.phone);
   return {
-    name: profile.name,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
     email: profile.email,
     phone: needsCheck ? { ...phone, needsCheck: true } : phone,
     address: profile.address,
@@ -74,7 +78,7 @@ export function toStripeContact(d: CheckoutDetails): StripeContact {
   const { address: a } = d;
   return {
     billingAddress: {
-      name: d.name,
+      name: `${d.firstName} ${d.lastName}`,
       address: { line1: a.line1, line2: a.line2, postal_code: a.postalCode, city: a.city, country: a.country },
     },
     // Stored international ("+31 6 23456789"), so it always parses; the

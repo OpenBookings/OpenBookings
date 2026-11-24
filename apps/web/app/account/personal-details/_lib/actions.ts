@@ -21,7 +21,7 @@ export async function saveDetails(_prev: SaveState, form: FormData): Promise<Sav
   const parsed = parseDetails(form);
   if (!parsed.ok) return { status: "error", errors: parsed.errors };
   try {
-    await saveGuestDetails(session.user.id, session.user.name ?? null, parsed.value);
+    await saveGuestDetails(session.user.id, { firstName: session.user.firstName ?? "", lastName: session.user.lastName ?? "" }, parsed.value);
   } catch {
     return FAILED;
   }
