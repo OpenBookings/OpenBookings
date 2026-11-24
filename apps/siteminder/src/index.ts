@@ -5,6 +5,7 @@ import { getPool } from "./db/pool";
 import type { Queryable } from "./db/migrate";
 import { assertRequiredEnv, env } from "./env";
 import { removeInstallation, upsertInstallation } from "./installations";
+import { type SoapDeps, defaultSoapDeps, handleSoap } from "./soap/route";
 
 // Only when this file is the entrypoint — importing it (tests) must not
 // require the production env set.
@@ -20,7 +21,7 @@ function hasBearer(header: string | undefined, secret: string): boolean {
   return timingSafeEqual(sha256(presented), sha256(secret));
 }
 
-export function createApp(getDb: () => Queryable = getPool) {
+export function createApp(getDb: () => Queryable = getPool, soapDeps: SoapDeps = defaultSoapDeps) {
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ ok: true }));
@@ -48,6 +49,8 @@ export function createApp(getDb: () => Queryable = getPool) {
     if (UUID.test(id)) await removeInstallation(getDb(), id);
     return c.body(null, 204);
   });
+
+  app.post("/soap", (c) => handleSoap(c, getDb, soapDeps));
 
   return app;
 }

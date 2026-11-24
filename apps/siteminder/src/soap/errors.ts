@@ -23,3 +23,12 @@ export const invalidNumberOfAdults = (expecting?: number): OtaError => ({
 
 /** Structural problems (Type 10, no Code, as in SiteMinder's "Node CreateDateTime must exist" sample). */
 export const invalidRequest = (message: string): OtaError => ({ type: 10, message });
+
+/**
+ * The docs' error table has no entry for "our backend is down". Type 12 (OTA "Processing exception") is the
+ * type SiteMinder's own sample uses for processing-level failures; no Code, as with the structural errors.
+ */
+export const temporarilyUnavailable = (): OtaError => ({
+  type: 12,
+  message: "Room and rate configuration is temporarily unavailable, please try again shortly",
+});

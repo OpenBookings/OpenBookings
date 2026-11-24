@@ -48,7 +48,7 @@ function statusError(status: number, path: string): CoreApiError {
 export function coreClient(inst: AppInstallation, fetchImpl: typeof fetch = fetch) {
   const base = inst.coreBaseUrl.replace(/\/+$/, "");
 
-  async function call(path: string, init: { method: string; body?: unknown }): Promise<Response> {
+  async function call(path: string, init: { method: string; body?: unknown; timeoutMs?: number }): Promise<Response> {
     try {
       return await fetchImpl(`${base}/api/apps/v1${path}`, {
         method: init.method,
@@ -58,7 +58,7 @@ export function coreClient(inst: AppInstallation, fetchImpl: typeof fetch = fetc
           ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
         },
         body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-        signal: AbortSignal.timeout(CORE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(init.timeoutMs ?? CORE_TIMEOUT_MS),
       });
     } catch (e) {
       throw new CoreApiError(`core ${path} unreachable: ${e instanceof Error ? e.message : String(e)}`, "network", null, true);
@@ -80,9 +80,10 @@ export function coreClient(inst: AppInstallation, fetchImpl: typeof fetch = fetc
   }
 
   return {
-    async structure(): Promise<AppStructure> {
+    /** `timeoutMs` shortens the wait for callers with a reply budget (SiteMinder's Rooms and Rates). */
+    async structure(opts: { timeoutMs?: number } = {}): Promise<AppStructure> {
       const path = "/structure";
-      const res = await call(path, { method: "GET" });
+      const res = await call(path, { method: "GET", timeoutMs: opts.timeoutMs });
       if (!res.ok) throw statusError(res.status, path);
       return parse(AppStructureSchema, await json(res, path), path, res.status);
     },
