@@ -703,13 +703,6 @@ CREATE TABLE public.analytics_month_cache (
     facts jsonb NOT NULL,
     built_at timestamp with time zone DEFAULT now() NOT NULL
 );
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN hotel_id SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN month SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN version SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN generation SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN hotel_generation SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN facts SET (pg_attver=1331488608);
-ALTER TABLE ONLY public.analytics_month_cache ALTER COLUMN built_at SET (pg_attver=1331488608);
 
 
 --
@@ -721,9 +714,6 @@ CREATE TABLE public.analytics_month_generation (
     month date NOT NULL,
     generation bigint DEFAULT 0 NOT NULL
 );
-ALTER TABLE ONLY public.analytics_month_generation ALTER COLUMN hotel_id SET (pg_attver=1331512168);
-ALTER TABLE ONLY public.analytics_month_generation ALTER COLUMN month SET (pg_attver=1331512168);
-ALTER TABLE ONLY public.analytics_month_generation ALTER COLUMN generation SET (pg_attver=1331512168);
 
 
 --
@@ -796,11 +786,6 @@ CREATE TABLE public.booking_intent_payment_sessions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT booking_intent_payment_sessions_amount_cents_check CHECK ((amount_cents >= 0))
 );
-ALTER TABLE ONLY public.booking_intent_payment_sessions ALTER COLUMN session_id SET (pg_attver=381057160);
-ALTER TABLE ONLY public.booking_intent_payment_sessions ALTER COLUMN intent_id SET (pg_attver=381057160);
-ALTER TABLE ONLY public.booking_intent_payment_sessions ALTER COLUMN account_id SET (pg_attver=381057160);
-ALTER TABLE ONLY public.booking_intent_payment_sessions ALTER COLUMN amount_cents SET (pg_attver=381057160);
-ALTER TABLE ONLY public.booking_intent_payment_sessions ALTER COLUMN created_at SET (pg_attver=381057160);
 
 
 --
@@ -836,20 +821,6 @@ CREATE TABLE public.booking_intent_rooms (
     CONSTRAINT booking_intent_rooms_nights_array CHECK ((jsonb_typeof(nights) = 'array'::text)),
     CONSTRAINT booking_intent_rooms_pay_at_property_cents_check CHECK ((pay_at_property_cents >= 0))
 );
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN stay_total_cents SET (pg_attver=1567455704);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN tourist_tax_cents SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN tourist_tax_lines SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN sort_order SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN cots SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN extra_beds SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN infants SET (pg_attver=1567514424);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN pay_at_property_cents SET (pg_attver=1567574416);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN discount_label SET (pg_attver=1567574416);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN discount_cents SET (pg_attver=1567638040);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN rate_nights SET (pg_attver=1567638040);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN extra_guests SET (pg_attver=1567638040);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN pay_at_property_lines SET (pg_attver=1567638040);
-ALTER TABLE ONLY public.booking_intent_rooms ALTER COLUMN vat_split SET (pg_attver=1567638040);
 
 
 --
@@ -881,18 +852,6 @@ CREATE TABLE public.booking_intents (
     CONSTRAINT booking_intents_dates CHECK ((check_out_date > check_in_date)),
     CONSTRAINT booking_intents_status_check CHECK ((status = ANY (ARRAY['open'::text, 'paid'::text, 'expired'::text, 'failed'::text, 'abandoned'::text, 'oversold'::text, 'refunded_oversold'::text])))
 );
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN total_cents SET (pg_attver=1567274248);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN tourist_tax_cents SET (pg_attver=1567334000);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN commission_cents SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN currency SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN payment_provider SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN payment_session_id SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN payment_account_id SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN payment_reference SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN refund_reference SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN booking_id SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN created_at SET (pg_attver=1567392760);
-ALTER TABLE ONLY public.booking_intents ALTER COLUMN updated_at SET (pg_attver=1567392760);
 
 
 --
@@ -1325,7 +1284,6 @@ CREATE TABLE public.properties (
     CONSTRAINT properties_breakfast_value_cents_check CHECK ((breakfast_value_cents >= 0)),
     CONSTRAINT properties_commission_rate_range CHECK (((commission_rate >= (0)::numeric) AND (commission_rate < 0.5)))
 );
-ALTER TABLE ONLY public.properties ALTER COLUMN breakfast_value_cents SET (pg_attver=1566982880);
 
 
 --
@@ -1425,8 +1383,6 @@ CREATE TABLE public.rate_modifiers (
     CONSTRAINT rate_modifiers_discount_sign CHECK (((type <> ALL (ARRAY['length_of_stay'::public.rate_modifier_type, 'early_bird'::public.rate_modifier_type])) OR (adjustment_value < 0))),
     CONSTRAINT rate_modifiers_last_minute_discount_percent CHECK (((type <> 'last_minute'::public.rate_modifier_type) OR (adjustment_value > 0) OR (adjustment_type = 'percent'::public.adjustment_type)))
 );
-ALTER TABLE ONLY public.rate_modifiers ALTER COLUMN rule_group_id SET (pg_attver=507313512);
-ALTER TABLE ONLY public.rate_modifiers ALTER COLUMN applies_to_all SET (pg_attver=507316824);
 
 
 --
@@ -1539,19 +1495,6 @@ CREATE TABLE public.refunds (
     CONSTRAINT refunds_source_check CHECK ((source = ANY (ARRAY['openbookings'::text, 'stripe_dashboard'::text, 'dispute'::text]))),
     CONSTRAINT refunds_split_explained CHECK (((split_explained_at IS NULL) OR (source <> 'openbookings'::text)))
 );
-ALTER TABLE ONLY public.refunds ALTER COLUMN accommodation_cents SET (pg_attver=1567187816);
-ALTER TABLE ONLY public.refunds ALTER COLUMN tourist_tax_cents SET (pg_attver=1567214416);
-ALTER TABLE ONLY public.refunds ALTER COLUMN amount_cents SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN breakdown SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN status SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN stripe_refund_id SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN idempotency_key SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN created_by SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN created_at SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN last_attempt_at SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN source SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN split_explained_at SET (pg_attver=1567242336);
-ALTER TABLE ONLY public.refunds ALTER COLUMN split_explained_by SET (pg_attver=1567242336);
 
 
 --
@@ -1595,21 +1538,6 @@ CREATE TABLE public.reservations (
     CONSTRAINT reservations_price_positive CHECK ((price_per_night_cents >= 0)),
     CONSTRAINT reservations_total_positive CHECK ((total_cents >= 0))
 );
-ALTER TABLE ONLY public.reservations ALTER COLUMN tourist_tax_cents SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN tourist_tax_lines SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN cancellation_tier SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN check_in_at SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN grace_until SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN full_refund_until SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN partial_refund_until SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN nights SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN policy_version SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN cancelled_at SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN cots SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN extra_beds SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN infants SET (pg_attver=1567070360);
-ALTER TABLE ONLY public.reservations ALTER COLUMN pay_at_property_cents SET (pg_attver=1567113824);
-ALTER TABLE ONLY public.reservations ALTER COLUMN vat_split SET (pg_attver=1567113824);
 
 
 --
@@ -1827,7 +1755,6 @@ CREATE TABLE public.session (
     "lastFactorVerifiedAt" timestamp with time zone,
     "activePropertyId" uuid
 );
-ALTER TABLE ONLY public.session ALTER COLUMN "activePropertyId" SET (pg_attver=881518744);
 
 
 --
@@ -1940,7 +1867,6 @@ CREATE TABLE public.tourist_tax_rules (
     CONSTRAINT tourist_tax_rules_charges_array CHECK ((jsonb_typeof(charges) = 'array'::text)),
     CONSTRAINT tourist_tax_rules_max_nights CHECK (((max_nights IS NULL) OR (max_nights > 0)))
 );
-ALTER TABLE ONLY public.tourist_tax_rules ALTER COLUMN infants_taxed SET (pg_attver=560086352);
 
 
 --
@@ -1963,7 +1889,6 @@ CREATE TABLE public.transactions (
     CONSTRAINT transactions_amount_positive CHECK ((amount_cents > 0)),
     CONSTRAINT transactions_currency_eur CHECK ((currency = 'EUR'::bpchar))
 );
-ALTER TABLE ONLY public.transactions ALTER COLUMN amount_cents SET (pg_attver=1567861336);
 
 
 --

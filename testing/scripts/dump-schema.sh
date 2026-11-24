@@ -26,7 +26,8 @@ pg_dump "$SCHEMA_SOURCE_URL" --schema-only --no-owner --no-privileges --no-comme
   echo
   # \restrict / \unrestrict are psql meta-commands that pg_dump 17.6+ adds; older
   # psql versions reject them. The two extensions are not on stock Postgres.
-  grep -vE '^\\(un)?restrict |^CREATE EXTENSION IF NOT EXISTS (pg_session_jwt|vector) |^-- Name: (pg_session_jwt|vector); Type: EXTENSION' "$tmp"
+  # Neon also records a per-column pg_attver option that stock Postgres rejects.
+  grep -vE '^\\(un)?restrict |^CREATE EXTENSION IF NOT EXISTS (pg_session_jwt|vector) |^-- Name: (pg_session_jwt|vector); Type: EXTENSION|^ALTER TABLE ONLY .* SET \(pg_attver=' "$tmp"
 } > "$out"
 
 echo "Wrote $out ($(grep -c '^CREATE TABLE' "$out") tables)."
