@@ -63,7 +63,7 @@ async function dac7(db: Queryable, quarter: string): Promise<Table> {
          FROM bookings b JOIN properties p ON p.id = b.hotel_id
         WHERE b.confirmed_at IS NOT NULL AND p.organization_id IS NOT NULL
        UNION ALL
-       SELECT p.organization_id, -round(rf.accommodation_amount * 100)::bigint, rf.created_at
+       SELECT p.organization_id, -rf.accommodation_cents::bigint, rf.created_at
          FROM refunds rf JOIN bookings b ON b.id = rf.booking_id JOIN properties p ON p.id = b.hotel_id
         WHERE rf.status = 'succeeded' AND p.organization_id IS NOT NULL
      ), consideration AS (

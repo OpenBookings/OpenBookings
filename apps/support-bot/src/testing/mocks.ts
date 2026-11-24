@@ -88,8 +88,7 @@ function reservationRow(fake: FakeReservation): SupportReservation {
     check_out_time: "11:00:00",
     timezone: "Europe/Amsterdam",
     confirmed_at: "2026-08-01T00:00:00+00:00",
-    // Money as the tools read it: cents. The real row also has
-    // bookings.total_amount = 207 (whole euros); the lookup never selects it.
+    // Money as the tools read it and the database stores it: cents.
     total_cents: 20700,
     rooms_total_cents: 19050,
     tourist_tax_cents: 1650,

@@ -84,8 +84,8 @@ describeWithDb("analytics month cache invalidation", () => {
     await fillCache(propertyId, ["2031-01", "2031-02", "2031-03", "2031-04"]);
 
     await db.query(
-      `INSERT INTO refunds (booking_id, reason, source, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-       VALUES ($1, 'goodwill', 'openbookings', 50, 0, 50, 'succeeded', $2)`,
+      `INSERT INTO refunds (booking_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, 'goodwill', 'openbookings', 5000, 0, 5000, 'succeeded', $2)`,
       [bookingId, `k-${crypto.randomUUID()}`],
     );
 
@@ -238,8 +238,8 @@ describeWithDb("analytics month cache invalidation", () => {
     const { propertyId, bookingId } = await bookedHotel();
     await fillCache(propertyId, ["2031-01", "2031-02", "2031-03", "2031-04"]);
     await db.query(
-      `INSERT INTO refunds (booking_id, source, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-       VALUES ($1, 'stripe_dashboard', 20, 0, 20, 'succeeded', $2)`,
+      `INSERT INTO refunds (booking_id, source, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, 'stripe_dashboard', 2000, 0, 2000, 'succeeded', $2)`,
       [bookingId, `stripe_dashboard:re_${crypto.randomUUID()}`],
     );
     expect(await cachedMonths(propertyId)).toEqual(["2031-04"]);
@@ -314,8 +314,8 @@ describeWithDb("analytics month cache invalidation", () => {
     const { propertyId, bookingId } = await bookedHotel();
     const refund = (
       await db.query(
-        `INSERT INTO refunds (booking_id, reason, source, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-         VALUES ($1, 'goodwill', 'openbookings', 50, 0, 50, 'pending', $2) RETURNING id`,
+        `INSERT INTO refunds (booking_id, reason, source, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+         VALUES ($1, 'goodwill', 'openbookings', 5000, 0, 5000, 'pending', $2) RETURNING id`,
         [bookingId, `k-${crypto.randomUUID()}`],
       )
     ).rows[0].id as string;

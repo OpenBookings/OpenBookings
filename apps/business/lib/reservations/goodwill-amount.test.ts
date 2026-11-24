@@ -2,19 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { goodwillAmount } from "./goodwill-amount";
 
 describe("goodwillAmount", () => {
-  test("accepts a positive, finite euro amount", () => {
-    expect(goodwillAmount.parse(12.5)).toBe(12.5);
-    expect(goodwillAmount.safeParse(0.01).success).toBe(true);
+  test("reads what the host typed as cents", () => {
+    expect(goodwillAmount.parse("12,50")).toBe(1250);
+    expect(goodwillAmount.parse(" 12.5 ")).toBe(1250);
+    expect(goodwillAmount.parse("186.50")).toBe(18650);
+    expect(goodwillAmount.parse("0.01")).toBe(1);
   });
 
-  test("rejects NaN, Infinity, zero, negatives and non-numbers", () => {
-    for (const bad of [Number.NaN, Infinity, -Infinity, 0, -1, "10", null, undefined]) {
+  test("rejects zero, negatives, three decimals, thousands separators and junk", () => {
+    for (const bad of ["0", "0,00", "-1", "12.505", "1.234,50", "", "abc", "1e3", "NaN", "Infinity"]) {
       expect(goodwillAmount.safeParse(bad).success).toBe(false);
     }
   });
 
-  test("what the dialog sends for junk text is rejected", () => {
-    expect(goodwillAmount.safeParse(Number("abc".replace(",", "."))).success).toBe(false);
-    expect(goodwillAmount.safeParse(Number("".replace(",", "."))).success).toBe(false);
+  test("rejects anything that isn't text: a number got past the type system", () => {
+    for (const bad of [12.5, Number.NaN, Infinity, null, undefined, {}]) {
+      expect(goodwillAmount.safeParse(bad).success).toBe(false);
+    }
   });
 });

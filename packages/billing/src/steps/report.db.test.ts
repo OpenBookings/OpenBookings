@@ -128,13 +128,13 @@ describeWithDb("quarterly reports", () => {
       .stripe_payment_intent_id as string;
     const ownRefund = (o: { key: string; room: number; tax: number; status: string; at: string }) =>
       db.query(
-        `INSERT INTO refunds (booking_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key, created_at)
-         VALUES ($1, 'guest_cancellation', $2, $3, $2::numeric + $3::numeric, $4::payment_status, $5, $6)`,
+        `INSERT INTO refunds (booking_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key, created_at)
+         VALUES ($1, 'guest_cancellation', $2, $3, $2::bigint + $3::bigint, $4::payment_status, $5, $6)`,
         [nl.bookingId, o.room, o.tax, o.status, o.key, o.at],
       );
     // Ours in November: €100 room price and €3 tourist tax back; a failed one moved nothing.
-    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 100, tax: 3, status: "succeeded", at: "2100-11-02T10:00:00Z" });
-    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 80, tax: 0, status: "failed", at: "2100-11-03T10:00:00Z" });
+    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 10_000, tax: 300, status: "succeeded", at: "2100-11-02T10:00:00Z" });
+    await ownRefund({ key: `t:${crypto.randomUUID()}`, room: 8_000, tax: 0, status: "failed", at: "2100-11-03T10:00:00Z" });
     // The host refunded €50 in their own Dashboard in December, not explained: all of it room price.
     await recordOutsideRefund(db, {
       source: "stripe_dashboard",
@@ -156,7 +156,7 @@ describeWithDb("quarterly reports", () => {
       occurredAt: new Date("2101-01-10T10:00:00Z"),
     });
     await db.query(
-      `UPDATE refunds SET accommodation_amount = 30, tourist_tax_amount = 6, split_explained_at = NOW()
+      `UPDATE refunds SET accommodation_cents = 3000, tourist_tax_cents = 600, split_explained_at = NOW()
         WHERE idempotency_key = 'dispute:dp_next'`,
     );
 

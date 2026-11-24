@@ -13,7 +13,7 @@ import {
   type MailRoom,
   type RefundIssuedReason,
 } from "./booking-mail";
-import { formatEuro, formatStayDate } from "./format";
+import { formatStayDate, mailCents } from "./format";
 import type { ActionMail } from "./action-mail";
 import { trackMail, type EmailKind } from "./tracking";
 
@@ -120,8 +120,8 @@ type BookingRow = {
     /** False only for a non-refundable rate: the room price never comes back. */
     refundable: boolean;
     free_until: string | null;
-    nights: { date: string; price: number }[];
-    tax_lines: { label: string; amount: number }[];
+    nights: { date: string; priceCents: number }[];
+    tax_lines: { label: string; amountCents: number }[];
   }[];
 };
 
@@ -134,8 +134,7 @@ async function loadBooking(c: Ctx, bookingId: string): Promise<BookingRow | null
             u.email AS "guestEmail", COALESCE(u.name, u.email) AS "guestName",
             b.rooms_total_cents::float8 AS rooms_total_cents, b.tourist_tax_cents::float8 AS tourist_tax_cents,
             b.total_cents::float8 AS total_cents, b.commission_cents::float8 AS commission_cents,
-            -- pay_at_property_amount is euros (numeric 10,2); the mail works in cents.
-            (SELECT ROUND(COALESCE(SUM(r.pay_at_property_amount), 0) * 100)::float8
+            (SELECT COALESCE(SUM(r.pay_at_property_cents), 0)::float8
                FROM reservations r WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS pay_at_property_cents,
             COALESCE((
               SELECT json_agg(json_build_object(
@@ -192,8 +191,8 @@ const mailRooms = (rooms: BookingRow["rooms"]): MailRoom[] =>
     extras: extrasText(r.cots, r.extra_beds),
     refundable: r.refundable !== false,
     freeCancellationUntil: deadline(r.free_until),
-    nights: r.nights.map((n) => ({ date: n.date, price: Number(n.price) })),
-    touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amount: Number(t.amount) })),
+    nights: r.nights.map((n) => ({ date: n.date, priceCents: Number(n.priceCents) })),
+    touristTaxLines: r.tax_lines.map((t) => ({ label: t.label, amountCents: Number(t.amountCents) })),
   }));
 
 /** The guest's confirmation and the host's new-booking notice. */
@@ -231,10 +230,10 @@ export async function sendBookingConfirmed(bookingId: string, deps: SendDeps = {
 export async function sendOversoldRefunded(intentId: string, deps: SendDeps = {}): Promise<void> {
   const c = resolve(deps);
   const row = (
-    await rowsOf<{ guestEmail: string; property_name: string; amount: number }>(
+    await rowsOf<{ guestEmail: string; property_name: string; total_cents: number }>(
       c.db,
       `SELECT u.email AS "guestEmail", p.name AS property_name,
-              i.total_amount::float8 AS amount -- what was charged and refunded; includes tourist tax
+              i.total_cents::float8 AS total_cents -- what was charged and refunded; includes tourist tax
          FROM booking_intents i
          JOIN properties p ON p.id = i.property_id
          JOIN "user" u ON u.id = i.user_id
@@ -246,25 +245,24 @@ export async function sendOversoldRefunded(intentId: string, deps: SendDeps = {}
   await deliver(
     c,
     [row.guestEmail],
-    guestOversoldRefunded({ propertyName: row.property_name, amount: formatEuro(row.amount), searchUrl: `${trim(c.urls.webUrl)}/search` }),
+    guestOversoldRefunded({ propertyName: row.property_name, amount: mailCents(row.total_cents), searchUrl: `${trim(c.urls.webUrl)}/search` }),
   );
 }
 
 /**
- * What `cancelRooms` returned in `cancelled`. `refundFailed` is the part of
- * `refundTotal` Stripe refused (absent: none).
+ * What `cancelRooms` returned in `cancelled`, in cents. `refundFailedCents`
+ * is the part of `refundTotalCents` Stripe refused (absent: none).
  */
-export type CancelledRooms = { reservationIds: string[]; refundTotal: number; refundFailed?: number; cancelsBooking: boolean };
+export type CancelledRooms = { reservationIds: string[]; refundTotalCents: number; refundFailedCents?: number; cancelsBooking: boolean };
 
-const euroCents = (euros: number) => Math.round(euros * 100);
-
-/** Splits a refund into what went (or is on its way) and what Stripe refused, formatted; null for nothing. */
-function refundAmounts(total: number, failed: number): { refund: string | null; refundFailed: string | null } {
-  const failedCents = Math.min(Math.max(euroCents(failed), 0), Math.max(euroCents(total), 0));
-  const sentCents = Math.max(euroCents(total), 0) - failedCents;
+/** Splits a refund (cents) into what went (or is on its way) and what Stripe refused, formatted; null for nothing. */
+function refundAmounts(totalCents: number, failedCents: number): { refund: string | null; refundFailed: string | null } {
+  const total = Math.max(totalCents, 0);
+  const failed = Math.min(Math.max(failedCents, 0), total);
+  const sent = total - failed;
   return {
-    refund: sentCents > 0 ? formatEuro(sentCents / 100) : null,
-    refundFailed: failedCents > 0 ? formatEuro(failedCents / 100) : null,
+    refund: sent > 0 ? mailCents(sent) : null,
+    refundFailed: failed > 0 ? mailCents(failed) : null,
   };
 }
 
@@ -310,7 +308,7 @@ export async function sendBookingCancelled(
           guestBookingCancelled({
             propertyName: row.property_name,
             rooms: row.rooms,
-            ...refundAmounts(cancelled.refundTotal, cancelled.refundFailed ?? 0),
+            ...refundAmounts(cancelled.refundTotalCents, cancelled.refundFailedCents ?? 0),
             cancelsBooking,
             bookingUrl: bookingUrl(c, bookingId),
           }),
@@ -337,8 +335,8 @@ export async function sendBookingCancelled(
   }
 }
 
-/** What a lifecycle action returned in `refunds`: each refund row and what Stripe did with it. */
-export type IssuedRefund = { amount: number; status: "pending" | "succeeded" | "failed" };
+/** What a lifecycle action returned in `refunds`: each refund row (cents) and what Stripe did with it. */
+export type IssuedRefund = { amountCents: number; status: "pending" | "succeeded" | "failed" };
 
 /**
  * Tells the guest about a refund made outside a cancellation: an early
@@ -358,7 +356,7 @@ export async function sendRefundIssued(
   deps: SendDeps = {},
 ): Promise<void> {
   try {
-    const sum = (rows: IssuedRefund[]) => rows.reduce((total, r) => total + euroCents(r.amount), 0) / 100;
+    const sum = (rows: IssuedRefund[]) => rows.reduce((total, r) => total + r.amountCents, 0);
     const counted = issued.reason === "retry" ? issued.refunds.filter((r) => r.status === "succeeded") : issued.refunds;
     const amounts = refundAmounts(sum(counted), sum(counted.filter((r) => r.status === "failed")));
     if (!amounts.refund && !amounts.refundFailed) return;

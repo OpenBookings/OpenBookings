@@ -53,10 +53,10 @@ describeWithDb("booking emails against Postgres", () => {
     await db.query(`UPDATE reservations SET room_id = $2 WHERE id = $1`, [reservationIds[1], suite.id]);
     await db.query(`UPDATE rooms SET name = 'Deluxe Double' WHERE id = $1`, [ids.roomId]);
     // €100 a night + €3 tax, two nights, two rooms = €412.
-    await db.query(`UPDATE reservations SET nights = $1::jsonb`, [JSON.stringify([{ date: "2027-03-12", price: 100, touristTax: 3 }, { date: "2027-03-13", price: 100, touristTax: 3 }])]);
-    await db.query(`UPDATE reservations SET tourist_tax_amount = 6, tourist_tax_lines = $2::jsonb WHERE booking_id = $1`, [
+    await db.query(`UPDATE reservations SET nights = $1::jsonb`, [JSON.stringify([{ date: "2027-03-12", priceCents: 10_000, touristTaxCents: 300 }, { date: "2027-03-13", priceCents: 10_000, touristTaxCents: 300 }])]);
+    await db.query(`UPDATE reservations SET tourist_tax_cents = 600, tourist_tax_lines = $2::jsonb WHERE booking_id = $1`, [
       bookingId,
-      JSON.stringify([{ label: "€1.50 per person per night", amount: 6, effectiveFrom: "2026-01-01" }]),
+      JSON.stringify([{ label: "€1.50 per person per night", amountCents: 600, effectiveFrom: "2026-01-01" }]),
     ]);
     await db.query(
       `UPDATE bookings SET rooms_total_cents = 40000, tourist_tax_cents = 1200, total_cents = 41200, commission_cents = 1800 WHERE id = $1`,
@@ -125,7 +125,7 @@ describeWithDb("booking emails against Postgres", () => {
 
   test("cots, extra beds and infants are in both mails, with what is left to pay at the hotel", async () => {
     await db.query(
-      `UPDATE reservations SET cots = 1, extra_beds = 1, infants = 1, pay_at_property_amount = 37.50 WHERE id = $1`,
+      `UPDATE reservations SET cots = 1, extra_beds = 1, infants = 1, pay_at_property_cents = 3750 WHERE id = $1`,
       [reservationIds[0]],
     );
     await sendBookingConfirmed(bookingId, deps());
@@ -178,14 +178,14 @@ describeWithDb("booking emails against Postgres", () => {
 
   test("a cancellation is not tracked", async () => {
     const { marked, track } = tracker();
-    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotal: 103, cancelsBooking: false }, undefined, deps({ track }));
+    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotalCents: 10_300, cancelsBooking: false }, undefined, deps({ track }));
     expect(marked).toEqual([]);
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.every((m) => !/<!--[a-z_]+:/.test(m.html))).toBe(true);
   });
 
   test("a partial cancellation mails exactly the cancelled room and refund", async () => {
-    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotal: 103, cancelsBooking: false }, undefined, deps());
+    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotalCents: 10_300, cancelsBooking: false }, undefined, deps());
     expect(to()).toEqual([guestEmail, ...ownerEmails].sort());
     for (const m of sent) {
       expect(m.html).toContain("Deluxe Double");
@@ -196,7 +196,7 @@ describeWithDb("booking emails against Postgres", () => {
   });
 
   test("a cancellation whose refund Stripe refused tells the guest it is still owed", async () => {
-    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotal: 103, refundFailed: 103, cancelsBooking: false }, undefined, deps());
+    await sendBookingCancelled(bookingId, { reservationIds: [reservationIds[0]], refundTotalCents: 10_300, refundFailedCents: 10_300, cancelsBooking: false }, undefined, deps());
     const guest = sent.find((m) => m.to === guestEmail)!.html;
     expect(guest).toContain("We couldn't refund");
     expect(guest).toContain("€103.00");
@@ -206,7 +206,7 @@ describeWithDb("booking emails against Postgres", () => {
   test("an early departure refund mails the guest only, with what went and what didn't", async () => {
     await sendRefundIssued(
       bookingId,
-      { reason: "early_departure", refunds: [{ amount: 100, status: "succeeded" }, { amount: 3, status: "failed" }] },
+      { reason: "early_departure", refunds: [{ amountCents: 10_000, status: "succeeded" }, { amountCents: 300, status: "failed" }] },
       undefined,
       deps(),
     );
@@ -218,9 +218,9 @@ describeWithDb("booking emails against Postgres", () => {
   });
 
   test("a retry mails only the refunds that went through, and nothing when none did", async () => {
-    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amount: 50, status: "failed" }] }, undefined, deps());
+    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amountCents: 5_000, status: "failed" }] }, undefined, deps());
     expect(sent).toHaveLength(0);
-    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amount: 50, status: "succeeded" }, { amount: 9, status: "failed" }] }, undefined, deps());
+    await sendRefundIssued(bookingId, { reason: "retry", refunds: [{ amountCents: 5_000, status: "succeeded" }, { amountCents: 900, status: "failed" }] }, undefined, deps());
     expect(sent).toHaveLength(1);
     expect(sent[0].html).toContain("€50.00");
     expect(sent[0].html).not.toContain("€9.00");
@@ -231,8 +231,8 @@ describeWithDb("booking emails against Postgres", () => {
     const intent = await one<{ id: string }>(
       `INSERT INTO booking_intents
          (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at,
-          snapshot, total_amount, tourist_tax_amount)
-       SELECT b.user_id, $2, '2027-03-12', '2027-03-14', 'refunded_oversold', NOW(), '{}'::jsonb, 412, 12
+          snapshot, total_cents, tourist_tax_cents)
+       SELECT b.user_id, $2, '2027-03-12', '2027-03-14', 'refunded_oversold', NOW(), '{}'::jsonb, 41200, 1200
          FROM bookings b WHERE b.id = $1
        RETURNING id`,
       [bookingId, propertyId],
@@ -250,7 +250,7 @@ describeWithDb("booking emails against Postgres", () => {
     };
     await sendBookingCancelled(
       bookingId,
-      { reservationIds, refundTotal: 0, cancelsBooking: true },
+      { reservationIds, refundTotalCents: 0, cancelsBooking: true },
       (error, ctx) => reported.push({ error, kind: ctx.kind }),
       deps({ transport: failing }),
     );

@@ -52,8 +52,8 @@ describe("mistralToolSchemas", () => {
 });
 
 describe("amounts", () => {
-  // bookings.total_amount holds whole euros (207 for this booking); the prompt
-  // tells the model every amount is in cents. Only cent fields may reach it.
+  // The prompt tells the model every amount is in cents. Only cent fields may
+  // reach it, never a whole-euro name from before 0058.
   it("gives the model cents only, never the whole-euro columns", async () => {
     const result = await executeTool("get_reservation", { booking_reference: OWN_REF }, GUEST);
     expect(result).toMatchObject({

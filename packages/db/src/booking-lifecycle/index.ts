@@ -42,7 +42,7 @@ import {
   planCancellation,
   planEarlyDeparture,
   planGoodwill,
-  roomPaid,
+  roomPaidCents,
   type PlanError,
   type PlannedRefund,
   type RefundReason,
@@ -115,25 +115,26 @@ export type RefundStatus = "pending" | "succeeded" | "failed";
 /** What a cancelRooms call itself cancelled, so a caller can tell the guest exactly that. */
 export type CancelledRooms = {
   reservationIds: string[];
-  /** What the cancellation refunds, euros. */
-  refundTotal: number;
+  /** What the cancellation refunds, cents. */
+  refundTotalCents: number;
   /**
-   * The part of `refundTotal` Stripe refused, euros: it is owed but has not
-   * gone yet (a retry sends it). The rest went, or is on its way.
+   * The part of `refundTotalCents` Stripe refused, cents: it is owed but has
+   * not gone yet (a retry sends it). The rest went, or is on its way.
    */
-  refundFailed: number;
+  refundFailedCents: number;
   cancelsBooking: boolean;
 };
 
-/** What Stripe refused among `refunds`, euros. */
-export function failedRefundTotal(refunds: { amount: number; status: RefundStatus }[]): number {
-  return refunds.filter((r) => r.status === "failed").reduce((sum, r) => sum + Math.round(r.amount * 100), 0) / 100;
+/** What Stripe refused among `refunds`, cents. */
+export function failedRefundTotalCents(refunds: { amountCents: number; status: RefundStatus }[]): number {
+  return refunds.filter((r) => r.status === "failed").reduce((sum, r) => sum + r.amountCents, 0);
 }
 
 export type LifecycleResult =
   | {
       ok: true;
-      refunds: { reservationId: string | null; amount: number; status: RefundStatus }[];
+      /** One per refund row, `amountCents` as stored and as sent to Stripe. */
+      refunds: { reservationId: string | null; amountCents: number; status: RefundStatus }[];
       /** Set by cancelRooms only. */
       cancelled?: CancelledRooms;
     }
@@ -172,7 +173,7 @@ type ReservationRow = {
   policy_version: string | null;
   nights: NightValue[];
   cancelled_at: Date | null;
-  refunded: number;
+  refunded_cents: number;
 };
 
 export type BookingState = {
@@ -181,13 +182,13 @@ export type BookingState = {
   /** What may happen now. Empty for a booking without a policy snapshot (still pending). */
   actions: BookingAction[];
   /**
-   * Refund rows on the whole booking so far, euros — failed and pending ones
+   * Refund rows on the whole booking so far, cents — failed and pending ones
    * included, until they are reconciled, so a cap never assumes money that
    * may already have left. Money the host refunded outside OpenBookings, or
    * lost in a dispute, is in here too (0053): Stripe would refuse to refund it
    * again.
    */
-  refunded: number;
+  refundedCents: number;
 };
 
 /**
@@ -228,7 +229,8 @@ export async function loadBookingState(
   const { rows } = await db.query(
     `SELECT res.id, res.cancellation_tier, res.check_in_at, res.full_refund_until,
             res.policy_version, res.nights, res.cancelled_at,
-            COALESCE((SELECT SUM(rf.amount) FROM refunds rf WHERE rf.reservation_id = res.id), 0)::float8 AS refunded
+            -- float8, not int8 (which pg returns as a string); sums of cents stay exact in it.
+            COALESCE((SELECT SUM(rf.amount_cents) FROM refunds rf WHERE rf.reservation_id = res.id), 0)::float8 AS refunded_cents
      FROM reservations res WHERE res.booking_id = $1
      ORDER BY res.created_at, res.id`,
     [bookingId],
@@ -236,7 +238,7 @@ export async function loadBookingState(
   const reservations = rows as ReservationRow[];
 
   const { rows: totals } = await db.query(
-    `SELECT COALESCE(SUM(amount), 0)::float8 AS refunded FROM refunds WHERE booking_id = $1`,
+    `SELECT COALESCE(SUM(amount_cents), 0)::float8 AS refunded_cents FROM refunds WHERE booking_id = $1`,
     [bookingId],
   );
 
@@ -253,7 +255,7 @@ export async function loadBookingState(
         },
         nights: r.nights,
         cancelledAt: r.cancelled_at,
-        refunded: Number(r.refunded),
+        refundedCents: Number(r.refunded_cents),
       }))
     : [];
 
@@ -280,7 +282,7 @@ export async function loadBookingState(
     : []
   ).filter((a) => !(a === "record_early_departure" && booking.departed_early_on));
 
-  return { booking, rooms, actions, refunded: Number((totals[0] as { refunded: number }).refunded) };
+  return { booking, rooms, actions, refundedCents: Number((totals[0] as { refunded_cents: number }).refunded_cents) };
 }
 
 // ── Writing ───────────────────────────────────────────────────────────────────
@@ -307,9 +309,9 @@ async function recordEventSafely(db: Queryable, event: NewBookingEvent): Promise
 type RefundRow = {
   id: string;
   reservationId: string | null;
-  amount: number;
-  /** The room-price part of `amount`, euros; the rest is tourist tax. */
-  accommodation: number;
+  amountCents: number;
+  /** The room-price part of `amountCents`; the rest is tourist tax. */
+  accommodationCents: number;
   key: string;
   status?: "pending" | "failed";
   createdAt?: Date;
@@ -319,31 +321,48 @@ async function insertRefund(
   tx: Queryable,
   bookingId: string,
   actor: Actor,
-  r: { reservationId: string | null; reason: RefundReason; accommodation: number; touristTax: number; key: string; breakdown: unknown },
+  r: {
+    reservationId: string | null;
+    reason: RefundReason;
+    accommodationCents: number;
+    touristTaxCents: number;
+    key: string;
+    breakdown: unknown;
+  },
 ): Promise<RefundRow> {
+  // Whole cents only: a fraction is a caller bug, never something to round away.
+  if (!Number.isSafeInteger(r.accommodationCents) || !Number.isSafeInteger(r.touristTaxCents)) {
+    throw new RangeError(`A refund must be whole cents (got ${r.accommodationCents} + ${r.touristTaxCents})`);
+  }
   const { rows } = await tx.query(
     `INSERT INTO refunds
-       (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount,
+       (booking_id, reservation_id, reason, accommodation_cents, tourist_tax_cents, amount_cents,
         breakdown, idempotency_key, created_by)
-     VALUES ($1, $2, $3::refund_reason, $4, $5, $4::numeric + $5::numeric, $6::jsonb, $7, $8)
-     RETURNING id, amount::float8 AS amount, accommodation_amount::float8 AS accommodation`,
-    [bookingId, r.reservationId, r.reason, r.accommodation, r.touristTax, JSON.stringify(r.breakdown), r.key, actor.userId],
+     VALUES ($1, $2, $3::refund_reason, $4::bigint, $5::bigint, $4::bigint + $5::bigint, $6::jsonb, $7, $8)
+     RETURNING id, amount_cents::float8 AS amount_cents, accommodation_cents::float8 AS accommodation_cents`,
+    [bookingId, r.reservationId, r.reason, r.accommodationCents, r.touristTaxCents, JSON.stringify(r.breakdown), r.key, actor.userId],
   );
-  const row = rows[0] as { id: string; amount: number; accommodation: number };
-  return { id: row.id, reservationId: r.reservationId, amount: row.amount, accommodation: row.accommodation, key: r.key };
+  const row = rows[0] as { id: string; amount_cents: number; accommodation_cents: number };
+  return {
+    id: row.id,
+    reservationId: r.reservationId,
+    amountCents: Number(row.amount_cents),
+    accommodationCents: Number(row.accommodation_cents),
+    key: r.key,
+  };
 }
 
 async function insertPlanned(tx: Queryable, bookingId: string, actor: Actor, planned: PlannedRefund[]) {
   const out: RefundRow[] = [];
   for (const p of planned) {
     // Written so NaN is skipped too (NaN <= 0 is false).
-    if (!(p.refund.total > 0)) continue;
+    if (!(p.refund.totalCents > 0)) continue;
     out.push(
       await insertRefund(tx, bookingId, actor, {
         reservationId: p.reservationId,
         reason: p.reason,
-        accommodation: p.refund.accommodation,
-        touristTax: p.refund.touristTax,
+        accommodationCents: p.refund.accommodationCents,
+        touristTaxCents: p.refund.touristTaxCents,
         key: `refund:${p.reservationId}:${p.reason}`,
         breakdown: p.result satisfies RefundResult,
       }),
@@ -377,12 +396,12 @@ async function sendRefunds(
   retry = false,
   actor?: { via?: "admin" },
 ) {
-  const results: { reservationId: string | null; amount: number; status: RefundStatus }[] = [];
+  const results: { reservationId: string | null; amountCents: number; status: RefundStatus }[] = [];
   for (const row of rows) {
     const pi = booking.stripe_payment_intent_id;
     const account = booking.stripe_account_id;
     if (!pi || !account) {
-      results.push({ reservationId: row.reservationId, amount: row.amount, status: "pending" });
+      results.push({ reservationId: row.reservationId, amountCents: row.amountCents, status: "pending" });
       continue;
     }
     // Its own statement, before Stripe hears of it, on the clock as this row is
@@ -404,7 +423,8 @@ async function sendRefunds(
         !!deps.findRefund &&
         (row.status === "failed" ||
           (row.createdAt !== undefined && now.getTime() - row.createdAt.getTime() >= RETRY_KEY_WINDOW_MS));
-      const amountCents = Math.round(row.amount * 100);
+      // The stored cents go to Stripe as they are.
+      const amountCents = row.amountCents;
       const refund =
         existing ??
         (await deps.refund({
@@ -416,7 +436,7 @@ async function sendRefunds(
           ...(roomsTotalCents > 0
             ? {
                 roomPrice: {
-                  refundCents: Math.min(Math.max(Math.round(row.accommodation * 100), 0), amountCents),
+                  refundCents: Math.min(Math.max(row.accommodationCents, 0), amountCents),
                   totalCents: roomsTotalCents,
                 },
               }
@@ -427,7 +447,7 @@ async function sendRefunds(
         [refund.id, row.id],
       );
       succeeded = { stripeRefundId: refund.id };
-      results.push({ reservationId: row.reservationId, amount: row.amount, status: "succeeded" });
+      results.push({ reservationId: row.reservationId, amountCents: row.amountCents, status: "succeeded" });
     } catch (error) {
       const status = (deps.isDefiniteFailure ?? (() => true))(error) ? "failed" : "pending";
       await db.query(`UPDATE refunds SET status = $1::payment_status WHERE id = $2 AND status <> 'succeeded'`, [
@@ -439,7 +459,7 @@ async function sendRefunds(
         [
           status === "failed" ? "refund.failed" : "refund.uncertain",
           booking.organization_id,
-          JSON.stringify({ bookingId: booking.id, refundId: row.id, amount: row.amount, error: String(error) }),
+          JSON.stringify({ bookingId: booking.id, refundId: row.id, amountCents: row.amountCents, error: String(error) }),
         ],
       );
       await recordEventSafely(db, {
@@ -447,10 +467,10 @@ async function sendRefunds(
         reservationId: row.reservationId,
         kind: status === "failed" ? "refund_failed" : "refund_uncertain",
         actor: SYSTEM,
-        data: refundData(actor, { refundId: row.id, amount: row.amount, error: String(error) }),
+        data: refundData(actor, { refundId: row.id, amountCents: row.amountCents, error: String(error) }),
       });
       deps.onRefundProblem?.({ bookingId: booking.id, refundId: row.id, status, error });
-      results.push({ reservationId: row.reservationId, amount: row.amount, status });
+      results.push({ reservationId: row.reservationId, amountCents: row.amountCents, status });
     }
     if (succeeded) {
       await recordEventSafely(db, {
@@ -458,21 +478,24 @@ async function sendRefunds(
         reservationId: row.reservationId,
         kind: "refund_succeeded",
         actor: SYSTEM,
-        data: refundData(actor, { refundId: row.id, amount: row.amount, stripeRefundId: succeeded.stripeRefundId }),
+        data: refundData(actor, { refundId: row.id, amountCents: row.amountCents, stripeRefundId: succeeded.stripeRefundId }),
       });
     }
   }
   return results;
 }
 
-/** What the guest paid for every room on the booking, euros. */
-function bookingPaid(state: BookingState): number {
-  return state.rooms.reduce((sum, r) => sum + Math.round(roomPaid(r) * 100), 0) / 100;
+/** What the guest paid for every room on the booking, cents. */
+function bookingPaidCents(state: BookingState): number {
+  return state.rooms.reduce((sum, r) => sum + roomPaidCents(r), 0);
 }
+
+/** What is left unrefunded on the whole booking, cents. */
+const bookingLeftCents = (state: BookingState) => bookingPaidCents(state) - state.refundedCents;
 
 /** The room price on the whole booking, tourist tax left out, cents: the commission's base. */
 export function roomsTotalCents(rooms: Pick<RoomState, "nights">[]): number {
-  return rooms.reduce((sum, r) => sum + r.nights.reduce((s, n) => s + Math.round(n.price * 100), 0), 0);
+  return rooms.reduce((sum, r) => sum + r.nights.reduce((s, n) => s + n.priceCents, 0), 0);
 }
 
 function context(deps: LifecycleDeps) {
@@ -481,11 +504,11 @@ function context(deps: LifecycleDeps) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
-/** What a refund would be right now, per active room. Read-only. */
+/** What a refund would be right now, per active room, in cents. Read-only. */
 export async function previewRefund(
   i: { bookingId: string; reservationIds: string[] | null; event?: RefundEvent },
   deps: Omit<LifecycleDeps, "refund"> = {},
-): Promise<{ perRoom: { reservationId: string; result: RefundResult; refund: PlannedRefund["refund"] }[]; total: number } | null> {
+): Promise<{ perRoom: { reservationId: string; result: RefundResult; refund: PlannedRefund["refund"] }[]; totalCents: number } | null> {
   const { db, now } = context({ ...deps, refund: async () => ({ id: "", status: "" }) });
   const event = i.event ?? { kind: "guest_cancellation", at: now };
   const actor = event.kind === "guest_cancellation" ? "guest" : "host";
@@ -494,21 +517,21 @@ export async function previewRefund(
   // Previewing what a guest can't do would promise a refund the cancel then refuses.
   if (actor === "guest" && !state.actions.includes("cancel")) return null;
 
-  const bookingLeft = bookingPaid(state) - state.refunded;
+  const left = bookingLeftCents(state);
   const plan =
     event.kind === "early_departure"
-      ? planEarlyDeparture({ rooms: state.rooms, lastNightStayed: event.lastNightStayed, bookingLeft })
+      ? planEarlyDeparture({ rooms: state.rooms, lastNightStayed: event.lastNightStayed, bookingLeftCents: left })
       : planCancellation({
           rooms: state.rooms,
           reservationIds: i.reservationIds,
           actor,
           now: event.kind === "guest_cancellation" ? event.at : now,
-          bookingLeft,
+          bookingLeftCents: left,
         });
   if (!plan.ok) return null;
   return {
     perRoom: plan.rooms.map((r) => ({ reservationId: r.reservationId, result: r.result, refund: r.refund })),
-    total: plan.totalCents / 100,
+    totalCents: plan.totalCents,
   };
 }
 
@@ -528,7 +551,7 @@ export async function cancelRooms(
       reservationIds: i.reservationIds,
       actor: i.actor.kind,
       now,
-      bookingLeft: bookingPaid(state) - state.refunded,
+      bookingLeftCents: bookingLeftCents(state),
     });
     if (!plan.ok) return plan;
 
@@ -553,7 +576,7 @@ export async function cancelRooms(
       data: eventData(i.actor, {
         reservationIds,
         cancelsBooking: plan.cancelsBooking,
-        refundTotal: plan.totalCents / 100,
+        refundTotalCents: plan.totalCents,
       }),
     });
     return {
@@ -561,12 +584,12 @@ export async function cancelRooms(
       booking: state.booking,
       roomsTotalCents: roomsTotalCents(state.rooms),
       rows,
-      cancelled: { reservationIds, refundTotal: plan.totalCents / 100, cancelsBooking: plan.cancelsBooking },
+      cancelled: { reservationIds, refundTotalCents: plan.totalCents, cancelsBooking: plan.cancelsBooking },
     };
   });
   if (!done.ok) return done;
   const refunds = await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor);
-  return { ok: true, refunds, cancelled: { ...done.cancelled, refundFailed: failedRefundTotal(refunds) } };
+  return { ok: true, refunds, cancelled: { ...done.cancelled, refundFailedCents: failedRefundTotalCents(refunds) } };
 }
 
 async function setStatus(
@@ -622,7 +645,7 @@ export async function recordEarlyDeparture(
     const plan = planEarlyDeparture({
       rooms: state.rooms,
       lastNightStayed: i.lastNightStayed,
-      bookingLeft: bookingPaid(state) - state.refunded,
+      bookingLeftCents: bookingLeftCents(state),
     });
     if (!plan.ok) return plan;
 
@@ -643,16 +666,20 @@ export async function recordEarlyDeparture(
   return { ok: true, refunds: await sendRefunds(deps, db, done.booking, done.roomsTotalCents, done.rows, false, i.actor) };
 }
 
-/** The host refunds an amount of their choosing, capped at what is left unrefunded. Hosts only. */
+/**
+ * The host refunds an amount of their choosing, in cents, capped at what is
+ * left unrefunded. Hosts only. Callers parse what the host typed with
+ * `parseEuroInput` (@openbookings/pricing/money).
+ */
 export async function issueGoodwillRefund(
   deps: LifecycleDeps,
-  i: { bookingId: string; actor: Actor; amount: number },
+  i: { bookingId: string; actor: Actor; amountCents: number },
 ): Promise<LifecycleResult> {
   if (i.actor.kind !== "host") return { ok: false, error: "not_allowed" };
-  // Before any query: a NaN/Infinity/non-number here is a caller bug or a
-  // tampered request, never something to plan around (see planGoodwill).
-  if (typeof i.amount !== "number" || !Number.isFinite(i.amount)) {
-    throw new RangeError("Goodwill refund amount must be a finite number");
+  // Before any query: NaN, Infinity, a fraction of a cent or a non-number here
+  // is a caller bug or a tampered request, never something to plan around.
+  if (typeof i.amountCents !== "number" || !Number.isSafeInteger(i.amountCents)) {
+    throw new RangeError("Goodwill refund amount must be a whole number of cents");
   }
   const { db, now } = context(deps);
   const done = await db.transaction(async (tx) => {
@@ -660,7 +687,7 @@ export async function issueGoodwillRefund(
     if (!state) return { ok: false as const, error: "not_found" as const };
     if (!state.actions.includes("goodwill_refund")) return { ok: false as const, error: "not_allowed" as const };
 
-    const plan = planGoodwill({ paid: bookingPaid(state), refunded: state.refunded, amount: i.amount });
+    const plan = planGoodwill({ paidCents: bookingPaidCents(state), refundedCents: state.refundedCents, amountCents: i.amountCents });
     if (!plan.ok) return plan;
 
     const { rows: count } = await tx.query(
@@ -670,16 +697,16 @@ export async function issueGoodwillRefund(
     const row = await insertRefund(tx, i.bookingId, i.actor, {
       reservationId: null,
       reason: "goodwill",
-      accommodation: plan.amount,
-      touristTax: 0,
+      accommodationCents: plan.amountCents,
+      touristTaxCents: 0,
       key: `refund:${i.bookingId}:goodwill:${(count[0] as { n: number }).n}`,
-      breakdown: { requested: i.amount, capped: plan.amount },
+      breakdown: { requestedCents: i.amountCents, cappedCents: plan.amountCents },
     });
     await recordBookingEvent(tx, {
       bookingId: i.bookingId,
       kind: "goodwill_refund",
       actor: eventActor(i.actor),
-      data: eventData(i.actor, { requested: i.amount, amount: plan.amount }),
+      data: eventData(i.actor, { requestedCents: i.amountCents, amountCents: plan.amountCents }),
     });
     return { ok: true as const, booking: state.booking, roomsTotalCents: roomsTotalCents(state.rooms), rows: [row] };
   });
@@ -707,8 +734,8 @@ export async function retryRefunds(
   if (!state) return { ok: false, error: "not_found" };
   const claim = await db.transaction(async (tx) => {
     const { rows } = await tx.query(
-      `SELECT id, reservation_id AS "reservationId", amount::float8 AS amount,
-              accommodation_amount::float8 AS accommodation, idempotency_key AS key,
+      `SELECT id, reservation_id AS "reservationId", amount_cents::float8 AS "amountCents",
+              accommodation_cents::float8 AS "accommodationCents", idempotency_key AS key,
               status, created_at AS "createdAt"
        FROM refunds
        WHERE booking_id = $1 AND status IN ('pending', 'failed') AND source = 'openbookings'

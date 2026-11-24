@@ -48,11 +48,9 @@ export type SupportReservation = {
   check_in_date: string;
   check_out_date: string;
   /**
-   * Money in cents. `bookings.total_amount` is whole euros, so it is never
-   * read here: the support bot is told every amount is in cents.
-   * `rooms_total_cents` and `tourist_tax_cents` are null on bookings from
-   * before the split was stored (0035); `total_cents` then falls back to the
-   * legacy whole-euro total.
+   * Money in cents, as stored: the support bot is told every amount is in
+   * cents. `rooms_total_cents` and `tourist_tax_cents` are null on a booking
+   * with no total (one from before the split was stored, 0035).
    */
   total_cents: number;
   rooms_total_cents: number | null;
@@ -81,27 +79,26 @@ export type SupportReservation = {
 
 /**
  * A booking's money in cents, for any SELECT over `bookings b`. Shared with
- * the host lookups so both bots get the same units. `total_cents` is 0 only on
- * bookings from before 0035; those fall back to the whole-euro total.
+ * the host lookups so both bots get the same units. The split is left out
+ * (null) on a booking with no total.
  */
 // ::int, not ::bigint: pg returns int8 as a string. A booking's cents fit int4.
 export const BOOKING_CENTS_COLUMNS = `
-    (CASE WHEN b.total_cents > 0 THEN b.total_cents ELSE b.total_amount * 100 END)::int AS total_cents,
+    b.total_cents::int AS total_cents,
     (CASE WHEN b.total_cents > 0 THEN b.rooms_total_cents END)::int AS rooms_total_cents,
     (CASE WHEN b.total_cents > 0 THEN b.tourist_tax_cents END)::int AS tourist_tax_cents`;
 
 /**
  * A room's money in cents, as json_build_object pairs. Needs `r`
  * (reservations). The stay is the sum of the night prices snapshotted at
- * confirmation; `price_per_night` and `total_amount` are rounded whole euros,
- * so they are only the fallback for a reservation without nights.
+ * confirmation; `total_cents` is the fallback for a reservation without nights.
  */
 export const ROOM_CENTS_JSON = `
   'stay_total_cents', COALESCE(
-    (SELECT round(sum((n->>'price')::numeric) * 100) FROM jsonb_array_elements(r.nights) n),
-    r.total_amount * 100
+    (SELECT sum((n->>'priceCents')::bigint) FROM jsonb_array_elements(r.nights) n),
+    r.total_cents
   )::bigint,
-  'pay_at_property_cents', round(r.pay_at_property_amount * 100)::bigint`;
+  'pay_at_property_cents', r.pay_at_property_cents::bigint`;
 
 const RESERVATION_SELECT = `
   SELECT

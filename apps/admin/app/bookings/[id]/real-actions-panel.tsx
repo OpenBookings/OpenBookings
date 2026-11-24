@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { BookingAction } from "@openbookings/pricing";
+import { formatCents } from "@openbookings/pricing/money";
 import type { LifecycleResult } from "@openbookings/db/booking-lifecycle";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,7 +21,8 @@ import type { ActAs } from "@/lib/actor";
 type Allowed = { actor: boolean; actions: BookingAction[] };
 type Preview = Awaited<ReturnType<typeof adminPreviewRefund>>;
 
-const eur = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" });
+/** Cents as "€12.50". */
+const eur = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 export function RealActionsPanel({
   bookingId,
@@ -123,12 +125,12 @@ export function RealActionsPanel({
           <p className="text-sm text-muted-foreground">No preview available.</p>
         ) : preview ? (
           <div className="text-sm">
-            Guest-cancellation refund preview: total {eur.format(preview.total)}
+            Guest-cancellation refund preview: total {eur(preview.totalCents)}
             <ul>
               {preview.perRoom.map((p) => (
                 <li key={p.reservationId}>
                   <span className="font-mono text-xs">{p.reservationId.slice(0, 8)}</span>{" "}
-                  {eur.format(Number(p.refund.total))}
+                  {eur(p.refund.totalCents)}
                 </li>
               ))}
             </ul>
@@ -166,7 +168,7 @@ export function RealActionsPanel({
             size="sm"
             variant="outline"
             disabled={!can("goodwill_refund") || amount === ""}
-            onClick={() => perform(() => adminGoodwillRefund(bookingId, Number(amount)))}
+            onClick={() => perform(() => adminGoodwillRefund(bookingId, amount))}
           >
             Issue goodwill refund
           </Button>
@@ -193,7 +195,7 @@ export function RealActionsPanel({
               <ul>
                 {result.refunds.map((r, i) => (
                   <li key={i}>
-                    {r.reservationId?.slice(0, 8) ?? "booking"} {eur.format(r.amount)} {r.status}
+                    {r.reservationId?.slice(0, 8) ?? "booking"} {eur(r.amountCents)} {r.status}
                   </li>
                 ))}
               </ul>

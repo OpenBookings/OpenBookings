@@ -49,13 +49,13 @@ const WRITE = [
   "properties: SELECT",
   "property_content: SELECT",
   "rate_plans: SELECT",
-  "refunds.accommodation_amount: UPDATE",
+  "refunds.accommodation_cents: UPDATE",
   "refunds.last_attempt_at: UPDATE",
   "refunds.split_explained_at: UPDATE",
   "refunds.split_explained_by: UPDATE",
   "refunds.status: UPDATE",
   "refunds.stripe_refund_id: UPDATE",
-  "refunds.tourist_tax_amount: UPDATE",
+  "refunds.tourist_tax_cents: UPDATE",
   "refunds: DELETE",
   "refunds: INSERT",
   "refunds: SELECT",
@@ -82,7 +82,13 @@ describeWithDb("admin console roles (0054)", () => {
     await applyPendingMigrations(db);
     // Again, even where CI applied it up front: a database rebuilt from a
     // schema dump has the roles without their attributes. Rolled back.
-    await db.query(pendingMigrationSql("0054_admin_roles.sql"));
+    // 0058 renamed the refund columns 0054 grants on; replay its grants on the new names.
+    await db.query(
+      pendingMigrationSql("0054_admin_roles.sql").replace(
+        "accommodation_amount, tourist_tax_amount",
+        "accommodation_cents, tourist_tax_cents",
+      ),
+    );
   });
   afterEach(async () => {
     await db.query("ROLLBACK");
@@ -165,7 +171,7 @@ describeWithDb("admin console roles (0054)", () => {
     }
     expect(await denied("ob_admin_read", `INSERT INTO audit_log (action) VALUES ('probe')`)).toBe(true);
     expect(await denied("ob_admin_read", `UPDATE bookings SET status = status`)).toBe(true);
-    expect(await denied("ob_admin_write", `UPDATE bookings SET total_amount = total_amount`)).toBe(true);
+    expect(await denied("ob_admin_write", `UPDATE bookings SET total_cents = total_cents`)).toBe(true);
     expect(await denied("ob_admin_write", `DELETE FROM bookings`)).toBe(true);
     expect(await denied("ob_admin_write", `DELETE FROM audit_log`)).toBe(true);
   });

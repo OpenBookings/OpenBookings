@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { LifecycleResult } from "@openbookings/db/booking-lifecycle";
+import { formatCents, parseEuroInput } from "@openbookings/pricing/money";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -31,6 +32,8 @@ import {
 import type { HostReservation } from "@/lib/reservations/shape";
 
 const euros = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
+/** "€12.50": a refund amount in cents, always with cents. */
+const refundText = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 const nightLabel = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 const ERRORS: Record<string, string> = {
@@ -218,14 +221,14 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
   const nights = reservation.rooms.find((r) => !r.cancelledAt)?.nights.slice(0, -1) ?? [];
   const [lastNight, setLastNight] = React.useState(nights[0] ?? "");
   // Keyed by night, so a stale answer for a previous pick is never shown.
-  const [preview, setPreview] = React.useState<{ night: string; total: number } | null>(null);
-  const refund = preview?.night === lastNight ? preview.total : null;
+  const [preview, setPreview] = React.useState<{ night: string; totalCents: number } | null>(null);
+  const refundCents = preview?.night === lastNight ? preview.totalCents : null;
 
   React.useEffect(() => {
     if (!lastNight) return;
     let live = true;
     hostPreviewEarlyDeparture(reservation.id, lastNight).then((p) => {
-      if (live) setPreview({ night: lastNight, total: p?.total ?? 0 });
+      if (live) setPreview({ night: lastNight, totalCents: p?.totalCents ?? 0 });
     });
     return () => {
       live = false;
@@ -236,9 +239,9 @@ function EarlyDeparture({ reservation, busy, perform }: { reservation: HostReser
     <Confirm
       title="Guest left early?"
       body="Pick the last night they stayed. The nights after it are refunded by the booking's cancellation policy, and the tourist tax for them in full."
-      action={refund === null ? "Record departure" : `Record and refund ${euros.format(refund)}`}
+      action={refundCents === null ? "Record departure" : `Record and refund ${refundText(refundCents)}`}
       busy={busy}
-      disabled={!lastNight || refund === null}
+      disabled={!lastNight || refundCents === null}
       onConfirm={() =>
         perform(() => hostRecordEarlyDeparture(reservation.id, lastNight), "Early departure recorded")
       }
@@ -341,18 +344,22 @@ function CancelRooms({ reservation, busy, perform }: { reservation: HostReservat
 }
 
 function Goodwill({ reservation, busy, perform }: { reservation: HostReservation; busy: boolean; perform: Perform }) {
-  const left = Math.round((reservation.totalAmount - reservation.refundedAmount) * 100) / 100;
+  // `totalAmount` and `refundedAmount` are still euros here (the reservations
+  // shape moves to cents separately); what is typed and sent is cents.
+  const leftCents = Math.max(0, Math.round((reservation.totalAmount - reservation.refundedAmount) * 100));
   const [amount, setAmount] = React.useState("");
-  const value = Number(amount.replace(",", "."));
-  const valid = Number.isFinite(value) && value > 0 && value <= left;
+  const typed = parseEuroInput(amount);
+  const cents = typed.ok ? typed.cents : null;
+  const valid = cents !== null && cents > 0 && cents <= leftCents;
   return (
     <Confirm
       title="Refund booking"
-      body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${euros.format(left)} is left to refund.`}
-      action={valid ? `Refund ${euros.format(value)}` : "Refund"}
+      body={`Refund the guest an amount of your choosing, from your Stripe balance. Up to ${refundText(leftCents)} is left to refund.`}
+      action={valid ? `Refund ${refundText(cents)}` : "Refund"}
       busy={busy}
       disabled={!valid}
-      onConfirm={() => perform(() => hostGoodwillRefund(reservation.id, value), "Refund sent")}
+      // The server reads the typed text into cents again: the browser is trusted for nothing.
+      onConfirm={() => perform(() => hostGoodwillRefund(reservation.id, amount), "Refund sent")}
     >
       <Input
         inputMode="decimal"

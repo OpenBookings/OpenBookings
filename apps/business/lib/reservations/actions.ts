@@ -105,12 +105,12 @@ export async function hostRecordEarlyDeparture(bookingId: string, lastNightStaye
   });
 }
 
-/** `amount` is whatever the browser sent; the dialog builds it with Number(text), so junk arrives as NaN. */
-export async function hostGoodwillRefund(bookingId: string, amount: number) {
+/** `amount` is the text the host typed ("12,50"), whatever the browser sent; it is read into cents here. */
+export async function hostGoodwillRefund(bookingId: string, amount: string) {
   const parsed = goodwillAmount.safeParse(amount);
   if (!parsed.success) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
   return run(bookingId, ACTION_PERMISSION.goodwill_refund, async (actor) => {
-    const result = await issueGoodwillRefund(deps, { bookingId, actor, amount: parsed.data });
+    const result = await issueGoodwillRefund(deps, { bookingId, actor, amountCents: parsed.data });
     if (result.ok) await sendRefundMail(bookingId, "goodwill", result.refunds);
     return result;
   });

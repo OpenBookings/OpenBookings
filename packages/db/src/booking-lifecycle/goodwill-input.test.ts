@@ -15,21 +15,21 @@ const deps: LifecycleDeps = { refund: async () => ({ id: "re_1" }) as never, db:
 const host = { kind: "host" as const, userId: "host-1" };
 
 describe("issueGoodwillRefund input", () => {
-  test("rejects NaN and Infinity before touching the database", async () => {
-    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      await expect(issueGoodwillRefund(deps, { bookingId: "b", actor: host, amount })).rejects.toThrow(RangeError);
+  test("rejects NaN, Infinity and fractions of a cent before touching the database", async () => {
+    for (const amountCents of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 12.5]) {
+      await expect(issueGoodwillRefund(deps, { bookingId: "b", actor: host, amountCents })).rejects.toThrow(RangeError);
     }
   });
 
   test("rejects a non-number that got past the type system", async () => {
     await expect(
-      issueGoodwillRefund(deps, { bookingId: "b", actor: host, amount: "10" as unknown as number }),
+      issueGoodwillRefund(deps, { bookingId: "b", actor: host, amountCents: "1000" as unknown as number }),
     ).rejects.toThrow(RangeError);
   });
 
   test("a guest is still refused first, without an error", async () => {
     expect(
-      await issueGoodwillRefund(deps, { bookingId: "b", actor: { kind: "guest", userId: "g" }, amount: Number.NaN }),
+      await issueGoodwillRefund(deps, { bookingId: "b", actor: { kind: "guest", userId: "g" }, amountCents: Number.NaN }),
     ).toEqual({ ok: false, error: "not_allowed" });
   });
 });

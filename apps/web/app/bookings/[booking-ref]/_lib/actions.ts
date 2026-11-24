@@ -38,9 +38,7 @@ export async function guestPreviewCancel(
        AND ($2::uuid[] IS NULL OR r.id = ANY($2::uuid[]))`,
     [bookingId, reservationIds],
   );
-  // previewRefund still answers in euros (booking-lifecycle moves to cents in M6); its
-  // total is whole cents divided by 100, so rounding recovers those cents exactly.
-  const refundCents = Math.round(preview.total * 100);
+  const refundCents = preview.totalCents;
   return { refundCents, retainedCents: Number(paid?.paid_cents ?? 0) - refundCents };
 }
 

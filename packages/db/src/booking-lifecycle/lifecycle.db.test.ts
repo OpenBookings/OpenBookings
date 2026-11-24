@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
 import { loadBookingEvents, type BookingEventKind } from "../booking-events";
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { confirmBookingPolicy } from "../reservation-policy";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import {
@@ -27,6 +28,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
   let refund: RefundFn;
   let bookingId: string;
   let reservationIds: string[];
+  let ids: Awaited<ReturnType<typeof seedProperty>>;
   const guest = { kind: "guest" as const, userId: "test-guest" };
   const host = { kind: "host" as const, userId: "test-host" };
 
@@ -63,11 +65,11 @@ describeWithDb("booking lifecycle against Postgres", () => {
       return { id: `re_${calls.length}`, status: "succeeded" };
     };
     // Two rooms, €100 × 3 nights each, €3 tourist tax a night: €309 a room.
-    const ids = await seedProperty(db, { tier: "flex" });
+    ids = await seedProperty(db, { tier: "flex" });
     await db.query(`UPDATE properties SET stripe_account_id = $2 WHERE id = $1`, [ids.propertyId, `acct_${crypto.randomUUID()}`]);
     await db.query(
       `INSERT INTO tourist_tax_rules (property_id, effective_from, charges) VALUES ($1, '2026-01-01', $2::jsonb)`,
-      [ids.propertyId, JSON.stringify([{ kind: "fixed", amount: 3, perPerson: false, perNight: true, perRoom: true }])],
+      [ids.propertyId, JSON.stringify([{ kind: "fixed", amountCents: 300, perPerson: false, perNight: true, perRoom: true }])],
     );
     ({ bookingId, reservationIds } = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 3, rooms: 2 }));
     await confirmBookingPolicy(db, { bookingId, confirmedAt: new Date(CHECK_IN_AT - 40 * DAY) });
@@ -80,8 +82,8 @@ describeWithDb("booking lifecycle against Postgres", () => {
     const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
     expect(result).toEqual({
       ok: true,
-      refunds: [{ reservationId: reservationIds[0], amount: 309, status: "succeeded" }],
-      cancelled: { reservationIds: [reservationIds[0]], refundTotal: 309, refundFailed: 0, cancelsBooking: false },
+      refunds: [{ reservationId: reservationIds[0], amountCents: 30_900, status: "succeeded" }],
+      cancelled: { reservationIds: [reservationIds[0]], refundTotalCents: 30_900, refundFailedCents: 0, cancelsBooking: false },
     });
     expect(calls.map((c) => c.amountCents)).toEqual([30_900]);
     // Room price €300 of the €309, out of €600 on the booking: half the commission goes back.
@@ -104,9 +106,9 @@ describeWithDb("booking lifecycle against Postgres", () => {
     await db.query(
       `INSERT INTO booking_intents
          (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot,
-          total_amount, payment_account_id, booking_id)
+          total_cents, payment_account_id, booking_id)
        SELECT b.user_id, b.hotel_id, b.check_in_date, b.check_out_date, 'paid', NOW(), '{}'::jsonb,
-              618, 'acct_charged', b.id
+              61800, 'acct_charged', b.id
          FROM bookings b WHERE b.id = $1`,
       [bookingId],
     );
@@ -141,7 +143,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
   test("a host cancellation refunds every room in full, one Stripe refund per room", async () => {
     const late = new Date(CHECK_IN_AT - 2 * 3_600_000);
     const result = await cancelRooms(deps(late), { bookingId, actor: host, reservationIds: null });
-    expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([309, 309]);
+    expect(result.ok && result.refunds.map((r) => r.amountCents)).toEqual([30_900, 30_900]);
     expect(calls.map((c) => c.amountCents)).toEqual([30_900, 30_900]);
     expect(new Set(calls.map((c) => c.idempotencyKey)).size).toBe(2);
   });
@@ -149,7 +151,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
   test("a late guest cancellation refunds the tourist tax alone and names no room price, so no commission goes back", async () => {
     const late = new Date(CHECK_IN_AT - 2 * 3_600_000);
     const result = await cancelRooms(deps(late), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
-    expect(result.ok && result.refunds.map((r) => r.amount)).toEqual([9]);
+    expect(result.ok && result.refunds.map((r) => r.amountCents)).toEqual([900]);
     expect(calls.map((c) => ({ amountCents: c.amountCents, roomPrice: c.roomPrice }))).toEqual([
       { amountCents: 900, roomPrice: { refundCents: 0, totalCents: 60_000 } },
     ]);
@@ -166,16 +168,16 @@ describeWithDb("booking lifecycle against Postgres", () => {
   });
 
   test("goodwill is capped at what was paid, and a second one has nothing left", async () => {
-    const first = await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 10_000 });
-    expect(first.ok && first.refunds[0].amount).toBe(618);
-    expect(await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 10 })).toEqual({
+    const first = await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: 1_000_000 });
+    expect(first.ok && first.refunds[0].amountCents).toBe(61_800);
+    expect(await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: 1_000 })).toEqual({
       ok: false,
       error: "nothing_to_refund",
     });
   });
 
   test("a guest can't give goodwill", async () => {
-    expect(await issueGoodwillRefund(deps(), { bookingId, actor: guest, amount: 10 })).toEqual({
+    expect(await issueGoodwillRefund(deps(), { bookingId, actor: guest, amountCents: 1_000 })).toEqual({
       ok: false,
       error: "not_allowed",
     });
@@ -189,7 +191,7 @@ describeWithDb("booking lifecycle against Postgres", () => {
     const result = await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
     expect(result.ok && result.refunds[0].status).toBe("failed");
     // The guest's mail says this part has not gone yet.
-    expect(result.ok && result.cancelled).toMatchObject({ refundTotal: 309, refundFailed: 309 });
+    expect(result.ok && result.cancelled).toMatchObject({ refundTotalCents: 30_900, refundFailedCents: 30_900 });
     expect((await one<{ status: string }>(`SELECT status FROM refunds WHERE reservation_id = $1`, [reservationIds[0]])).status).toBe(
       "failed",
     );
@@ -297,13 +299,13 @@ describeWithDb("booking lifecycle against Postgres", () => {
   });
 
   test("goodwill first, then a host cancellation: never more than was paid in total", async () => {
-    await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 500 });
+    await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: 50_000 });
     await cancelRooms(deps(), { bookingId, actor: host, reservationIds: null });
     const total = await one<{ total: number }>(
-      `SELECT SUM(amount)::float8 AS total FROM refunds WHERE booking_id = $1`,
+      `SELECT SUM(amount_cents)::int AS total FROM refunds WHERE booking_id = $1`,
       [bookingId],
     );
-    expect(total.total).toBe(618);
+    expect(total.total).toBe(61_800);
   });
 
   test("a timeout leaves the refund pending and audited; a retry finds it on Stripe instead of paying again", async () => {
@@ -381,11 +383,11 @@ describeWithDb("booking lifecycle against Postgres", () => {
   });
 
   test("goodwill writes goodwill_refund with the requested and capped amount", async () => {
-    await issueGoodwillRefund(deps(), { bookingId, actor: host, amount: 10_000 });
+    await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: 1_000_000 });
     const events = (await loadBookingEvents(db, bookingId)).filter((e) => e.kind === "goodwill_refund");
     expect(events).toHaveLength(1);
-    expect(events[0].data.requested).toBe(10_000);
-    expect(events[0].data.amount).toBe(618);
+    expect(events[0].data.requestedCents).toBe(1_000_000);
+    expect(events[0].data.amountCents).toBe(61_800);
   });
 
   test("a refund Stripe refuses writes refund_failed as the system", async () => {
@@ -398,6 +400,13 @@ describeWithDb("booking lifecycle against Postgres", () => {
     expect(events[0].actorKind).toBe("system");
     expect(events[0].reservationId).toBe(reservationIds[0]);
     expect(String(events[0].data.error)).toContain("card_declined");
+    expect(events[0].data.amountCents).toBe(30_900);
+    const audit = await one<{ detail: Record<string, unknown> }>(
+      `SELECT detail FROM audit_log WHERE action = 'refund.failed' AND detail->>'bookingId' = $1`,
+      [bookingId],
+    );
+    expect(audit.detail.amountCents).toBe(30_900);
+    expect(audit.detail).not.toHaveProperty("amount");
   });
 
   test("an admin retry stamps via admin on the refund outcome event", async () => {
@@ -447,5 +456,59 @@ describeWithDb("booking lifecycle against Postgres", () => {
       [bookingId],
     );
     expect(audit.n).toBe(0);
+  });
+  test("cancel writes amounts in cents on rooms_cancelled and refund_succeeded, and the refund row", async () => {
+    await cancelRooms(deps(), { bookingId, actor: guest, reservationIds: [reservationIds[0]] });
+    const events = await loadBookingEvents(db, bookingId);
+    expect(events.find((e) => e.kind === "rooms_cancelled")?.data.refundTotalCents).toBe(30_900);
+    expect(events.find((e) => e.kind === "refund_succeeded")?.data.amountCents).toBe(30_900);
+    const row = await one<{ accommodation_cents: string; tourist_tax_cents: string; amount_cents: string; breakdown: { refund: unknown } }>(
+      `SELECT accommodation_cents, tourist_tax_cents, amount_cents, breakdown FROM refunds WHERE reservation_id = $1`,
+      [reservationIds[0]],
+    );
+    expect([row.accommodation_cents, row.tourist_tax_cents, row.amount_cents].map(Number)).toEqual([30_000, 900, 30_900]);
+    expect(row.breakdown.refund).toEqual({ accommodationCents: 30_000, touristTaxCents: 900, totalCents: 30_900 });
+  });
+
+  test("a 2-night €186.50 room, one of two, refunds exactly 18650 and exactly half the commission base (Review Focus 4)", async () => {
+    // A second booking: two rooms, two nights of €93.25 each, no tourist tax.
+    const priced = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2, rooms: 2 });
+    const nights = [
+      { date: "2031-11-10", priceCents: 9_325 },
+      { date: "2031-11-11", priceCents: 9_325 },
+    ];
+    await confirmBookingPolicy(db, {
+      bookingId: priced.bookingId,
+      confirmedAt: new Date(CHECK_IN_AT - 40 * DAY),
+      nightPrices: Object.fromEntries(priced.reservationIds.map((id) => [id, nights])),
+      touristTaxCents: Object.fromEntries(priced.reservationIds.map((id) => [id, 0])),
+    });
+
+    const result = await cancelRooms(deps(), { bookingId: priced.bookingId, actor: guest, reservationIds: [priced.reservationIds[0]] });
+    expect(result.ok && result.cancelled?.refundTotalCents).toBe(18_650);
+    // Stripe gets the stored cents as they are, and the room-price part of
+    // €373.00: half of it, so exactly half the commission goes back.
+    expect(calls.map((c) => ({ amountCents: c.amountCents, roomPrice: c.roomPrice }))).toEqual([
+      { amountCents: 18_650, roomPrice: { refundCents: 18_650, totalCents: 37_300 } },
+    ]);
+    const row = await one<{ amount_cents: string; accommodation_cents: string }>(
+      `SELECT amount_cents, accommodation_cents FROM refunds WHERE reservation_id = $1`,
+      [priced.reservationIds[0]],
+    );
+    expect([row.amount_cents, row.accommodation_cents].map(Number)).toEqual([18_650, 18_650]);
+  });
+
+  test('a host goodwill of "12,50" refunds 1250', async () => {
+    const typed = parseEuroInput("12,50");
+    if (!typed.ok) throw new Error(typed.error);
+    const result = await issueGoodwillRefund(deps(), { bookingId, actor: host, amountCents: typed.cents });
+    expect(result).toEqual({ ok: true, refunds: [{ reservationId: null, amountCents: 1_250, status: "succeeded" }] });
+    expect(calls.map((c) => c.amountCents)).toEqual([1_250]);
+    const row = await one<{ amount_cents: string; accommodation_cents: string; breakdown: unknown }>(
+      `SELECT amount_cents, accommodation_cents, breakdown FROM refunds WHERE booking_id = $1 AND reason = 'goodwill'`,
+      [bookingId],
+    );
+    expect([row.amount_cents, row.accommodation_cents].map(Number)).toEqual([1_250, 1_250]);
+    expect(row.breakdown).toEqual({ requestedCents: 1_250, cappedCents: 1_250 });
   });
 });

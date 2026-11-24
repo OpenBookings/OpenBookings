@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import {
-  formatEuro,
   formatStayDate,
   guestBookingCancelled,
   guestBookingConfirmed,
@@ -19,10 +18,10 @@ const rooms = [
     refundable: true,
     freeCancellationUntil: "Fri 5 Mar 2027",
     nights: [
-      { date: "2027-03-12", price: 100 },
-      { date: "2027-03-13", price: 100 },
+      { date: "2027-03-12", priceCents: 10_000 },
+      { date: "2027-03-13", priceCents: 10_000 },
     ],
-    touristTaxLines: [{ label: "€3.00 per person per night", amount: 12 }],
+    touristTaxLines: [{ label: "€3.00 per person per night", amountCents: 1_200 }],
   },
   {
     name: "Garden Suite",
@@ -31,8 +30,8 @@ const rooms = [
     refundable: false,
     freeCancellationUntil: null,
     nights: [
-      { date: "2027-03-12", price: 49.5 },
-      { date: "2027-03-13", price: 50.5 },
+      { date: "2027-03-12", priceCents: 4_950 },
+      { date: "2027-03-13", priceCents: 5_050 },
     ],
     touristTaxLines: [],
   },
@@ -77,8 +76,21 @@ test("dates come from the string, never from local time", () => {
   expect(formatStayDate("2027-12-31")).toBe("Fri 31 Dec 2027");
 });
 
-test("euros read in British English", () => {
-  expect(formatEuro(1234.5)).toBe("€1,234.50");
+test("nights priced with cents show to the cent", () => {
+  const priced = [{ ...rooms[0]!, nights: [{ date: "2027-03-12", priceCents: 9_325 }, { date: "2027-03-13", priceCents: 9_325 }] }];
+  const { html } = guestBookingConfirmed({
+    propertyName: "Hotel",
+    ...stay,
+    rooms: priced,
+    money: { roomsCents: 18_650, touristTaxCents: 0, totalCents: 123_450 },
+    seller: { legalName: null, vatNumber: null },
+    reference: "AB12CD34",
+    bookingUrl: "https://web.test/b",
+  });
+  expect(html).toContain("2 nights × €93.25");
+  expect(html).toContain("€186.50");
+  // Two decimals even on whole euros, and a thousands comma.
+  expect(html).toContain("€1,234.50");
 });
 
 test("a partial cancellation does not say the booking was cancelled", () => {
@@ -162,7 +174,7 @@ test("tourist tax labels are escaped", () => {
   const evil = guestBookingConfirmed({
     propertyName: "Hotel",
     ...stay,
-    rooms: [{ ...rooms[0]!, touristTaxLines: [{ label: EVIL, amount: 1 }] }],
+    rooms: [{ ...rooms[0]!, touristTaxLines: [{ label: EVIL, amountCents: 100 }] }],
     money,
     seller: { legalName: null, vatNumber: null },
     reference: "AB12CD34",
