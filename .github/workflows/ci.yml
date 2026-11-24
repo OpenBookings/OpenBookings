@@ -121,6 +121,8 @@ jobs:
 
       # apps/siteminder may depend on @openbookings/apps-contract only.
       - run: bun .github/scripts/check-app-boundaries.ts
+      # The script's own tests: .github/scripts is outside every turbo package.
+      - run: bun test .github/scripts/check-app-boundaries.test.ts
 
       # Unused, missing or unresolved dependencies across the whole repo
       # (~2 s, so not limited to --affected). Config in knip.json.
@@ -635,7 +637,8 @@ jobs:
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-support:main
 
   # The SiteMinder channel-manager app. Built and pushed, not rolled: there is
-  # no Serverless Container for it yet, so the release job does not wait on it.
+  # no Serverless Container for it yet. It is in release `needs:` only so a
+  # failed build blocks a release, as for support and invoice-job.
   build-siteminder:
     needs: detect
     if: needs.detect.outputs.siteminder == 'true'

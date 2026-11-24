@@ -28,18 +28,26 @@ function isForbidden(specifier: string): boolean {
   return FORBIDDEN_PACKAGES.some((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
 }
 
-/** Module specifiers named by import/export-from/require/dynamic import. */
-function specifiersIn(source: string): string[] {
-  const found: string[] = [];
-  const patterns = [
-    /\b(?:import|export)\s[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*['"]([^'"]+)['"]/g,
-    /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) found.push(match[1]!);
+const LOADERS: Record<string, "ts" | "tsx" | "js" | "jsx"> = {
+  ".ts": "ts", ".mts": "ts", ".cts": "ts", ".tsx": "tsx", ".js": "js", ".mjs": "js", ".cjs": "js",
+};
+
+/**
+ * Module specifiers a file names. The transpiler's parser covers import,
+ * export-from, require() and dynamic import; it drops type-only imports, so a
+ * loose regex over the source (which also catches template-literal specifiers)
+ * backs it up. Over-reporting is fine here: a forbidden name in that position is
+ * a violation either way.
+ */
+function specifiersIn(source: string, ext: string): string[] {
+  const found = new Set<string>();
+  try {
+    for (const imp of new Bun.Transpiler({ loader: LOADERS[ext] }).scanImports(source)) found.add(imp.path);
+  } catch {
+    // Unparseable: the regex below still looks.
   }
-  return found;
+  for (const match of source.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]([^'"`]+)['"`]/g)) found.add(match[1]!);
+  return [...found];
 }
 
 export async function findViolations(root: string, apps: readonly string[] = GUARDED_APPS): Promise<string[]> {
@@ -53,9 +61,10 @@ export async function findViolations(root: string, apps: readonly string[] = GUA
         if (isForbidden(name)) violations.push(`${path.relative(root, pkgPath)}: ${section} lists ${name}`);
       }
     }
-    for await (const file of new Glob("src/**/*.ts").scan({ cwd: appDir })) {
+    for await (const file of new Glob("**/*.{ts,tsx,mts,cts,js,mjs,cjs}").scan({ cwd: appDir })) {
+      if (file.split("/").includes("node_modules")) continue;
       const full = path.join(appDir, file);
-      for (const specifier of specifiersIn(await readFile(full, "utf8"))) {
+      for (const specifier of specifiersIn(await readFile(full, "utf8"), path.extname(file))) {
         if (isForbidden(specifier)) violations.push(`${path.relative(root, full)}: imports ${specifier}`);
       }
     }

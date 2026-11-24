@@ -53,17 +53,33 @@ describe("run mode and polling", () => {
 });
 
 describe("assertRequiredEnv", () => {
-  it("lists every missing variable, and needs queue keys only when scale-to-zero", () => {
+  it("lists every missing variable, none of them QStash's", () => {
     for (const name of requiredAtStartup()) delete process.env[name];
-    process.env.SITEMINDER_RUN_MODE = "scale-to-zero";
-    expect(() => assertRequiredEnv()).toThrow(/SITEMINDER_DATABASE_URL[\s\S]*QSTASH_NEXT_SIGNING_KEY/);
-    process.env.SITEMINDER_RUN_MODE = "always-on";
-    expect(requiredAtStartup()).not.toContain("QSTASH_CURRENT_SIGNING_KEY");
+    for (const mode of ["scale-to-zero", "always-on"]) {
+      process.env.SITEMINDER_RUN_MODE = mode;
+      expect(() => assertRequiredEnv()).toThrow(/SITEMINDER_DATABASE_URL/);
+      expect(requiredAtStartup().join()).not.toMatch(/QSTASH|SERVICE_BASE_URL/);
+    }
   });
 
-  it("passes when everything is set", () => {
-    process.env.SITEMINDER_RUN_MODE = "always-on";
-    for (const name of requiredAtStartup()) process.env[name] = "x";
-    expect(() => assertRequiredEnv()).not.toThrow();
+  it("passes with QStash unconfigured, and the getters are undefined", () => {
+    for (const mode of ["scale-to-zero", "always-on"]) {
+      process.env.SITEMINDER_RUN_MODE = mode;
+      for (const name of requiredAtStartup()) process.env[name] = "x";
+      delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+      delete process.env.QSTASH_NEXT_SIGNING_KEY;
+      delete process.env.SERVICE_BASE_URL;
+      expect(() => assertRequiredEnv()).not.toThrow();
+      expect(env.qstashCurrentSigningKey).toBeUndefined();
+      expect(env.qstashNextSigningKey).toBeUndefined();
+      expect(env.serviceBaseUrl).toBeUndefined();
+    }
+  });
+
+  it("reads QStash settings when present", () => {
+    process.env.QSTASH_CURRENT_SIGNING_KEY = "cur";
+    process.env.SERVICE_BASE_URL = "https://sm.example.com/";
+    expect(env.qstashCurrentSigningKey).toBe("cur");
+    expect(env.serviceBaseUrl).toBe("https://sm.example.com");
   });
 });

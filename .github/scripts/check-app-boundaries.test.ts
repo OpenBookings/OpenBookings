@@ -70,4 +70,38 @@ describe("check-app-boundaries", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain("@openbookings/authz");
   });
+
+  it("catches compact, star-export, template-literal, multi-line, type-only and require forms", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": cleanPackage,
+      "apps/siteminder/src/a.ts": `import{db}from"@openbookings/db"`,
+      "apps/siteminder/src/b.ts": `export*from"@openbookings/db"`,
+      "apps/siteminder/src/c.ts": "const m = await import(`@openbookings/messaging`)",
+      "apps/siteminder/src/d.ts": `import {\n  a,\n  b,\n} from "@openbookings/pricing/money";`,
+      "apps/siteminder/src/e.ts": `const s = require("@openbookings/stripe");`,
+      "apps/siteminder/src/f.ts": `import type { X } from "@openbookings/authz";`,
+    });
+    expect(await findViolations(root)).toHaveLength(6);
+  });
+
+  it("scans other extensions and files outside src, but not node_modules", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": cleanPackage,
+      "apps/siteminder/src/a.tsx": `import { db } from "@openbookings/db";`,
+      "apps/siteminder/src/b.mts": `import { db } from "@openbookings/db";`,
+      "apps/siteminder/src/c.cts": `const x = require("@openbookings/db");`,
+      "apps/siteminder/src/d.js": `import { db } from "@openbookings/db";`,
+      "apps/siteminder/scripts/e.mjs": `import { db } from "@openbookings/db";`,
+      "apps/siteminder/f.cjs": `require("@openbookings/db");`,
+      "apps/siteminder/node_modules/x/index.js": `require("@openbookings/db");`,
+    });
+    expect(await findViolations(root)).toHaveLength(6);
+  });
+
+  it("fails on a forbidden peerDependency", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": JSON.stringify({ peerDependencies: { "@openbookings/db": "*" } }),
+    });
+    expect(await findViolations(root)).toHaveLength(1);
+  });
 });

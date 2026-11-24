@@ -14,6 +14,10 @@ function required(name: string): string {
   return value;
 }
 
+function optional(name: string): string | undefined {
+  return process.env[name]?.trim() || undefined;
+}
+
 export type RunMode = "always-on" | "scale-to-zero";
 
 const RUN_MODES: readonly RunMode[] = ["always-on", "scale-to-zero"];
@@ -51,12 +55,9 @@ export function requiredAtStartup(): string[] {
     "SITEMINDER_REQUESTOR_ID",
     "APP_SITEMINDER_REGISTRATION_SECRET",
     "SITEMINDER_TICK_SECRET",
-    "SERVICE_BASE_URL",
   ];
-  // Scale-to-zero has nothing running between requests: the queue wakes it.
-  if (parseRunMode(process.env.SITEMINDER_RUN_MODE) === "scale-to-zero") {
-    names.push("QSTASH_CURRENT_SIGNING_KEY", "QSTASH_NEXT_SIGNING_KEY");
-  }
+  // QStash (signing keys, service base URL) is optional in every mode: with it
+  // unset the app's own poll still delivers, and the doorbell answers 503.
   return names;
 }
 
@@ -107,14 +108,15 @@ export const env = {
   get pollSeconds(): number {
     return parsePollSeconds(process.env.SITEMINDER_POLL_SECONDS, parseRunMode(process.env.SITEMINDER_RUN_MODE));
   },
-  get qstashCurrentSigningKey() {
-    return required("QSTASH_CURRENT_SIGNING_KEY");
+  /** Optional: undefined when QStash is not configured. */
+  get qstashCurrentSigningKey(): string | undefined {
+    return optional("QSTASH_CURRENT_SIGNING_KEY");
   },
-  get qstashNextSigningKey() {
-    return required("QSTASH_NEXT_SIGNING_KEY");
+  get qstashNextSigningKey(): string | undefined {
+    return optional("QSTASH_NEXT_SIGNING_KEY");
   },
-  /** Public base URL of this service; the queue's signature binds it. */
-  get serviceBaseUrl() {
-    return required("SERVICE_BASE_URL").replace(/\/$/, "");
+  /** Public base URL of this service; only the queue's signature binds it. Optional. */
+  get serviceBaseUrl(): string | undefined {
+    return optional("SERVICE_BASE_URL")?.replace(/\/$/, "");
   },
 };
