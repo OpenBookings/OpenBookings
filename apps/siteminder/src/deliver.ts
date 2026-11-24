@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { AppBooking, DeliveryReport } from "@openbookings/apps-contract";
 import { XMLValidator } from "fast-xml-parser";
-import { alert } from "./alert";
+import { alert, errorText } from "./alert";
 import { CoreApiError, type CoreClient, UnknownBookingError } from "./core-client";
 import type { Queryable } from "./db/migrate";
 import { env } from "./env";
 import { type AppInstallation, activeInstallations } from "./installations";
 import { type OutboxRow, type Result, type Sent, afterResult, nextMessage } from "./outbox";
 import { buildResNotif } from "./ota/res-notif";
+import { ALERT_AFTER_FAILURES } from "./retry";
 import type { Credentials } from "./soap/envelope";
 import { xmlParser } from "./soap/xml";
 import type { TickDeps } from "./tick";
@@ -20,8 +21,6 @@ export const SITEMINDER_TIMEOUT_MS = 60_000;
 /** A send holds its row ('sending') for its timeout plus this; after that another tick may take it over (a tick that died). */
 const CLAIM_MARGIN_MS = 60_000;
 const REPORTS_PER_ROUND = 100;
-/** Our own alert (not the hotel's) after this many failures in a row of one booking: SiteMinder is likely down. */
-export const ALERT_AFTER_FAILURES = 5;
 
 /**
  * One POST of a reservation message to SiteMinder: throws on a network error or timeout, else the HTTP answer.
@@ -51,7 +50,6 @@ const reservationFromEnv = (): ReservationConfig => ({
   credentials: { username: env.reservationUsername, password: env.reservationPassword },
 });
 
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const asArray = (v: unknown): unknown[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
 
@@ -131,9 +129,11 @@ type DbRow = {
   attempts: number;
   acked_at: Date | null;
   first_failed_at: Date | null;
+  commit_attempt_version: string | null;
   report: DeliveryReport | null;
 };
-const COLUMNS = `booking_id, latest, latest_version::text AS latest_version, acked, acked_version::text AS acked_version, status, attempts, acked_at, first_failed_at, report`;
+const COLUMNS = `booking_id, latest, latest_version::text AS latest_version, acked, acked_version::text AS acked_version, status, attempts,
+  acked_at, first_failed_at, commit_attempt_version::text AS commit_attempt_version, report`;
 
 const stateOf = (r: DbRow): OutboxRow => ({
   acked: r.acked,
@@ -142,6 +142,7 @@ const stateOf = (r: DbRow): OutboxRow => ({
   latestVersion: Number(r.latest_version),
   status: r.status,
   attempts: r.attempts,
+  commitAttemptVersion: r.commit_attempt_version === null ? null : Number(r.commit_attempt_version),
 });
 
 /**
@@ -195,6 +196,7 @@ type Decision = {
   acked: OutboxRow["acked"];
   ackedVersion: number | null;
   attempts: number;
+  commitAttemptVersion: number | null;
   nextAttemptAt: Date | null;
   lastError: string | null;
   /** Set on a success; null keeps the stored time. */
@@ -218,11 +220,14 @@ const changed = (fresh: DbRow, report: DeliveryReport | null) =>
 /** After a send, decided on the FRESH row: a newer version that arrived meanwhile keeps the row 'waiting'. */
 function afterSend(fresh: DbRow, sent: Sent, result: Result, sentVersion: number, at: Date): Decision {
   const state = stateOf(fresh);
-  const firstFailedAt = result.ok ? null : (fresh.first_failed_at ?? at);
-  const failingForSeconds = firstFailedAt === null ? 0 : Math.max(0, (at.getTime() - firstFailedAt.getTime()) / 1000);
+  const failingSince = result.ok ? null : (fresh.first_failed_at ?? at);
+  const failingForSeconds = failingSince === null ? 0 : Math.max(0, (at.getTime() - failingSince.getTime()) / 1000);
   const out = afterResult(state, sent, result, sentVersion, failingForSeconds);
   let status = out.status;
-  let lastError = result.ok ? null : result.error;
+  // A failure that ends 'waiting' had a newer version arrive meanwhile: a new message, with a clean slate.
+  const failed = !result.ok && status !== "waiting";
+  const firstFailedAt = failed ? failingSince : null;
+  let lastError = !result.ok && status !== "waiting" ? result.error : null;
   let version = sentVersion;
   if (status === "waiting") {
     // Acked, but more to do. A reopen after the Cancel just acked is not something to send: tell the hotel.
@@ -242,7 +247,15 @@ function afterSend(fresh: DbRow, sent: Sent, result: Result, sentVersion: number
 function withoutSend(fresh: DbRow): Decision {
   const state = stateOf(fresh);
   const next = nextMessage(state);
-  const keep = { acked: state.acked, ackedVersion: state.ackedVersion, attempts: state.attempts, nextAttemptAt: null, ackedAt: null, firstFailedAt: fresh.first_failed_at };
+  const keep = {
+    acked: state.acked,
+    ackedVersion: state.ackedVersion,
+    attempts: state.attempts,
+    commitAttemptVersion: state.commitAttemptVersion,
+    nextAttemptAt: null,
+    ackedAt: null,
+    firstFailedAt: fresh.first_failed_at,
+  };
   if ("needsAttention" in next) {
     return { ...keep, status: "needs_attention", lastError: next.needsAttention, report: changed(fresh, reportFor("needs_attention", state.latestVersion, null, next.needsAttention)) };
   }
@@ -272,6 +285,7 @@ async function settle(db: Queryable, installationId: string, bookingId: string, 
           SET status = $5, acked = $6, acked_version = $7, attempts = $8, next_attempt_at = $9, last_error = $10,
               acked_at = COALESCE($11::timestamptz, acked_at),
               first_failed_at = $14::timestamptz,
+              commit_attempt_version = $15,
               report = COALESCE($12::jsonb, report),
               report_pending = report_pending OR $12::jsonb IS NOT NULL,
               claim_token = NULL, updated_at = $13
@@ -292,6 +306,7 @@ async function settle(db: Queryable, installationId: string, bookingId: string, 
         d.report === null ? null : JSON.stringify(d.report),
         now().toISOString(),
         d.firstFailedAt?.toISOString() ?? null,
+        d.commitAttemptVersion,
       ],
     );
     if (written.rows.length > 0) return d;
@@ -310,11 +325,13 @@ type Ctx = {
   renew: (holdMs: number) => Promise<boolean>;
   budget: { left: () => number };
   counts: DeliveryCounts;
+  /** A report to core failed in this run: core is likely down, so later reports wait for the next tick. */
+  coreDown: boolean;
 };
 
 /** Tell core; on success clear the pending mark unless a newer report replaced it meanwhile. False: try later. */
 async function sendReport(ctx: Ctx, bookingId: string, report: DeliveryReport): Promise<boolean> {
-  if (!(await ctx.renew(0))) return false;
+  if (ctx.coreDown || !(await ctx.renew(0))) return false;
   const context = { installationId: ctx.inst.id, propertyCode: ctx.inst.propertyCode, bookingId, report };
   try {
     await ctx.client.reportDelivery(bookingId, report);
@@ -322,6 +339,7 @@ async function sendReport(ctx: Ctx, bookingId: string, report: DeliveryReport): 
     // Core will never take this one (unknown booking, refused body): drop it rather than retry for ever.
     const never = e instanceof UnknownBookingError || (e instanceof CoreApiError && e.kind === "bad_request");
     if (!never) {
+      ctx.coreDown = true;
       console.warn("[siteminder] reporting a delivery to core failed; the next tick tries again", { ...context, error: errorText(e) });
       return false;
     }
@@ -334,7 +352,7 @@ async function sendReport(ctx: Ctx, bookingId: string, report: DeliveryReport): 
   return true;
 }
 
-/** Reports a previous tick could not get to core. Stops at the first failure: core is likely down. */
+/** Reports a previous tick could not get to core. After a failure the rest wait for the next tick (see `coreDown`). */
 async function flushPendingReports(ctx: Ctx): Promise<void> {
   const { rows } = await ctx.deps.db.query<{ booking_id: string; report: DeliveryReport }>(
     `SELECT booking_id, report FROM siteminder.outbox WHERE installation_id = $1 AND report_pending ORDER BY updated_at, booking_id LIMIT ${REPORTS_PER_ROUND}`,
@@ -343,6 +361,18 @@ async function flushPendingReports(ctx: Ctx): Promise<void> {
   for (const r of rows) {
     if (ctx.budget.left() <= 0 || !(await sendReport(ctx, r.booking_id, r.report))) return;
   }
+}
+
+/**
+ * Before a Commit goes out, remember the version of the first one (see OutboxRow.commitAttemptVersion): recorded
+ * before the send so that a timeout, a network error, a 5xx or a tick that dies mid-send all count as "maybe taken".
+ */
+async function recordCommitAttempt(db: Queryable, installationId: string, bookingId: string, token: string, version: number): Promise<void> {
+  await db.query(
+    `UPDATE siteminder.outbox SET commit_attempt_version = COALESCE(commit_attempt_version, $4)
+      WHERE installation_id = $1 AND booking_id = $2 AND claim_token = $3`,
+    [installationId, bookingId, token, version],
+  );
 }
 
 /** One message to SiteMinder. A booking the builder refuses is a permanent failure: resending cannot fix it. */
@@ -379,6 +409,7 @@ async function deliverOne(ctx: Ctx, claimed: DbRow, token: string): Promise<void
   } else {
     const sent = next.send;
     const sentVersion = state.latestVersion;
+    if (sent === "Commit") await recordCommitAttempt(deps.db, inst.id, claimed.booking_id, token, sentVersion);
     const result = await send(ctx, next.booking, sent);
     const at = deps.now();
     decision = await settle(deps.db, inst.id, claimed.booking_id, token, deps.now, (fresh) => afterSend(fresh, sent, result, sentVersion, at));
@@ -454,7 +485,7 @@ export async function deliverDue(
   await Promise.all(
     installations.map(async (inst) => {
       try {
-        await deliverInstallation({ deps, inst, client: deps.client(inst), reservation, renew, budget, counts });
+        await deliverInstallation({ deps, inst, client: deps.client(inst), reservation, renew, budget, counts, coreDown: false });
       } catch (e) {
         console.error("[siteminder] delivering bookings failed for an installation", { installationId: inst.id, propertyCode: inst.propertyCode, error: errorText(e) });
       }

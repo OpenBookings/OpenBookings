@@ -84,9 +84,11 @@ function fakeClock(start = T0) {
 function fakeCore() {
   const reports: { bookingId: string; report: DeliveryReport }[] = [];
   let failures = 0;
+  const tried = { calls: 0 };
   const client = () =>
     ({
       reportDelivery: async (bookingId: string, report: DeliveryReport) => {
+        tried.calls += 1;
         if (failures > 0) {
           failures -= 1;
           throw new CoreApiError("core /bookings/:bookingId/delivery answered 500", "server", 500, true);
@@ -94,7 +96,7 @@ function fakeCore() {
         reports.push({ bookingId, report });
       },
     }) as unknown as CoreClient;
-  return { reports, client, failNext: (n: number) => { failures += n; } };
+  return { reports, client, tried, failNext: (n: number) => { failures += n; } };
 }
 
 type Row = {
@@ -352,6 +354,167 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       expect(core.reports.map((r) => r.report)).toEqual([
         { status: "needs_attention", acknowledgedAt: null, detail: "SiteMinder error Type 4: Invalid Username and/or Password for OBK", version: 1 },
       ]);
+    });
+  });
+
+  it("a validation error (Type 10): needs_attention at once", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      sm.failNext(1, "error");
+
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 0, retrying: 0, needsAttention: 1 });
+      expect(sm.received).toHaveLength(1);
+      expect(await rowOf(db)).toMatchObject({ status: "needs_attention", acked: "none", attempts: 1, last_error: "SiteMinder error Type 10: Node CreateDateTime must exist" });
+      expect(statuses(core)).toEqual([["needs_attention", 1]]);
+    });
+  });
+
+  it("a Commit whose answer never came, then v2: Commit, Commit, Modify, delivered at v2", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      sm.failNext(1, "timeout"); // the fake records the Commit: SiteMinder may hold v1
+
+      expect(await run(mkDeps(db, core, clock), 1_000)).toEqual({ delivered: 0, retrying: 1, needsAttention: 0 });
+      await upsertFromFeed(db, inst, booking(B1, 2, { rooms: [room({ adults: 1 })] }), T0);
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
+
+      // The v2 Commit is ignored by SiteMinder (repeated ID) if v1 arrived, so a Modify carries v2.
+      expect(sm.received.map(resStatus)).toEqual(["Commit", "Commit", "Modify"]);
+      expect(sm.received[2]).toContain(`<GuestCount AgeQualifyingCode="10" Count="1"/>`);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked: "committed", acked_version: "2" });
+      const { rows } = await db.query<{ v: string | null }>(`SELECT commit_attempt_version::text AS v FROM siteminder.outbox WHERE booking_id = $1`, [B1]);
+      expect(rows[0]?.v).toBeNull();
+      expect(statuses(core)).toEqual([["retrying", 1], ["delivered", 2]]);
+    });
+  });
+
+  it("a newer version arriving during a send that fails transiently is a new message: sent next, clean slate", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      const sdb = serialized(db);
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      await run(mkDeps(db, core, clock));
+      await upsertFromFeed(db, inst, booking(B1, 2, { rooms: [room({ adults: 1 })] }), T0);
+      sm.failNext(1, "http500");
+      const http = reservationPoster(() => sm.url, 300);
+      const seenByLastSend: Row[] = [];
+      let sends = 0;
+      const post: Post = withTimeout(async (xml) => {
+        sends += 1;
+        if (sends === 1) await upsertFromFeed(sdb, inst, booking(B1, 3, { rooms: [room({ adults: 2, children: 1 })] }), T0);
+        else seenByLastSend.push(await rowOf(sdb));
+        return http(xml);
+      });
+
+      expect(await run({ ...mkDeps(db, core, clock), db: sdb, post })).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
+      expect(sm.received.map(resStatus)).toEqual(["Commit", "Modify", "Modify"]);
+      expect(sm.received[2]).toContain(`<GuestCount AgeQualifyingCode="8" Count="1"/>`);
+      expect(clock.slept).toEqual([]);
+      expect(seenByLastSend).toMatchObject([{ attempts: 0, first_failed_at: null, last_error: null, acked_version: "1" }]);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked_version: "3" });
+      expect(statuses(core)).toEqual([["delivered", 1], ["delivered", 3]]);
+    });
+  });
+
+  it("a newer version arriving during a send that is refused for good is still sent", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      const sdb = serialized(db);
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      sm.failNext(1, "error");
+      const http = reservationPoster(() => sm.url, 300);
+      let sends = 0;
+      const post: Post = withTimeout(async (xml) => {
+        sends += 1;
+        if (sends === 1) await upsertFromFeed(sdb, inst, booking(B1, 2), T0);
+        return http(xml);
+      });
+
+      expect(await run({ ...mkDeps(db, core, clock), db: sdb, post })).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
+      // v1 was refused; v2 goes out as a Commit (and a harmless Modify, since a Commit of v1 had been tried).
+      expect(sm.received.map(resStatus)).toEqual(["Commit", "Commit", "Modify"]);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked_version: "2", attempts: 0, first_failed_at: null, last_error: null });
+      expect(statuses(core)).toEqual([["delivered", 2]]);
+    });
+  });
+
+  it("a version that lands between reading the fresh row and writing it is not lost (compare and set)", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      const sdb = serialized(db);
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      let landed = false;
+      const racing = {
+        query: async (text: string, params?: unknown[]) => {
+          const result = await sdb.query(text, params);
+          // Right after the settle's read of the fresh row, before its UPDATE.
+          if (!landed && text.startsWith("SELECT booking_id, latest") && text.includes("claim_token = $3")) {
+            landed = true;
+            await upsertFromFeed(sdb, inst, booking(B1, 2, { rooms: [room({ adults: 1 })] }), T0);
+          }
+          return result;
+        },
+      } as unknown as Queryable;
+
+      expect(await run({ ...mkDeps(db, core, clock), db: racing })).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
+      expect(landed).toBe(true);
+      expect(sm.received.map(resStatus)).toEqual(["Commit", "Modify"]);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked_version: "2" });
+      // The decision made on the stale read (delivered v1) was never written nor reported.
+      expect(statuses(core)).toEqual([["delivered", 2]]);
+    });
+  });
+
+  it("a send whose claim ran out (its tick died) is taken over, not before", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      await db.query(`UPDATE siteminder.outbox SET status = 'sending', claim_token = gen_random_uuid(), next_attempt_at = $1 WHERE booking_id = $2`, [
+        new Date(T0.getTime() + 10_000).toISOString(),
+        B1,
+      ]);
+
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 0, retrying: 0, needsAttention: 0 });
+      expect(sm.received).toEqual([]);
+      clock.t += 10_000;
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 1, retrying: 0, needsAttention: 0 });
+      expect(sm.received.map(resStatus)).toEqual(["Commit"]);
+      expect(await rowOf(db)).toMatchObject({ status: "delivered", acked: "committed" });
+    });
+  });
+
+  it("core down: one failed report and the rest of the run skips core; the next tick sends them all", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+      await upsertFromFeed(db, inst, booking(B2, 1), new Date(T0.getTime() + 1));
+      core.failNext(1);
+
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 2, retrying: 0, needsAttention: 0 });
+      expect(core.tried.calls).toBe(1);
+      expect((await rowOf(db, B1)).report_pending).toBe(true);
+      expect((await rowOf(db, B2)).report_pending).toBe(true);
+
+      await tick(mkDeps(db, core, clock), { budgetMs: 1_000 });
+      expect(core.reports.map((r) => r.bookingId).sort()).toEqual([B1, B2].sort());
+      expect((await rowOf(db, B1)).report_pending).toBe(false);
+      expect((await rowOf(db, B2)).report_pending).toBe(false);
     });
   });
 

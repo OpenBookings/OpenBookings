@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type AriBatch, MAX_ARI_CHANGES } from "@openbookings/apps-contract";
-import { alert } from "./alert";
+import { alert, errorText } from "./alert";
 import { CORE_TIMEOUT_MS, CoreApiError, coreClient } from "./core-client";
 import type { Queryable } from "./db/migrate";
 import { getPool } from "./db/pool";
@@ -28,6 +28,7 @@ import { type AppInstallation, activeInstallations } from "./installations";
 import { dueForPoll } from "./outbox-store";
 import { dayNumber } from "./ota/status-control";
 import { pollInstallation } from "./poll";
+import { ALERT_AFTER_FAILURES, retryDelaySeconds } from "./retry";
 
 export type TickDeps = {
   db: Queryable;
@@ -50,9 +51,6 @@ export type TickResult = { inboxApplied: number; inboxFailed: number; delivery?:
 
 /** Nights one POST may expand to in core (sum over its changes of the days from..to), next to MAX_ARI_CHANGES. */
 export const MAX_BATCH_NIGHTS = 50_000;
-/** Wait after the 1st, 2nd, 3rd and 4th failure; later failures keep the last wait. */
-export const RETRY_SECONDS = [5, 15, 30, 60] as const;
-export const ALERT_AFTER_FAILURES = 5;
 export const STALE_INBOX_SECONDS = 10 * 60;
 /**
  * When new work may start. It fits one full SiteMinder send (60 s timeout) after other work: a send only starts
@@ -75,7 +73,6 @@ export function defaultTickDeps(): TickDeps {
   };
 }
 
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // ---------------------------------------------------------------------------------------------------------------
 // Batching
@@ -232,7 +229,7 @@ async function drain(deps: TickDeps, inst: AppInstallation, token: string, budge
         break;
       }
       const attempts = Math.max(...due.filter((m) => pack.messageIds.includes(m.id)).map((m) => m.attempts)) + 1;
-      const delaySeconds = RETRY_SECONDS[Math.min(attempts, RETRY_SECONDS.length) - 1] as number;
+      const delaySeconds = retryDelaySeconds(attempts);
       await scheduleRetry(deps.db, pack.messageIds, outcome.error, new Date(at.getTime() + delaySeconds * 1000));
       if (attempts === ALERT_AFTER_FAILURES) {
         alert("error", `inbox message failed ${attempts} times; still retrying every ${delaySeconds} s`, { ...context, messageIds: pack.messageIds, error: outcome.error });

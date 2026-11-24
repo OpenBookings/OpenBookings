@@ -1,12 +1,11 @@
 import type { AppBooking } from "@openbookings/apps-contract";
+import { retryDelaySeconds } from "./retry";
 
 /**
- * Seconds to wait after the 1st, 2nd, 3rd and 4th transient failure; every later failure waits the last value
- * (60 s). Transient failures are retried until RETRY_WINDOW_SECONDS have passed since the first failure of the
- * current message (guides_error-handling.md:248: back off, "then every 1 minute until a minimum timeout of 30
- * minutes is reached").
+ * Transient failures are retried on the shared schedule (retry.ts) until RETRY_WINDOW_SECONDS have passed since the
+ * first failure of the current message (guides_error-handling.md:248: back off, "then every 1 minute until a
+ * minimum timeout of 30 minutes is reached").
  */
-export const RETRY_SECONDS = [5, 15, 30, 60];
 export const RETRY_WINDOW_SECONDS = 30 * 60;
 
 export type OutboxRow = {
@@ -16,6 +15,11 @@ export type OutboxRow = {
   latestVersion: number;
   status: "waiting" | "sending" | "retrying" | "delivered" | "needs_attention" | "not_sent";
   attempts: number;
+  /**
+   * The version of the first Commit sent while nothing is acked yet (recorded before the send, since a timeout,
+   * a network error or a 5xx leaves unknown whether SiteMinder took it). Null once a Commit is acked.
+   */
+  commitAttemptVersion: number | null;
 };
 
 export type NextMessage = { send: "Commit" | "Modify" | "Cancel"; booking: AppBooking } | { send: "none" } | { needsAttention: string };
@@ -63,10 +67,16 @@ export function nextMessage(row: OutboxRow): NextMessage {
  * defaulting to `row.latestVersion` would ack a version SiteMinder never saw.
  *
  * - Success: acked moves to committed (Commit/Modify) or cancelled (Cancel) at `sentVersion`; attempts reset to 0.
+ *   A Commit is acked at the LOWER of `sentVersion` and `commitAttemptVersion`: SiteMinder ignores a repeated
+ *   Commit ID, so if an earlier Commit (v1) whose outcome was unknown did arrive, the hotel holds v1 and a Modify
+ *   with the latest data must follow (a Modify of identical data is harmless). `commitAttemptVersion` is cleared.
  *   `delivered` only when nothing else is pending: the sent version is still the latest and `nextMessage` of the
  *   new row has nothing to send. Otherwise `waiting`, so the next call sends it: a newer version arrived during
  *   the send, or a Commit of an already-cancelled booking still needs its Cancel. A reopen after Cancel also
  *   goes to `waiting`; the next `nextMessage` reports the needs-attention reason.
+ * - Failure while a newer version arrived (`sentVersion < row.latestVersion`): the newer version is a new
+ *   message, as if it had come in after the failure (C1's reset): `waiting`, attempts 0, no retry wait, acked
+ *   unchanged — also for a permanent refusal, which concerned the old version.
  * - Permanent failure: `needs_attention` at once, attempts counted, acked unchanged (a failed Commit stays 'none').
  * - Transient failure: attempts + 1; `retrying` after `RETRY_SECONDS[attempts - 1]` (5, 15, 30, 60, then 60
  *   each time), until the failure comes `RETRY_WINDOW_SECONDS` or more after the first failure of this message
@@ -78,21 +88,24 @@ export function afterResult(
   result: Result,
   sentVersion: number,
   failingForSeconds: number,
-): Pick<OutboxRow, "acked" | "ackedVersion" | "status" | "attempts"> & { retryInSeconds: number | null } {
+): Pick<OutboxRow, "acked" | "ackedVersion" | "status" | "attempts" | "commitAttemptVersion"> & { retryInSeconds: number | null } {
+  const { commitAttemptVersion } = row;
   if (!result.ok) {
+    const unchanged = { acked: row.acked, ackedVersion: row.ackedVersion, commitAttemptVersion };
+    if (sentVersion < row.latestVersion) return { ...unchanged, attempts: 0, status: "waiting", retryInSeconds: null };
     const attempts = row.attempts + 1;
     const final = result.permanent || failingForSeconds >= RETRY_WINDOW_SECONDS;
     return {
-      acked: row.acked,
-      ackedVersion: row.ackedVersion,
+      ...unchanged,
       attempts,
       status: final ? "needs_attention" : "retrying",
-      retryInSeconds: final ? null : (RETRY_SECONDS[Math.min(attempts, RETRY_SECONDS.length) - 1] as number),
+      retryInSeconds: final ? null : retryDelaySeconds(attempts),
     };
   }
   const acked = sent === "Cancel" ? "cancelled" : "committed";
-  const next: OutboxRow = { ...row, acked, ackedVersion: sentVersion, attempts: 0 };
+  const ackedVersion = sent === "Commit" && commitAttemptVersion !== null ? Math.min(sentVersion, commitAttemptVersion) : sentVersion;
+  const next: OutboxRow = { ...row, acked, ackedVersion, attempts: 0, commitAttemptVersion: null };
   const after = nextMessage(next);
-  const pending = sentVersion < row.latestVersion || "needsAttention" in after || after.send !== "none";
-  return { acked, ackedVersion: sentVersion, attempts: 0, status: pending ? "waiting" : "delivered", retryInSeconds: null };
+  const pending = ackedVersion < row.latestVersion || "needsAttention" in after || after.send !== "none";
+  return { acked, ackedVersion, attempts: 0, status: pending ? "waiting" : "delivered", retryInSeconds: null, commitAttemptVersion: null };
 }

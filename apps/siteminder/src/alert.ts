@@ -3,3 +3,5 @@ export function alert(level: "error" | "warning", message: string, extra: Record
   if (level === "error") console.error(`[siteminder] ${message}`, extra);
   else console.warn(`[siteminder] ${message}`, extra);
 }
+
+export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
