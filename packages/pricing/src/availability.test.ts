@@ -30,6 +30,15 @@ describe("nightTotal", () => {
   test("floors at zero", () => {
     expect(nightTotal({ override: null, totalRooms: null, totalUnits: 1, blocked: 3 })).toBe(0);
   });
+  test("managed: a night the app has not sent has no units", () => {
+    expect(nightTotal({ override: 8, totalRooms: 5, totalUnits: 10, blocked: 0, managed: { unitsLeft: null, settledBooked: 0 } })).toBe(0);
+  });
+  test("managed: the app's units left plus our settled bookings, ignoring our own numbers", () => {
+    expect(nightTotal({ override: 8, totalRooms: 5, totalUnits: 10, blocked: 4, managed: { unitsLeft: 2, settledBooked: 1 } })).toBe(3);
+  });
+  test("managed: zero left and nothing settled is zero", () => {
+    expect(nightTotal({ override: null, totalRooms: null, totalUnits: 10, blocked: 0, managed: { unitsLeft: 0, settledBooked: 0 } })).toBe(0);
+  });
 });
 
 describe("bookableUnits", () => {
@@ -83,6 +92,20 @@ describe("stayRuleReasons", () => {
         ],
       }),
     ).toEqual(["rate_closed", "closed_to_arrival", "closed_to_departure", "min_stay"]);
+  });
+  test("a stay-through minimum on any night of the stay constrains its length", () => {
+    const rules = [rule("2026-07-02", { minStayThrough: 3 })];
+    expect(stayRuleReasons({ ...stay, checkIn: "2026-07-01", checkOut: "2026-07-03", rules })).toEqual(["min_stay"]);
+    expect(stayRuleReasons({ ...stay, checkIn: "2026-07-01", checkOut: "2026-07-04", rules })).toEqual([]);
+  });
+  test("a stay-through rule on the departure date does not apply", () => {
+    const rules = [rule("2026-07-03", { minStayThrough: 5 })];
+    expect(stayRuleReasons({ ...stay, checkIn: "2026-07-01", checkOut: "2026-07-03", rules })).toEqual([]);
+  });
+  test("a stay-through maximum on any night of the stay constrains its length", () => {
+    const rules = [rule("2026-07-03", { maxStayThrough: 2 })];
+    expect(stayRuleReasons({ ...stay, rules })).toEqual(["max_stay"]);
+    expect(stayRuleReasons({ ...stay, checkIn: "2026-07-02", checkOut: "2026-07-04", rules })).toEqual([]);
   });
   test("month boundaries count whole days", () => {
     expect(

@@ -1,4 +1,5 @@
 import { CURRENT_PROPERTY_SQL, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
+import { MANAGED_PROPERTY_SQL, SETTLED_BOOKED_SQL } from "@openbookings/db/apps";
 import {
   bookableUnits,
   hasStayLengthDiscount,
@@ -81,12 +82,21 @@ interface AvailabilityQueryRow {
   closure_by: string | null;
   closure_by_name: string | null;
   closure_at: string | null;
+  /** The property has an active app installation (SiteMinder): the next two replace our own stock. */
+  managed: boolean;
+  /** app_inventory.units_left; null when the app never sent this night. */
+  units_left: number | null;
+  /** Of `booked`, the reservations the app has already counted in `units_left`. */
+  settled_booked: number;
 }
 
 /**
  * One room type on one night. The host's number (`available_override`) is the
  * night's total and never moves by itself; what goes down is what is left to
  * book: total - booked - held. The same two functions decide it for guests.
+ *
+ * On a managed property the total is the app's units left plus the bookings it
+ * has settled, as in loadStayAvailability (@openbookings/db).
  */
 export function buildAvailabilityCell(
   row: Pick<
@@ -102,7 +112,8 @@ export function buildAvailabilityCell(
     | "updated_by"
     | "updated_by_name"
     | "updated_at"
-  >,
+  > &
+    Partial<Pick<AvailabilityQueryRow, "managed" | "units_left" | "settled_booked">>,
   closure: RoomClosureRule | null,
 ): AvailabilityCell {
   const override = row.available_override;
@@ -111,6 +122,9 @@ export function buildAvailabilityCell(
     totalRooms: row.effective_total,
     totalUnits: row.total_units,
     blocked: row.blocked,
+    managed: row.managed
+      ? { unitsLeft: row.units_left ?? null, settledBooked: row.settled_booked ?? 0 }
+      : undefined,
   });
   const left = bookableUnits({ total, booked: row.booked, held: row.held });
   return {
@@ -196,16 +210,28 @@ interface PropertyRow {
  * `booked` counts reservations on bookings that actually hold stock. Pending
  * bookings deliberately do not: they have not been paid for and holding
  * inventory against them would show hosts a lower number than they can sell.
+ *
+ * A room on a property a connected app manages also carries the app's units
+ * left and the bookings the app has settled (MANAGED_PROPERTY_SQL,
+ * SETTLED_BOOKED_SQL, shared with loadStayAvailability), and its room closures
+ * are ignored. "Now" is the transaction's now(), as for `held`.
  */
 export const AVAILABILITY_SQL = `
 WITH dates AS (
   SELECT generate_series($3::date, $4::date, INTERVAL '1 day')::date AS d
 ),
+nights AS (
+  SELECT d FROM dates
+),
+clock AS (
+  SELECT now() AS now
+),
 -- Draft (unpublished) rooms are included: R&A is where a new room type gets
 -- its prices, and it has to be priced before it can go on sale. Archived rooms
 -- are gone for good. on_sale tells the grid which is which.
 scope_rooms AS (
-  SELECT r.id, r.name, r.room_type, r.base_occupancy, r.total_units, r.is_active AS on_sale
+  SELECT r.id, r.property_id, r.name, r.room_type, r.base_occupancy, r.total_units, r.is_active AS on_sale,
+         ${MANAGED_PROPERTY_SQL} AS managed
   FROM rooms r
   JOIN properties p ON p.id = r.property_id
   WHERE ${CURRENT_PROPERTY_SQL}
@@ -236,7 +262,8 @@ held AS (
   WHERE bi.status = 'open'
     AND bi.hold_expires_at > now()
   GROUP BY bir.room_id, d.d
-)
+),
+settled AS (${SETTLED_BOOKED_SQL})
 SELECT
   sr.id                                        AS room_id,
   sr.name                                      AS room_name,
@@ -260,12 +287,17 @@ SELECT
   rc.note                                      AS closure_note,
   rc.created_by                                AS closure_by,
   cu.name                                      AS closure_by_name,
-  rc.created_at                                AS closure_at
+  rc.created_at                                AS closure_at,
+  sr.managed,
+  ainv.units_left,
+  COALESCE(st.units, 0)                        AS settled_booked
 FROM scope_rooms sr
 CROSS JOIN dates d
 LEFT JOIN room_inventory inv ON inv.room_id = sr.id AND inv.date = d.d
 LEFT JOIN booked bk          ON bk.room_id  = sr.id AND bk.date = d.d
 LEFT JOIN held h             ON h.room_id   = sr.id AND h.date  = d.d
+LEFT JOIN app_inventory ainv ON sr.managed AND ainv.room_id = sr.id AND ainv.date = d.d
+LEFT JOIN settled st         ON st.room_id  = sr.id AND st.date = d.d
 LEFT JOIN "user" u           ON u.id = inv.updated_by
 -- The room-type closure, which cascades to every rate plan on the room. Read
 -- here rather than in the rates query: it is a room-type fact, and fetching it
@@ -277,6 +309,7 @@ LEFT JOIN LATERAL (
     AND start_date <= d.d
     AND end_date   >= d.d
     AND is_active
+    AND NOT sr.managed
   ORDER BY priority DESC
   LIMIT 1
 ) rc ON TRUE

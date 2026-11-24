@@ -32,13 +32,22 @@ export const REASON_PRIORITY: readonly UnavailableReason[] = [
  * Units a room type has on one night. An availability override replaces the
  * count outright (blocked units are not subtracted from it); otherwise the
  * night's total rooms (or the room type's units) minus blocked units.
+ *
+ * On a property a connected app manages, `managed` replaces all of that. The
+ * app's `unitsLeft` is already net of every booking it knows about, ours
+ * included once it has settled them (see `SETTLED_BOOKED_SQL` in
+ * @openbookings/db), so the settled ones are added back: `bookableUnits` then
+ * takes all our bookings off again, which leaves unitsLeft minus the unsettled
+ * ones minus held. A night the app never sent (`unitsLeft` null) has none.
  */
 export function nightTotal(i: {
   override: number | null
   totalRooms: number | null
   totalUnits: number
   blocked: number
+  managed?: { unitsLeft: number | null; settledBooked: number }
 }): number {
+  if (i.managed) return i.managed.unitsLeft === null ? 0 : Math.max(0, i.managed.unitsLeft + i.managed.settledBooked)
   if (i.override !== null) return Math.max(0, i.override)
   return Math.max(0, (i.totalRooms ?? i.totalUnits) - i.blocked)
 }
@@ -54,6 +63,9 @@ export type StayRule = {
   maxStay: number | null
   closedToArrival: boolean
   closedToDeparture: boolean
+  /** Stay-through limits (app-managed plans): on any night of the stay, they bound the whole stay's length. */
+  minStayThrough?: number | null
+  maxStayThrough?: number | null
 }
 
 const DAY_MS = 86_400_000
@@ -87,6 +99,15 @@ export function stayRuleReasons(i: {
   const maxStay = arrival?.maxStay ?? i.planMaxStay
   if (minStay !== null && nights < minStay) found.add('min_stay')
   if (maxStay !== null && nights > maxStay) found.add('max_stay')
+
+  // Arrival limits above apply on the arrival night only; through limits on
+  // any night stayed (not the departure date).
+  for (const r of i.rules) {
+    const day = dayNumber(r.date)
+    if (day < from || day >= to) continue
+    if (r.minStayThrough != null && nights < r.minStayThrough) found.add('min_stay')
+    if (r.maxStayThrough != null && nights > r.maxStayThrough) found.add('max_stay')
+  }
 
   return REASON_PRIORITY.filter(r => found.has(r))
 }

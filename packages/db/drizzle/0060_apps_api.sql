@@ -17,8 +17,10 @@
 --                     transaction share a txid, seq breaks ties across inserts.
 --
 -- Privileges follow 0049/0057: ob_system (BYPASSRLS) reads and writes it all;
--- ob_app gets the installation and delivery tables behind property policies;
--- the ARI tables are only touched by the Apps API (ob_system).
+-- ob_app gets the installation and delivery tables behind property policies.
+-- The ARI tables are written only by the Apps API (ob_system); ob_app may read
+-- them, as it reads room_inventory, rate_overrides and rate_plan_restrictions,
+-- because search, the quote and the host rates grid price and count from them.
 
 SET lock_timeout = '5s';
 
@@ -198,6 +200,7 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ob_app') THEN
     GRANT SELECT, INSERT, UPDATE, DELETE ON app_installations, app_booking_delivery TO ob_app;
+    GRANT SELECT ON app_inventory, app_rates, app_restrictions TO ob_app;
   END IF;
 END
 $$;
@@ -215,6 +218,16 @@ BEGIN
     CREATE POLICY ob_app_party ON app_installations FOR ALL TO ob_app
       USING (property_id = ANY ((SELECT app.readable_property_ids())::uuid[]))
       WITH CHECK (property_id = ANY ((SELECT app.readable_property_ids())::uuid[]));
+
+    -- Read-only and public, like the host tables they stand in for (which
+    -- have no row-level security at all): any hotel's prices and stock are
+    -- what guest search shows anyway.
+    DROP POLICY IF EXISTS ob_app_read ON app_inventory;
+    CREATE POLICY ob_app_read ON app_inventory FOR SELECT TO ob_app USING (true);
+    DROP POLICY IF EXISTS ob_app_read ON app_rates;
+    CREATE POLICY ob_app_read ON app_rates FOR SELECT TO ob_app USING (true);
+    DROP POLICY IF EXISTS ob_app_read ON app_restrictions;
+    CREATE POLICY ob_app_read ON app_restrictions FOR SELECT TO ob_app USING (true);
 
     DROP POLICY IF EXISTS ob_app_party ON app_booking_delivery;
     CREATE POLICY ob_app_party ON app_booking_delivery FOR ALL TO ob_app

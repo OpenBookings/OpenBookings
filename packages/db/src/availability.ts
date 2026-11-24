@@ -7,6 +7,7 @@ import {
   type StayRule,
   type UnavailableReason,
 } from "@openbookings/pricing";
+import { MANAGED_PROPERTY_SQL, SETTLED_BOOKED_SQL } from "./apps/managed-sql";
 import type { Queryable } from "./reservation-policy";
 
 /**
@@ -50,6 +51,9 @@ type NightRow = {
   booked: number;
   held: number;
   closed: boolean;
+  /** Managed rooms only: the app's units left (null: not sent) and our bookings it has settled. */
+  unitsLeft: number | null;
+  settledBooked: number;
 };
 
 type PlanRow = {
@@ -67,6 +71,7 @@ type RoomRow = {
   max_adults: number;
   max_children: number;
   total_units: number;
+  managed: boolean;
   nights: NightRow[];
   rate_plans: PlanRow[];
 };
@@ -87,6 +92,13 @@ type RoomRow = {
  * `held` is one unit per booking_intent_rooms row of an open, unexpired
  * intent, for each night it covers. `now` is a parameter, never SQL now(), so
  * a caller (or a test) decides what "unexpired" means.
+ *
+ * A room whose property a connected app manages (spec §3, §4) reads none of
+ * room_inventory, room_closures, rate_plan_restrictions or the plan's own stay
+ * limits: its stock is app_inventory's units left plus our bookings the app has
+ * settled (`settled`, see SETTLED_BOOKED_SQL; `nightTotal` adds them back), and
+ * its plan rules are app_restrictions, with a night that has no app_rates row
+ * closed. Every other room takes exactly the path it always did.
  */
 const STAY_AVAILABILITY_SQL = `
 WITH nights AS (
@@ -95,15 +107,20 @@ WITH nights AS (
 rule_dates AS (
   SELECT generate_series($2::date, $3::date, INTERVAL '1 day')::date AS d
 ),
+clock AS (
+  SELECT $4::timestamptz AS now
+),
 scope_rooms AS (
   SELECT r.id, r.property_id, r.name, r.is_active AS on_sale,
-         r.max_adults, r.max_children, r.total_units
+         r.max_adults, r.max_children, r.total_units,
+         ${MANAGED_PROPERTY_SQL} AS managed
   FROM rooms r
   WHERE r.property_id = ANY($1::uuid[])
     AND r.archived_at IS NULL
 ),
 scope_plans AS (
-  SELECT rp.id, rp.room_id, rp.name, rp.sort_order, rp.is_refundable, rp.min_stay, rp.max_stay
+  SELECT rp.id, rp.room_id, rp.name, rp.sort_order, rp.is_refundable, rp.min_stay, rp.max_stay,
+         sr.managed
   FROM rate_plans rp
   JOIN scope_rooms sr ON sr.id = rp.room_id
   WHERE rp.is_active
@@ -133,6 +150,7 @@ held AS (
     AND bi.id IS DISTINCT FROM $5::uuid
   GROUP BY bir.room_id, n.d
 ),
+settled AS (${SETTLED_BOOKED_SQL}),
 room_nights AS (
   SELECT
     sr.id                            AS room_id,
@@ -142,18 +160,22 @@ room_nights AS (
     COALESCE(inv.blocked_rooms, 0)   AS blocked,
     COALESCE(bk.units, 0)            AS booked,
     COALESCE(h.units, 0)             AS held,
-    EXISTS (
+    NOT sr.managed AND EXISTS (
       SELECT 1 FROM room_closures rc
       WHERE rc.room_id = sr.id
         AND rc.start_date <= n.d
         AND rc.end_date   >= n.d
         AND rc.is_active
-    )                                AS closed
+    )                                AS closed,
+    ainv.units_left,
+    COALESCE(st.units, 0)            AS settled_booked
   FROM scope_rooms sr
   CROSS JOIN nights n
   LEFT JOIN room_inventory inv ON inv.room_id = sr.id AND inv.date = n.d
   LEFT JOIN booked bk          ON bk.room_id  = sr.id AND bk.date = n.d
   LEFT JOIN held h             ON h.room_id   = sr.id AND h.date  = n.d
+  LEFT JOIN app_inventory ainv ON sr.managed AND ainv.room_id = sr.id AND ainv.date = n.d
+  LEFT JOIN settled st         ON st.room_id  = sr.id AND st.date = n.d
 ),
 plan_rules AS (
   SELECT
@@ -163,7 +185,9 @@ plan_rules AS (
     rs.min_stay,
     rs.max_stay,
     COALESCE(rs.closed_to_arrival, false)    AS closed_to_arrival,
-    COALESCE(rs.closed_to_departure, false)  AS closed_to_departure
+    COALESCE(rs.closed_to_departure, false)  AS closed_to_departure,
+    NULL::int                                AS min_stay_through,
+    NULL::int                                AS max_stay_through
   FROM scope_plans sp
   CROSS JOIN rule_dates rd
   LEFT JOIN LATERAL (
@@ -187,7 +211,28 @@ plan_rules AS (
     ORDER BY priority DESC
     LIMIT 1
   ) rs ON TRUE
-  WHERE cl.id IS NOT NULL OR rs.id IS NOT NULL
+  WHERE NOT sp.managed
+    AND (cl.id IS NOT NULL OR rs.id IS NOT NULL)
+
+  UNION ALL
+
+  -- Managed plans: every date, since a night without an app price is closed
+  -- (the departure date needs none). Arrival limits stand in for min/max stay.
+  SELECT
+    sp.id,
+    rd.d,
+    COALESCE(ars.is_closed, false) OR (art.rate_plan_id IS NULL AND rd.d < $3::date),
+    ars.min_stay_arrival,
+    ars.max_stay_arrival,
+    COALESCE(ars.closed_to_arrival, false),
+    COALESCE(ars.closed_to_departure, false),
+    ars.min_stay_through,
+    ars.max_stay_through
+  FROM scope_plans sp
+  CROSS JOIN rule_dates rd
+  LEFT JOIN app_restrictions ars ON ars.rate_plan_id = sp.id AND ars.date = rd.d
+  LEFT JOIN app_rates art        ON art.rate_plan_id = sp.id AND art.date = rd.d
+  WHERE sp.managed
 )
 SELECT
   sr.id           AS room_id,
@@ -196,15 +241,18 @@ SELECT
   sr.max_adults,
   sr.max_children,
   sr.total_units,
+  sr.managed,
   COALESCE((
     SELECT json_agg(json_build_object(
-      'date',       rn.d::text,
-      'override',   rn.available_override,
-      'totalRooms', rn.total_rooms,
-      'blocked',    rn.blocked,
-      'booked',     rn.booked,
-      'held',       rn.held,
-      'closed',     rn.closed
+      'date',          rn.d::text,
+      'override',      rn.available_override,
+      'totalRooms',    rn.total_rooms,
+      'blocked',       rn.blocked,
+      'booked',        rn.booked,
+      'held',          rn.held,
+      'closed',        rn.closed,
+      'unitsLeft',     rn.units_left,
+      'settledBooked', rn.settled_booked
     ) ORDER BY rn.d)
     FROM room_nights rn WHERE rn.room_id = sr.id
   ), '[]'::json)  AS nights,
@@ -212,8 +260,9 @@ SELECT
     SELECT json_agg(json_build_object(
       'ratePlanId',   sp.id,
       'isRefundable', sp.is_refundable,
-      'minStay',      sp.min_stay,
-      'maxStay',      sp.max_stay,
+      -- A managed plan's own defaults give way to the app's restrictions.
+      'minStay',      CASE WHEN sp.managed THEN NULL ELSE sp.min_stay END,
+      'maxStay',      CASE WHEN sp.managed THEN NULL ELSE sp.max_stay END,
       'rules', COALESCE((
         SELECT json_agg(json_build_object(
           'date',              pr.d::text,
@@ -221,7 +270,9 @@ SELECT
           'minStay',           pr.min_stay,
           'maxStay',           pr.max_stay,
           'closedToArrival',   pr.closed_to_arrival,
-          'closedToDeparture', pr.closed_to_departure
+          'closedToDeparture', pr.closed_to_departure,
+          'minStayThrough',    pr.min_stay_through,
+          'maxStayThrough',    pr.max_stay_through
         ) ORDER BY pr.d)
         FROM plan_rules pr WHERE pr.rate_plan_id = sp.id
       ), '[]'::json)
@@ -262,7 +313,13 @@ export async function loadRoomsAvailability(
 
 function toRoom(row: RoomRow, stay: { checkIn: string; checkOut: string }): RoomAvailability {
   const nights = row.nights.map((n): RoomNightUnits => {
-    const total = nightTotal({ override: n.override, totalRooms: n.totalRooms, totalUnits: row.total_units, blocked: n.blocked });
+    const total = nightTotal({
+      override: n.override,
+      totalRooms: n.totalRooms,
+      totalUnits: row.total_units,
+      blocked: n.blocked,
+      managed: row.managed ? { unitsLeft: n.unitsLeft, settledBooked: n.settledBooked } : undefined,
+    });
     return { date: n.date, total, booked: n.booked, held: n.held, bookable: bookableUnits({ total, booked: n.booked, held: n.held }) };
   });
   return {
