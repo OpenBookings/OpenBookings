@@ -121,14 +121,14 @@ export const UNSELLABLE_PRICE_NOTE =
  */
 export function adjustmentChip(cell: {
   hasOverride: boolean;
-  trace: { modifier_type?: string; delta: number }[];
+  trace: { modifier_type?: string; delta_cents: number }[];
 }): string | null {
   if (cell.hasOverride) return "Manual";
 
-  const base = cell.trace.find((step) => !step.modifier_type)?.delta ?? 0;
+  const base = cell.trace.find((step) => !step.modifier_type)?.delta_cents ?? 0;
   const moved = cell.trace
     .filter((step) => step.modifier_type)
-    .reduce((total, step) => total + step.delta, 0);
+    .reduce((total, step) => total + step.delta_cents, 0);
 
   if (base === 0 || moved === 0) return null;
 

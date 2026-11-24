@@ -72,20 +72,20 @@ describeWithDb("loadHostReservations against Postgres", () => {
       [property.id],
     );
     const rate = await one(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, 'Room only', 100, true, true) RETURNING id`,
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Room only', 10000, true, true) RETURNING id`,
       [room.id],
     );
     bookingId = (
       await one(
-        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-         VALUES ($1, $2, CURRENT_DATE + 30, CURRENT_DATE + 32, 'pending', 400) RETURNING id`,
+        `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents)
+         VALUES ($1, $2, CURRENT_DATE + 30, CURRENT_DATE + 32, 'pending', 40000, 40000) RETURNING id`,
         [property.id, guest],
       )
     ).id;
     for (let i = 0; i < 2; i += 1) {
       await db.query(
-        `INSERT INTO reservations (booking_id, room_id, rate_plan_id, adults, total_nights, price_per_night, total_amount)
-         VALUES ($1, $2, $3, 2, 2, 100, 200)`,
+        `INSERT INTO reservations (booking_id, room_id, rate_plan_id, adults, total_nights, price_per_night_cents, total_cents)
+         VALUES ($1, $2, $3, 2, 2, 10000, 20000)`,
         [bookingId, room.id, rate.id],
       );
     }
@@ -105,12 +105,12 @@ describeWithDb("loadHostReservations against Postgres", () => {
 
   test("the party by age band, the cots and beds, and what the hotel collects", async () => {
     await db.query(
-      `UPDATE reservations SET infants = 1, cots = 1, pay_at_property_amount = 50
+      `UPDATE reservations SET infants = 1, cots = 1, pay_at_property_cents = 5050
        WHERE id = (SELECT id FROM reservations WHERE booking_id = $1 LIMIT 1)`,
       [bookingId],
     );
     const booking = (await loadHostReservations(session(owner), propertyId, propertyDb(session(owner)))).find((r) => r.id === bookingId);
-    expect(booking).toMatchObject({ guests: 4, partyLabel: "4 adults, 1 infant", extrasLabel: "1 cot", atHotelAmount: 50 });
+    expect(booking).toMatchObject({ guests: 4, partyLabel: "4 adults, 1 infant", extrasLabel: "1 cot", atHotelCents: 5050 });
   });
 
   test("a refund the host made in their own Stripe shows as its own line, and counts as refunded", async () => {
@@ -126,9 +126,9 @@ describeWithDb("loadHostReservations against Postgres", () => {
       occurredAt: new Date("2031-01-02T09:00:00Z"),
     });
     const booking = (await loadHostReservations(session(owner), propertyId, propertyDb(session(owner)))).find((r) => r.id === bookingId);
-    expect(booking?.refundedAmount).toBe(75);
+    expect(booking?.refundedCents).toBe(7_500);
     expect(booking?.outsideRefunds).toEqual([
-      { kind: "refund", amount: 75, at: expect.stringMatching(/^2031-01-02T09:00:00/), split: null },
+      { kind: "refund", amountCents: 7_500, at: expect.stringMatching(/^2031-01-02T09:00:00/), split: null },
     ]);
     expect(booking?.refundIssue).toBe(false);
   });

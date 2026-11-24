@@ -37,7 +37,6 @@ import {
   formatAdjustment,
   formatDateRange,
   formatFullDate,
-  formatMoney,
   formatTimestamp,
   modifierLabel,
 } from "../_lib/format";
@@ -46,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DraftEdit } from "../_lib/use-ari-draft";
 import type { PriceStep } from "@openbookings/pricing";
+import { centsToInput, formatCents, parseEuroInput, roundHalfUp } from "@openbookings/pricing/money";
 
 /**
  * Explains a number, and stages the one-click changes to it.
@@ -63,7 +63,6 @@ import type { PriceStep } from "@openbookings/pricing";
 
 interface DetailPanelProps {
   selection: AriSelection | null;
-  currency: string;
   stayLength: number;
   onClose: () => void;
   onEditAvailability: (prefill: EditPrefill) => void;
@@ -75,7 +74,6 @@ interface DetailPanelProps {
 
 export function AriDetailPanel({
   selection,
-  currency,
   stayLength,
   onClose,
   onEditAvailability,
@@ -113,7 +111,6 @@ export function AriDetailPanel({
             room={selection.room}
             plan={selection.plan}
             run={selection.run}
-            currency={currency}
             stayLength={stayLength}
             onEditAvailability={onEditAvailability}
             onEditRestrictions={onEditRestrictions}
@@ -312,7 +309,6 @@ function RateDetail({
   room,
   plan,
   run,
-  currency,
   stayLength,
   onEditAvailability,
   onEditRestrictions,
@@ -323,7 +319,6 @@ function RateDetail({
   room: RoomTypeRow;
   plan: RatePlanRow;
   run: CellRun;
-  currency: string;
   stayLength: number;
   onEditAvailability: (prefill: EditPrefill) => void;
   onEditRestrictions: (prefill: EditPrefill) => void;
@@ -362,7 +357,7 @@ function RateDetail({
               : "Not on sale — this room type is a draft in Rooms."}
           </p>
         )}
-        {plan.bar === 0 && (
+        {plan.barCents === 0 && (
           <p className="text-(--amber-11) text-sm">No base rate yet. Set one before it goes on sale.</p>
         )}
         <StatusPill run={run} cell={first} />
@@ -372,12 +367,7 @@ function RateDetail({
         {/* Always, whatever the state. A closed date still has a rate under
             it, and "what would this have sold for?" is exactly the question a
             host asks before deciding whether to reopen. */}
-        <PriceBreakdown
-          plan={plan}
-          cell={first}
-          currency={currency}
-          stayLength={stayLength}
-        />
+        <PriceBreakdown plan={plan} cell={first} stayLength={stayLength} />
 
         {first.reasons.length > 0 && (
           <>
@@ -499,13 +489,7 @@ function RateDetail({
           </ViewOnlyHint>
         )}
 
-        <StagePriceForm
-          plan={plan}
-          cell={first}
-          dates={dates}
-          currency={currency}
-          onStage={onStage}
-        />
+        <StagePriceForm plan={plan} cell={first} dates={dates} onStage={onStage} />
 
         {/* The buttons above act on the dates on screen. A closure usually
             runs past them — the Why section says how far — and reopening
@@ -530,7 +514,7 @@ function RateDetail({
             onClick={() => onEditBaseRate({ ratePlanId: plan.id })}
           >
             <Tag className="size-4" />
-            {plan.bar === 0 ? "Set base rate" : "Edit base rate"}
+            {plan.barCents === 0 ? "Set base rate" : "Edit base rate"}
           </Button>
         </ViewOnlyHint>
 
@@ -606,12 +590,10 @@ function StatusPill({ run, cell }: { run: CellRun; cell: RateCell }) {
 function PriceBreakdown({
   plan,
   cell,
-  currency,
   stayLength,
 }: {
   plan: RatePlanRow;
   cell: RateCell;
-  currency: string;
   stayLength: number;
 }) {
   const fired = new Set(
@@ -621,7 +603,7 @@ function PriceBreakdown({
     .filter((modifier) => !fired.has(modifier.type))
     .sort((a, b) => a.sort_order - b.sort_order);
 
-  const total = cell.trace[cell.trace.length - 1]?.result ?? 0;
+  const totalCents = cell.trace[cell.trace.length - 1]?.result_cents ?? 0;
 
   return (
     <Section title="Price build-up">
@@ -641,22 +623,22 @@ function PriceBreakdown({
                   {step.label}
                 </span>
                 <span className="block truncate text-muted-foreground text-xs">
-                  {stepCaption(step, plan, currency)}
+                  {stepCaption(step, plan)}
                 </span>
               </span>
               <span className="shrink-0 text-right text-sm tabular-nums">
                 {index === 0 ? (
-                  formatMoney(step.result, currency)
+                  formatCents(step.result_cents)
                 ) : (
                   <span
                     className={
-                      step.delta < 0
+                      step.delta_cents < 0
                         ? "text-(--ari-bookable-fg)"
                         : "text-(--ari-adjusted-fg)"
                     }
                   >
-                    {step.delta < 0 ? "−" : "+"}
-                    {formatMoney(Math.abs(step.delta), currency)}
+                    {step.delta_cents < 0 ? "−" : "+"}
+                    {formatCents(Math.abs(step.delta_cents))}
                   </span>
                 )}
               </span>
@@ -676,7 +658,7 @@ function PriceBreakdown({
         value={
           cell.trace.length === 0
             ? "—"
-            : formatMoney(round2(total / stayLength), currency)
+            : formatCents(roundHalfUp(totalCents / stayLength))
         }
         emphasis
       />
@@ -697,11 +679,7 @@ function PriceBreakdown({
               >
                 <span>{modifierLabel(modifier.type)}</span>
                 <span className="tabular-nums">
-                  {formatAdjustment(
-                    modifier.adjustment_type,
-                    modifier.adjustment_value,
-                    currency,
-                  )}
+                  {formatAdjustment(modifier.adjustment_type, modifier.adjustment_value)}
                 </span>
               </li>
             ))}
@@ -727,24 +705,16 @@ function PriceBreakdown({
  * cannot carry — "Parent rate", "Weekend uplift", "replaces the plan rate" —
  * which is what turns a list of figures into an explanation.
  */
-function stepCaption(
-  step: PriceStep,
-  plan: RatePlanRow,
-  currency: string,
-): string {
+function stepCaption(step: PriceStep, plan: RatePlanRow): string {
   if (step.op === "base") return "Plan rate";
   if (step.op === "set") {
-    return `Manual override, replacing the plan rate of ${formatMoney(plan.bar, currency)}`;
+    return `Manual override, replacing the plan rate of ${formatCents(plan.barCents)}`;
   }
+  // `value` is a percentage on a percent step and cents on every other one.
   if (step.op === "percent") {
-    return `Modifier · ${formatAdjustment("percent", step.value, currency)}`;
+    return `Modifier · ${formatAdjustment("percent", step.value)}`;
   }
-  return `Modifier · ${formatAdjustment("flat", step.value, currency)}`;
-}
-
-/** The panel prints step totals; dividing one of them must not reintroduce cents. */
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  return `Modifier · ${formatAdjustment("flat", step.value)}`;
 }
 
 /**
@@ -889,29 +859,28 @@ function StagePriceForm({
   plan,
   cell,
   dates,
-  currency,
   onStage,
 }: {
   plan: RatePlanRow;
   cell: RateCell;
   dates: string[];
-  currency: string;
   onStage: (edits: DraftEdit[]) => void;
 }) {
   const [value, setValue] = React.useState("");
 
-  const stagePrice = (price: number | null) =>
+  const stagePrice = (priceCents: number | null) =>
     onStage(
       dates.map((date) => ({
         kind: "price" as const,
         ratePlanId: plan.id,
         date,
-        price,
+        priceCents,
       })),
     );
 
-  const parsed = Number(value);
-  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
+  // "89,50" and "89.5" both mean 8950 cents.
+  const parsed = parseEuroInput(value);
+  const typed = value.trim() !== "";
 
   return (
     <div className="space-y-2 rounded-lg border p-3">
@@ -922,21 +891,24 @@ function StagePriceForm({
         <Input
           id="ari-price"
           inputMode="decimal"
-          placeholder={String(Math.round(cell.indicativePrice))}
+          placeholder={centsToInput(cell.indicativePriceCents)}
           value={value}
+          aria-invalid={typed && !parsed.ok}
+          aria-describedby={typed && !parsed.ok ? "ari-price-error" : undefined}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || !valid) return;
+            if (event.key !== "Enter" || !parsed.ok) return;
             event.preventDefault();
-            stagePrice(Math.round(parsed));
+            stagePrice(parsed.cents);
             setValue("");
           }}
         />
         <ViewOnlyHint>
           <Button
-            disabled={!valid}
+            disabled={!parsed.ok}
             onClick={() => {
-              stagePrice(Math.round(parsed));
+              if (!parsed.ok) return;
+              stagePrice(parsed.cents);
               setValue("");
             }}
           >
@@ -944,6 +916,11 @@ function StagePriceForm({
           </Button>
         </ViewOnlyHint>
       </div>
+      {typed && !parsed.ok && (
+        <p id="ari-price-error" role="alert" className="text-(--red-9) text-xs">
+          {parsed.error}
+        </p>
+      )}
       {cell.hasOverride && (
         <ViewOnlyHint className="flex w-full">
           <Button
@@ -952,7 +929,7 @@ function StagePriceForm({
             onClick={() => stagePrice(null)}
           >
             Clear the override and go back to the plan rate of{" "}
-            {formatMoney(plan.bar, currency)}
+            {formatCents(plan.barCents)}
           </Button>
         </ViewOnlyHint>
       )}

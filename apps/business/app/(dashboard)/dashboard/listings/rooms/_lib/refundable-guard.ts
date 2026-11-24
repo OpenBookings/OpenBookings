@@ -12,7 +12,8 @@ export interface GuardRate {
   id: string;
   isActive: boolean;
   isRefundable: boolean;
-  bar: number;
+  /** Base rate in cents. */
+  barCents: number;
 }
 
 export const NON_REFUNDABLE_MESSAGE =
@@ -39,10 +40,10 @@ export function refundableGuardError(rates: GuardRate[], next: GuardRate): strin
 
 /** Ids of the active Non-refundable rates that don't keep the 10% rule. */
 function failing(rates: GuardRate[]): Set<string> {
-  const refundableBars = rates.filter((r) => r.isActive && r.isRefundable).map((r) => r.bar);
+  const refundableBars = rates.filter((r) => r.isActive && r.isRefundable).map((r) => r.barCents);
   return new Set(
     rates
-      .filter((r) => r.isActive && !r.isRefundable && !nonRefundableQualifies(r.bar, refundableBars))
+      .filter((r) => r.isActive && !r.isRefundable && !nonRefundableQualifies(r.barCents, refundableBars))
       .map((r) => r.id),
   );
 }

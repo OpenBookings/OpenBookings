@@ -23,6 +23,7 @@ import { VERSION_SQL } from "./ari-query";
 import { dateRange, isoDate, MAX_RANGE_DAYS } from "./date-range";
 import { groupConsecutiveDates } from "./runs";
 import { getServerSession } from "@/lib/auth";
+import { euroCents } from "@/lib/euro-input";
 import {
   currentPropertyPin,
   pinnedAccess,
@@ -292,9 +293,10 @@ const ratePlanSchema = z
   .object({
     roomId: z.string().uuid(),
     name: z.string().min(1).max(100),
-    bar: z.number().int().min(0),
-    // EUR only: prices, commission and refunds are all computed in euros, and a
-    // plan in another currency would be charged and displayed as if it were.
+    /** The base rate as typed ("89,50"), stored as cents. */
+    bar: euroCents.pipe(z.number().int().min(0)),
+    // EUR only: prices, commission and refunds are all computed in euro cents,
+    // and a plan in another currency would be charged and displayed as if it were.
     currency: z.literal("EUR"),
     isRefundable: z.boolean(),
     minStay: z.number().int().min(1),
@@ -305,7 +307,7 @@ const ratePlanSchema = z
     path: ["maxStay"],
   });
 
-export type RatePlanInput = z.infer<typeof ratePlanSchema>;
+export type RatePlanInput = z.input<typeof ratePlanSchema>;
 
 export async function createRatePlan(
   input: RatePlanInput,
@@ -326,21 +328,21 @@ export async function createRatePlan(
   // Annex B B.4: a new plan goes on sale at once, so a Non-refundable one
   // needs a refundable plan on the room that costs at least 10% more.
   if (!data.isRefundable) {
-    const siblings = await query<{ id: string; is_active: boolean; is_refundable: boolean; bar: number }>(
-      `SELECT id, is_active, is_refundable, bar::float8 AS bar FROM rate_plans
+    const siblings = await query<{ id: string; is_active: boolean; is_refundable: boolean; bar_cents: number }>(
+      `SELECT id, is_active, is_refundable, bar_cents::float8 AS bar_cents FROM rate_plans
        WHERE room_id = $1 AND archived_at IS NULL`,
       [data.roomId],
     );
     const refusal = refundableGuardError(
-      siblings.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, bar: r.bar })),
-      { id: "new", isActive: true, isRefundable: false, bar: data.bar },
+      siblings.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, barCents: r.bar_cents })),
+      { id: "new", isActive: true, isRefundable: false, barCents: data.bar },
     );
     if (refusal) return failed(refusal);
   }
 
   const rows = await query<{ id: string }>(
     `INSERT INTO rate_plans
-       (room_id, name, bar, currency, is_refundable, min_stay, max_stay)
+       (room_id, name, bar_cents, currency, is_refundable, min_stay, max_stay)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
@@ -355,7 +357,7 @@ export async function createRatePlan(
   );
 
   revalidatePath(ROUTE);
-  // rate_plans.bar is on the public listing page; the per-date ARI tables are
+  // rate_plans.bar_cents is on the public listing page; the per-date ARI tables are
   // not, which is why setAvailability, setRestriction, clearRestrictions and
   // publishAriChanges deliberately do not purge. Nor do closeRoomType and
   // reopenRoomType: room_closures is not queried by that page either. When the
@@ -371,12 +373,13 @@ export async function createRatePlan(
 
 const baseRateSchema = z.object({
   ratePlanId: z.string().uuid(),
-  // At least 1: a zero base rate is how a rate created in the Rooms editor
+  // Above zero: a zero base rate is how a rate created in the Rooms editor
   // says "not priced yet", and the editor refuses to put one on sale.
-  bar: z.number().int().min(1, "Enter a base rate of at least 1"),
+  /** As typed ("89,50"), stored as cents. */
+  bar: euroCents.pipe(z.number().int().min(1, "Enter a base rate above 0")),
 });
 
-export type BaseRateInput = z.infer<typeof baseRateSchema>;
+export type BaseRateInput = z.input<typeof baseRateSchema>;
 
 /**
  * Set a rate plan's standing nightly price — the figure every date falls back
@@ -399,7 +402,7 @@ export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
   }
 
   const rows = await query<{ room_id: string }>(
-    `UPDATE rate_plans SET bar = $1, updated_at = NOW()
+    `UPDATE rate_plans SET bar_cents = $1, updated_at = NOW()
      WHERE id = $2 AND archived_at IS NULL
      RETURNING room_id`,
     [data.bar, data.ratePlanId],
@@ -409,7 +412,7 @@ export async function setBaseRate(input: BaseRateInput): Promise<ActionResult> {
   // The Rooms editor reads "is this priced" to decide whether a rate can be
   // switched on.
   revalidatePath("/dashboard/listings/rooms", "layout");
-  // rate_plans.bar is on the public listing page, as for createRatePlan.
+  // rate_plans.bar_cents is on the public listing page, as for createRatePlan.
   if (rows[0]) await purgePropertyPage({ roomId: rows[0].room_id });
   return { ok: true, affected: rows.length };
 }
@@ -582,8 +585,11 @@ const ariChangeSchema = z.discriminatedUnion("type", [
     type: z.literal("price"),
     ratePlanId: z.string().uuid(),
     dates,
-    /** Null clears the override and lets the plan's BAR show through again. */
-    price: z.number().int().min(0).nullable(),
+    /**
+     * The nightly price as text ("120.25"), stored as cents. Null clears the
+     * override and lets the plan's BAR show through again.
+     */
+    price: euroCents.pipe(z.number().int().min(0)).nullable(),
     label: z.string().max(100).nullable().default(null),
   }),
   z.object({
@@ -623,6 +629,8 @@ const ariChangeSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AriChange = z.infer<typeof ariChangeSchema>;
+/** What the client sends: prices still as the text the host typed. */
+export type AriChangeInput = z.input<typeof ariChangeSchema>;
 
 const publishSchema = z.object({
   propertyId: z.string().uuid(),
@@ -816,7 +824,7 @@ async function applyChange(
         if (change.price !== null) {
           const inserted = await client.query(
             `INSERT INTO rate_overrides
-               (rate_plan_id, label, start_date, end_date, price_per_night, created_by)
+               (rate_plan_id, label, start_date, end_date, price_per_night_cents, created_by)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id`,
             [change.ratePlanId, change.label, start, end, change.price, userId],

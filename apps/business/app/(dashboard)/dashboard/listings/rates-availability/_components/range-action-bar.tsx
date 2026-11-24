@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Ban, Undo2, X } from "lucide-react";
+import { parseEuroInput } from "@openbookings/pricing/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { RangeSelection } from "../_lib/types";
@@ -61,9 +62,10 @@ export function RangeActionBar({
   const stage = (build: (date: string) => DraftEdit) =>
     onStage(dates.map(build));
 
-  const parsed = Number(price);
-  const priceValid =
-    price.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
+  // "89,50" and "89.5" both mean 8950 cents; anything else stages nothing.
+  const parsed = parseEuroInput(price);
+  const priceCents = parsed.ok ? parsed.cents : null;
+  const priceValid = priceCents !== null;
 
   // Reopening is offered only when something on the run is actually closed on
   // this plan. A room-type closure is lifted on the room type, not here.
@@ -90,31 +92,33 @@ export function RangeActionBar({
         <Input
           inputMode="decimal"
           placeholder="Price incl. VAT"
-          title={RATE_INCLUSIVE_NOTICE}
           aria-label={`Set price for ${dates.length} selected nights, including VAT`}
           className="h-8 w-32"
+          aria-invalid={price.trim() !== "" && !priceValid}
+          title={price.trim() !== "" && !parsed.ok ? parsed.error : RATE_INCLUSIVE_NOTICE}
           value={price}
           onChange={(event) => setPrice(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || !priceValid) return;
+            if (event.key !== "Enter" || priceCents === null) return;
             event.preventDefault();
             stage((date) => ({
               kind: "price",
               ratePlanId: range.plan.id,
               date,
-              price: Math.round(parsed),
+              priceCents,
             }));
           }}
         />
         <Button
           size="sm"
-          disabled={!priceValid}
+          disabled={priceCents === null}
           onClick={() =>
+            priceCents !== null &&
             stage((date) => ({
               kind: "price",
               ratePlanId: range.plan.id,
               date,
-              price: Math.round(parsed),
+              priceCents,
             }))
           }
         >

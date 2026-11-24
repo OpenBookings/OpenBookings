@@ -36,7 +36,7 @@ describeWithDb("pricing rule groups against Postgres", () => {
 
   const addPlan = async (roomId: string, name: string) =>
     (
-      await db.query(`INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active) VALUES ($1, $2, 90, true, true) RETURNING id`, [
+      await db.query(`INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, $2, 9000, true, true) RETURNING id`, [
         roomId,
         name,
       ])
@@ -130,6 +130,26 @@ describeWithDb("pricing rule groups against Postgres", () => {
       await saveRuleGroup(owner, { ...weekly, propertyId: ids.propertyId, groupId: theirs.groupId }, deps()),
     ).toEqual({ ok: false, error: "Rule not found" });
     expect((await rows(theirs.groupId)).every((r) => r.is_active)).toBe(true);
+  });
+
+  test('a flat weekend surcharge of "15.50" stores 1550 cents', async () => {
+    const weekend: RuleGroupForm = {
+      ...weekly,
+      section: "adjustment",
+      kind: "weekend",
+      direction: "up",
+      adjustmentType: "flat",
+      amount: "15.50",
+      daysOfWeek: ["5", "6"],
+      minNights: "",
+    };
+    const saved = await saveRuleGroup(owner, { ...weekend, propertyId: ids.propertyId }, deps());
+    if (!saved.ok) throw new Error(saved.error);
+    const stored = await rows(saved.groupId);
+    expect(stored.map((r) => [r.type, r.value])).toEqual([
+      ["day_of_week", 1550],
+      ["day_of_week", 1550],
+    ]);
   });
 
   test("the database refuses a lower last-minute fixed amount", async () => {

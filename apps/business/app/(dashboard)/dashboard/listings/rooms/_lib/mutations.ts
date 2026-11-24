@@ -427,8 +427,8 @@ export async function saveRoomSpace(
     `UPDATE rooms
      SET size_sqm = $1, bed_config = $2::jsonb, bed_type = $3,
          max_adults = $4, max_children = $5, total_units = $6,
-         base_occupancy = $8, extra_adult_fee = $9, extra_child_fee = $10,
-         cots_max = $11, cot_fee = $12, extra_beds_max = $13, extra_bed_fee = $14,
+         base_occupancy = $8, extra_adult_fee_cents = $9, extra_child_fee_cents = $10,
+         cots_max = $11, cot_fee_cents = $12, extra_beds_max = $13, extra_bed_fee_cents = $14,
          cot_and_extra_bed_together = $15, updated_at = NOW()
      WHERE id = $7`,
     [
@@ -442,12 +442,12 @@ export async function saveRoomSpace(
       d.units,
       roomId,
       d.baseOccupancy,
-      d.extraAdultFee,
-      d.extraChildFee,
+      d.extraAdultFeeCents,
+      d.extraChildFeeCents,
       d.cotsMax,
-      d.cotFee,
+      d.cotFeeCents,
       d.extraBedsMax,
-      d.extraBedFee,
+      d.extraBedFeeCents,
       d.cotAndExtraBedTogether,
     ],
   );
@@ -506,7 +506,7 @@ interface PlanRow {
   room_id: string;
   is_active: boolean;
   is_refundable: boolean;
-  bar: number;
+  bar_cents: number;
   priced: boolean;
   room_published: boolean;
 }
@@ -520,8 +520,8 @@ async function requirePlan(
   const access = await ownsRatePlan(session, ratePlanId, deps);
   if (access !== "ok") return { plan: null, ...switchedReason(access) };
   const plan = await deps.queryOne<PlanRow>(
-    `SELECT rp.id, rp.room_id, rp.is_active, rp.is_refundable, rp.bar::float8 AS bar,
-            (rp.bar > 0) AS priced, r.is_active AS room_published
+    `SELECT rp.id, rp.room_id, rp.is_active, rp.is_refundable, rp.bar_cents::float8 AS bar_cents,
+            (rp.bar_cents > 0) AS priced, r.is_active AS room_published
      FROM rate_plans rp JOIN rooms r ON r.id = rp.room_id
      WHERE rp.id = $1 AND rp.archived_at IS NULL AND r.archived_at IS NULL`,
     [ratePlanId],
@@ -541,12 +541,12 @@ async function otherActiveRates(plan: PlanRow, deps: Pick<MutationDeps, "queryOn
 
 /** The room's rates as the refundable guard sees them. */
 async function roomRates(roomId: string, deps: Pick<MutationDeps, "query">): Promise<GuardRate[]> {
-  const rows = await deps.query<{ id: string; is_active: boolean; is_refundable: boolean; bar: number }>(
-    `SELECT id, is_active, is_refundable, bar::float8 AS bar FROM rate_plans
+  const rows = await deps.query<{ id: string; is_active: boolean; is_refundable: boolean; bar_cents: number }>(
+    `SELECT id, is_active, is_refundable, bar_cents::float8 AS bar_cents FROM rate_plans
      WHERE room_id = $1 AND archived_at IS NULL`,
     [roomId],
   );
-  return rows.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, bar: r.bar }));
+  return rows.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, barCents: r.bar_cents }));
 }
 
 const UNPRICED_MESSAGE =
@@ -557,7 +557,7 @@ const LAST_ACTIVE_MESSAGE =
 /**
  * The two rules on a rate's status, in one place so the Sheet and the inline
  * switch cannot drift: a rate goes on sale only once R&A has priced it (guest
- * search reads `bar` as the nightly price, so an unpriced rate would sell at
+ * search reads `bar_cents` as the nightly price, so an unpriced rate would sell at
  * zero), and a published room never loses its last active rate.
  */
 async function statusChangeError(
@@ -574,7 +574,7 @@ async function statusChangeError(
     id: plan.id,
     isActive: active,
     isRefundable: refundable,
-    bar: plan.bar,
+    barCents: plan.bar_cents,
   });
   if (refusal) return { code: "non_refundable" as const, error: refusal };
   return null;
@@ -600,7 +600,7 @@ export type RateValues = {
  * Create (no `ratePlanId`) or update a rate's descriptive terms. No price,
  * stay length or availability is written here — R&A owns those.
  *
- * A new rate is written with `bar = 0` (unpriced, so it cannot be activated
+ * A new rate is written with `bar_cents = 0` (unpriced, so it cannot be activated
  * until R&A prices it). The host picks refundable (the property's tier) or
  * Non-refundable here; Annex B B.4 is checked on every save.
  */
@@ -664,7 +664,7 @@ export async function saveRate(
       id: plan.id,
       isActive: d.active,
       isRefundable: d.refundable,
-      bar: plan.bar,
+      barCents: plan.bar_cents,
     });
     if (refusal) return { values, errors: { refundable: [refusal] }, success: false };
   }
@@ -698,7 +698,7 @@ export async function saveRate(
       `INSERT INTO rate_plans
          (room_id, name, description, includes_breakfast, includes_lunch, includes_dinner,
           extras, other_inclusion, min_advance_booking, max_advance_booking,
-          is_refundable, is_active, bar, currency, sort_order)
+          is_refundable, is_active, bar_cents, currency, sort_order)
        SELECT $12, $1, $2, $3, $4, $5, $6::text[], $7, $8, $9, $10, $11,
               0,
               -- The property's currency, as its other rates state it.
@@ -754,11 +754,11 @@ export async function duplicateRate(
     `INSERT INTO rate_plans
        (room_id, name, description, includes_breakfast, includes_lunch, includes_dinner,
         extras, other_inclusion, min_advance_booking, max_advance_booking,
-        bar, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
+        bar_cents, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
         is_active, sort_order)
      SELECT room_id, $2, description, includes_breakfast, includes_lunch, includes_dinner,
             extras, other_inclusion, min_advance_booking, max_advance_booking,
-            bar, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
+            bar_cents, currency, is_refundable, booking_fee_rate, min_stay, max_stay,
             false,
             (SELECT COALESCE(MAX(sort_order) + 1, 0) FROM rate_plans WHERE room_id = src.room_id)
      FROM rate_plans src

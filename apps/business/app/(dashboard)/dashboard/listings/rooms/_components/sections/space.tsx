@@ -11,6 +11,7 @@ import {
   FieldSeparator,
 } from "@/components/ui/field";
 import { AGE_BANDS, AGE_RANGES } from "@openbookings/pricing";
+import { centsToInput } from "@openbookings/pricing/money";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
@@ -37,14 +38,14 @@ export function SpaceSection({ data, onDirtyChange }: RoomSectionProps) {
     maxChildren: String(room.maxChildren),
     units: String(room.units),
     baseOccupancy: String(room.baseOccupancy),
-    extraAdultFee: room.extraAdultFee === null ? "" : String(room.extraAdultFee),
-    extraChildFee: room.extraChildFee === null ? "" : String(room.extraChildFee),
+    extraAdultFee: feeText(room.extraAdultFeeCents),
+    extraChildFee: feeText(room.extraChildFeeCents),
     cotsOn: room.cotsMax > 0 ? "on" : "",
     cotsMax: String(room.cotsMax),
-    cotFee: room.cotFee === null ? "" : String(room.cotFee),
+    cotFee: feeText(room.cotFeeCents),
     extraBedsOn: room.extraBedsMax > 0 ? "on" : "",
     extraBedsMax: String(room.extraBedsMax),
-    extraBedFee: room.extraBedFee === null ? "" : String(room.extraBedFee),
+    extraBedFee: feeText(room.extraBedFeeCents),
     cotAndExtraBedTogether: room.cotAndExtraBedTogether ? "on" : "",
     ...Object.fromEntries(BED_TYPES.map(({ key }) => [`bed_${key}`, String(room.beds[key] ?? 0)])),
   } as SpaceValues;
@@ -447,7 +448,12 @@ function ExtraToggle({
   );
 }
 
-/** Whole euros per night; empty is free. */
+/** A stored fee as the field shows it: "17.50", "25", or empty when not charged. */
+function feeText(cents: number | null): string {
+  return cents === null ? "" : centsToInput(cents);
+}
+
+/** Euros and cents per night ("17.50" or "17,50"); empty is free. */
 function FeeField({
   id,
   label,
@@ -479,11 +485,7 @@ function FeeField({
         <InputGroupInput
           id={id}
           name={id}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={LIMITS.fee.max}
-          step={1}
+          inputMode="decimal"
           defaultValue={defaultValue}
           placeholder="Free"
           disabled={disabled}

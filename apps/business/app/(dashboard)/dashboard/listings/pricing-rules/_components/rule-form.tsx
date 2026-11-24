@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 import { discountLabel, type ModifierType } from "@openbookings/pricing";
+import { formatCents, parseEuroInput, percentOfCents } from "@openbookings/pricing/money";
 import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EditFieldset, useEditAccess, ViewOnlyHint } from "@/components/dashboard/edit-access";
@@ -114,7 +115,8 @@ export function RuleForm({
   const noun = isDiscount ? "discount" : "price adjustment";
   const backHref = planId ? `${PRICING_RULES_PATH}?plan=${planId}` : PRICING_RULES_PATH;
 
-  const amount = Number(v.amount) || 0;
+  // A percentage is a whole number; a fixed amount is euros and cents, previewed in cents.
+  const amount = adjustmentType === "flat" ? centsOf(v.amount) : Number(v.amount) || 0;
   const preview: Pick<RuleGroup, "type" | "adjustmentType" | "adjustmentValue" | "triggerCondition"> = {
     type: MODIFIER_TYPE[v.kind],
     adjustmentType,
@@ -310,11 +312,9 @@ export function RuleForm({
                   <div className="flex flex-wrap items-center gap-2">
                     <Input
                       id="rule-amount"
-                      type="number"
-                      inputMode="numeric"
-                      min={limits.min}
-                      max={limits.max}
-                      step={1}
+                      {...(adjustmentType === "flat"
+                        ? { inputMode: "decimal" as const }
+                        : { type: "number", inputMode: "numeric" as const, min: limits.min, max: limits.max, step: 1 })}
                       value={v.amount}
                       onChange={(e) => set({ amount: e.target.value })}
                       aria-invalid={!!(fieldError("amount") ?? fieldError("adjustmentType"))}
@@ -474,10 +474,12 @@ function PriceExamples({
   plans: PlanOption[];
   preview: Pick<RuleGroup, "type" | "adjustmentType" | "adjustmentValue" | "triggerCondition">;
 }) {
-  const priced = plans.filter((p) => p.bar > 0).slice(0, 4);
-  const after = (bar: number) =>
-    preview.adjustmentType === "flat" ? bar + preview.adjustmentValue : Math.round(bar * (1 + preview.adjustmentValue / 100) * 100) / 100;
-  const euro = (n: number) => `€${Number.isInteger(n) ? n : n.toFixed(2)}`;
+  const priced = plans.filter((p) => p.barCents > 0).slice(0, 4);
+  // The engine's own rounding: a percentage of a night in whole cents, half up.
+  const after = (barCents: number) =>
+    preview.adjustmentType === "flat"
+      ? barCents + preview.adjustmentValue
+      : barCents + percentOfCents(barCents, preview.adjustmentValue);
   return (
     <Card className="gap-3.5 p-5">
       <SectionHeader title="What it does to your prices" />
@@ -491,7 +493,7 @@ function PriceExamples({
                 {plan.roomName} · {plan.name}
               </span>
               <span className="tabular-nums">
-                {euro(plan.bar)} → {euro(after(plan.bar))}
+                {formatCents(plan.barCents)} → {formatCents(after(plan.barCents))}
               </span>
             </li>
           ))}
@@ -600,4 +602,10 @@ function NumberField({
 function FieldMessage({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="text-(--red-9) text-xs">{message}</p>;
+}
+
+/** The fixed amount being typed, in cents; 0 until it reads as an amount. */
+function centsOf(text: string): number {
+  const parsed = parseEuroInput(text);
+  return parsed.ok ? parsed.cents : 0;
 }

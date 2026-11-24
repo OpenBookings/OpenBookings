@@ -136,21 +136,21 @@ export interface RateCell {
   date: string;
   state: CellState;
   /**
-   * The sellable price: the resolved rate, or null when nothing can be sold on
-   * this date. The collapsed-row summary and the lowest-rate pass read this,
-   * so null has to mean "no price a guest could pay".
+   * The sellable price in cents: the resolved rate, or null when nothing can
+   * be sold on this date. The collapsed-row summary and the lowest-rate pass
+   * read this, so null has to mean "no price a guest could pay".
    */
-  price: number | null;
+  priceCents: number | null;
   /**
    * The resolved rate regardless of whether it can be sold. A closed or
    * sold-out date still has a rate underneath it, and the cell shows it struck
    * through — hiding it would leave a host unable to see what they are about
-   * to reopen at.
+   * to reopen at. Cents.
    */
-  indicativePrice: number;
-  /** Price before modifiers — the override, or the plan's BAR. */
-  basePrice: number;
-  /** True when a rate_overrides row supplied basePrice rather than the BAR. */
+  indicativePriceCents: number;
+  /** Price before modifiers in cents — the override, or the plan's BAR. */
+  basePriceCents: number;
+  /** True when a rate_overrides row supplied basePriceCents rather than the BAR. */
   hasOverride: boolean;
   overrideLabel: string | null;
   /** Modifiers that actually fired for this date, in application order. */
@@ -195,7 +195,8 @@ export interface RatePlanRow {
   id: string;
   name: string;
   currency: string;
-  bar: number;
+  /** The plan's base rate (BAR) in cents; 0 = not priced yet. */
+  barCents: number;
   /**
    * Room published and plan active. Draft rooms and switched-off plans are
    * listed so they can be priced before they sell, but guests cannot book them.
@@ -224,8 +225,8 @@ export interface RoomTypeRow {
   onSale: boolean;
   availability: AvailabilityCell[];
   ratePlans: RatePlanRow[];
-  /** Lowest open price per date across the plans — the collapsed-row summary. */
-  lowestRates: (number | null)[];
+  /** Lowest open price per date across the plans, in cents — the collapsed-row summary. */
+  lowestRatesCents: (number | null)[];
 }
 
 export interface AriGridData {

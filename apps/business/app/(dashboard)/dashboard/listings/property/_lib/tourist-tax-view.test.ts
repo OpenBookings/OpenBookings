@@ -36,7 +36,7 @@ describe("groupRules", () => {
 
 describe("exampleStay", () => {
   const perPersonPerNight = rule("2026-01-01", [
-    { kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false },
+    { kind: "fixed", amountCents: 250, perPerson: true, perNight: true, perRoom: false },
   ]);
 
   test("adds tourist tax on top and takes commission on the room price only", () => {
@@ -45,17 +45,17 @@ describe("exampleStay", () => {
       commissionRate: 0.045,
       arrival: "2026-11-01",
       nights: 2,
-      pricePerNight: 100,
+      pricePerNightCents: 10000,
       adults: 2,
       children: 0,
       rooms: 1,
     });
     expect(result).toMatchObject({
-      stay: 200,
-      touristTax: { total: 10 },
-      guestTotal: 210,
-      commission: 9,
-      hostReceives: 201,
+      stayCents: 20000,
+      touristTax: { totalCents: 1000 },
+      guestTotalCents: 21000,
+      commissionCents: 900,
+      hostReceivesCents: 20100,
     });
   });
 
@@ -66,14 +66,14 @@ describe("exampleStay", () => {
         commissionRate: 0.045,
         arrival: "2026-11-01",
         nights: 2,
-        pricePerNight: 100,
+        pricePerNightCents: 10000,
         adults: 2,
         children: 0,
         infants: 1,
         rooms: 1,
-      }).touristTax.total;
-    expect(stay(perPersonPerNight)).toBe(10);
-    expect(stay({ ...perPersonPerNight, infantsTaxed: true })).toBe(15);
+      }).touristTax.totalCents;
+    expect(stay(perPersonPerNight)).toBe(1000);
+    expect(stay({ ...perPersonPerNight, infantsTaxed: true })).toBe(1500);
   });
 
   test("the room price is per room, so more rooms raise the stay", () => {
@@ -82,12 +82,30 @@ describe("exampleStay", () => {
       commissionRate: 0.045,
       arrival: "2026-11-01",
       nights: 1,
-      pricePerNight: 100,
+      pricePerNightCents: 10000,
       adults: 4,
       children: 0,
       rooms: 2,
     });
-    expect(result.stay).toBe(200);
+    expect(result.stayCents).toBe(20000);
+  });
+
+  test("a price with cents is priced to the cent: 6.5% on €93.25 a night", () => {
+    const percent = rule("2026-01-01", [
+      { kind: "percent", percent: 6.5, perPerson: false, perNight: false, perRoom: false, vatIncludedPercent: null },
+    ]);
+    const result = exampleStay({
+      rules: [percent],
+      commissionRate: 0.045,
+      arrival: "2026-11-01",
+      nights: 2,
+      pricePerNightCents: 9325,
+      adults: 2,
+      children: 0,
+      rooms: 1,
+    });
+    // 6.5% of 9325 is 606.125 → 606 a night.
+    expect(result).toMatchObject({ stayCents: 18650, touristTax: { totalCents: 1212 }, guestTotalCents: 19862 });
   });
 
   test("an empty or impossible stay comes back as zeros rather than throwing", () => {
@@ -96,11 +114,11 @@ describe("exampleStay", () => {
       commissionRate: 0.045,
       arrival: "",
       nights: 0,
-      pricePerNight: Number.NaN,
+      pricePerNightCents: Number.NaN,
       adults: 2,
       children: 0,
       rooms: 1,
     });
-    expect(result).toMatchObject({ stay: 0, guestTotal: 0, commission: 0, hostReceives: 0 });
+    expect(result).toMatchObject({ stayCents: 0, guestTotalCents: 0, commissionCents: 0, hostReceivesCents: 0 });
   });
 });

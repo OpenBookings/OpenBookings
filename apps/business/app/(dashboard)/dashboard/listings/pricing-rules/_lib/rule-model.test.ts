@@ -7,7 +7,8 @@ const rule = (over: Partial<RuleGroup>): RuleGroup => ({
   id: "g1",
   type: "day_of_week",
   adjustmentType: "flat",
-  adjustmentValue: 30,
+  // Cents: €30 a night.
+  adjustmentValue: 3000,
   triggerCondition: { days_of_week: [5, 6] },
   active: true,
   appliesToAll: true,
@@ -17,9 +18,9 @@ const rule = (over: Partial<RuleGroup>): RuleGroup => ({
 });
 
 const plans: PlanOption[] = [
-  { id: "p1", name: "Flexible", bar: 185, roomId: "r1", roomName: "Deluxe" },
-  { id: "p2", name: "Non-refundable", bar: 130, roomId: "r1", roomName: "Deluxe" },
-  { id: "p3", name: "Flexible", bar: 240, roomId: "r2", roomName: "Superior" },
+  { id: "p1", name: "Flexible", barCents: 18500, roomId: "r1", roomName: "Deluxe" },
+  { id: "p2", name: "Non-refundable", barCents: 13000, roomId: "r1", roomName: "Deluxe" },
+  { id: "p3", name: "Flexible", barCents: 24000, roomId: "r2", roomName: "Superior" },
 ];
 
 describe("sections", () => {
@@ -39,6 +40,7 @@ describe("sections", () => {
 describe("labels", () => {
   test("amount, when and what guests see", () => {
     expect(amountLabel(rule({}))).toBe("+€30");
+    expect(amountLabel(rule({ adjustmentValue: 1550 }))).toBe("+€15.50");
     expect(whenLabel(rule({}))).toBe("Fri, Sat · per night");
     expect(guestLabel(rule({}))).toBeNull();
 
@@ -75,7 +77,7 @@ describe("groupRules", () => {
     rate_plan_id: "p1",
     type: "day_of_week" as const,
     adjustment_type: "flat" as const,
-    adjustment_value: "30",
+    adjustment_value: "3000",
     trigger_condition: { days_of_week: [5, 6] },
     is_active: true,
     applies_to_all: false,
@@ -90,7 +92,7 @@ describe("groupRules", () => {
       row({ id: "m3", rule_group_id: "g2", type: "length_of_stay", adjustment_type: "percent", adjustment_value: "-10", sort_order: 1 }),
     ]);
     expect(rules.map((r) => [r.id, r.ratePlanIds, r.adjustmentValue])).toEqual([
-      ["g1", ["p1", "p2"], 30],
+      ["g1", ["p1", "p2"], 3000],
       ["g2", ["p1"], -10],
     ]);
   });

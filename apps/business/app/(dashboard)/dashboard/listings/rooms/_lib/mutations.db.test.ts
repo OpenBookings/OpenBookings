@@ -153,14 +153,14 @@ describeWithDb("Rooms editor against Postgres", () => {
     ))!.id;
 
     pricedRate = (await one<{ id: string }>(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active, currency, extras)
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active, currency, extras)
        VALUES ($1, 'Standard', 12000, true, true, 'EUR', '{parking}')
        RETURNING id`,
       [roomId],
     ))!.id;
 
     unpricedRate = (await one<{ id: string }>(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active)
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active)
        VALUES ($1, 'New', 0, false, false)
        RETURNING id`,
       [roomId],
@@ -179,15 +179,15 @@ describeWithDb("Rooms editor against Postgres", () => {
     ratePlanId = pricedRate,
   ) {
     const booking = await one<{ id: string }>(
-      `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-       VALUES ($1, $2, $3, $4, $5::booking_status, 10000)
+      `INSERT INTO bookings (hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents)
+       VALUES ($1, $2, $3, $4, $5::booking_status, 10000, 10000)
        RETURNING id`,
       [propertyId, guest, checkIn, checkOut, status],
     );
     for (let i = 0; i < units; i += 1) {
       await db.query(
         `INSERT INTO reservations
-           (booking_id, room_id, rate_plan_id, total_nights, price_per_night, total_amount)
+           (booking_id, room_id, rate_plan_id, total_nights, price_per_night_cents, total_cents)
          VALUES ($1, $2, $3, 1, 10000, 10000)`,
         [booking!.id, roomId, ratePlanId],
       );
@@ -259,6 +259,32 @@ describeWithDb("Rooms editor against Postgres", () => {
     expect(Number(row!.size_sqm)).toBe(35);
   });
 
+  test("an extra adult fee of \"17.5\" stores 1750 cents, and the editor shows it back as typed", async () => {
+    const state = await m.saveRoomSpace(
+      session(owner),
+      form({ roomId, sizeM2: "35", maxAdults: "3", maxChildren: "1", baseOccupancy: "2", units: "3", bed_king: "1", extraAdultFee: "17.5", extraChildFee: "8,25" }),
+      deps,
+    );
+    expect(state.success).toBe(true);
+    const row = await one<{ extra_adult_fee_cents: string; extra_child_fee_cents: string }>(
+      `SELECT extra_adult_fee_cents, extra_child_fee_cents FROM rooms WHERE id = $1`,
+      [roomId],
+    );
+    expect(row).toEqual({ extra_adult_fee_cents: "1750", extra_child_fee_cents: "825" });
+    const editor = await loadRoomEditor(session(owner), propertyId, roomId, propertyDb(session(owner)));
+    expect(editor?.room).toMatchObject({ extraAdultFeeCents: 1750, extraChildFeeCents: 825 });
+  });
+
+  test("a fee with three decimals is refused under its field, and nothing is written", async () => {
+    const state = await m.saveRoomSpace(
+      session(owner),
+      form({ roomId, sizeM2: "35", maxAdults: "3", maxChildren: "0", baseOccupancy: "2", units: "3", bed_king: "1", extraAdultFee: "17.555" }),
+      deps,
+    );
+    expect(state.success).toBe(false);
+    expect(state.errors?.extraAdultFee?.[0]).toBe("Use at most two decimals");
+  });
+
   test("units cannot drop below the busiest future night, which the error names", async () => {
     await book("confirmed", "2031-03-10", "2031-03-12", 1);
     await book("pending", "2031-03-11", "2031-03-12", 1);
@@ -315,7 +341,7 @@ describeWithDb("Rooms editor against Postgres", () => {
     const refused = await m.setRateActive(session(owner), unpricedRate, true, deps);
     expect(refused.ok).toBe(false);
 
-    await db.query(`UPDATE rate_plans SET bar = 9000 WHERE id = $1`, [unpricedRate]);
+    await db.query(`UPDATE rate_plans SET bar_cents = 9000 WHERE id = $1`, [unpricedRate]);
     expect((await m.setRateActive(session(owner), unpricedRate, true, deps)).ok).toBe(true);
   });
 
@@ -361,7 +387,7 @@ describeWithDb("Rooms editor against Postgres", () => {
       [roomId],
     );
     expect(row).toMatchObject({
-      bar: "0",
+      bar_cents: "0",
       is_refundable: true,
       is_active: false,
       currency: "EUR",
@@ -382,21 +408,21 @@ describeWithDb("Rooms editor against Postgres", () => {
       deps,
     );
     expect(state.success).toBe(true);
-    const row = await one<{ bar: string; is_refundable: boolean }>(
-      `SELECT bar, is_refundable FROM rate_plans WHERE id = $1`,
+    const row = await one<{ bar_cents: string; is_refundable: boolean }>(
+      `SELECT bar_cents, is_refundable FROM rate_plans WHERE id = $1`,
       [pricedRate],
     );
-    expect(row).toEqual({ bar: "12000", is_refundable: true });
+    expect(row).toEqual({ bar_cents: "12000", is_refundable: true });
   });
 
   // ── Non-refundable rates (Annex B B.4) ──────────────────────────────
 
-  async function nonRefundableRate(bar: number, active: boolean) {
+  async function nonRefundableRate(barCents: number, active: boolean) {
     return (await one<{ id: string }>(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable, is_active)
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active)
        VALUES ($1, 'Saver', $2, false, $3)
        RETURNING id`,
-      [roomId, bar, active],
+      [roomId, barCents, active],
     ))!.id;
   }
 
@@ -448,7 +474,7 @@ describeWithDb("Rooms editor against Postgres", () => {
     ]);
     expect(copy).toMatchObject({
       name: "Standard (copy)",
-      bar: "12000",
+      bar_cents: "12000",
       is_active: false,
       extras: ["parking"],
       room_id: roomId,

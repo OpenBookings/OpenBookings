@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { TouristTaxRule } from "@openbookings/pricing";
+import { formatCents, parseEuroInput } from "@openbookings/pricing/money";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { exampleStay } from "../../_lib/tourist-tax-view";
 
-const eur = new Intl.NumberFormat("en-NL", { style: "currency", currency: "EUR" });
+const money = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
 const percent = (rate: number) =>
   `${(rate * 100).toLocaleString("en-GB", { maximumFractionDigits: 2 })}%`;
@@ -38,12 +39,14 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
   const [infants, setInfants] = React.useState("0");
   const [rooms, setRooms] = React.useState("1");
 
+  // "120", "120.50" or "120,50"; anything else prices nothing.
+  const priceRead = parseEuroInput(price);
   const result = exampleStay({
     rules,
     commissionRate,
     arrival,
     nights: Number(nights),
-    pricePerNight: Number(price),
+    pricePerNightCents: priceRead.ok ? priceRead.cents : Number.NaN,
     adults: Number(adults),
     children: Number(children),
     infants: Number(infants),
@@ -90,8 +93,7 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
         })}
         {field("nights", "Nights", nights, setNights, "col-span-2", { min: 1, max: 60 })}
         {field("price", "Room price per night", price, setPrice, "col-span-6", {
-          min: 0,
-          step: "0.01",
+          type: "text",
           inputMode: "decimal",
         })}
         {field("adults", "Adults", adults, setAdults, "col-span-3", { min: 1, max: 20 })}
@@ -103,21 +105,21 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
       <Separator />
 
       <dl className="flex flex-col gap-2 text-sm">
-        <Row label="Room price" value={eur.format(result.stay)} />
+        <Row label="Room price" value={money(result.stayCents)} />
         {result.touristTax.lines.map((line, i) => (
           <Row
             key={`${line.effectiveFrom}-${i}`}
             label={<span className="text-muted-foreground">Tourist tax · {line.label}</span>}
-            value={eur.format(line.amount)}
+            value={money(line.amountCents)}
           />
         ))}
         {result.touristTax.lines.length === 0 && (
-          <Row label={<span className="text-muted-foreground">Tourist tax</span>} value={eur.format(0)} />
+          <Row label={<span className="text-muted-foreground">Tourist tax</span>} value={money(0)} />
         )}
         <Separator className="my-1" />
         <Row
           label={<span className="font-medium">Guest pays (all-in)</span>}
-          value={<span className="font-medium">{eur.format(result.guestTotal)}</span>}
+          value={<span className="font-medium">{money(result.guestTotalCents)}</span>}
         />
         <Row
           label={
@@ -125,17 +127,17 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
               OpenBookings commission · {percent(commissionRate)} of the room price
             </span>
           }
-          value={`−${eur.format(result.commission)}`}
+          value={`−${money(result.commissionCents)}`}
         />
         <Separator className="my-1" />
         <Row
           label={<span className="font-medium">You receive</span>}
-          value={<span className="font-medium">{eur.format(result.hostReceives)}</span>}
+          value={<span className="font-medium">{money(result.hostReceivesCents)}</span>}
         />
       </dl>
 
       <p className="text-muted-foreground text-xs">
-        Before Stripe&apos;s payment fees. The {eur.format(result.touristTax.total)} tourist tax is
+        Before Stripe&apos;s payment fees. The {money(result.touristTax.totalCents)} tourist tax is
         yours to pay to your town; OpenBookings never takes commission on it.
       </p>
     </Card>

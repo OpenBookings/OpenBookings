@@ -1,4 +1,6 @@
+import { formatCents } from "@openbookings/pricing/money";
 import { z } from "zod";
+import { euroCents } from "@/lib/euro-input";
 import {
   BED_TYPE_KEYS,
   LIMITS,
@@ -71,11 +73,19 @@ const bedsSchema = z
   })
   .refine((beds) => Object.keys(beds).length > 0, "Add at least one bed.");
 
-/** A blank fee is free (0): a guest is never charged for a field the host left empty. */
+/**
+ * A fee per night as the host typed it ("17.5", "17,50"), read into cents. A
+ * blank fee is free (0): a guest is never charged for a field the host left empty.
+ */
 const fee = (label: string) =>
   z.preprocess(
-    (v) => (v === undefined || v === null || String(v).trim() === "" ? 0 : v),
-    wholeNumber(label, 0, LIMITS.fee.max),
+    (v) => (v === undefined || v === null || String(v).trim() === "" ? "0" : String(v)),
+    euroCents.pipe(
+      z
+        .number()
+        .int()
+        .max(LIMITS.feeCents.max, `${capitalise(label)} can be at most ${formatCents(LIMITS.feeCents.max)}.`),
+    ),
   );
 
 /** A count posted only while its switch is on; absent reads as 0. */
@@ -131,14 +141,16 @@ export const spaceSchema = z
   .transform(({ cotsOn, extraBedsOn, ...v }) => {
     const adultCanBeExtra = v.maxAdults > v.baseOccupancy;
     const childCanBeExtra = v.maxChildren > 0 && v.maxAdults + v.maxChildren > v.baseOccupancy;
+    const { extraAdultFee, extraChildFee, cotFee, extraBedFee, ...rest } = v;
+    // Fees leave the schema as cents, under names that say so.
     return {
-      ...v,
-      extraAdultFee: adultCanBeExtra ? v.extraAdultFee : null,
-      extraChildFee: childCanBeExtra ? v.extraChildFee : null,
+      ...rest,
+      extraAdultFeeCents: adultCanBeExtra ? extraAdultFee : null,
+      extraChildFeeCents: childCanBeExtra ? extraChildFee : null,
       cotsMax: cotsOn ? v.cotsMax : 0,
-      cotFee: cotsOn ? v.cotFee : null,
+      cotFeeCents: cotsOn ? cotFee : null,
       extraBedsMax: extraBedsOn ? v.extraBedsMax : 0,
-      extraBedFee: extraBedsOn ? v.extraBedFee : null,
+      extraBedFeeCents: extraBedsOn ? extraBedFee : null,
       cotAndExtraBedTogether: cotsOn && extraBedsOn ? v.cotAndExtraBedTogether : true,
     };
   });

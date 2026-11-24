@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { changesTouchPrice, pricedRatePlanIds } from "./rates-confirmation";
 
-const price = { type: "price" as const, ratePlanId: "p", dates: ["2026-10-10"], price: 120 };
+const price = { type: "price" as const, ratePlanId: "p", dates: ["2026-10-10"], price: "120" };
 const clearPrice = { ...price, price: null };
 const closure = { type: "closure" as const, ratePlanId: "p", dates: ["2026-10-10"] };
 const restriction = { type: "restriction" as const, ratePlanId: "p", dates: ["2026-10-10"] };

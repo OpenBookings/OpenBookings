@@ -72,7 +72,8 @@ interface InventorySpec {
 
 interface PlanSpec {
   name: string;
-  bar: number;
+  /** Base rate in cents. */
+  barCents: number;
   refundable: boolean;
   minStay?: number;
   maxStay?: number;
@@ -107,7 +108,8 @@ const weekendUplift: Modifier = {
 const weekendFlat: Modifier = {
   type: "day_of_week",
   adjustment_type: "flat",
-  adjustment_value: 25,
+  // Cents: €25 a night.
+  adjustment_value: 2500,
   trigger_condition: { days_of_week: [5, 6] },
   sort_order: 10,
 };
@@ -160,19 +162,19 @@ const ROOM_SPECS: RoomSpec[] = [
     plans: [
       {
         name: "Refundable",
-        bar: 89,
+        barCents: 8900,
         refundable: true,
         modifiers: [weekendFlat],
       },
       {
         name: "Non-refundable",
-        bar: 76,
+        barCents: 7600,
         refundable: false,
         modifiers: [weekendFlat, threeNightDiscount],
       },
       {
         name: "Special Rate (Members)",
-        bar: 99,
+        barCents: 9900,
         refundable: true,
         modifiers: [weekendUplift, earlyBird],
       },
@@ -193,25 +195,25 @@ const ROOM_SPECS: RoomSpec[] = [
     plans: [
       {
         name: "Refundable",
-        bar: 129,
+        barCents: 12900,
         refundable: true,
         modifiers: [weekendUplift, earlyBird],
       },
       {
         name: "Non-refundable",
-        bar: 112,
+        barCents: 11200,
         refundable: false,
         modifiers: [weekendUplift, threeNightDiscount],
       },
       {
         name: "Breakfast Included",
-        bar: 149,
+        barCents: 14900,
         refundable: true,
         modifiers: [weekendUplift],
       },
       {
         name: "Last Minute",
-        bar: 119,
+        barCents: 11900,
         refundable: false,
         modifiers: [lastMinute],
       },
@@ -230,9 +232,9 @@ const ROOM_SPECS: RoomSpec[] = [
     baseOccupancy: 2,
     bookingPattern: [2, 3, 4, 4, 3, 2, 1],
     plans: [
-      { name: "Refundable", bar: 119, refundable: true, modifiers: [weekendUplift] },
-      { name: "Non-refundable", bar: 104, refundable: false, modifiers: [weekendUplift, threeNightDiscount] },
-      { name: "Corporate", bar: 109, refundable: true, minStay: 2, modifiers: [] },
+      { name: "Refundable", barCents: 11900, refundable: true, modifiers: [weekendUplift] },
+      { name: "Non-refundable", barCents: 10400, refundable: false, modifiers: [weekendUplift, threeNightDiscount] },
+      { name: "Corporate", barCents: 10900, refundable: true, minStay: 2, modifiers: [] },
     ],
     inventory: [
       { from: 6, to: 8, blocked: 2, note: "Bathroom refit on two units.", by: HOST },
@@ -257,17 +259,17 @@ const ROOM_SPECS: RoomSpec[] = [
     plans: [
       {
         name: "Refundable",
-        bar: 219,
+        barCents: 21900,
         refundable: true,
         modifiers: [weekendUplift, weekStayDiscount],
       },
       {
         name: "Non-refundable",
-        bar: 189,
+        barCents: 18900,
         refundable: false,
         modifiers: [weekendUplift, weekStayDiscount],
       },
-      { name: "Spa Package", bar: 279, refundable: true, minStay: 2, modifiers: [weekendUplift] },
+      { name: "Spa Package", barCents: 27900, refundable: true, minStay: 2, modifiers: [weekendUplift] },
     ],
     closures: [
       { planIndex: 2, from: 0, to: 13, by: HOST, note: "Spa closed for the season — reopens in spring." },
@@ -279,8 +281,8 @@ const ROOM_SPECS: RoomSpec[] = [
     baseOccupancy: 4,
     bookingPattern: [2, 2, 4, 5, 3, 2, 2],
     plans: [
-      { name: "Refundable", bar: 199, refundable: true, modifiers: [weekendUplift, threeNightDiscount] },
-      { name: "Non-refundable", bar: 174, refundable: false, modifiers: [weekendUplift] },
+      { name: "Refundable", barCents: 19900, refundable: true, modifiers: [weekendUplift, threeNightDiscount] },
+      { name: "Non-refundable", barCents: 17400, refundable: false, modifiers: [weekendUplift] },
     ],
     inventory: [
       { from: 9, to: 10, override: 1, note: "Holding two rooms for a returning guest.", by: HOST },
@@ -297,12 +299,12 @@ const ROOM_SPECS: RoomSpec[] = [
     plans: [
       {
         name: "Refundable",
-        bar: 649,
+        barCents: 64900,
         refundable: true,
         minStay: 2,
         modifiers: [weekendUplift, weekStayDiscount, earlyBird],
       },
-      { name: "Non-refundable", bar: 549, refundable: false, minStay: 2, modifiers: [weekendUplift] },
+      { name: "Non-refundable", barCents: 54900, refundable: false, minStay: 2, modifiers: [weekendUplift] },
     ],
   },
 ];
@@ -424,7 +426,7 @@ export function buildMockAriGrid(
       const resolved = resolveNightlyRates(
         probeDates.map((date) => ({
           date,
-          base_price: planSpec.bar,
+          base_price_cents: planSpec.barCents,
           has_override: false,
         })),
         modifiers,
@@ -482,9 +484,9 @@ export function buildMockAriGrid(
         return {
           date,
           state: status.state,
-          price: status.bookable ? priced.price : null,
-          indicativePrice: priced.price,
-          basePrice: planSpec.bar,
+          priceCents: status.bookable ? priced.price_cents : null,
+          indicativePriceCents: priced.price_cents,
+          basePriceCents: planSpec.barCents,
           hasOverride: false,
           overrideLabel: null,
           appliedModifiers: priced.applied_modifiers,
@@ -508,7 +510,7 @@ export function buildMockAriGrid(
         id: planId,
         name: planSpec.name,
         currency: DEMO_CURRENCY,
-        bar: planSpec.bar,
+        barCents: planSpec.barCents,
         onSale: true,
         isRefundable: planSpec.refundable,
         minStay: planMinStay,
@@ -538,7 +540,7 @@ export function buildMockAriGrid(
       onSale: true,
       availability,
       ratePlans,
-      lowestRates: dates.map(() => null),
+      lowestRatesCents: dates.map(() => null),
     };
   });
 

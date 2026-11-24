@@ -32,7 +32,7 @@ interface ReservationSql {
   booking_cancelled_at: string | null;
   room_id: string;
   rate_plan_id: string;
-  price_per_night: string | number;
+  price_per_night_cents: string | number;
   nights: ReservationRow["nightsJson"] | null;
   vat_split: ReservationRow["vatSplit"];
 }
@@ -98,7 +98,7 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
               r.total_nights, b.departed_early_on::text AS departed_early_on,
               ${amsInstant("r.cancelled_at")} AS reservation_cancelled_at,
               ${amsInstant("b.cancelled_at")} AS booking_cancelled_at,
-              r.room_id, r.rate_plan_id, r.price_per_night, r.nights, r.vat_split
+              r.room_id, r.rate_plan_id, r.price_per_night_cents, r.nights, r.vat_split
          FROM reservations r
          JOIN bookings b ON b.id = r.booking_id
         WHERE b.hotel_id = $1 AND b.status <> 'pending'
@@ -115,7 +115,7 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
     bookingIds.length === 0
       ? Promise.resolve([] as { booking_id: string; room_id: string; rate_plan_id: string; sort_order: number; discount: string | null }[])
       : query<{ booking_id: string; room_id: string; rate_plan_id: string; sort_order: number; discount: string | null }>(
-          `SELECT bi.booking_id, ir.room_id, ir.rate_plan_id, ir.sort_order, ir.discount_amount::text AS discount
+          `SELECT bi.booking_id, ir.room_id, ir.rate_plan_id, ir.sort_order, ir.discount_cents::text AS discount
              FROM booking_intent_rooms ir JOIN booking_intents bi ON bi.id = ir.intent_id
             WHERE bi.booking_id = ANY($1::uuid[])
             ORDER BY bi.booking_id, ir.sort_order`,
@@ -124,7 +124,7 @@ export async function loadWindowFacts(propertyId: string, window: DateRange): Pr
     bookingIds.length === 0
       ? Promise.resolve([] as { booking_id: string; reservation_id: string | null; cents: string }[])
       : query<{ booking_id: string; reservation_id: string | null; cents: string }>(
-          `SELECT booking_id, reservation_id, round(accommodation_amount * 100)::text AS cents
+          `SELECT booking_id, reservation_id, accommodation_cents::text AS cents
              FROM refunds WHERE booking_id = ANY($1::uuid[]) AND status = 'succeeded'`,
           [bookingIds],
         ),
@@ -212,12 +212,12 @@ function toReservationRows(
   return rows.map((r) => {
     // `|| 0`: an unreadable price must not become NaN, which JSON stores as
     // null, so a cached month would differ from the same month read live.
-    const nightsJson = (r.nights ?? []).map((n) => ({ date: n.date, price: Number(n.price) || 0 }));
-    const pricePerNight = Number(r.price_per_night);
+    const nightsJson = (r.nights ?? []).map((n) => ({ date: n.date, priceCents: Number(n.priceCents) || 0 }));
+    const pricePerNightCents = Number(r.price_per_night_cents);
     const roomsTotalCents =
       nightsJson.length > 0
-        ? nightsJson.reduce((a, n) => a + Math.round(n.price * 100), 0)
-        : Math.round(pricePerNight * 100) * r.total_nights;
+        ? nightsJson.reduce((a, n) => a + n.priceCents, 0)
+        : pricePerNightCents * r.total_nights;
     return {
       reservationId: r.reservation_id,
       bookingId: r.booking_id,
@@ -232,10 +232,10 @@ function toReservationRows(
       bookingCancelledAt: r.booking_cancelled_at,
       roomId: r.room_id,
       ratePlanId: r.rate_plan_id,
-      pricePerNight,
+      pricePerNightCents,
       nightsJson,
       vatSplit: r.vat_split ?? null,
-      discountAmount: discountOf(r),
+      discountCents: discountOf(r),
       roomsTotalCents,
     };
   });

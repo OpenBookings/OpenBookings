@@ -1,4 +1,5 @@
 import { discountLabel, isStayDiscount, type ModifierType } from "@openbookings/pricing";
+import { formatCents } from "@openbookings/pricing/money";
 import { WEEKDAYS } from "../../rates-availability/_lib/rule-copy";
 
 /**
@@ -11,7 +12,7 @@ export type RuleGroup = {
   id: string;
   type: ModifierType;
   adjustmentType: "flat" | "percent";
-  /** Signed: below zero lowers the price. Whole euros or a percentage. */
+  /** Signed: below zero lowers the price. Cents for a fixed amount, else a percentage. */
   adjustmentValue: number;
   triggerCondition: Record<string, unknown>;
   active: boolean;
@@ -25,8 +26,8 @@ export type RuleGroup = {
 export type PlanOption = {
   id: string;
   name: string;
-  /** The plan's base rate, whole euros; 0 = not priced yet. */
-  bar: number;
+  /** The plan's base rate in cents; 0 = not priced yet. */
+  barCents: number;
   roomId: string;
   roomName: string;
 };
@@ -38,11 +39,11 @@ export function sectionOf(rule: Pick<RuleGroup, "type" | "adjustmentValue">): Ru
   return isStayDiscount({ type: rule.type, adjustment_value: rule.adjustmentValue }) ? "discount" : "adjustment";
 }
 
-/** "+€30", "+10%", "−15%". A fixed amount is always per night. */
+/** "+€30", "+€15.50", "+10%", "−15%". A fixed amount is always per night. */
 export function amountLabel(rule: Pick<RuleGroup, "adjustmentType" | "adjustmentValue">): string {
   const sign = rule.adjustmentValue < 0 ? "−" : "+";
   const amount = Math.abs(rule.adjustmentValue);
-  return rule.adjustmentType === "percent" ? `${sign}${amount}%` : `${sign}€${amount}`;
+  return rule.adjustmentType === "percent" ? `${sign}${amount}%` : `${sign}${formatCents(amount)}`;
 }
 
 /** When the rule fires: "Fri, Sat · per night", "Stays of 7+ nights"… */

@@ -8,8 +8,8 @@ const room = (id: string, extra: Partial<HostReservationRow["rooms"][number]> = 
   check_in_at: "2031-11-10T14:00:00+00:00",
   full_refund_until: "2031-11-09T14:00:00+00:00",
   nights: [
-    { date: "2031-11-10", price: 100, touristTax: 3 },
-    { date: "2031-11-11", price: 100, touristTax: 3 },
+    { date: "2031-11-10", priceCents: 10000, touristTaxCents: 325 },
+    { date: "2031-11-11", priceCents: 10000, touristTaxCents: 325 },
   ],
   cancelled_at: null,
   ...extra,
@@ -27,15 +27,15 @@ const row = (extra: Partial<HostReservationRow> = {}): HostReservationRow => ({
   infants: 0,
   cots: 0,
   extra_beds: 0,
-  pay_at_property: 0,
-  total_amount: 206,
+  pay_at_property_cents: 0,
+  total_cents: 20650,
   timezone: "Europe/Amsterdam",
   check_in_time: "15:00",
   check_in_until: "22:00",
   check_out_time: "11:00",
   departed_early_on: null,
   confirmed_at: "2031-10-01T10:00:00+00:00",
-  refunded: 0,
+  refunded_cents: 0,
   unsettled_refunds: 0,
   rooms: [room("r1"), room("r2", { room_name: "Suite" })],
   ...extra,
@@ -54,21 +54,22 @@ describe("toHostReservation", () => {
     const r = toHostReservation(row(), NOW);
     expect(r.reference).toBe("OB-B000-0000");
     expect(r.roomName).toBe("Deluxe + Suite");
-    expect(r.totalAmount).toBe(412);
+    // Every night's price and tourist tax, to the cent: 2 rooms × (2 × €103.25).
+    expect(r.totalCents).toBe(41300);
     expect(r.actions).toEqual(["cancel", "goodwill_refund"]);
-    expect(r.rooms[0]).toMatchObject({ reservationId: "r1", tierLabel: "Flex", paid: 206, cancelledAt: null });
+    expect(r.rooms[0]).toMatchObject({ reservationId: "r1", tierLabel: "Flex", paidCents: 20650, cancelledAt: null });
     expect(r.rooms[0].policyLines[0]).toBe("Free cancellation until Sun 9 Nov 2031, 15:00.");
   });
 
   test("the party by age band, and what the hotel prepares and collects", () => {
-    const r = toHostReservation(row({ guests: 3, adults: 2, children: 1, infants: 1, cots: 1, extra_beds: 1, pay_at_property: 175 }), NOW);
+    const r = toHostReservation(row({ guests: 3, adults: 2, children: 1, infants: 1, cots: 1, extra_beds: 1, pay_at_property_cents: 17550 }), NOW);
     expect(r.partyLabel).toBe("2 adults, 1 child, 1 infant");
     expect(r.extrasLabel).toBe("1 cot · 1 extra bed");
-    expect(r.atHotelAmount).toBe(175);
+    expect(r.atHotelCents).toBe(17550);
     const plain = toHostReservation(row(), NOW);
     expect(plain.partyLabel).toBe("2 adults");
     expect(plain.extrasLabel).toBeNull();
-    expect(plain.atHotelAmount).toBe(0);
+    expect(plain.atHotelCents).toBe(0);
   });
 
   test("completed shows as checked out", () => {
@@ -115,20 +116,20 @@ describe("refunds outside OpenBookings", () => {
   test("each is a line of its own, with its split once explained, and counts as refunded", () => {
     const r = toHostReservation(
       row({
-        refunded: 150,
+        refunded_cents: 15050,
         outside_refunds: [
-          { source: "stripe_dashboard", amount: 50, at: "2031-11-02T09:00:00+00:00", room_price: null, tourist_tax: null },
-          { source: "dispute", amount: 100, at: "2031-11-05T09:00:00+00:00", room_price: 94, tourist_tax: 6 },
+          { source: "stripe_dashboard", amount_cents: 5050, at: "2031-11-02T09:00:00+00:00", room_price_cents: null, tourist_tax_cents: null },
+          { source: "dispute", amount_cents: 10000, at: "2031-11-05T09:00:00+00:00", room_price_cents: 9400, tourist_tax_cents: 600 },
         ],
       }),
       NOW,
     );
     expect(r.outsideRefunds).toEqual([
-      { kind: "refund", amount: 50, at: "2031-11-02T09:00:00+00:00", split: null },
-      { kind: "dispute", amount: 100, at: "2031-11-05T09:00:00+00:00", split: { roomPrice: 94, touristTax: 6 } },
+      { kind: "refund", amountCents: 5050, at: "2031-11-02T09:00:00+00:00", split: null },
+      { kind: "dispute", amountCents: 10000, at: "2031-11-05T09:00:00+00:00", split: { roomPriceCents: 9400, touristTaxCents: 600 } },
     ]);
     // What is left to refund comes off everything refunded, outside included.
-    expect(r.totalAmount - r.refundedAmount).toBe(262);
+    expect(r.totalCents - r.refundedCents).toBe(26250);
   });
 
   test("a booking without any has none", () => {

@@ -132,7 +132,7 @@ describeWithDb("AVAILABILITY_SQL", () => {
     // reservations.rate_plan_id is NOT NULL, so a plan has to exist even though
     // availability is a room-type fact and never reads it.
     const ratePlan = await db.query<{ id: string }>(
-      `INSERT INTO rate_plans (room_id, name, bar, is_refundable)
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable)
        VALUES ($1, 'Standard', 10000, true)
        RETURNING id`,
       [roomId],
@@ -183,8 +183,8 @@ describeWithDb("AVAILABILITY_SQL", () => {
   ): Promise<void> {
     const booking = await db.query<{ id: string }>(
       `INSERT INTO bookings
-         (hotel_id, user_id, check_in_date, check_out_date, status, total_amount)
-       VALUES ($1, $2, $3, $4, $5::booking_status, 10000)
+         (hotel_id, user_id, check_in_date, check_out_date, status, rooms_total_cents, total_cents)
+       VALUES ($1, $2, $3, $4, $5::booking_status, 10000, 10000)
        RETURNING id`,
       [propertyId, guestUserId, checkIn, checkOut, status],
     );
@@ -192,7 +192,7 @@ describeWithDb("AVAILABILITY_SQL", () => {
     for (let i = 0; i < units; i += 1) {
       await db.query(
         `INSERT INTO reservations
-           (booking_id, room_id, rate_plan_id, total_nights, price_per_night, total_amount)
+           (booking_id, room_id, rate_plan_id, total_nights, price_per_night_cents, total_cents)
          VALUES ($1, $2, $3, 1, 10000, 10000)`,
         [booking.rows[0].id, roomId, ratePlanId],
       );
@@ -249,14 +249,14 @@ describeWithDb("AVAILABILITY_SQL", () => {
   async function hold(checkIn: string, checkOut: string, units: number, expiresIn: string, status = "open") {
     const intent = await db.query<{ id: string }>(
       `INSERT INTO booking_intents
-         (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_amount)
+         (user_id, property_id, check_in_date, check_out_date, status, hold_expires_at, snapshot, total_cents)
        VALUES ($1, $2, $3, $4, $5, now() + $6::interval, '{}'::jsonb, 100)
        RETURNING id`,
       [guestUserId, propertyId, checkIn, checkOut, status, expiresIn],
     );
     for (let i = 0; i < units; i += 1) {
       await db.query(
-        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total)
+        `INSERT INTO booking_intent_rooms (intent_id, room_id, rate_plan_id, adults, nights, stay_total_cents)
          VALUES ($1, $2, $3, 2, '[]'::jsonb, 100)`,
         [intent.rows[0].id, roomId, ratePlanId],
       );

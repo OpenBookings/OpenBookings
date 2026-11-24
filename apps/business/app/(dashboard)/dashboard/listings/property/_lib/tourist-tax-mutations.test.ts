@@ -23,7 +23,7 @@ const session = (id: string): SessionLike => ({ user: { id, account_type: "busin
 
 const rule = {
   effectiveFrom: "2031-01-01",
-  charges: [{ kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false }],
+  charges: [{ kind: "fixed", amount: "2.50", perPerson: true, perNight: true, perRoom: false }],
   childrenExempt: false,
   maxNights: null,
 };

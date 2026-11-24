@@ -21,10 +21,10 @@ function res(over: Partial<ReservationRow> = {}): ReservationRow {
     bookingCancelledAt: null,
     roomId: "room",
     ratePlanId: "plan",
-    pricePerNight: 100,
+    pricePerNightCents: 10000,
     nightsJson: [],
     vatSplit: null,
-    discountAmount: null,
+    discountCents: null,
     roomsTotalCents: 30000,
     ...over,
   };
@@ -47,15 +47,15 @@ describe("mapBookings", () => {
         res({
           checkOut: "2026-06-02",
           totalNights: 1,
-          nightsJson: [{ date: "2026-06-01", price: 121 }],
-          vatSplit: { nights: [{ date: "2026-06-01", room: { vat: 21 }, breakfast: null }] },
+          nightsJson: [{ date: "2026-06-01", priceCents: 12100 }],
+          vatSplit: { nights: [{ date: "2026-06-01", room: { vatCents: 2100 }, breakfast: null }] },
         }),
         res({
           reservationId: "r2",
           checkOut: "2026-06-02",
           totalNights: 1,
-          nightsJson: [{ date: "2026-06-01", price: 130 }],
-          vatSplit: { nights: [{ date: "2026-06-01", room: { vat: 21 }, breakfast: { vat: 9 } }] },
+          nightsJson: [{ date: "2026-06-01", priceCents: 13000 }],
+          vatSplit: { nights: [{ date: "2026-06-01", room: { vatCents: 2100 }, breakfast: { vatCents: 900 } }] },
         }),
       ],
       [money()],
@@ -64,7 +64,7 @@ describe("mapBookings", () => {
     expect(bookings[1].nightlyNetCents).toEqual([10000]);
   });
 
-  test("empty nights json falls back to price_per_night", () => {
+  test("empty nights json falls back to price_per_night_cents", () => {
     const { bookings, nights } = mapBookings([res()], [money()]);
     expect(bookings[0].nightlyNetCents).toEqual([10000, 10000, 10000]);
     expect(nights.map((n) => n.date)).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
@@ -99,7 +99,7 @@ describe("mapBookings", () => {
     const vat = (n: number) => ({
       nights: Array.from({ length: n }, (_, i) => ({
         date: `2026-06-0${i + 1}`,
-        room: { vat: 17.36 },
+        room: { vatCents: 1736 },
         breakfast: null,
       })),
     });
@@ -109,7 +109,7 @@ describe("mapBookings", () => {
           reservationId: "r0",
           sortIndex: 0,
           roomsTotalCents: 30000,
-          nightsJson: [1, 2, 3].map((d) => ({ date: `2026-06-0${d}`, price: 100 })),
+          nightsJson: [1, 2, 3].map((d) => ({ date: `2026-06-0${d}`, priceCents: 10000 })),
           vatSplit: vat(3),
         }),
         res({
@@ -118,7 +118,7 @@ describe("mapBookings", () => {
           roomsTotalCents: 10000,
           checkOut: "2026-06-02",
           totalNights: 1,
-          nightsJson: [{ date: "2026-06-01", price: 100 }],
+          nightsJson: [{ date: "2026-06-01", priceCents: 10000 }],
           vatSplit: vat(1),
         }),
       ],
@@ -196,9 +196,9 @@ describe("mapBookings", () => {
         res({
           checkOut: "2026-06-02",
           totalNights: 1,
-          nightsJson: [{ date: "2026-06-01", price: 121 }],
-          vatSplit: { nights: [{ date: "2026-06-01", room: { vat: 21 }, breakfast: null }] },
-          discountAmount: 12.1,
+          nightsJson: [{ date: "2026-06-01", priceCents: 12100 }],
+          vatSplit: { nights: [{ date: "2026-06-01", room: { vatCents: 2100 }, breakfast: null }] },
+          discountCents: 1210,
         }),
       ],
       [money()],

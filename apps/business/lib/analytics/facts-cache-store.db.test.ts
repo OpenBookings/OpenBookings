@@ -150,8 +150,8 @@ describeWithDb("analytics month cache store", () => {
     await book("2031-05-02", 2, "2031-01-31T23:30:00Z"); // made 00:30 on 1 Feb Amsterdam, stays after the window
     const pair = await book("2031-02-27", 3, "2031-02-10T09:00:00Z", 2); // two rooms, across Feb/Mar
     await db.query(
-      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_amount, tourist_tax_amount, amount, status, idempotency_key)
-       VALUES ($1, NULL, 'goodwill', 75, 0, 75, 'succeeded', $2)`,
+      `INSERT INTO refunds (booking_id, reservation_id, reason, accommodation_cents, tourist_tax_cents, amount_cents, status, idempotency_key)
+       VALUES ($1, NULL, 'goodwill', 7550, 0, 7550, 'succeeded', $2)`,
       [pair.bookingId, `t-${crypto.randomUUID()}`],
     );
     await db.query(`UPDATE reservations SET cancelled_at = '2031-02-20T10:00:00Z' WHERE id = $1`, [pair.reservationIds[1]]);

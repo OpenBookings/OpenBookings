@@ -1,4 +1,5 @@
 import type { ModifierType } from "@openbookings/pricing";
+import { centsToInput, formatCents } from "@openbookings/pricing/money";
 import type { RuleKind } from "./modifier-schema";
 
 /**
@@ -9,7 +10,7 @@ export type PricingRule = {
   id: string;
   type: ModifierType;
   adjustmentType: "flat" | "percent";
-  /** Signed: below zero lowers the price. Whole euros or a percentage. */
+  /** Signed: below zero lowers the price. Cents for a fixed amount, else a percentage. */
   adjustmentValue: number;
   triggerCondition: Record<string, unknown>;
   active: boolean;
@@ -49,7 +50,7 @@ const KIND_OF: Partial<Record<ModifierType, RuleKind>> = {
 function adjustment(rule: Pick<PricingRule, "adjustmentType" | "adjustmentValue">): string {
   const sign = rule.adjustmentValue < 0 ? "−" : "+";
   const amount = Math.abs(rule.adjustmentValue);
-  return rule.adjustmentType === "percent" ? `${sign}${amount}%` : `${sign}€${amount} per night`;
+  return rule.adjustmentType === "percent" ? `${sign}${amount}%` : `${sign}${formatCents(amount)} per night`;
 }
 
 /** "Fri, Sat: +€30 per night", "Stays of 7+ nights: −10%"… */
@@ -96,7 +97,10 @@ export function ruleForm(rule: PricingRule | null): RuleFormValues {
     kind: KIND_OF[rule.type] ?? "weekend",
     direction: rule.adjustmentValue < 0 ? "down" : "up",
     adjustmentType: rule.adjustmentType,
-    amount: String(Math.abs(rule.adjustmentValue)),
+    amount:
+      rule.adjustmentType === "flat"
+        ? centsToInput(Math.abs(rule.adjustmentValue))
+        : String(Math.abs(rule.adjustmentValue)),
     daysOfWeek: ((tc.days_of_week as number[] | undefined) ?? []).map(String),
     minNights: text(tc.min_nights),
     daysBeforeArrival: text(tc.days_before_arrival),

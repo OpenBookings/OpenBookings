@@ -4,8 +4,8 @@ import { touristTaxRuleSchema } from "./tourist-tax-schema";
 const valid = {
   effectiveFrom: "2027-01-01",
   charges: [
-    { kind: "percent", amount: 12.5, perPerson: false, perNight: false, perRoom: false, vatIncludedPercent: 9 },
-    { kind: "fixed", amount: 2.5, perPerson: true, perNight: true, perRoom: false },
+    { kind: "percent", amount: "12.5", perPerson: false, perNight: false, perRoom: false, vatIncludedPercent: 9 },
+    { kind: "fixed", amount: "2.50", perPerson: true, perNight: true, perRoom: false },
   ],
   childrenExempt: true,
   maxNights: 7,
@@ -28,6 +28,25 @@ describe("touristTaxRuleSchema", () => {
     expect(touristTaxRuleSchema.safeParse(valid).success).toBe(true);
   });
 
+  test("a fixed amount is stored in cents, a percentage as a percentage", () => {
+    expect(touristTaxRuleSchema.parse(valid).charges).toEqual([
+      { kind: "percent", percent: 12.5, perPerson: false, perNight: false, perRoom: false, vatIncludedPercent: 9 },
+      { kind: "fixed", amountCents: 250, perPerson: true, perNight: true, perRoom: false, vatIncludedPercent: null },
+    ]);
+  });
+
+  test("amounts may use a decimal comma", () => {
+    const r = touristTaxRuleSchema.parse({
+      ...valid,
+      charges: [
+        { ...valid.charges[0], amount: "6,5" },
+        { ...valid.charges[1], amount: "3,75" },
+      ],
+    });
+    expect(r.charges[0]).toMatchObject({ kind: "percent", percent: 6.5 });
+    expect(r.charges[1]).toMatchObject({ kind: "fixed", amountCents: 375 });
+  });
+
   test("accepts a rule with no charges, meaning no tourist tax from that date", () => {
     expect(touristTaxRuleSchema.safeParse({ ...valid, charges: [] }).success).toBe(true);
   });
@@ -37,33 +56,41 @@ describe("touristTaxRuleSchema", () => {
   });
 
   test("rejects a charge of zero", () => {
-    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: 0 }] })).toContain(
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: "0" }] })).toContain(
+      "Enter an amount above zero.",
+    );
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: "0" }] })).toContain(
       "Enter an amount above zero.",
     );
   });
 
   test("accepts the highest real tourist taxes: 25% and €25", () => {
-    const at = (i: 0 | 1, amount: number) => ({ ...valid, charges: [{ ...valid.charges[i], amount }] });
-    expect(touristTaxRuleSchema.safeParse(at(0, 25)).success).toBe(true);
-    expect(touristTaxRuleSchema.safeParse(at(1, 25)).success).toBe(true);
+    const at = (i: 0 | 1, amount: string) => ({ ...valid, charges: [{ ...valid.charges[i], amount }] });
+    expect(touristTaxRuleSchema.safeParse(at(0, "25")).success).toBe(true);
+    expect(touristTaxRuleSchema.parse(at(1, "25")).charges[0]).toMatchObject({ amountCents: 2500 });
   });
 
   test("rejects a percentage above 25", () => {
-    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: 25.01 }] })).toContain(
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: "25.01" }] })).toContain(
       "A tourist tax percentage cannot be more than 25%.",
     );
   });
 
   test("rejects a fixed amount above €25", () => {
-    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: 25.01 }] })).toContain(
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: "25.01" }] })).toContain(
       "A tourist tax amount cannot be more than €25.",
     );
   });
 
-  test("rejects amounts with more than two decimals", () => {
-    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: 2.555 }] })).toContain(
-      "Use at most two decimals.",
+  test("rejects amounts with more than two decimals, and anything that is not an amount", () => {
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: "2.555" }] })).toContain(
+      "Use at most two decimals",
     );
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[0], amount: "6.555" }] })).toContain(
+      "Use at most two decimals",
+    );
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: "" }] }).length).toBeGreaterThan(0);
+    expect(errorsOf({ ...valid, charges: [{ ...valid.charges[1], amount: 2.5 }] }).length).toBeGreaterThan(0);
   });
 
   test("a percentage ignores the per-person, per-room and per-night ticks", () => {

@@ -147,8 +147,8 @@ export const LIMITS = {
   /** rooms.cots_max / extra_beds_max (0040). */
   cots: { max: 4 },
   extraBeds: { max: 4 },
-  /** Extra-guest, cot and extra-bed fees, whole euros per night. */
-  fee: { max: 9999 },
+  /** Extra-guest, cot and extra-bed fees per night, in cents: up to €9,999.99. */
+  feeCents: { max: 999_999 },
   minPhotos: 3,
   rateName: { min: 2, max: 60 },
   rateDescription: { max: 200 },
