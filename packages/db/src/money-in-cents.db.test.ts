@@ -10,14 +10,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { Client } from "pg";
 import {
   applyPendingMigrationsBefore,
-  canReplayPendingMigrations,
   connectionString,
   seedGuest,
 } from "./testing/db-harness";
 import { pendingMigrationSql } from "./testing/pending-migrations";
 
 const MIGRATION = "0058_money_in_cents.sql";
-const describeBefore0058 = connectionString && canReplayPendingMigrations ? describe : describe.skip;
 
 type Fixture = {
   propertyId: string;
@@ -37,7 +35,8 @@ type Fixture = {
   legacyChargeId: string;
 };
 
-describeBefore0058("0058 money in cents", () => {
+// 0058 is on the dev database; this verified the conversion before it was applied.
+describe.skip("0058 money in cents", () => {
   let db: Client;
 
   beforeAll(async () => {

@@ -14,35 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const PENDING_MIGRATIONS: string[] = [
-  "0032_booking_events.sql",
-  "0033_booking_intents.sql",
-  "0034_booking_intents_dates_not_null.sql",
-  "0035_booking_money_cents.sql",
-  "0036_commission_invoices.sql",
-  "0037_billing_report_views.sql",
-  "0038_guest_reviews.sql",
-  "0039_review_replies.sql",
-  "0040_room_occupancy_extras.sql",
-  "0041_modifier_discount_sign.sql",
-  "0042_infants_pay_at_property.sql",
-  "0043_drop_property_beds.sql",
-  "0044_intent_breakdown.sql",
-  "0045_vat_split.sql",
-  "0046_intent_payment_sessions.sql",
-  "0047_refund_last_attempt.sql",
-  "0048_revoke_data_api_grants.sql",
-  "0049_rls_guest_data.sql",
-  "0050_pricing_rule_groups.sql",
-  "0051_eur_only.sql",
-  "0052_tourist_tax_infants.sql",
-  "0053_outside_refunds.sql",
-  "0054_admin_roles.sql",
-  "0055_session_active_property.sql",
-  "0056_booking_reference.sql",
-  "0057_analytics_month_cache.sql",
-  "0058_money_in_cents.sql",
-];
+export const PENDING_MIGRATIONS: string[] = [];
 
 const DRIZZLE_DIR = new URL("../../drizzle/", import.meta.url);
 
