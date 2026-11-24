@@ -9,15 +9,16 @@
  * Tourist tax is added on top of the room price. The guest sees one all-in
  * price; OpenBookings' commission is taken on the room price only.
  *
- * Amounts are in euros, like the rest of this package, and every line is
- * rounded to cents before it is summed, so the lines always add up to the
- * total a host or guest is shown.
+ * Every amount is an integer number of cents. A percentage is taken per night
+ * and rounded half up to a whole cent (taking VAT out first is a step of its
+ * own, rounded the same way), so lines and nights are whole cents and always
+ * add up exactly to the total a host or guest is shown.
  */
 
-export interface TouristTaxCharge {
-  kind: "percent" | "fixed";
-  /** `percent`: 12.5 means 12.5% of the room price. `fixed`: euros. */
-  amount: number;
+import { formatCents, percentOfCents, roundHalfUp } from "./money";
+
+/** The `per` flags: shared by both kinds of charge, as stored. */
+interface TouristTaxChargeFlags {
   /** `fixed` only. The `per` flags multiply; none of them = once per booking. */
   perPerson: boolean;
   perNight: boolean;
@@ -28,6 +29,18 @@ export interface TouristTaxCharge {
    */
   vatIncludedPercent?: number | null;
 }
+
+export type TouristTaxCharge =
+  | (TouristTaxChargeFlags & {
+      kind: "fixed";
+      /** Cents, multiplied by the `per` flags. */
+      amountCents: number;
+    })
+  | (TouristTaxChargeFlags & {
+      kind: "percent";
+      /** 12.5 means 12.5% of each night's room price. */
+      percent: number;
+    });
 
 export interface TouristTaxRule {
   /** "2027-01-01". The rule applies to nights on or after this date. */
@@ -47,8 +60,8 @@ export interface TouristTaxRule {
 }
 
 export interface TouristTaxStay {
-  /** One entry per night, with the room price for that night (incl. VAT). */
-  nights: { date: string; price: number }[];
+  /** One entry per night, with the room price for that night in cents (incl. VAT). */
+  nights: { date: string; priceCents: number }[];
   adults: number;
   children: number;
   /** Under 2. Counted only where the rule says infants pay. */
@@ -59,13 +72,13 @@ export interface TouristTaxStay {
 export interface TouristTaxLine {
   /** "€2.50 per person per night" */
   label: string;
-  amount: number;
+  amountCents: number;
   /** The rule this charge belongs to, for stays that span a rate change. */
   effectiveFrom: string;
 }
 
 export interface TouristTaxResult {
-  total: number;
+  totalCents: number;
   lines: TouristTaxLine[];
 }
 
@@ -83,16 +96,16 @@ export function calculateTouristTax(
   rules: TouristTaxRule[],
   stay: TouristTaxStay,
 ): TouristTaxResult {
-  if (stay.nights.length === 0) return { total: 0, lines: [] };
+  if (stay.nights.length === 0) return { totalCents: 0, lines: [] };
 
-  // Exact amounts per (rule, charge), in insertion order so lines read in the
-  // order the host entered them.
-  const exact = new Map<string, { rule: TouristTaxRule; charge: TouristTaxCharge; amount: number }>();
-  const add = (rule: TouristTaxRule, index: number, amount: number) => {
+  // Cents per (rule, charge), in insertion order so lines read in the order
+  // the host entered them.
+  const byCharge = new Map<string, { rule: TouristTaxRule; charge: TouristTaxCharge; amountCents: number }>();
+  const add = (rule: TouristTaxRule, index: number, cents: number) => {
     const key = `${rule.effectiveFrom}#${index}`;
-    const entry = exact.get(key);
-    if (entry) entry.amount += amount;
-    else exact.set(key, { rule, charge: rule.charges[index], amount });
+    const entry = byCharge.get(key);
+    if (entry) entry.amountCents += cents;
+    else byCharge.set(key, { rule, charge: rule.charges[index], amountCents: cents });
   };
 
   const guests = (rule: TouristTaxRule) => taxedGuests(rule, stay);
@@ -104,7 +117,7 @@ export function calculateTouristTax(
 
     rule.charges.forEach((charge, index) => {
       if (charge.kind === "percent") {
-        add(rule, index, (taxableRoomPrice(charge, night.price) * charge.amount) / 100);
+        add(rule, index, percentOfNight(charge, night.priceCents));
       } else if (charge.perNight) {
         add(rule, index, fixedAmount(charge, guests(rule), stay.rooms));
       }
@@ -120,33 +133,32 @@ export function calculateTouristTax(
   });
 
   const lines: TouristTaxLine[] = [];
-  for (const { rule, charge, amount } of exact.values()) {
-    const rounded = round2(amount);
-    if (rounded === 0) continue;
-    lines.push({ label: describeCharge(charge), amount: rounded, effectiveFrom: rule.effectiveFrom });
+  for (const { rule, charge, amountCents } of byCharge.values()) {
+    if (amountCents === 0) continue;
+    lines.push({ label: describeCharge(charge), amountCents, effectiveFrom: rule.effectiveFrom });
   }
 
-  return { total: round2(lines.reduce((sum, line) => sum + line.amount, 0)), lines };
+  return { totalCents: lines.reduce((sum, line) => sum + line.amountCents, 0), lines };
 }
 
 /**
- * The tax owed per night of the stay, for refunds of the nights not stayed.
- * Per-night charges land on their night; charges owed once per stay land on
- * the first night, which is always stayed when a guest leaves early. Rounding
- * differences also go to the first night, so the nights always add up to
- * `calculateTouristTax(...).total` exactly.
+ * The tax owed per night of the stay in cents, for refunds of the nights not
+ * stayed. Per-night charges land on their night; charges owed once per stay
+ * land on the first night, which is always stayed when a guest leaves early.
+ * Each night is the same whole cents `calculateTouristTax` adds up, so the
+ * nights always sum to its `totalCents` exactly.
  */
 export function touristTaxByNight(rules: TouristTaxRule[], stay: TouristTaxStay): number[] {
   if (stay.nights.length === 0) return [];
 
   const guests = (rule: TouristTaxRule) => taxedGuests(rule, stay);
 
-  const exact = stay.nights.map((night, nightIndex) => {
+  const cents = stay.nights.map((night, nightIndex) => {
     const rule = ruleInForce(rules, night.date);
     if (!rule) return 0;
     if (rule.maxNights !== null && nightIndex >= rule.maxNights) return 0;
     return rule.charges.reduce((sum, charge) => {
-      if (charge.kind === "percent") return sum + (taxableRoomPrice(charge, night.price) * charge.amount) / 100;
+      if (charge.kind === "percent") return sum + percentOfNight(charge, night.priceCents);
       if (charge.perNight) return sum + fixedAmount(charge, guests(rule), stay.rooms);
       return sum;
     }, 0);
@@ -155,14 +167,11 @@ export function touristTaxByNight(rules: TouristTaxRule[], stay: TouristTaxStay)
   const arrivalRule = ruleInForce(rules, stay.nights[0].date);
   arrivalRule?.charges.forEach((charge) => {
     if (charge.kind === "fixed" && !charge.perNight) {
-      exact[0] += fixedAmount(charge, guests(arrivalRule), stay.rooms);
+      cents[0] += fixedAmount(charge, guests(arrivalRule), stay.rooms);
     }
   });
 
-  const cents = exact.map((amount) => Math.round(amount * 100));
-  const totalCents = Math.round(calculateTouristTax(rules, stay).total * 100);
-  cents[0] += totalCents - cents.reduce((sum, c) => sum + c, 0);
-  return cents.map((c) => c / 100);
+  return cents;
 }
 
 /** The people a per-person charge counts under this rule. */
@@ -186,30 +195,37 @@ export function infantsPayTouristTax(rules: TouristTaxRule[], today: string): bo
   );
 }
 
-function fixedAmount(charge: TouristTaxCharge, guests: number, rooms: number): number {
-  return charge.amount * (charge.perPerson ? guests : 1) * (charge.perRoom ? rooms : 1);
+/** A fixed charge in cents: whole cents times whole counts, so already exact. */
+function fixedAmount(
+  charge: Extract<TouristTaxCharge, { kind: "fixed" }>,
+  guests: number,
+  rooms: number,
+): number {
+  return charge.amountCents * (charge.perPerson ? guests : 1) * (charge.perRoom ? rooms : 1);
 }
 
-/** The part of one night's price a percentage is taken of. */
-function taxableRoomPrice(charge: TouristTaxCharge, price: number): number {
-  const taxable = charge.vatIncludedPercent ? price / (1 + charge.vatIncludedPercent / 100) : price;
-  return Math.max(0, taxable);
+/**
+ * A percentage charge on one night, in cents. The part of the price before
+ * VAT (when the town taxes that) is rounded half up to a whole cent first,
+ * then the percentage of it.
+ */
+function percentOfNight(charge: Extract<TouristTaxCharge, { kind: "percent" }>, priceCents: number): number {
+  const taxable = charge.vatIncludedPercent
+    ? roundHalfUp((priceCents * 100) / (100 + charge.vatIncludedPercent))
+    : priceCents;
+  return percentOfCents(Math.max(0, taxable), charge.percent);
 }
 
 /** "€2.50 per person per night", "12.5% of the room price excl. 9% VAT". */
 export function describeCharge(charge: TouristTaxCharge): string {
   if (charge.kind === "percent") {
     const vat = charge.vatIncludedPercent ? ` excl. ${charge.vatIncludedPercent}% VAT` : "";
-    return `${charge.amount}% of the room price${vat}`;
+    return `${charge.percent}% of the room price${vat}`;
   }
   const per = [
     charge.perPerson && "per person",
     charge.perRoom && "per room",
     charge.perNight && "per night",
   ].filter(Boolean);
-  return `€${charge.amount.toFixed(2)} ${per.length ? per.join(" ") : "per booking"}`;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  return `${formatCents(charge.amountCents, { whole: "always-decimals" })} ${per.length ? per.join(" ") : "per booking"}`;
 }
