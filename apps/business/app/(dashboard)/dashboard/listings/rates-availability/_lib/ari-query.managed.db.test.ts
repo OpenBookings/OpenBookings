@@ -67,6 +67,22 @@ const scenarios: Scenario[] = [
     expected: [2, 2],
   },
   {
+    name: "acknowledged 31 minutes ago but needs attention since: still counts",
+    seed: async (s) => {
+      await s.push({ unitsLeft: 2, minutesAgo: 60 });
+      await s.booking({ delivery: { status: "needs_attention", ackMinutesAgo: 31 } });
+    },
+    expected: [1, 1],
+  },
+  {
+    name: "acknowledged 31 minutes ago but pending again: still counts",
+    seed: async (s) => {
+      await s.push({ unitsLeft: 2, minutesAgo: 60 });
+      await s.booking({ delivery: { status: "pending", ackMinutesAgo: 31 } });
+    },
+    expected: [1, 1],
+  },
+  {
     name: "not_sent never counts",
     seed: async (s) => {
       await s.push({ unitsLeft: 2, minutesAgo: 5 });

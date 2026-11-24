@@ -35,11 +35,15 @@ export const MANAGED_PROPERTY_SQL = `EXISTS (
  * settled when its booking's delivery row for the property's active
  * installation
  *   - is `not_sent` (the hotel already had it when it connected), or
- *   - was acknowledged by the app, and either a limit for that room and night
- *     arrived at least 3 minutes after the acknowledgement (the app's rounds
- *     can carry a number computed before it saw ours), or 30 minutes have
- *     passed since it (silence means the number already included ours).
- * A booking with no delivery row yet is unsettled.
+ *   - is `delivered` and was acknowledged by the app, and either a limit for
+ *     that room and night arrived at least 3 minutes after the
+ *     acknowledgement (the app's rounds can carry a number computed before it
+ *     saw ours), or 30 minutes have passed since it (silence means the number
+ *     already included ours).
+ * A booking with no delivery row yet is unsettled, and so is one whose row is
+ * pending, retrying or needs attention even with an older acknowledgement: it
+ * changed since (reopened, rooms uncancelled), the app has not counted the
+ * change, and selling one room fewer beats selling one the hotel does not hold.
  */
 export const SETTLED_BOOKED_SQL = `
   SELECT res.room_id, n.d AS date, COUNT(*)::int AS units
@@ -57,7 +61,8 @@ export const SETTLED_BOOKED_SQL = `
     AND (
       dl.status = 'not_sent'
       OR (
-        dl.acknowledged_at IS NOT NULL
+        dl.status = 'delivered'
+        AND dl.acknowledged_at IS NOT NULL
         AND (
           inv.received_at >= dl.acknowledged_at + INTERVAL '3 minutes'
           OR clock.now >= dl.acknowledged_at + INTERVAL '30 minutes'

@@ -140,6 +140,18 @@ describeWithDb("availability on an app-managed property", () => {
     expect((await stay()).unitsLeft).toBe(1);
   });
 
+  test("acknowledged 31 minutes ago but changed since (needs attention): still counted", async () => {
+    await push({ unitsLeft: 2, receivedAt: ago(60) });
+    await delivery(await confirmedBooking(), "needs_attention", ago(31));
+    expect((await stay()).unitsLeft).toBe(1);
+  });
+
+  test("acknowledged 31 minutes ago but changed since (pending again): still counted", async () => {
+    await push({ unitsLeft: 2, receivedAt: ago(60) });
+    await delivery(await confirmedBooking(), "pending", ago(31));
+    expect((await stay()).unitsLeft).toBe(1);
+  });
+
   test("a booking marked not_sent never counts", async () => {
     await push({ unitsLeft: 2, receivedAt: ago(5) });
     await delivery(await confirmedBooking(), "not_sent", null);
