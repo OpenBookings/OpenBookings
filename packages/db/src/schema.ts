@@ -97,6 +97,8 @@ export const properties = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     slug: varchar("slug", { length: 255 }).notNull().unique(),
+    /** Public code a channel manager maps to (0060). Set by trigger on INSERT, never changed. */
+    channelCode: text("channel_code").notNull().unique().default(sql`NULL`),
     addressLine1: varchar("address_line_1", { length: 255 }).notNull(),
     addressLine2: varchar("address_line_2", { length: 255 }),
     city: varchar("city", { length: 100 }).notNull(),
@@ -187,6 +189,8 @@ export const rooms = pgTable(
       .notNull()
       .references(() => properties.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 100 }).notNull(),
+    /** Public code a channel manager maps to (0060). Set by trigger on INSERT, never changed. */
+    channelCode: text("channel_code").notNull().unique().default(sql`NULL`),
     description: text("description"),
     baseOccupancy: integer("base_occupancy").notNull(),
     maxAdults: integer("max_adults").notNull(),
@@ -260,6 +264,8 @@ export const ratePlans = pgTable(
       .notNull()
       .references(() => rooms.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 100 }).notNull(),
+    /** Public code a channel manager maps to (0060). Set by trigger on INSERT, never changed. */
+    channelCode: text("channel_code").notNull().unique().default(sql`NULL`),
     /** Best available rate per night, cents, VAT-inclusive (cents since 0058). */
     barCents: bigint("bar_cents", { mode: "number" }).notNull(),
     currency: char("currency", { length: 3 }).notNull().default("EUR"),
@@ -944,6 +950,12 @@ export const bookingIntentRooms = pgTable(
   ],
 );
 
+const xid8 = customType<{ data: string }>({
+  dataType() {
+    return "xid8";
+  },
+});
+
 /** Append-only log of what happened to a booking and who did it. */
 export const bookingEvents = pgTable(
   "booking_events",
@@ -959,8 +971,12 @@ export const bookingEvents = pgTable(
     reason: text("reason"),
     data: jsonb("data").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Transaction that wrote the event (0060); with `seq`, a total order for the event feed. */
+    txid: xid8("txid").notNull().default(sql`pg_current_xact_id()`),
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity(),
   },
   (table) => [
+    index("idx_booking_events_txid_seq").on(table.txid, table.seq),
     index("idx_booking_events_booking").on(table.bookingId, table.createdAt),
     check("booking_events_actor_kind", sql`${table.actorKind} IN ('guest','host','system','admin')`),
   ],
@@ -1545,4 +1561,109 @@ export const analyticsMonthGeneration = pgTable(
     generation: bigint("generation", { mode: "bigint" }).notNull().default(sql`0`),
   },
   (table) => [primaryKey({ columns: [table.hotelId, table.month] })],
+);
+
+/** An app (SiteMinder) connected to a property (0060). Only a hash of its key is stored. */
+export const appInstallations = pgTable(
+  "app_installations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    appKey: text("app_key").notNull(),
+    status: text("status").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    keyLast4: text("key_last4").notNull(),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
+    connectedBy: text("connected_by"),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("app_installations_one_active_per_property").on(table.propertyId).where(sql`${table.status} = 'active'`),
+    check("app_installations_app_key_check", sql`${table.appKey} IN ('siteminder')`),
+    check("app_installations_status_check", sql`${table.status} IN ('active','disconnected')`),
+  ],
+);
+
+/** Units left per room and night, as last pushed by the app (0060). */
+export const appInventory = pgTable(
+  "app_inventory",
+  {
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull(),
+    unitsLeft: integer("units_left").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.date] }),
+    check("app_inventory_units_left_check", sql`${table.unitsLeft} >= 0`),
+  ],
+);
+
+/** Price per rate plan and night, cents, as last pushed by the app (0060). */
+export const appRates = pgTable(
+  "app_rates",
+  {
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull(),
+    priceCents: bigint("price_cents", { mode: "number" }).notNull(),
+    extraAdultCents: bigint("extra_adult_cents", { mode: "number" }),
+    extraChildCents: bigint("extra_child_cents", { mode: "number" }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.ratePlanId, table.date] }),
+    check("app_rates_price_cents_check", sql`${table.priceCents} >= 0`),
+  ],
+);
+
+/** Restrictions per rate plan and night, as last pushed by the app (0060). */
+export const appRestrictions = pgTable(
+  "app_restrictions",
+  {
+    ratePlanId: uuid("rate_plan_id")
+      .notNull()
+      .references(() => ratePlans.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "string" }).notNull(),
+    isClosed: boolean("is_closed").notNull().default(false),
+    closedToArrival: boolean("closed_to_arrival").notNull().default(false),
+    closedToDeparture: boolean("closed_to_departure").notNull().default(false),
+    minStayArrival: integer("min_stay_arrival"),
+    maxStayArrival: integer("max_stay_arrival"),
+    minStayThrough: integer("min_stay_through"),
+    maxStayThrough: integer("max_stay_through"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ratePlanId, table.date] })],
+);
+
+/** Whether a booking reached an installation's app (0060). */
+export const appBookingDelivery = pgTable(
+  "app_booking_delivery",
+  {
+    installationId: uuid("installation_id")
+      .notNull()
+      .references(() => appInstallations.id),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    detail: text("detail"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.installationId, table.bookingId] }),
+    index("idx_app_booking_delivery_booking").on(table.bookingId),
+    check(
+      "app_booking_delivery_status_check",
+      sql`${table.status} IN ('pending','delivered','retrying','needs_attention','not_sent')`,
+    ),
+  ],
 );
