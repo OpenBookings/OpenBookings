@@ -3,7 +3,7 @@ import { Client } from "pg";
 import { bookingReference } from "@openbookings/db/booking-reference";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
 import type { trackMail } from "./tracking";
-import { sendBookingCancelled, sendBookingConfirmed, sendOversoldRefunded, sendRefundIssued, type SendDeps } from "./booking-send";
+import { sendBookingCancelled, sendBookingConfirmed, sendChannelDeliveryFailed, sendOversoldRefunded, sendRefundIssued, type SendDeps } from "./booking-send";
 
 let db: Client;
 let sent: { to: string; subject: string; html: string }[];
@@ -268,5 +268,14 @@ describeWithDb("booking emails against Postgres", () => {
     };
     await expect(sendBookingConfirmed(bookingId, deps({ db: flaky }))).rejects.toThrow("lookup failed");
     expect(to()).toEqual([guestEmail]);
+  });
+
+  test("a channel delivery failure goes to every owner and names the app and the booking", async () => {
+    await db.query(`INSERT INTO app_installations (property_id, app_key, status, key_hash, key_last4, connected_at) VALUES ($1, 'siteminder', 'active', $2, 'abcd', NOW())`, [propertyId, `hash-${crypto.randomUUID()}`]);
+    await sendChannelDeliveryFailed(bookingId, "Hotel <not> found", deps());
+    expect(to()).toEqual([...ownerEmails].sort());
+    expect(sent[0]!.subject).toBe(`Booking ${bookingReference(bookingId)} didn't reach SiteMinder`);
+    expect(sent[0]!.html).toContain("Hotel &lt;not&gt; found");
+    expect(sent[0]!.html).toContain("https://biz.test/dashboard/bookings/reservations");
   });
 });

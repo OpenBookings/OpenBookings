@@ -1,6 +1,7 @@
 import { DeliveryReportSchema } from "@openbookings/apps-contract";
 import { withTransaction } from "@openbookings/db";
 import { recordDelivery } from "@openbookings/db/apps";
+import { alertDeliveryNeedsAttention } from "@/lib/apps/delivery-alert";
 import { appsJson, authenticateApp, firstIssue, readBodyText, unauthorized } from "@/lib/apps/api-auth";
 
 export const dynamic = "force-dynamic";
@@ -31,5 +32,15 @@ export async function PUT(request: Request, context: { params: Promise<{ booking
   // The booking row is locked FOR SHARE, so this runs in a transaction.
   const result = await withTransaction((tx) => recordDelivery(tx, installation, bookingId, parsed.data, new Date()));
   if (result.result === "unknown-booking") return appsJson({ error: "not found" }, 404);
+  // Only the move into needs_attention alerts: a repeated report, or one the
+  // store ignored, leaves the status as it was. After the commit, never inside it.
+  if (result.previousStatus !== "needs_attention" && result.status === "needs_attention") {
+    await alertDeliveryNeedsAttention({
+      bookingId,
+      propertyId: installation.propertyId,
+      appKey: installation.appKey,
+      detail: parsed.data.detail,
+    });
+  }
   return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 }

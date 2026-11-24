@@ -3,7 +3,7 @@
  * with plain Requests (no cookie), the pool is this test's transaction.
  * Fixtures sit in 2031+.
  */
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, spyOn, test } from "bun:test";
 import { Client } from "pg";
 import { BookingChangesPageSchema, AppStructureSchema } from "@openbookings/apps-contract";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "@openbookings/db/testing";
@@ -29,6 +29,11 @@ function run(text: string, values?: unknown[]) {
 }
 const pool = { query: run };
 
+/** What the delivery route sent out: fakes for the mailer and Sentry. */
+const emails: { bookingId: string; detail: string | null }[] = [];
+const messages: { message: string; options: { level: string; tags: Record<string, string> } }[] = [];
+let mailFails = false;
+
 await mockModules(import.meta.dir, {
   "@openbookings/db": () => ({
     ...realDb,
@@ -45,6 +50,18 @@ await mockModules(import.meta.dir, {
         throw error;
       }
     },
+  }),
+  "@openbookings/mailing/booking-send": () => ({
+    sendChannelDeliveryFailed: async (bookingId: string, detail: string | null) => {
+      if (mailFails) throw new Error("smtp down");
+      emails.push({ bookingId, detail });
+    },
+  }),
+  "@sentry/nextjs": () => ({
+    captureMessage: (message: string, options: { level: string; tags: Record<string, string> }) => {
+      messages.push({ message, options });
+    },
+    captureException: () => undefined,
   }),
 });
 
@@ -69,6 +86,9 @@ describeWithDb("Apps API v1 routes", () => {
     await db.query("BEGIN");
     await applyPendingMigrations(db);
     failNext = null;
+    emails.length = 0;
+    messages.length = 0;
+    mailFails = false;
   });
   afterEach(async () => {
     await db.query("ROLLBACK");
@@ -335,5 +355,37 @@ describeWithDb("Apps API v1 routes", () => {
     expect(((await noVersion.json()) as { error: string }).error).toStartWith("version:");
     expect((await put(report({ acknowledgedAt: "yesterday" }))).status).toBe(400);
     expect((await put(report({ status: "pending" }))).status).toBe(400);
+  });
+
+  test("delivery: reporting needs_attention twice emails the hotel and alerts us once; retrying sends nothing", async () => {
+    const { apiKey, ids } = await setup();
+    const mine = await confirmedBooking(ids, "2031-06-10");
+    const put = (body: unknown) =>
+      delivery.PUT(req(`/bookings/${mine}/delivery`, { method: "PUT", key: apiKey, body }), ctx(mine));
+
+    expect((await put(report({ status: "retrying" }))).status).toBe(204);
+    expect(emails).toHaveLength(0);
+    expect(messages).toHaveLength(0);
+
+    expect((await put(report({ status: "needs_attention", detail: "Hotel not found" }))).status).toBe(204);
+    expect((await put(report({ status: "needs_attention", detail: "Hotel not found" }))).status).toBe(204);
+    expect(emails).toEqual([{ bookingId: mine, detail: "Hotel not found" }]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.options.level).toBe("warning");
+    expect(messages[0]!.options.tags).toEqual({ app: "siteminder", property_id: ids.propertyId });
+  });
+
+  test("delivery: a failing mail does not turn the 204 into an error", async () => {
+    const { apiKey, ids } = await setup();
+    const mine = await confirmedBooking(ids, "2031-06-10");
+    mailFails = true;
+    const quiet = spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await delivery.PUT(
+      req(`/bookings/${mine}/delivery`, { method: "PUT", key: apiKey, body: report({ status: "needs_attention" }) }),
+      ctx(mine),
+    );
+    quiet.mockRestore();
+    expect(res.status).toBe(204);
+    expect(messages).toHaveLength(1);
   });
 });

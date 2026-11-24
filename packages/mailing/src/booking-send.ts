@@ -9,6 +9,7 @@ import {
   guestOversoldRefunded,
   guestRefundIssued,
   hostBookingCancelled,
+  hostChannelDeliveryFailed,
   hostNewBooking,
   type MailRoom,
   type RefundIssuedReason,
@@ -386,4 +387,51 @@ export async function sendRefundIssued(
       // Reporting must not throw either.
     }
   }
+}
+
+/** What the apps' installations are called in mail, by `app_installations.app_key`. */
+const APP_NAMES: Record<string, string> = { siteminder: "SiteMinder" };
+
+/**
+ * Tells the hotel (whoever gets its new-booking mail) that a booking never
+ * reached its channel manager. `detail` is the app's own text, untrusted; the
+ * mail shortens and escapes it. Throws on failure: the caller reports it.
+ */
+export async function sendChannelDeliveryFailed(bookingId: string, detail: string | null, deps: SendDeps = {}): Promise<void> {
+  const c = resolve(deps);
+  const row = (
+    await rowsOf<{
+      property_id: string;
+      property_name: string;
+      guestEmail: string;
+      check_in_date: string;
+      check_out_date: string;
+      app_key: string | null;
+    }>(
+      c.db,
+      `SELECT p.id AS property_id, p.name AS property_name, u.email AS "guestEmail",
+              b.check_in_date::text AS check_in_date, b.check_out_date::text AS check_out_date,
+              (SELECT ai.app_key FROM app_installations ai WHERE ai.property_id = p.id
+                ORDER BY (ai.status = 'active') DESC, ai.connected_at DESC LIMIT 1) AS app_key
+         FROM bookings b
+         JOIN properties p ON p.id = b.hotel_id
+         JOIN "user" u ON u.id = b.user_id
+        WHERE b.id = $1::uuid`,
+      [bookingId],
+    )
+  )[0];
+  if (!row) throw new Error(`Booking ${bookingId} not found for its channel delivery email`);
+  await deliver(
+    c,
+    await hostsOf(c, row.property_id, row.guestEmail),
+    hostChannelDeliveryFailed({
+      propertyName: row.property_name,
+      reference: bookingReference(bookingId),
+      appName: (row.app_key && APP_NAMES[row.app_key]) || "your channel manager",
+      checkIn: row.check_in_date,
+      checkOut: row.check_out_date,
+      bookingUrl: reservationsUrl(c),
+      detail,
+    }),
+  );
 }

@@ -5,6 +5,7 @@ import {
   guestBookingConfirmed,
   guestOversoldRefunded,
   hostBookingCancelled,
+  hostChannelDeliveryFailed,
   guestRefundIssued,
   hostNewBooking,
 } from "./index";
@@ -254,4 +255,27 @@ test("refund mails give the same timing as the booking page", () => {
   expect(mails.refundIssued.html).toContain("within 5 to 10 business days");
   const cancelled = guestBookingCancelled({ propertyName: "Hotel", rooms: ["A"], refund: "€50.00", cancelsBooking: true, bookingUrl: "https://web.test/b" });
   expect(cancelled.html).toContain("within 5 to 10 business days");
+});
+
+const failedInput = { propertyName: "Hotel", reference: "OB-B7B0-2A1C", appName: "SiteMinder", checkIn: "2027-03-11", checkOut: "2027-03-13", bookingUrl: "https://biz.test/r" };
+
+test("the channel failure mail names the booking, the dates and links to the console", () => {
+  const mail = hostChannelDeliveryFailed(failedInput);
+  expect(mail.subject).toBe("Booking OB-B7B0-2A1C didn't reach SiteMinder");
+  expect(mail.html).toContain("OB-B7B0-2A1C");
+  expect(mail.html).toContain("Thu 11 Mar 2027");
+  expect(mail.html).toContain("Sat 13 Mar 2027");
+  expect(mail.html).toContain("confirmed and paid");
+  expect(mail.html).toContain("isn't in your channel manager or PMS yet");
+  expect(mail.html).toContain("by hand");
+  expect(mail.html).toContain("https://biz.test/r");
+});
+
+test("the app's detail is escaped, shortened and kept out of the subject", () => {
+  const mail = hostChannelDeliveryFailed({ ...failedInput, detail: `<script>x</script>${"a".repeat(500)}` });
+  expect(mail.html).toContain("&lt;script&gt;");
+  expect(mail.html).not.toContain("<script>");
+  expect(mail.html).not.toContain("a".repeat(201));
+  expect(mail.subject).not.toContain("script");
+  expect(hostChannelDeliveryFailed({ ...failedInput, detail: null }).html).not.toContain("SiteMinder said");
 });

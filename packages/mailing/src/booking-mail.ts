@@ -282,3 +282,32 @@ export function hostBookingCancelled(i: {
     footnote: FOOTNOTE,
   });
 }
+
+const DETAIL_MAX = 200;
+
+/**
+ * The booking is paid and confirmed with us but never reached the hotel's
+ * channel manager. `detail` is the app's own words for why: untrusted text,
+ * shortened and escaped, and never part of the subject.
+ */
+export function hostChannelDeliveryFailed(i: {
+  propertyName: string;
+  reference: string;
+  appName: string;
+  checkIn: string;
+  checkOut: string;
+  bookingUrl: string;
+  detail?: string | null;
+}): ActionMail {
+  const detail = i.detail?.trim().slice(0, DETAIL_MAX);
+  return composeActionMail({
+    subject: `Booking ${i.reference} didn't reach ${i.appName}`,
+    preheader: `Booking ${i.reference} at ${i.propertyName} is not in your channel manager yet.`,
+    eyebrow: "Reservations",
+    headline: `A booking didn't<br />reach ${escapeHtml(i.appName)}.`,
+    body: `Booking ${STRONG(i.reference)} at ${STRONG(i.propertyName)} for ${stay(i.checkIn, i.checkOut)} is confirmed and paid, but it isn't in your channel manager or PMS yet. Add it there by hand, or check the connection with ${escapeHtml(i.appName)}.${detail ? `<br /><br />${escapeHtml(i.appName)} said: ${escapeHtml(detail)}` : ""}`,
+    ctaUrl: i.bookingUrl,
+    ctaLabel: "Open reservations",
+    footnote: FOOTNOTE,
+  });
+}
