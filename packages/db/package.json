@@ -7,7 +7,8 @@
     "./booking-lifecycle": "./src/booking-lifecycle/index.ts",
     "./testing": "./src/testing/db-harness.ts",
     "./booking-reference": "./src/booking-reference.ts",
-    "./reviews": "./src/reviews/index.ts"
+    "./reviews": "./src/reviews/index.ts",
+    "./apps": "./src/apps/index.ts"
   },
   "scripts": {
     "db:generate": "bun --env-file=../../.env.local drizzle-kit generate",
