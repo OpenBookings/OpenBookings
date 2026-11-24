@@ -240,6 +240,35 @@ describeWithDb("app delivery status", () => {
     expect(await unitsLeft()).toBe(2);
   });
 
+  test("a stale report never overwrites a stored delivered row (R16)", async () => {
+    const { installation, bookingId } = await setup();
+    await event(bookingId, "confirmed");
+    const v1 = await currentVersion(bookingId);
+    await event(bookingId, "forced_uncancel");
+    const v2 = await currentVersion(bookingId);
+    expect(v2).toBeGreaterThan(v1);
+    await recordDelivery(db, installation, bookingId, delivered(0, v2), later);
+    const before = await row(bookingId);
+    expect(before?.status).toBe("delivered");
+
+    for (const r of [
+      report({ status: "retrying", acknowledgedAt: null, detail: "late", version: v1 }),
+      report({ status: "needs_attention", acknowledgedAt: null, detail: "late", version: v1 }),
+      delivered(30, v1),
+    ]) {
+      expect(await recordDelivery(db, installation, bookingId, r, later)).toEqual({
+        result: "ok",
+        previousStatus: "delivered",
+        status: "delivered",
+      });
+      expect(await row(bookingId)).toEqual(before);
+    }
+    // A report for the current version still applies.
+    expect(
+      await recordDelivery(db, installation, bookingId, report({ status: "retrying", acknowledgedAt: null, detail: "now", version: v2 }), later),
+    ).toEqual({ result: "ok", previousStatus: "delivered", status: "retrying" });
+  });
+
   test("a not_sent row is never changed by a report (R15a)", async () => {
     const { installation, bookingId } = await setup();
     await db.query(

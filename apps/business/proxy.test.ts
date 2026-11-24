@@ -72,6 +72,17 @@ describe("business proxy: CSRF on /api", () => {
     expect(calls).toEqual([]);
   });
 
+  test("a cookie-less app request (Apps API v1) is never refused, whatever its origin headers", async () => {
+    for (const [method, path] of [["POST", "/api/apps/v1/ari"], ["PUT", "/api/apps/v1/bookings/b-1/delivery"]] as const) {
+      const res = await proxy(
+        new NextRequest(`https://${HOST}${path}`, { method, headers: { host: HOST, authorization: `Bearer obk_${"a".repeat(40)}` } }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-middleware-next")).toBe("1");
+    }
+    expect(calls).toEqual([]);
+  });
+
   test("the matcher covers /api, except better-auth and the multipart support uploads", () => {
     const matches = (path: string) => config.matcher.some((source) => pathToRegexp(source).test(path));
     for (const path of ["/api/threads", "/api/threads/t-1/messages", "/api/upload/confirm", "/api/stripe/account-link", "/api/realtime/token", "/dashboard/listings"]) {

@@ -40,6 +40,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *   reached the channel restarts the availability rule's 3/30-minute window,
  *   and a clock running ahead cannot settle a booking early. Other reports
  *   leave it as it is. `detail` is the report's.
+ * - A report for an older version than the booking's current one is ignored
+ *   (no write, ok with the stored status) while the stored row is `delivered`
+ *   (R16): a stale retrying/needs_attention must not overwrite a newer success.
  * - A `not_sent` row is never changed (spec §3b: permanently not sent); the
  *   report is accepted and ignored, previous and stored status `not_sent`.
  * - A booking of another property, or none at all, is `unknown-booking` and
@@ -94,6 +97,12 @@ export async function recordDelivery(
     )
   ).rows[0] as { status: string };
   if (previous.status === "not_sent") return { result: "ok", previousStatus: "not_sent", status: "not_sent" };
+  // R16: a report about an older version than the booking's current one must
+  // not overwrite a stored success (a stale retrying/needs_attention, or a
+  // delayed delivered for v1 after v2 was delivered). Accepted, nothing written.
+  if (previous.status === "delivered" && BigInt(report.version) < BigInt(current.version)) {
+    return { result: "ok", previousStatus: "delivered", status: "delivered" };
+  }
 
   await db.query(
     `UPDATE app_booking_delivery

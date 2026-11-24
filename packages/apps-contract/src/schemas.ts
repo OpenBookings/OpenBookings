@@ -100,6 +100,8 @@ export const AriBatchSchema = z
     inventory: z.array(InventoryChangeSchema),
     rates: z.array(RateChangeSchema),
     restrictions: z.array(RestrictionChangeSchema),
+    /** The earliest time the app received any message merged into this batch (ISO 8601 with Z or an offset). */
+    receivedAt: z.iso.datetime({ offset: true }).optional(),
   })
   .refine((b) => b.inventory.length + b.rates.length + b.restrictions.length <= MAX_ARI_CHANGES, {
     message: `at most ${MAX_ARI_CHANGES} changes per request`,

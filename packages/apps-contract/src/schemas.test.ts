@@ -19,6 +19,12 @@ describe("AriBatchSchema", () => {
   test("accepts a valid batch", () => {
     expect(AriBatchSchema.safeParse(batch({ inventory: [inv] })).success).toBe(true);
   });
+  test("receivedAt is optional and must be an ISO datetime", () => {
+    expect(AriBatchSchema.safeParse(batch({ receivedAt: "2031-01-01T10:00:00Z" })).success).toBe(true);
+    expect(AriBatchSchema.safeParse(batch({ receivedAt: "2031-01-01T12:00:00+02:00" })).success).toBe(true);
+    expect(AriBatchSchema.safeParse(batch({ receivedAt: "yesterday" })).success).toBe(false);
+    expect(AriBatchSchema.safeParse(batch({ receivedAt: "2031-01-01" })).success).toBe(false);
+  });
   test("accepts a single-day range", () => {
     expect(AriBatchSchema.safeParse(batch({ inventory: [{ ...inv, to: inv.from }] })).success).toBe(true);
   });

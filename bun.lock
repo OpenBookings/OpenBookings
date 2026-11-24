@@ -54,6 +54,7 @@
         "@mdx-js/loader": "^3.1.1",
         "@next/mdx": "^16.4.6",
         "@openbookings/analytics": "workspace:*",
+        "@openbookings/apps-contract": "workspace:*",
         "@openbookings/auth": "workspace:*",
         "@openbookings/authz": "workspace:*",
         "@openbookings/billing": "workspace:*",
