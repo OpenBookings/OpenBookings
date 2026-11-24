@@ -72,9 +72,10 @@ const rowVariants: Variants = {
 /**
  * The all-in price in cents for one night from today (tourist tax included,
  * see withAllInPrices), falling back to the host's rate where it was not worked out.
+ * Null when there is no price to show (withAllInPrices set none).
  */
-function nightlyPriceCents(plan: DbRatePlan): number {
-  return plan.price_per_night_cents ?? plan.bar_cents;
+function nightlyPriceCents(plan: DbRatePlan): number | null {
+  return plan.price_per_night_cents === undefined ? (plan.bar_cents ?? null) : plan.price_per_night_cents;
 }
 
 function tierOf(rate: DbRatePlan) {
@@ -178,10 +179,11 @@ type RoomPanelProps = {
 function RoomPanel({ room, view, stayFields, viewMode, ratesOffset, liked, onToggleLike, onViewRates }: RoomPanelProps) {
   // With dates, the cheapest quoted night; without, today's prices as before.
   const quoted = Object.values(view.rates).filter((r): r is PricedRate => r !== null);
+  const nightly = room.rate_plans.map(nightlyPriceCents).filter((c): c is number => c !== null);
   const fromPrice = stayFields.hasStay
     ? (quoted.length > 0 ? Math.min(...quoted.map((r) => r.perNightCents)) : null)
-    : room.rate_plans.length > 0
-      ? Math.min(...room.rate_plans.map(nightlyPriceCents))
+    : nightly.length > 0
+      ? Math.min(...nightly)
       : null;
 
   return (
@@ -463,7 +465,8 @@ type RateRowProps = {
 function RateRow({ rate, priced, hasStay, canAdd, lastOne, maxOccupancy, qty, onQtyChange, ratesConfirmed }: RateRowProps) {
   const tier = tierOf(rate);
   const savingCents = priced ? priced.savingCents : hasStay ? 0 : (rate.saving_vs_refundable_cents ?? 0);
-  const price = priced ? formatCents(priced.perNightCents) : hasStay ? "—" : formatCents(nightlyPriceCents(rate));
+  const nightly = nightlyPriceCents(rate);
+  const price = priced ? formatCents(priced.perNightCents) : hasStay || nightly === null ? "—" : formatCents(nightly);
   // Without dates, a rate that can't be booked tonight shows its base rate.
   const from = !priced && !hasStay && (rate.price_from || rate.price_per_night_cents === undefined);
 
@@ -813,7 +816,7 @@ function SelectionSummary({ rooms, views, stay, bookBar, quantities, visible, ra
       const qty = quantities[rate.id] ?? 0;
       if (qty === 0) continue;
       picks.push({ rateId: rate.id, roomIndex, roomName: room.name, rateName: rate.name, qty });
-      nightlyTotal += qty * nightlyPriceCents(rate);
+      nightlyTotal += qty * (nightlyPriceCents(rate) ?? 0);
       const priced = views[roomIndex]?.rates[rate.id];
       if (priced) quotedTotal += qty * priced.totalCents;
       else allQuoted = false;

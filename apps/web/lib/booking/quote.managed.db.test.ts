@@ -6,10 +6,14 @@
  * is never priced from our own numbers. Every test runs in a transaction that
  * is rolled back; fixtures sit in 2031+.
  */
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
 import { applyAriBatch, connectApp, type Installation } from "@openbookings/db/apps";
+import { getDb } from "@openbookings/db";
 import { applyPendingMigrations, connectionString, describeWithDb, seedProperty } from "@openbookings/db/testing";
+import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
+import { buildPropertyPageQuery } from "@/lib/hotel-page-data";
+import { withAllInPrices, withCancellationTerms } from "@/lib/listing-prices";
 import { priceSelection, priceTonight, quoteStay, type SelectedRoom } from "./quote";
 
 const CHECK_IN = "2031-11-10";
@@ -19,6 +23,8 @@ const NOW = new Date("2031-10-01T10:00:00Z");
 const STAY = { checkIn: CHECK_IN, checkOut: CHECK_OUT, adults: 2, children: 0, infants: 0, rooms: 1 };
 
 type AriBatch = Parameters<typeof applyAriBatch>[2];
+/** drizzle's own rendering of a query, so the page data SQL runs in the test transaction. */
+type Rendering = { dialect: { sqlToQuery: (q: ReturnType<typeof buildPropertyPageQuery>) => { sql: string; params: unknown[] } } };
 type Ids = { propertyId: string; roomId: string; ratePlanId: string };
 
 describeWithDb("stay quote on an app-managed rate plan", () => {
@@ -172,10 +178,67 @@ describeWithDb("stay quote on an app-managed rate plan", () => {
     expect((await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW))[ids.ratePlanId]).toEqual({
       priceCents: 18650,
       sellable: true,
+      managed: true,
     });
 
     const later = new Date("2031-10-02T10:00:00Z");
-    expect((await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, later))[ids.ratePlanId]).toBeUndefined();
+    expect((await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, later))[ids.ratePlanId]).toEqual({
+      priceCents: null,
+      sellable: false,
+      managed: true,
+    });
+  });
+
+  describe("the listing without dates", () => {
+    const TONIGHT = "2031-10-01"; // NOW at the property
+    // A BAR no other number in the output can be mistaken for.
+    const BAR = 12345;
+
+    /** The page's rooms as the property page renders them: page data, tonight's prices, B.4. */
+    async function listing() {
+      await db.query(`UPDATE rate_plans SET bar_cents = $2 WHERE id = $1`, [ids.ratePlanId, BAR]);
+      const { slug } = (await db.query(`SELECT slug FROM properties WHERE id = $1`, [ids.propertyId])).rows[0] as { slug: string };
+      const page = (getDb() as unknown as Rendering).dialect.sqlToQuery(buildPropertyPageQuery(slug));
+      const [row] = (await db.query(page.sql, page.params)).rows as { page_rooms: DbRoom[] }[];
+      const tonight = await priceTonight(db, { id: ids.propertyId, timezone: "Europe/Amsterdam" }, NOW);
+      return { pageRooms: row!.page_rooms, rooms: withCancellationTerms(withAllInPrices(row!.page_rooms, [], TONIGHT, tonight), "standard") };
+    }
+
+    async function priceTonightAt(priceCents: number | null, restrictions: AriBatch["restrictions"] = []) {
+      const batch: AriBatch = {
+        inventory: [{ roomCode: codes.room, from: TONIGHT, to: TONIGHT, unitsLeft: 3 }],
+        rates:
+          priceCents === null
+            ? []
+            : [{ ratePlanCode: codes.plan, from: TONIGHT, to: TONIGHT, priceCents, extraAdultCents: null, extraChildCents: null }],
+        restrictions,
+      };
+      expect((await applyAriBatch(db, installation, batch, NOW)).ok).toBe(true);
+    }
+
+    test("the page data says the plan is managed", async () => {
+      const { pageRooms } = await listing();
+      expect(pageRooms[0]!.rate_plans[0]).toMatchObject({ id: ids.ratePlanId, managed: true });
+    });
+
+    test("closed to arrival tonight: the app's price, as \"from\", never our BAR", async () => {
+      await priceTonightAt(18650, [{ ratePlanCode: codes.plan, from: TONIGHT, to: TONIGHT, closedToArrival: true }]);
+      const { rooms } = await listing();
+      const plan = rooms[0]!.rate_plans[0]!;
+      expect(plan).toMatchObject({ id: ids.ratePlanId, price_per_night_cents: 18650, price_from: true, managed: true });
+      expect(plan.bar_cents).toBeUndefined();
+      expect(JSON.stringify(rooms)).not.toContain(String(BAR));
+    });
+
+    test("no app price tonight: no price at all, and no BAR anywhere", async () => {
+      await priceTonightAt(null);
+      const { rooms } = await listing();
+      const plan = rooms[0]!.rate_plans[0]!;
+      expect(plan.price_per_night_cents).toBeNull();
+      expect(plan.price_from).toBeUndefined();
+      expect(plan.bar_cents).toBeUndefined();
+      expect(JSON.stringify(rooms)).not.toContain(String(BAR));
+    });
   });
 
   test("an unmanaged property with the same rules is priced as before", async () => {

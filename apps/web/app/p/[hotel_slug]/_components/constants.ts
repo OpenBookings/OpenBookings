@@ -19,8 +19,12 @@ export type DbAmenityCategory = { label: string; items: DbAmenityItem[] };
 export type DbRatePlan = {
   id: string;
   name: string;
-  /** The host's rate per night, in cents. */
-  bar_cents: number;
+  /**
+   * The host's rate per night, in cents. Removed at render time
+   * (withAllInPrices) from a plan a connected app prices: the hotel no longer
+   * keeps it, so guests must never see it.
+   */
+  bar_cents?: number;
   currency: string;
   /** true = follows the property's cancellation tier; false = Non-refundable. */
   is_refundable: boolean;
@@ -32,11 +36,20 @@ export type DbRatePlan = {
   /**
    * What the guest pays, in cents, for one night from today, all-in: the rate with its
    * overrides and modifiers, plus tourist tax. Set at render time by
-   * withAllInPrices; absent on demo data.
+   * withAllInPrices; absent on demo data. Null: no price to show (a plan a
+   * connected app prices, which it sent no price for tonight).
    */
-  price_per_night_cents?: number;
-  /** Tonight can't be booked on this rate: `price_per_night_cents` is the base rate, shown as "from". */
+  price_per_night_cents?: number | null;
+  /**
+   * Tonight can't be booked on this rate: `price_per_night_cents` is the base
+   * rate (on a managed plan, tonight's price from the app), shown as "from".
+   */
   price_from?: boolean;
+  /**
+   * A connected app (SiteMinder) prices this plan. From the page data, and
+   * confirmed live by priceTonight at render time.
+   */
+  managed?: boolean;
 };
 
 export type DbRoom = {

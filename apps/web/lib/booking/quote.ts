@@ -153,6 +153,8 @@ export async function loadVisibleProperty(
 }
 
 type PlanRow = RoomRow & {
+  /** False only on a managed plan with a night the app sent no price for: never priced. */
+  priced: boolean;
   room_type: string | null;
   cots_max: number;
   extra_beds_max: number;
@@ -170,9 +172,9 @@ type PlanRow = RoomRow & {
  * fees), then the plan's active modifiers (none on a managed plan: discount
  * rules are off) and the property's tourist tax rules for the resolver.
  *
- * A managed plan with a night the app sent no price for is left out: that
- * night is closed (loadStayAvailability says so), and nothing of ours may
- * price it.
+ * A managed plan with a night the app sent no price for comes back with
+ * `priced` false: that night is closed (loadStayAvailability says so), and
+ * nothing of ours may price it. loadPlanRows leaves such rows out.
  *
  * $1 property id, $2 check-in, $3 check-out.
  */
@@ -246,18 +248,29 @@ SELECT
   pl.*,
   NULL::text AS hero_image_url,
   rn.nights,
+  rn.priced,
   COALESCE(pm.modifiers, '[]'::jsonb) AS modifiers,
   tax.rules AS tourist_tax_rules
 FROM plans pl
-JOIN room_nights rn ON rn.rate_plan_id = pl.rate_plan_id AND rn.priced
+JOIN room_nights rn ON rn.rate_plan_id = pl.rate_plan_id
 LEFT JOIN plan_modifiers pm ON pm.rate_plan_id = pl.rate_plan_id
 CROSS JOIN tax
 ORDER BY pl.room_sort, pl.room_name, pl.room_id, pl.plan_sort, pl.rate_plan_name, pl.rate_plan_id
 `;
 
-async function loadPlanRows(db: Queryable, i: { propertyId: string; checkIn: string; checkOut: string }): Promise<PlanRow[]> {
+/** Every row, a managed plan's unpriced ones too: only priceTonight needs those, to say there is no price. */
+async function loadAllPlanRows(db: Queryable, i: { propertyId: string; checkIn: string; checkOut: string }): Promise<PlanRow[]> {
   const { rows } = await db.query(PLAN_ROWS_SQL, [i.propertyId, i.checkIn, i.checkOut]);
   return rows as PlanRow[];
+}
+
+/**
+ * The rows that can be priced for the stay. A managed plan the app left a
+ * night unpriced on is not offered, as a plan that isn't offered: the page
+ * hides whatever the quote does not mention (mergeQuote).
+ */
+async function loadPlanRows(db: Queryable, i: { propertyId: string; checkIn: string; checkOut: string }): Promise<PlanRow[]> {
+  return (await loadAllPlanRows(db, i)).filter((row) => row.priced);
 }
 
 /** "Breakfast included", "Half board"…, or null for room only. */
@@ -390,10 +403,18 @@ export async function quoteStay(
 
 /** One rate's price for tonight, for the listing without dates. */
 export type TonightPrice = {
-  /** All-in cents, one night at the room's base occupancy: rate, modifiers and tourist tax. */
-  priceCents: number;
+  /**
+   * All-in cents, one night at the room's base occupancy: rate, modifiers and
+   * tourist tax. Null only on a managed plan the app sent no price for tonight.
+   */
+  priceCents: number | null;
   /** Whether tonight can be booked on this rate at all (stock, closures, minimum stay…). */
   sellable: boolean;
+  /**
+   * Set (true) when a connected app prices the plan: the listing must then
+   * never fall back to our own BAR (withAllInPrices). Absent otherwise.
+   */
+  managed?: true;
 };
 
 const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
@@ -403,7 +424,8 @@ const nextDay = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_
  * a one-night stay from today at the property (its time zone), at each
  * room's base occupancy, through the same rows, resolver and availability
  * rule as the stay quote. So overrides and modifiers count, as they will
- * once the guest picks dates.
+ * once the guest picks dates. On a plan a connected app manages it is the
+ * app's price, flagged `managed`, or no price when the app sent none.
  */
 export async function priceTonight(
   db: Queryable,
@@ -413,18 +435,23 @@ export async function priceTonight(
   const checkIn = todayInZone(property.timezone, now);
   const checkOut = nextDay(checkIn);
   const [rows, availability] = await Promise.all([
-    loadPlanRows(db, { propertyId: property.id, checkIn, checkOut }),
+    loadAllPlanRows(db, { propertyId: property.id, checkIn, checkOut }),
     loadStayAvailability(db, { propertyId: property.id, checkIn, checkOut, now }),
   ]);
   const byRoom = new Map(availability.map((a) => [a.roomId, a]));
   const prices: Record<string, TonightPrice> = {};
   for (const row of rows) {
+    if (!row.priced) {
+      prices[row.rate_plan_id] = { priceCents: null, sellable: false, managed: true };
+      continue;
+    }
     const party = { adults: Math.max(1, row.base_occupancy), children: 0, infants: 0 };
     const a = byRoom.get(row.room_id);
     const planReasons = a?.ratePlans.find((p) => p.ratePlanId === row.rate_plan_id)?.reasons ?? ["not_on_sale"];
     prices[row.rate_plan_id] = {
       priceCents: resolveRoom(row, { ...party, arrivalDate: checkIn }, checkIn).total_price_cents,
       sellable: a !== undefined && roomReasons(a, party).length === 0 && planReasons.length === 0,
+      ...(row.managed ? { managed: true as const } : {}),
     };
   }
   return prices;

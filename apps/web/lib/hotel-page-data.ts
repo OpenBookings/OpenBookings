@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { cached, propertyPageKey } from "@openbookings/cache";
 import { getDb, sql } from "@openbookings/db";
+import { MANAGED_PROPERTY_SQL } from "@openbookings/db/apps";
 import { isTestingMode } from "@openbookings/demo";
 import type { TouristTaxRule } from "@openbookings/pricing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
@@ -73,7 +74,7 @@ export const PROPERTY_PAGE_TTL = {
  * An inactive or unknown slug, or a demo hotel with testing off, yields no
  * hero row, and therefore no row at all.
  */
-function buildPropertyPageQuery(slug: string) {
+export function buildPropertyPageQuery(slug: string) {
   return sql`
   WITH hero AS (${buildHeroQuery(slug, isTestingMode())})
   SELECT
@@ -121,6 +122,9 @@ function buildPropertyPageQuery(slug: string) {
             'bar_cents', rp.bar_cents,
             'currency', rp.currency,
             'is_refundable', rp.is_refundable,
+            -- A connected app prices it: the listing never shows bar_cents
+            -- (withAllInPrices). priceTonight confirms it live.
+            'managed', ${sql.raw(MANAGED_PROPERTY_SQL)},
             -- The rate's own meals, worded as the stay quote words them (mealPlan).
             'meal_plan', CASE
               WHEN rp.includes_breakfast AND rp.includes_lunch AND rp.includes_dinner THEN 'Full board'
