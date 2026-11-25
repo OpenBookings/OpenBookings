@@ -3,8 +3,10 @@
 --   channel_code      properties, rooms and rate_plans get a stable, public code
 --                     (letters and digits only) that a channel manager maps its
 --                     own inventory to. Set on INSERT from the row id
---                     ('OB' + 10, 'R' + 11, 'P' + 11 upper-case hex characters), backfilled
---                     for existing rows, never changed afterwards.
+--                     ('OB' + 10, 'R' + 11, 'P' + 11 upper-case hex characters;
+--                     'OB' + 18, 'R'/'P' + 19 from an md5 of the id when the
+--                     short one is taken), backfilled for existing rows, never
+--                     changed afterwards.
 --   app_installations one app per property at a time (partial unique index);
 --                     only a hash of the app key is stored.
 --   app_inventory, app_rates, app_restrictions
@@ -34,9 +36,34 @@ ALTER TABLE properties ADD COLUMN IF NOT EXISTS channel_code text;
 ALTER TABLE rooms ADD COLUMN IF NOT EXISTS channel_code text;
 ALTER TABLE rate_plans ADD COLUMN IF NOT EXISTS channel_code text;
 
-UPDATE properties SET channel_code = 'OB' || upper(left(replace(id::text, '-', ''), 10)) WHERE channel_code IS NULL;
-UPDATE rooms SET channel_code = 'R' || upper(left(replace(id::text, '-', ''), 11)) WHERE channel_code IS NULL;
-UPDATE rate_plans SET channel_code = 'P' || upper(left(replace(id::text, '-', ''), 11)) WHERE channel_code IS NULL;
+-- The short code comes from the id. Ids written by hand (seed and demo data)
+-- can share their first digits; a row whose short code another row shares or
+-- already holds gets the long code instead: 8 more hex digits, from an md5 of
+-- the id, so ids alike at the start still differ.
+DO $$
+DECLARE t record;
+BEGIN
+  FOR t IN SELECT * FROM (VALUES ('properties', 'OB', 10, 18), ('rooms', 'R', 11, 19), ('rate_plans', 'P', 11, 19))
+             AS v(tbl, prefix, short_len, long_len) LOOP
+    EXECUTE format(
+      $q$WITH c AS (
+           SELECT id,
+                  %2$L || upper(left(replace(id::text, '-', ''), %3$s)) AS short,
+                  %2$L || upper(left(md5(id::text), %4$s))              AS long
+             FROM %1$I WHERE channel_code IS NULL
+         ),
+         pick AS (
+           SELECT c.id,
+                  CASE WHEN count(*) OVER (PARTITION BY c.short) > 1
+                         OR EXISTS (SELECT 1 FROM %1$I x WHERE x.channel_code = c.short)
+                       THEN c.long ELSE c.short END AS code
+             FROM c
+         )
+         UPDATE %1$I t SET channel_code = pick.code FROM pick WHERE t.id = pick.id$q$,
+      t.tbl, t.prefix, t.short_len, t.long_len);
+  END LOOP;
+END
+$$;
 
 ALTER TABLE properties ALTER COLUMN channel_code SET NOT NULL;
 ALTER TABLE rooms ALTER COLUMN channel_code SET NOT NULL;
@@ -57,24 +84,35 @@ END
 $$;
 
 -- Default on INSERT (a column default cannot read the id) and refuse any change.
+-- Arguments: prefix, short length, long length. The short code unless a row
+-- already holds it, else the long one (as the backfill above). SECURITY
+-- DEFINER so the check sees every row, whatever row-level security hides from
+-- the inserting role; it reads only channel_code of the table it fires on.
 CREATE OR REPLACE FUNCTION app.channel_code_default() RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
 AS $$
+DECLARE
+  short text;
+  taken boolean;
 BEGIN
   IF NEW.channel_code IS NULL THEN
-    NEW.channel_code := TG_ARGV[0] || upper(left(replace(NEW.id::text, '-', ''), TG_ARGV[1]::int));
+    short := TG_ARGV[0] || upper(left(replace(NEW.id::text, '-', ''), TG_ARGV[1]::int));
+    EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.%I WHERE channel_code = $1)', TG_TABLE_SCHEMA, TG_TABLE_NAME)
+      INTO taken USING short;
+    NEW.channel_code := CASE WHEN taken THEN TG_ARGV[0] || upper(left(md5(NEW.id::text), TG_ARGV[2]::int)) ELSE short END;
   END IF;
   RETURN NEW;
 END
 $$;
 
+-- Set once (on insert, or by the backfill for a row that had none), never changed.
 CREATE OR REPLACE FUNCTION app.channel_code_immutable() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF NEW.channel_code IS DISTINCT FROM OLD.channel_code THEN
+  IF OLD.channel_code IS NOT NULL AND NEW.channel_code IS DISTINCT FROM OLD.channel_code THEN
     RAISE EXCEPTION 'channel_code cannot be changed' USING ERRCODE = 'integrity_constraint_violation';
   END IF;
   RETURN NEW;
@@ -83,13 +121,13 @@ $$;
 
 DROP TRIGGER IF EXISTS channel_code_default ON properties;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON properties
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('OB', '10');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('OB', '10', '18');
 DROP TRIGGER IF EXISTS channel_code_default ON rooms;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON rooms
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('R', '11');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('R', '11', '19');
 DROP TRIGGER IF EXISTS channel_code_default ON rate_plans;
 CREATE TRIGGER channel_code_default BEFORE INSERT ON rate_plans
-  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('P', '11');
+  FOR EACH ROW EXECUTE FUNCTION app.channel_code_default('P', '11', '19');
 
 DROP TRIGGER IF EXISTS channel_code_immutable ON properties;
 CREATE TRIGGER channel_code_immutable BEFORE UPDATE OF channel_code ON properties
