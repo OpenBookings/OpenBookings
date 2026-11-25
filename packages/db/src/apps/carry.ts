@@ -6,9 +6,9 @@
  * app's tables (app_inventory, app_rates, app_restrictions) and ignore the
  * host's own. When the app is switched off they go back to the host's tables,
  * so `carryAppValues` first writes what the app last sent into those tables,
- * for every night from today (property time) up to the last night the app sent
- * anything for. Guests then see on the first unmanaged night what they saw on
- * the last managed one:
+ * for every night from today (property time) through MAX_ARI_SPAN_DAYS (750)
+ * nights, or up to the last night the app sent anything for if that is later.
+ * Guests then see on every night what they saw while managed:
  *
  *   availability   room_inventory.available_override = units left + our bookings
  *                  the app had settled (SETTLED_BOOKED_SQL, judged now). Managed
@@ -43,6 +43,7 @@
  * Runs inside the disconnect's transaction, before the installation is
  * switched off (the settled rule reads the active installation).
  */
+import { MAX_ARI_SPAN_DAYS } from "@openbookings/apps-contract";
 import { todayInZone } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
 import { SETTLED_BOOKED_SQL } from "./managed-sql";
@@ -222,8 +223,17 @@ export async function carryAppValues(
     | undefined;
   if (!property) return null;
   const from = todayInZone(property.timezone, i.now);
-  const to = ((await db.query(HORIZON_SQL, [i.propertyId, from])).rows[0] as { horizon: string | null }).horizon;
-  if (!to) return null;
+  const horizon = ((await db.query(HORIZON_SQL, [i.propertyId, from])).rows[0] as { horizon: string | null }).horizon;
+  // The app never sent anything for today or later: it never managed these
+  // rooms' future, so the hotel's own values stand.
+  if (!horizon) return null;
+  // Otherwise at least SiteMinder's whole horizon: nights it never covered
+  // were closed while managed (no stock, no price) and stay closed, rather
+  // than reopening with the hotel's old stock and prices.
+  const to = (
+    (await db.query(`SELECT GREATEST($1::date, $2::date + ($3::int - 1))::text AS to`, [horizon, from, MAX_ARI_SPAN_DAYS]))
+      .rows[0] as { to: string }
+  ).to;
 
   await db.query(INVENTORY_SQL, [i.propertyId, from, to, i.now]);
   for (const t of RANGE_TABLES) await clearWindow(db, t, [i.propertyId, from, to]);

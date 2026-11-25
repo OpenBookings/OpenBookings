@@ -105,12 +105,13 @@ To offer a deal only on OpenBookings:
 
 Rates, availability and restrictions come back to you on the grid, starting from the last values SiteMinder sent. Pricing rules apply again. New bookings, changes and cancellations are no longer sent.
 
-What that means night by night, from today up to the last night SiteMinder sent anything for:
+The values are kept for the next 750 days (or longer, up to the last night SiteMinder sent anything for). Night by night:
 
 - **Availability** is set to what was left to sell when you disconnected. Nights SiteMinder never sent availability for are set to 0.
-- **Prices** become price overrides labelled *Last value from SiteMinder*. Nights without a price from SiteMinder are closed.
+- **Prices** become price overrides labelled *Last value from SiteMinder*. Nights without a price from SiteMinder are closed, as they were while connected. Reopen them in the rates grid when you want to sell them.
 - **Stop-sells, closed to arrival, closed to departure and minimum/maximum stay** become your own restrictions. A SiteMinder *through* stay limit becomes a stay limit for arrivals on that night.
 - Your own overrides, restrictions and room closures on those nights are replaced. Before and after those nights they stay as they were.
+- If SiteMinder never sent anything at all, nothing changes: your own values stay.
 - **Extra-adult and extra-child fees** go back to the amounts in **About → Rooms**.
 
 ## Limitations and warnings
@@ -122,6 +123,7 @@ What that means night by night, from today up to the last night SiteMinder sent 
 - SiteMinder runs the whole hotel. You can't keep some rooms on OpenBookings' own rates while others come from SiteMinder.
 - Only SiteMinder can be connected for now.
 - The hotel code never changes. Keep it as it is in SiteMinder.
+- If you make a room or rate plan inactive in OpenBookings and later make it active again, map it again in SiteMinder: SiteMinder switches off a mapping we no longer list.
 - Guest contact details (email, phone, address) are not sent to SiteMinder. Bookings arrive with first and last names only.
 
 ---

@@ -129,7 +129,7 @@ describeWithDb("disconnect keeps the app's last values", () => {
     // The hotel's own values, which the app's must win over after disconnecting.
     await db.query(
       `INSERT INTO rate_overrides (rate_plan_id, start_date, end_date, price_per_night_cents, priority)
-       VALUES ($1, '2031-11-01', '2031-12-31', 9999, 5)`,
+       VALUES ($1, '2031-11-01', '2034-01-31', 9999, 5)`,
       [ids.ratePlanId],
     );
     await db.query(
@@ -138,7 +138,7 @@ describeWithDb("disconnect keeps the app's last values", () => {
       [ids.ratePlanId],
     );
     await db.query(
-      `INSERT INTO room_closures (room_id, start_date, end_date) VALUES ($1, '2031-11-12', '2031-11-20')`,
+      `INSERT INTO room_closures (room_id, start_date, end_date) VALUES ($1, '2031-11-12', '2034-01-31')`,
       [ids.roomId],
     );
     await db.query(`INSERT INTO room_inventory (room_id, date, available_override) VALUES ($1, '2031-11-10', 9)`, [
@@ -162,7 +162,8 @@ describeWithDb("disconnect keeps the app's last values", () => {
     expect(await snapshot()).toEqual(managed);
     expect((await prices("2031-11-09", "2031-11-12")).filter((p) => p.date !== "2031-11-13")).toEqual(managedPrices);
 
-    // The hotel's price around the window survives, cut back to the nights outside it.
+    // The window runs 750 nights from today (2031-11-09 … 2033-11-27), past the
+    // last night the app sent: the hotel's price around it survives, cut back.
     const hostRows = (
       await db.query(
         `SELECT start_date::text AS start, end_date::text AS "end", price_per_night_cents::int AS price
@@ -172,14 +173,18 @@ describeWithDb("disconnect keeps the app's last values", () => {
     ).rows;
     expect(hostRows).toEqual([
       { start: "2031-11-01", end: "2031-11-08", price: 9999 },
-      { start: "2031-11-14", end: "2031-12-31", price: 9999 },
+      { start: "2033-11-28", end: "2034-01-31", price: 9999 },
     ]);
     // The room closure starting inside the window now starts after it.
     const closure = (
       await db.query(`SELECT start_date::text AS start FROM room_closures WHERE room_id = $1 AND is_active`, [ids.roomId])
     ).rows;
-    expect(closure).toEqual([{ start: "2031-11-14" }]);
-    expect(await prices("2031-11-14", "2031-11-14")).toEqual([{ date: "2031-11-14", price: 9999 }]);
+    expect(closure).toEqual([{ start: "2033-11-28" }]);
+    // A night the app never sent stays closed with no units, as while managed.
+    const never = (await loadStayAvailability(db, { propertyId: ids.propertyId, checkIn: "2032-06-01", checkOut: "2032-06-02", now: NOW }))[0]!;
+    expect(never.unitsLeft).toBe(0);
+    expect(never.ratePlans[0]!.reasons).toEqual(["rate_closed"]);
+    expect(await prices("2033-11-28", "2033-11-28")).toEqual([{ date: "2033-11-28", price: 9999 }]);
   });
 
   test("runs of equal prices become one row, not one per night", async () => {
