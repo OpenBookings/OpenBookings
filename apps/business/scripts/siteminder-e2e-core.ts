@@ -15,7 +15,7 @@
  * It writes to the database the business app uses, so it refuses any database that is not on localhost, read the
  * way `@openbookings/db` picks it (ENV_TYPE=dev → DEV_DATABASE_URL). Run from apps/business.
  */
-import { assertLocalDatabase } from "../../siteminder/scripts/local-db";
+import { assertLocalDatabase } from "./local-db";
 
 const MARKER = "E2E_RESULT ";
 

@@ -25,6 +25,7 @@ A [Turborepo](https://turborepo.com) monorepo, run with [Bun](https://bun.sh).
 | `apps/docs` | The documentation site ([Fumadocs](https://fumadocs.dev)) | 3004 |
 | `apps/admin` | An internal admin console, for local use only and never deployed | 3005 |
 | `apps/support-bot` | The support assistant behind the Chatwoot inboxes | 3003 |
+| `apps/siteminder` | The optional SiteMinder channel-manager app | 3006 |
 | `apps/invoice-job` | The monthly commission-invoice job (a Bun CLI) | — |
 | `packages/*` | Shared code: `db`, `auth`, `authz`, `billing`, `pricing`, `stripe`, `mailing`, `messaging`, … | — |
 | `testing/` | A local Postgres, a schema snapshot and seed data for trying the apps | 5433 |

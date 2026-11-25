@@ -203,7 +203,7 @@ The app needs core on **Postgres 17**, as every app does: the Apps API writes ra
 | `SITEMINDER_POLL_SECONDS` | no | How often each hotel's booking changes are fetched. Default `60` always-on, `300` scale-to-zero. A whole number. |
 | `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | no | Verify the doorbell from core. With either unset, or `SERVICE_BASE_URL` unset, `/doorbell` answers `503` and polling still delivers. |
 | `SERVICE_BASE_URL` | with the doorbell | The app's own public URL. Must equal `APP_SITEMINDER_URL` in core: the doorbell's signature covers the URL QStash calls, so any difference refuses every ring. |
-| `PORT` | no | Default `8080` in the image, `3004` with `bun run dev`. |
+| `PORT` | no | Default `8080` in the image, `3006` with `bun run dev`. |
 
 **The `/tick` scheduler.** In scale-to-zero, call `POST {app}/tick` with
 `Authorization: Bearer $SITEMINDER_TICK_SECRET` every 5 minutes (the default poll interval). One call

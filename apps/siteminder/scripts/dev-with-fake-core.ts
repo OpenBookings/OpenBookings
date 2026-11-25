@@ -1,5 +1,5 @@
 /**
- * Runs the SiteMinder app on :3004 against a fake core, for the replay tool and the Postman collection.
+ * Runs the SiteMinder app on :3006 against a fake core, for the replay tool and the Postman collection.
  *
  *   SITEMINDER_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/siteminder bun run scripts/dev-with-fake-core.ts
  *
@@ -46,7 +46,7 @@ await upsertInstallation(db, {
   coreBaseUrl: core.url,
 });
 
-const port = Number(process.env.PORT ?? 3004);
+const port = Number(process.env.PORT ?? 3006);
 Bun.serve({ port, fetch: createApp().fetch });
 startRunMode(defaultTickDeps(), env.runMode, 5);
 console.log(`siteminder on http://localhost:${port}/soap (user ${env.soapUsername}), fake core ${core.url}, hotel ${hotel}`);

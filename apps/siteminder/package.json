@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "PORT=3004 bun run --hot src/index.ts",
+    "dev": "PORT=3006 bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "tsc --noEmit",
     "test": "bun test --timeout 30000",

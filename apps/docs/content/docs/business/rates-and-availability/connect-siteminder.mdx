@@ -9,7 +9,7 @@ description: How to run your rates and availability from SiteMinder, and how you
 
 If you use SiteMinder as your channel manager, you can connect it to OpenBookings. SiteMinder then sends your prices, rooms to sell and restrictions to OpenBookings, and every OpenBookings booking, change and cancellation goes to SiteMinder, which passes it on to your PMS.
 
-You connect one hotel at a time: the hotel you have open in the dashboard. Owners, admins and managers of the hotel can connect and disconnect. Everyone else sees the page but can't change it.
+You connect one hotel at a time: the hotel you have open in the dashboard. Owners, general managers and managers of this hotel can connect and disconnect. Everyone else sees the page but can't change it.
 
 ## How to connect
 
@@ -63,7 +63,7 @@ Open a booking in **Bookings → Reservations**. At the end of the panel, the **
 | Status | What it means | What to do |
 | --- | --- | --- |
 | **Sent** and a time | SiteMinder confirmed it at that time. | Nothing. |
-| **Sending** | On its way. This usually takes under a minute. | Nothing. |
+| **Sending** | On its way. This usually takes under a minute. Where instant notifications (QStash) aren't set up, it can take up to the polling interval: 5 minutes by default. | Nothing. |
 | **Retrying** | SiteMinder didn't answer. We keep trying for up to 30 minutes. | Nothing yet. |
 | **Not delivered** | SiteMinder didn't accept it, or kept not answering. | Add it by hand (see below). |
 | **Not sent** | Made before you connected, and you chose to add these bookings by hand. | Nothing. |

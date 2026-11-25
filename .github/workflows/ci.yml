@@ -119,7 +119,7 @@ jobs:
           # shellcheck disable=SC2086
           bunx turbo run lint typecheck $TURBO_AFFECTED
 
-      # apps/siteminder may depend on @openbookings/apps-contract only.
+      # apps/siteminder may depend on @openbookings/apps-contract only, and nothing else may import from it.
       - run: bun .github/scripts/check-app-boundaries.ts
       # The script's own tests: .github/scripts is outside every turbo package.
       - run: bun test ./.github/scripts/check-app-boundaries.test.ts

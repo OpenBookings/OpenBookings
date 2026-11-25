@@ -32,7 +32,7 @@ EchoTokens), see `fixtures/README.md` for where each comes from.
 
 `src/testing/fake-core.ts` is a small stand-in for core's Apps API (two rooms SGL and DBL, two rate plans BAR and
 BNB; it records every `POST /api/apps/v1/ari`). `scripts/dev-with-fake-core.ts` starts it on :4010, applies the
-app's migrations, registers an installation for hotel `FAKE-HOTEL` and serves the app on :3004. It needs a
+app's migrations, registers an installation for hotel `FAKE-HOTEL` and serves the app on :3006. It needs a
 throwaway local Postgres and refuses any database that is not on localhost. Never use the shared dev database.
 
 ```sh
@@ -42,7 +42,7 @@ SITEMINDER_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/siteminder bun ru
 
 # in a second shell (credentials as printed by the first)
 SITEMINDER_INBOUND_USERNAME=replay-user SITEMINDER_INBOUND_PASSWORD=replay-pass \
-  bun run scripts/replay.ts --url http://localhost:3004/soap --hotel FAKE-HOTEL --days 750 --core http://localhost:4010
+  bun run scripts/replay.ts --url http://localhost:3006/soap --hotel FAKE-HOTEL --days 750 --core http://localhost:4010
 ```
 
 `replay.ts` sends every request sample (or the fixtures you name) with the hotel code and dates rewritten (earliest
@@ -63,7 +63,7 @@ local endpoint, with the inbound credentials in the environment:
 ```sh
 postman login
 postman collection run <collection-id-or-exported.json> -e <environment-id-or-file> \
-  --env-var url=http://localhost:3004/soap --env-var hotelCode=FAKE-HOTEL
+  --env-var url=http://localhost:3006/soap --env-var hotelCode=FAKE-HOTEL
 ```
 
 Use the variable names of the forked environment. Run the inventory (Rooms and Rates, availability, rates)
@@ -105,8 +105,6 @@ rows, and the app applies its migrations.
    stripe listen --forward-connect-to web.localhost:3002/api/stripe/webhook
    ```
 
-   Don't run the docs site at the same time: it also uses port 3004.
-
 3. Run it, and book when it asks (as `guest@openbookings.test`, 2 adults, the room, rate and dates it prints, card
    `4242 4242 4242 4242`, any future expiry and CVC):
 
@@ -115,7 +113,7 @@ rows, and the app applies its migrations.
    bun run scripts/e2e-local.ts
    ```
 
-   It ends with `PASS: ...` and exit code 0, or `FAIL: <what>` and exit code 1. It starts the app on :3004 and the
+   It ends with `PASS: ...` and exit code 0, or `FAIL: <what>` and exit code 1. It starts the app on :3006 and the
    fake SiteMinder on :4011 itself, in always-on mode with a 5-second poll.
 
 | Variable | Default | |
@@ -123,7 +121,7 @@ rows, and the app applies its migrations.
 | `DATABASE_URL` | `postgres://postgres:postgres@127.0.0.1:5433/openbookings` | Core's database, the one business and web use. |
 | `SITEMINDER_DATABASE_URL` | `DATABASE_URL` | The app's database; its tables live in schema `siteminder`. |
 | `CORE_URL` / `WEB_URL` | `http://localhost:3001` / `http://web.localhost:3002` | Business (the Apps API) and the guest site. |
-| `PORT` / `FAKE_SITEMINDER_PORT` | `3004` / `4011` | The app and the fake SiteMinder. |
+| `PORT` / `FAKE_SITEMINDER_PORT` | `3006` / `4011` | The app and the fake SiteMinder. |
 | `E2E_PROPERTY_ID`, `E2E_ROOM_ID`, `E2E_RATE_PLAN_ID` | Canal Lantern Hotel, Classic Double, Flexible | What to connect and book (seed ids). |
 | `E2E_OWNER_EMAIL` | `owner@openbookings.test` | Who connects and cancels. |
 | `E2E_CHECK_IN` | the hotel's today + 40 | First night of the 2-night stay (the load sets a 2-night minimum). |

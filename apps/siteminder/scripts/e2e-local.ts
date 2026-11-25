@@ -7,7 +7,7 @@
  *   bun run scripts/e2e-local.ts
  *
  * What it does, stopping at the first wrong answer:
- *  1. Starts the fake SiteMinder (:4011) and this app (:3004, always-on, 5 s poll) on SITEMINDER_DATABASE_URL.
+ *  1. Starts the fake SiteMinder (:4011) and this app (:3006, always-on, 5 s poll) on SITEMINDER_DATABASE_URL.
  *  2. Connects the hotel (default Canal Lantern Hotel) with the Channel manager's own connect function, as its owner.
  *  3. Replays a 750-day load for one room and rate plan and waits until core holds SiteMinder's availability.
  *  4. Asks you to book that room on the guest site with the test card 4242 4242 4242 4242 (the payment form is
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
 
   const coreUrl = (process.env.CORE_URL ?? "http://localhost:3001").replace(/\/+$/, "");
   const webUrl = (process.env.WEB_URL ?? "http://web.localhost:3002").replace(/\/+$/, "");
-  const appPort = Number(process.env.PORT ?? 3004);
+  const appPort = Number(process.env.PORT ?? 3006);
   const appUrl = `http://localhost:${appPort}`;
   const propertyId = process.env.E2E_PROPERTY_ID ?? "5eed1000-0000-4000-8000-000000000001"; // Canal Lantern Hotel
   const roomId = process.env.E2E_ROOM_ID ?? "5eed2000-0000-4000-8000-000000000001"; // Classic Double

@@ -4,7 +4,7 @@
  * shape: the earliest date lands on today + 7), EchoTokens are fresh UUIDs, the inbound credentials come from
  * SITEMINDER_INBOUND_USERNAME / SITEMINDER_INBOUND_PASSWORD.
  *
- *   bun run scripts/replay.ts --url http://localhost:3004/soap --hotel FAKE-HOTEL [--days 750] [--room SGL --rate BAR]
+ *   bun run scripts/replay.ts --url http://localhost:3006/soap --hotel FAKE-HOTEL [--days 750] [--room SGL --rate BAR]
  *     [--core http://localhost:4010] [--no-samples] [--keep-dates] [fixture...]
  *
  * With no fixtures, every request sample (`*-rq*.xml`) is sent, unless `--no-samples`. `--days N` adds a bulk load:
@@ -35,7 +35,7 @@ function arg(name: string): string | undefined {
 const flagged = new Set(["--url", "--hotel", "--days", "--core", "--room", "--rate"]);
 const files = process.argv.slice(2).filter((a, i, all) => !a.startsWith("--") && !flagged.has(all[i - 1] ?? ""));
 
-const url = arg("url") ?? "http://localhost:3004/soap";
+const url = arg("url") ?? "http://localhost:3006/soap";
 const hotel = arg("hotel");
 const days = arg("days") ? Number(arg("days")) : 0;
 const coreUrl = arg("core");

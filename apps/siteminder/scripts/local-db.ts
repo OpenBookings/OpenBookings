@@ -4,7 +4,7 @@
  * sockets, and a URL without a host falls back to PGHOST. Local scripts that apply migrations or write rows call
  * `assertLocalDatabase` first, so a local run never touches a shared or hosted database.
  *
- * Plain TypeScript with no imports: apps/business/scripts/siteminder-e2e-core.ts uses it too.
+ * apps/business/scripts/local-db.ts is a copy for the core half of the e2e check; keep the two in step.
  */
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);

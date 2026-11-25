@@ -4,7 +4,10 @@
  * it talks to core over the Apps API and shares only the contract.
  *
  * Fails (exit 1) when the app's package.json lists a forbidden package, or any
- * of its src/**\/*.ts files imports one.
+ * of its source files imports one. The other way round too: nothing else in
+ * the repo (apps, packages, testing) may import a file inside the app or list
+ * it as a dependency, since each app's image is pruned to its own dependencies
+ * and would not contain it.
  *
  * Usage: bun .github/scripts/check-app-boundaries.ts [repo-root]
  */
@@ -50,8 +53,56 @@ function specifiersIn(source: string, ext: string): string[] {
   return [...found];
 }
 
-export async function findViolations(root: string, apps: readonly string[] = GUARDED_APPS): Promise<string[]> {
+/** Directories that hold build output or installed packages, never our sources. */
+const SKIPPED_DIRS = new Set(["node_modules", ".next", ".turbo", "dist", "build", "out"]);
+
+/** Files outside the guarded apps that reach into one of them: a relative path into it, or its package name. */
+async function findInbound(root: string, apps: readonly string[]): Promise<string[]> {
+  const guarded = await Promise.all(
+    apps.map(async (app) => {
+      const dir = path.join(root, "apps", app);
+      const pkg = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8").catch(() => "{}")) as { name?: string };
+      return { dir, name: pkg.name ?? `@openbookings/${app}` };
+    }),
+  );
+  const inside = (dir: string, full: string) => {
+    const rel = path.relative(dir, full);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  };
+  const target = (file: string, specifier: string) =>
+    guarded.find(
+      (g) =>
+        specifier === g.name ||
+        specifier.startsWith(`${g.name}/`) ||
+        (specifier.startsWith(".") && inside(g.dir, path.resolve(path.dirname(file), specifier))),
+    );
+
   const violations: string[] = [];
+  for await (const file of new Glob("{apps,packages,testing}/**/*.{ts,tsx,mts,cts,js,mjs,cjs,json}").scan({ cwd: root, dot: true })) {
+    if (file.split("/").some((part) => SKIPPED_DIRS.has(part))) continue;
+    const full = path.join(root, file);
+    if (guarded.some((g) => inside(g.dir, full))) continue;
+    const source = await readFile(full, "utf8");
+    if (path.basename(file) === "package.json") {
+      const pkg = JSON.parse(source) as Record<string, Record<string, string> | undefined>;
+      for (const section of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+        for (const name of Object.keys(pkg[section] ?? {})) {
+          const g = guarded.find((x) => x.name === name);
+          if (g) violations.push(`${file}: ${section} lists ${name}`);
+        }
+      }
+      continue;
+    }
+    if (file.endsWith(".json") || !guarded.some((g) => source.includes(path.basename(g.dir)))) continue;
+    for (const specifier of specifiersIn(source, path.extname(file))) {
+      if (target(full, specifier)) violations.push(`${file}: imports ${specifier}, inside apps/${path.basename(target(full, specifier)!.dir)}`);
+    }
+  }
+  return violations;
+}
+
+export async function findViolations(root: string, apps: readonly string[] = GUARDED_APPS): Promise<string[]> {
+  const violations: string[] = await findInbound(root, apps);
   for (const app of apps) {
     const appDir = path.join(root, "apps", app);
     const pkgPath = path.join(appDir, "package.json");

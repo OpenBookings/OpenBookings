@@ -104,4 +104,38 @@ describe("check-app-boundaries", () => {
     });
     expect(await findViolations(root)).toHaveLength(1);
   });
+
+  it("fails when a file elsewhere imports a path inside the app (pruned images would not contain it)", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": JSON.stringify({ name: "@openbookings/siteminder" }),
+      "apps/siteminder/scripts/local-db.ts": `export const x = 1;\n`,
+      "apps/business/scripts/e2e.ts": `import { x } from "../../siteminder/scripts/local-db";\n`,
+      "apps/web/lib/a.ts": `const m = await import("../../siteminder/src/env");\n`,
+      "packages/db/src/b.ts": `import { y } from "@openbookings/siteminder/src/ota/res-notif";\n`,
+      "testing/scripts/c.ts": `export * from "@openbookings/siteminder";\n`,
+    });
+    const violations = await findViolations(root);
+    expect(violations).toHaveLength(4);
+    expect(violations[0]).toContain("apps/business/scripts/e2e.ts: imports ../../siteminder/scripts/local-db, inside apps/siteminder");
+  });
+
+  it("fails when another workspace lists the app as a dependency", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": JSON.stringify({ name: "@openbookings/siteminder" }),
+      "apps/business/package.json": JSON.stringify({ devDependencies: { "@openbookings/siteminder": "workspace:*" } }),
+    });
+    expect(await findViolations(root)).toEqual(["apps/business/package.json: devDependencies lists @openbookings/siteminder"]);
+  });
+
+  it("allows lookalikes, the word in strings, the app's own relative imports, and build output", async () => {
+    const root = await fixture({
+      "apps/siteminder/package.json": JSON.stringify({ name: "@openbookings/siteminder" }),
+      "apps/siteminder/scripts/a.ts": `import { b } from "../src/b";\n`,
+      "apps/business/scripts/a.ts": `import { x } from "../../siteminder-tools/x";\nconst label = "SiteMinder siteminder";\n`,
+      "apps/business/lib/b.ts": `import { s } from "@openbookings/siteminder-contract";\n`,
+      "apps/business/.next/server/c.js": `require("../../../siteminder/src/index");\n`,
+      "apps/docs/node_modules/x/d.js": `require("@openbookings/siteminder");\n`,
+    });
+    expect(await findViolations(root)).toEqual([]);
+  });
 });
