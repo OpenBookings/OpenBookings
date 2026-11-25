@@ -35,14 +35,14 @@ function restrictionFields(message: Record<string, unknown>): RestrictionFields 
     if (restriction === undefined) fields.closed = closed;
     else if (restriction === "Arrival") fields.closedToArrival = closed;
     else if (restriction === "Departure") fields.closedToDeparture = closed;
-    else return fail(`Unsupported RestrictionStatus Restriction "${restriction}"`);
+    // Any other type is one we don't offer: the docs' FAQ says ignore it and process the rest, never fail the message.
   }
 
   const lengths = asArray(message.LengthsOfStay).flatMap((group) => (isRecord(group) ? asArray(group.LengthOfStay) : []));
   for (const node of lengths.map(asNode)) {
     const type = attr(node, "MinMaxMessageType") ?? "";
     const stay = STAY_FIELDS[type];
-    if (!stay) return fail(`Unsupported MinMaxMessageType "${type}"`);
+    if (!stay) continue; // not one we offer: ignored, as with an unknown Restriction above
     const time = attr(node, "Time");
     if (time === undefined) {
       // The docs: a max stay without Time clears it; a min stay always carries Time (1 at least).

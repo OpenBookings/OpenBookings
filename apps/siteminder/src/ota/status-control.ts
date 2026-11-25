@@ -45,6 +45,9 @@ function isoDate(day: number): string {
 // OTA's day-of-week pattern attributes (and their common misspellings). SiteMinder's docs define none.
 const WEEKDAY_ATTRIBUTES = ["Mon", "Tue", "Wed", "Weds", "Thu", "Thur", "Fri", "Sat", "Sun"];
 
+/** The longest Start–End one StatusApplicationControl may cover: twice SiteMinder's 750-day horizon. */
+export const MAX_CONTROL_SPAN_DAYS = 2 * MAX_ARI_SPAN_DAYS;
+
 export type DateRange = { from: string; to: string };
 export type StatusControl = { ranges: DateRange[]; invTypeCode?: string; ratePlanCode?: string };
 
@@ -68,6 +71,8 @@ export function statusControl(message: Record<string, unknown>): StatusControl |
   const first = dayNumber(start);
   const last = dayNumber(end);
   if (last < first) return fail("End must not be before Start");
+  // SiteMinder sends at most 750 days ahead; a range far beyond that is a mistake that would expand to years of nights.
+  if (last - first + 1 > MAX_CONTROL_SPAN_DAYS) return fail(`Start to End spans ${last - first + 1} days, at most ${MAX_CONTROL_SPAN_DAYS}`);
 
   const ranges: DateRange[] = [];
   for (let from = first; from <= last; from += MAX_ARI_SPAN_DAYS) {

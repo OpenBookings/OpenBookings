@@ -1,10 +1,12 @@
+import type { AriBatch } from "@openbookings/apps-contract";
 import type { Queryable } from "../db/migrate";
 import { storeInbound } from "../inbox";
 import { installationByHotelCode } from "../installations";
 import { availNotifToChanges } from "../ota/avail-notif";
 import { ignoredSingleGuestAmounts, rateAmountNotifToChanges } from "../ota/rate-amount-notif";
+import { cachedStructure } from "../ota/rooms-and-rates";
 import type { OtaRequest, buildResponse } from "./envelope";
-import { hotelNotFound, invalidRequest } from "./errors";
+import { type OtaError, hotelNotFound, invalidRequest, rateCodeNotFound, roomTypeNotFound } from "./errors";
 
 type Content = Parameters<typeof buildResponse>[2];
 export type NotifContext = { db: Queryable; now: Date; kickTick?: (installationId: string) => void };
@@ -37,10 +39,30 @@ export async function handleNotif(request: OtaRequest, ctx: NotifContext): Promi
   const count = Object.values(changes).reduce((n, list) => n + list.length, 0);
   if (count === 0) return { success: true }; // nothing to change, e.g. a message we only acknowledge
 
+  const unknown = await unknownCodes(ctx.db, inst.id, changes);
+  if (unknown.length > 0) return { success: false, errors: unknown };
+
   const stored = await storeInbound(ctx.db, { installationId: inst.id, echoToken: request.echoToken, kind: request.kind, changes, now: ctx.now });
   if (stored === "stored" && ctx.kickTick) {
     const kick = ctx.kickTick;
     queueMicrotask(() => kick(inst.id));
   }
   return { success: true };
+}
+
+/**
+ * SiteMinder's mandatory 402 / 249 for codes the hotel's structure lacks, judged from the copy cached by Rooms and
+ * Rates (SiteMinder only learns codes from that reply, so it is never older than the codes it can send). Messages
+ * are atomic: with any unknown code nothing is stored. With no cached copy yet, core judges the codes later.
+ */
+async function unknownCodes(db: Queryable, installationId: string, changes: Partial<AriBatch>): Promise<OtaError[]> {
+  const structure = await cachedStructure(db, installationId);
+  if (!structure) return [];
+  const rooms = new Set(structure.rooms.map((r) => r.code));
+  const plans = new Set(structure.rooms.flatMap((r) => r.ratePlans.map((p) => p.code)));
+  const errors: OtaError[] = [];
+  if ((changes.inventory ?? []).some((c) => !rooms.has(c.roomCode))) errors.push(roomTypeNotFound());
+  const planCodes = [...(changes.rates ?? []), ...(changes.restrictions ?? [])].map((c) => c.ratePlanCode);
+  if (planCodes.some((code) => !plans.has(code))) errors.push(rateCodeNotFound());
+  return errors;
 }

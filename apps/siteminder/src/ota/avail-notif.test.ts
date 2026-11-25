@@ -158,11 +158,11 @@ describe("stay limits", () => {
     }
   });
 
-  it("refuses an unknown MinMaxMessageType", () => {
-    expect(fails(los(`<LengthOfStay MinMaxMessageType="SetMinStay" Time="2"/>`))).toEqual({
-      type: 10,
-      message: 'Unsupported MinMaxMessageType "SetMinStay"',
-    });
+  it("ignores an unknown MinMaxMessageType and keeps the rest (docs FAQ: never fail the whole message)", () => {
+    expect(ok(los(`<LengthOfStay MinMaxMessageType="SetMinStay" Time="2"/><LengthOfStay MinMaxMessageType="SetMinLOS" Time="3"/>`)).restrictions).toEqual([
+      { ...plan, minStayArrival: 3 },
+    ]);
+    expect(ok(los(`<LengthOfStay MinMaxMessageType="SetMinStay" Time="2"/>`)).restrictions).toEqual([]);
   });
 });
 
@@ -190,6 +190,15 @@ describe("dates", () => {
       { ratePlanCode: "PBAR2031", from: "2031-01-01", to: "2033-01-19", closed: true },
       { ratePlanCode: "PBAR2031", from: "2033-01-20", to: "2033-01-31", closed: true },
     ]);
+  });
+
+  it("refuses a range over twice the 750-day horizon (no single message may expand to years of nights)", () => {
+    // 2031-01-01 + 1499 days = 2035-02-08: the longest range taken.
+    expect(ok(avail(msg("", ` BookingLimit="1"`, control("2031-01-01", "2035-02-08")))).inventory).toHaveLength(2);
+    expect(fails(avail(msg("", ` BookingLimit="1"`, control("2031-01-01", "2035-02-09"))))).toEqual({
+      type: 10,
+      message: "Start to End spans 1501 days, at most 1500",
+    });
   });
 
   it("refuses End before Start and dates that are not real calendar dates", () => {
@@ -233,12 +242,13 @@ describe("BookingLimit", () => {
 });
 
 describe("malformed messages", () => {
-  it("refuses unknown Status and Restriction values", () => {
+  it("refuses unknown Status values; ignores an unknown Restriction type and keeps the rest of the message", () => {
     expect(fails(avail(msg(`<RestrictionStatus Status="Closed"/>`)))).toEqual({ type: 10, message: 'RestrictionStatus Status must be Open or Close, got "Closed"' });
     expect(fails(avail(msg(`<RestrictionStatus/>`)))).toEqual({ type: 10, message: 'RestrictionStatus Status must be Open or Close, got ""' });
-    expect(fails(avail(msg(`<RestrictionStatus Restriction="Master" Status="Close"/>`)))).toEqual({
-      type: 10,
-      message: 'Unsupported RestrictionStatus Restriction "Master"',
+    expect(ok(avail(msg(`<RestrictionStatus Restriction="Master" Status="Close"/>`, ` BookingLimit="4"`)))).toEqual({
+      hotelCode: "SM-AV-2031",
+      inventory: [{ roomCode: "RSGL2031", ...dates, unitsLeft: 4 }],
+      restrictions: [],
     });
   });
 

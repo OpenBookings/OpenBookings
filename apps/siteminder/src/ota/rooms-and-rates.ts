@@ -77,6 +77,15 @@ export async function structureFor(
   }
 }
 
+/** The cached structure as stored (however old), or null when none was ever fetched. Never calls core. */
+export async function cachedStructure(db: Queryable, installationId: string): Promise<AppStructure | null> {
+  const { rows } = await db.query<{ structure: unknown }>(`SELECT structure FROM siteminder.installations WHERE id = $1`, [installationId]);
+  const raw = rows[0]?.structure;
+  if (raw == null) return null;
+  const parsed = AppStructureSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 export type HotelAvailOutcome = { success: true; payload: Record<string, unknown> } | { success: false; errors: OtaError[] };
 
 const asArray = <T>(v: T | T[] | undefined): T[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);

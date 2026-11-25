@@ -159,4 +159,61 @@ describe.skipIf(skipDbTests)("SOAP notif messages (rolled back)", () => {
       expect(await inboxRows(db)).toEqual([]);
     });
   });
+
+  describe("codes checked against the cached structure", () => {
+    const structure = {
+      propertyCode: reg.propertyCode,
+      propertyName: reg.propertyName,
+      timezone: "Europe/Amsterdam",
+      rooms: [{ code: "RNOTIF2031", name: "Double", baseOccupancy: 2, maxAdults: 2, maxChildren: 0, ratePlans: [
+        { code: "PNOTIF2031", name: "Room only", isRefundable: true, includesBreakfast: false, includesLunch: false, includesDinner: false },
+      ] }],
+    };
+    const cache = (db: Queryable) =>
+      db.query(`UPDATE siteminder.installations SET structure = $2::jsonb, structure_fetched_at = $3 WHERE id = $1`, [
+        reg.installationId, JSON.stringify(structure), new Date(NOW.getTime() - 86_400_000).toISOString(),
+      ]);
+    const ctl = (room: string, plan: string) => `<StatusApplicationControl Start="2031-05-01" End="2031-05-02" InvTypeCode="${room}" RatePlanCode="${plan}"/>`;
+
+    it("answers 402 for an unknown room type and 249 for an unknown rate, at once, storing nothing", async () => {
+      await withTestDb(async (db) => {
+        await upsertInstallation(db, reg);
+        await cache(db);
+        const app = createApp(() => db, { now: () => NOW, clientFor: noCore });
+
+        const room = await (await post(app, availRq(crypto.randomUUID(), `<AvailStatusMessage BookingLimit="2">${ctl("RNOPE2031", "PNOTIF2031")}</AvailStatusMessage>`))).text();
+        expect(room).toContain(`<Error Type="12" Code="402">Room type code not found for this hotel</Error>`);
+        expect(room).not.toContain("<Success/>");
+
+        const plan = await (await post(app, availRq(crypto.randomUUID(), `<AvailStatusMessage>${ctl("RNOTIF2031", "PNOPE2031")}<RestrictionStatus Status="Close"/></AvailStatusMessage>`))).text();
+        expect(plan).toContain(`<Error Type="12" Code="249">Rate code not found for this hotel</Error>`);
+
+        const rate = await (await post(app, rateRq(crypto.randomUUID(), `<BaseByGuestAmt AmountAfterTax="186.50" CurrencyCode="{cur}"/>`).replace("PNOTIF2031", "PNOPE2031"))).text();
+        expect(rate).toContain(`<Error Type="12" Code="249">Rate code not found for this hotel</Error>`);
+
+        expect(await inboxRows(db)).toEqual([]);
+      });
+    });
+
+    it("known codes are stored and answered Success", async () => {
+      await withTestDb(async (db) => {
+        await upsertInstallation(db, reg);
+        await cache(db);
+        const app = createApp(() => db, { now: () => NOW, clientFor: noCore });
+        const text = await (await post(app, availRq(crypto.randomUUID(), `<AvailStatusMessage BookingLimit="2">${ctl("RNOTIF2031", "PNOTIF2031")}</AvailStatusMessage>`))).text();
+        expect(text).toContain("<Success/>");
+        expect(await inboxRows(db)).toHaveLength(1);
+      });
+    });
+
+    it("without a cached structure the codes are left to core: stored and answered Success", async () => {
+      await withTestDb(async (db) => {
+        await upsertInstallation(db, reg);
+        const app = createApp(() => db, { now: () => NOW, clientFor: noCore });
+        const text = await (await post(app, availRq(crypto.randomUUID(), `<AvailStatusMessage BookingLimit="2">${ctl("RNOPE2031", "PNOTIF2031")}</AvailStatusMessage>`))).text();
+        expect(text).toContain("<Success/>");
+        expect(await inboxRows(db)).toHaveLength(1);
+      });
+    });
+  });
 });
