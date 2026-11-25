@@ -380,12 +380,22 @@ describeWithDb("RATES_SQL on an app-managed rate plan", () => {
     expect(plan.hasStayDiscount).toBe(false);
   });
 
-  test("after disconnect, our own rules and prices are back", async () => {
+  test("after disconnect, the app's last values are the hotel's own and its pricing rules apply again", async () => {
+    await restrict({ from: LAST_NIGHT, to: LAST_NIGHT, closedToArrival: true });
+    const managed = await gridPlan();
+    const managedGuest = await guestReasons();
+
     await disconnectApp(db, { installationId: installation.id, now });
     const plan = await gridPlan();
-    expect(plan.cells[0]!.primary).toBe("STOP_SELL");
-    expect(plan.cells[0]!.hasOverride).toBe(true);
-    expect(plan.cells.map((c) => c.indicativePriceCents)).toEqual([12600, 9000, 9000]);
-    expect(plan.minStay).toBe(3);
+    // Same nights open and closed, same units left, same arrival rule.
+    expect(plan.cells.map((c) => c.bookable)).toEqual(managed.cells.map((c) => c.bookable));
+    expect(plan.cells.map((c) => c.available)).toEqual(managed.cells.map((c) => c.available));
+    expect(plan.cells.map((c) => c.primary)).toEqual([null, "CLOSED_TO_ARRIVAL", "STOP_SELL"]);
+    expect(await guestReasons()).toEqual(managedGuest);
+    // The app's prices are now overrides; the hotel's 10% rule applies to them again.
+    expect(plan.cells.slice(0, 2).every((c) => c.hasOverride)).toBe(true);
+    expect(plan.cells.map((c) => c.priceCents)).toEqual([16785, 18000, null]);
+    // The plan's default minimum of 3 stays off on the carried nights.
+    expect(plan.cells.map((c) => c.minStay)).toEqual([1, 1, 1]);
   });
 });

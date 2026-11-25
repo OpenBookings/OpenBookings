@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { todayInZone } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
+import { carryAppValues } from "./carry";
 
 export type Installation = {
   id: string;
@@ -152,8 +153,28 @@ export async function connectApp(
   return { installation: toInstallation(row), apiKey, notSentCount };
 }
 
-/** Switch an installation off. The row stays, so a reconnect keeps its id and delivery history. */
+/** How core names an app in host-facing text (the only app-specific word core may use). */
+const APP_DISPLAY_NAME: Record<Installation["appKey"], string> = { siteminder: "SiteMinder" };
+
+/**
+ * Switch an installation off, keeping the app's last values: they are written
+ * into the hotel's own tables first (`carryAppValues`), so what guests can
+ * book and pay does not jump when control returns to the hotel. The row
+ * stays, so a reconnect keeps its id and delivery history. Pass a transaction.
+ */
 export async function disconnectApp(db: Queryable, i: { installationId: string; now: Date }): Promise<void> {
+  const active = (
+    await db.query(
+      `SELECT property_id, app_key FROM app_installations WHERE id = $1::uuid AND status = 'active' FOR UPDATE`,
+      [i.installationId],
+    )
+  ).rows[0] as { property_id: string; app_key: Installation["appKey"] } | undefined;
+  if (!active) return;
+  await carryAppValues(db, {
+    propertyId: active.property_id,
+    now: i.now,
+    appDisplayName: APP_DISPLAY_NAME[active.app_key],
+  });
   await db.query(
     `UPDATE app_installations SET status = 'disconnected', disconnected_at = $2
       WHERE id = $1::uuid AND status = 'active'`,

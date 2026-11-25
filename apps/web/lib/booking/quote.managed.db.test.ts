@@ -8,7 +8,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
-import { applyAriBatch, connectApp, type Installation } from "@openbookings/db/apps";
+import { applyAriBatch, connectApp, disconnectApp, type Installation } from "@openbookings/db/apps";
 import { getDb } from "@openbookings/db";
 import { applyPendingMigrations, connectionString, describeWithDb, seedProperty } from "@openbookings/db/testing";
 import type { DbRoom } from "@/app/p/[hotel_slug]/_components/constants";
@@ -104,6 +104,22 @@ describeWithDb("stay quote on an app-managed rate plan", () => {
       testing: false,
       selection: [{ roomId: ids.roomId, ratePlanId: ids.ratePlanId, adults: 2, children: 0, infants: 0, cots: 0, extraBeds: 0, ...over }],
     });
+
+  test("after disconnect the app's last prices stay the nightly prices; our discount applies again", async () => {
+    await push();
+    const managed = (await quote())!.rooms[0];
+    await disconnectApp(db, { installationId: installation.id, now: NOW });
+    const room = (await quote())!.rooms[0];
+    expect(room.unitsLeft).toBe(managed.unitsLeft);
+    const plan = room.ratePlans[0];
+    expect(plan.reasons).toEqual([]);
+    // €186.50 and €200.00, now with the hotel's 10% stay discount on top.
+    expect(plan.nights).toEqual([
+      { date: CHECK_IN, priceCents: 16785 },
+      { date: LAST_NIGHT, priceCents: 18000 },
+    ]);
+    expect(plan.discount).not.toBeNull();
+  });
 
   test("the app's €186.50 and €200.00 are the nightly prices, to the cent, untouched by our discount and override", async () => {
     await push();

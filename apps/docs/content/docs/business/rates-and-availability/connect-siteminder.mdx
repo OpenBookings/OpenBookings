@@ -94,6 +94,14 @@ To offer a deal only on OpenBookings:
 
 Rates, availability and restrictions come back to you on the grid, starting from the last values SiteMinder sent. Pricing rules apply again. New bookings, changes and cancellations are no longer sent.
 
+What that means night by night, from today up to the last night SiteMinder sent anything for:
+
+- **Availability** is set to what was left to sell when you disconnected. Nights SiteMinder never sent availability for are set to 0.
+- **Prices** become price overrides labelled *Last value from SiteMinder*. Nights without a price from SiteMinder are closed.
+- **Stop-sells, closed to arrival, closed to departure and minimum/maximum stay** become your own restrictions. A SiteMinder *through* stay limit becomes a stay limit for arrivals on that night.
+- Your own overrides, restrictions and room closures on those nights are replaced. Before and after those nights they stay as they were.
+- **Extra-adult and extra-child fees** go back to the amounts in **About → Rooms**.
+
 ## Limitations and warnings
 
 <Callout type="warn">

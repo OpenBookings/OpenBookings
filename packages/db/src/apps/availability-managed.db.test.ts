@@ -253,13 +253,18 @@ describeWithDb("availability on an app-managed property", () => {
     expect((await stay()).ratePlans[0]!.reasons).toEqual(["rate_closed", "closed_to_arrival", "closed_to_departure"]);
   });
 
-  test("after disconnecting, our own numbers count again", async () => {
+  test("after disconnecting, the app's last numbers stay; after them our own count again", async () => {
     await push({ unitsLeft: 1, receivedAt: ago(5) });
     await confirmedBooking();
+    expect((await stay()).unitsLeft).toBe(0);
     await disconnectApp(db, { installationId: installation.id, now: ago(1) });
     const room = await stay();
-    expect(room.unitsLeft).toBe(4);
+    expect(room.unitsLeft).toBe(0);
     expect(room.ratePlans[0]!.reasons).toEqual([]);
+    // Past the last night the app sent, the room's own 5 units.
+    const later = await stay({ checkIn: "2031-11-20", checkOut: "2031-11-21" });
+    expect(later.unitsLeft).toBe(5);
+    expect(later.ratePlans[0]!.reasons).toEqual([]);
   });
 
   test("the host dashboard role (ob_app, row-level security on) reads the app's stock", async () => {
