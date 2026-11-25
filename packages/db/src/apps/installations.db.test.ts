@@ -168,4 +168,32 @@ describeWithDb("app installations", () => {
     expect(byBooking.get(unacked)).toBe("not_sent");
     expect(second.notSentCount).toBe(1);
   });
+
+  test("reconnecting starts from nothing: the earlier connection's ARI is gone, other hotels' stays", async () => {
+    const ids = await seedProperty(db);
+    const other = await seedProperty(db);
+    const first = await connectApp(db, { propertyId: ids.propertyId, appKey: "siteminder", userId, sendUpcoming: true, now });
+    await connectApp(db, { propertyId: other.propertyId, appKey: "siteminder", userId, sendUpcoming: true, now });
+    for (const p of [ids, other]) {
+      await db.query(`INSERT INTO app_inventory (room_id, date, units_left, received_at) VALUES ($1, '2031-06-01', 2, now())`, [p.roomId]);
+      await db.query(`INSERT INTO app_rates (rate_plan_id, date, price_cents, received_at) VALUES ($1, '2031-06-01', 9000, now())`, [p.ratePlanId]);
+      await db.query(`INSERT INTO app_restrictions (rate_plan_id, date, is_closed, received_at) VALUES ($1, '2031-06-01', true, now())`, [
+        p.ratePlanId,
+      ]);
+    }
+    await disconnectApp(db, { installationId: first.installation.id, now });
+    await connectApp(db, { propertyId: ids.propertyId, appKey: "siteminder", userId, sendUpcoming: true, now });
+
+    const left = async (p: { roomId: string; ratePlanId: string }) =>
+      (
+        await db.query(
+          `SELECT (SELECT count(*) FROM app_inventory WHERE room_id = $1)::int AS inv,
+                  (SELECT count(*) FROM app_rates WHERE rate_plan_id = $2)::int AS rates,
+                  (SELECT count(*) FROM app_restrictions WHERE rate_plan_id = $2)::int AS restrictions`,
+          [p.roomId, p.ratePlanId],
+        )
+      ).rows[0];
+    expect(await left(ids)).toEqual({ inv: 0, rates: 0, restrictions: 0 });
+    expect(await left(other)).toEqual({ inv: 1, rates: 1, restrictions: 1 });
+  });
 });

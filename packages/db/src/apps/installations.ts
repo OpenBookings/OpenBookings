@@ -135,6 +135,19 @@ export async function connectApp(
     ).rows[0] as InstallationRow;
   }
 
+  // Whatever an earlier connection sent is stale by now (and was carried into
+  // the hotel's own tables when it ended): start empty, so each room shows
+  // "Not linked" until the app sends again, never last year's numbers.
+  for (const sql of [
+    `DELETE FROM app_inventory WHERE room_id IN (SELECT id FROM rooms WHERE property_id = $1::uuid)`,
+    `DELETE FROM app_rates WHERE rate_plan_id IN (
+       SELECT p.id FROM rate_plans p JOIN rooms r ON r.id = p.room_id WHERE r.property_id = $1::uuid)`,
+    `DELETE FROM app_restrictions WHERE rate_plan_id IN (
+       SELECT p.id FROM rate_plans p JOIN rooms r ON r.id = p.room_id WHERE r.property_id = $1::uuid)`,
+  ]) {
+    await db.query(sql, [i.propertyId]);
+  }
+
   let notSentCount = 0;
   if (!i.sendUpcoming) {
     const marked = await db.query(
