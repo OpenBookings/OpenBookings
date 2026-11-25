@@ -114,4 +114,16 @@ describeWithDb("search rows", () => {
     await manage([CHECK_IN]);
     expect(await row()).toBeUndefined();
   });
+
+  test("a managed room is shown on a plan the app priced, even when a newer plan has no price yet", async () => {
+    await manage([CHECK_IN, LAST_NIGHT]);
+    await db.query(
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active, created_at)
+       VALUES ($1, 'New, not priced yet', 10000, true, true, now() + INTERVAL '1 day')`,
+      [ids.roomId],
+    );
+    const r = (await row())!;
+    expect(r.rate_plan_id).toBe(ids.ratePlanId);
+    expect(await price(2)).toBe(38650);
+  });
 });

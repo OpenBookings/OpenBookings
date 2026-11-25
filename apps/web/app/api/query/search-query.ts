@@ -89,9 +89,16 @@ candidate_rooms AS (
     FROM rate_plans
     WHERE room_id = r.id
       AND is_active
-    -- A search card shows one rate, and a Non-refundable rate may only be
-    -- offered beside a refundable one (Annex B B.4.1), so prefer refundable.
-    ORDER BY is_refundable DESC, created_at DESC
+    -- A search card shows one rate. On a managed property, first a plan the
+    -- app priced for every night of the stay (an unpriced one is not offered,
+    -- and would hide the room). Then, as a Non-refundable rate may only be
+    -- offered beside a refundable one (Annex B B.4.1), prefer refundable.
+    ORDER BY
+      CASE WHEN ${MANAGED_PROPERTY_SQL} THEN NOT EXISTS (
+        SELECT 1 FROM stay_dates sd
+         WHERE NOT EXISTS (SELECT 1 FROM app_rates ar WHERE ar.rate_plan_id = rate_plans.id AND ar.date = sd.stay_date)
+      ) ELSE true END DESC,
+      is_refundable DESC, created_at DESC
     LIMIT 1
   ) rp ON TRUE
   WHERE p.is_active
