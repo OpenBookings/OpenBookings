@@ -7,7 +7,8 @@
  *   bun run scripts/replay.ts --url http://localhost:3006/soap --hotel FAKE-HOTEL [--days 750] [--room SGL --rate BAR]
  *     [--core http://localhost:4010] [--no-samples] [--keep-dates] [fixture...]
  *
- * With no fixtures, every request sample (`*-rq*.xml`) is sent, unless `--no-samples`. `--days N` adds a bulk load:
+ * With no fixtures, every request sample SiteMinder sends us (`*-rq*.xml`, not the `reservation-*` ones: those are what
+ * we send SiteMinder) is sent, unless `--no-samples`. `--days N` adds a bulk load:
  * availability, rates and restrictions for one room and rate plan (`--room`/`--rate`, default SGL/BAR) over N nights
  * from today. `--keep-dates` sends the fixtures' dates as they are. `--core` prints what the fake core received.
  * Exit code 1 when a reply is not Success (or, for the samples in EXPECTED_ERROR, not that error) or takes 2 s or more.
@@ -26,6 +27,8 @@ const EXPECTED_ERROR: Record<string, string> = {
   "rates-rq-pdp-included-occupancy-and-single-guest-discount.xml": "Invalid included occupancy",
   "rates-rq-pdp-included-occupancy.xml": "Invalid included occupancy",
 };
+/** A request SiteMinder sends us. Reservation samples are the messages we send SiteMinder, so the app refuses them. */
+const isInboundRequest = (f: string) => f.endsWith(".xml") && /-rq/.test(f) && !f.startsWith("reservation-");
 const NS = "http://www.opentravel.org/OTA/2003/05";
 
 function arg(name: string): string | undefined {
@@ -100,7 +103,7 @@ function bulk(n: number): { name: string; xml: string }[] {
 }
 
 const names =
-  files.length > 0 ? files : samples ? (await readdir(FIXTURES_DIR)).filter((f) => f.endsWith(".xml") && /-rq/.test(f)).sort() : [];
+  files.length > 0 ? files : samples ? (await readdir(FIXTURES_DIR)).filter(isInboundRequest).sort() : [];
 const messages: { name: string; xml: string }[] = [];
 for (const f of names) {
   const file = path.isAbsolute(f) || f.includes("/") ? f : path.join(FIXTURES_DIR, f);

@@ -45,7 +45,8 @@ SITEMINDER_INBOUND_USERNAME=replay-user SITEMINDER_INBOUND_PASSWORD=replay-pass 
   bun run scripts/replay.ts --url http://localhost:3006/soap --hotel FAKE-HOTEL --days 750 --core http://localhost:4010
 ```
 
-`replay.ts` sends every request sample (or the fixtures you name) with the hotel code and dates rewritten (earliest
+`replay.ts` sends every request sample SiteMinder sends us (or the fixtures you name; the `reservation-*` samples are
+what we send SiteMinder, so they are left out) with the hotel code and dates rewritten (earliest
 date lands on today + 7, unless `--keep-dates`), a fresh UUID EchoToken per message and the inbound credentials, and
 prints status and reply time per message. `--days N` (1 to 750) adds a bulk load of availability, restrictions and
 rates for one room and rate plan (`--room`/`--rate`, default SGL/BAR); `--no-samples` sends only that load. `--core`
