@@ -36,7 +36,7 @@ app's migrations, registers an installation for hotel `FAKE-HOTEL` and serves th
 throwaway local Postgres and refuses any database that is not on localhost. Never use the shared dev database.
 
 ```sh
-docker run -d --name sm-pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=siteminder -p 127.0.0.1:55432:5432 postgis/postgis
+docker run -d --name sm-pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=siteminder -p 127.0.0.1:55432:5432 postgres:17
 cd apps/siteminder
 SITEMINDER_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/siteminder bun run scripts/dev-with-fake-core.ts
 
