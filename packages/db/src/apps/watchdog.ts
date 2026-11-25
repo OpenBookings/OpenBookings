@@ -9,13 +9,14 @@
  *                              change, or the connection, is over 30 minutes
  *                              old) whose delivery row is missing, pending or
  *                              retrying becomes needs_attention.
- *   claimUnmailedAlerts        a needs_attention row whose mail never went out
+ *   unmailedAlerts             needs_attention rows whose mail never went out
  *                              (the process died between the report's commit
- *                              and its mail) is claimed for mailing.
+ *                              and its mail, or the mail failed), to mail.
  *
  * Mail goes out at most once per move into needs_attention: `mailed_at` is
- * set when a sender claims the row (claimAlert / claimUnmailedAlerts) and
- * cleared when the row leaves needs_attention (recordDelivery).
+ * set when a sender claims the row (claimAlert), put back to NULL when the
+ * mail fails (releaseAlert), and cleared when the row leaves needs_attention
+ * (recordDelivery).
  */
 import type { Queryable } from "../reservation-policy";
 import { DELIVERY_EVENT_KINDS } from "./feed";
@@ -76,7 +77,8 @@ export async function flagUnconfirmedDeliveries(
      INSERT INTO app_booking_delivery AS d (installation_id, booking_id, status, detail, updated_at)
      SELECT installation_id, booking_id, 'needs_attention', detail, $1 FROM due
      ON CONFLICT (installation_id, booking_id) DO UPDATE
-        SET status = 'needs_attention', detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at, mailed_at = NULL
+        SET status = 'needs_attention', detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at,
+            mailed_at = NULL, mail_failed_at = NULL
       WHERE d.status IN ('pending', 'retrying')
      RETURNING d.installation_id, d.booking_id, d.detail,
                (SELECT ai.property_id FROM app_installations ai WHERE ai.id = d.installation_id) AS property_id,
@@ -104,22 +106,43 @@ export async function claimAlert(db: Queryable, i: { installationId: string; boo
 }
 
 /**
- * Claim every needs_attention row of an active installation whose mail never
- * went out (older than a short grace, so a report being mailed right now is
- * left to its route). The caller sends the mails.
+ * Release a claim whose mail could not be sent, so the next watchdog run tries
+ * again. True the first time this row's mail failed (tell us then, not on
+ * every retry).
  */
-export async function claimUnmailedAlerts(
+export async function releaseAlert(db: Queryable, i: { installationId: string; bookingId: string; now: Date }): Promise<boolean> {
+  const { rows } = await db.query(
+    `UPDATE app_booking_delivery d SET mailed_at = NULL, mail_failed_at = COALESCE(d.mail_failed_at, $3)
+       FROM (SELECT mail_failed_at FROM app_booking_delivery
+              WHERE installation_id = $1::uuid AND booking_id = $2::uuid FOR UPDATE) before
+      WHERE d.installation_id = $1::uuid AND d.booking_id = $2::uuid AND d.status = 'needs_attention'
+      RETURNING before.mail_failed_at IS NULL AS first`,
+    [i.installationId, i.bookingId, i.now],
+  );
+  return (rows[0] as { first: boolean } | undefined)?.first ?? false;
+}
+
+/**
+ * Needs_attention rows of active installations whose mail never went out
+ * (older than a short grace, so a report being mailed right now is left to
+ * its route), at most `limit`, oldest first. Not claimed: the caller claims
+ * each with claimAlert right before mailing it, so a run cut short loses
+ * nothing.
+ */
+export async function unmailedAlerts(
   db: Queryable,
   now: Date,
+  limit: number,
 ): Promise<{ installationId: string; bookingId: string; propertyId: string; appKey: string; detail: string | null }[]> {
   const { rows } = await db.query(
-    `UPDATE app_booking_delivery d SET mailed_at = $1
-       FROM app_installations ai
-      WHERE ai.id = d.installation_id AND ai.status = 'active'
-        AND d.status = 'needs_attention' AND d.mailed_at IS NULL
+    `SELECT d.installation_id, d.booking_id, d.detail, ai.property_id, ai.app_key
+       FROM app_booking_delivery d
+       JOIN app_installations ai ON ai.id = d.installation_id AND ai.status = 'active'
+      WHERE d.status = 'needs_attention' AND d.mailed_at IS NULL
         AND d.updated_at <= $1::timestamptz - INTERVAL '${ROUTE_GRACE_MINUTES} minutes'
-      RETURNING d.installation_id, d.booking_id, d.detail, ai.property_id, ai.app_key`,
-    [now],
+      ORDER BY d.updated_at
+      LIMIT $2`,
+    [now, limit],
   );
   return (rows as { installation_id: string; booking_id: string; detail: string | null; property_id: string; app_key: string }[]).map(
     (r) => ({ installationId: r.installation_id, bookingId: r.booking_id, propertyId: r.property_id, appKey: r.app_key, detail: r.detail }),

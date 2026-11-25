@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { DeliveryReportSchema } from "@openbookings/apps-contract";
 import { getPool, withTransaction } from "@openbookings/db";
-import { claimAlert, recordDelivery } from "@openbookings/db/apps";
+import { recordDelivery } from "@openbookings/db/apps";
 import { alertDeliveryNeedsAttention } from "@/lib/apps/delivery-alert";
 import { appsJson, authenticateApp, firstIssue, readBodyText, unauthorized } from "@/lib/apps/api-auth";
 
@@ -39,23 +39,17 @@ export async function PUT(request: Request, context: { params: Promise<{ booking
   // Only the move into needs_attention alerts: a repeated report, or one the
   // store ignored, leaves the status as it was. After the commit, never inside
   // it, and after the 204 is on its way (the mail transport has no deadline).
-  // The mail is claimed first (mailed_at), so the watchdog job never sends it
-  // twice; if this process dies before claiming, the watchdog sends it.
+  // The alert claims the row's mail first, so the watchdog job never sends it
+  // twice; a mail that fails or never starts is the watchdog's to send.
   if (result.previousStatus !== "needs_attention" && result.status === "needs_attention") {
-    after(async () => {
-      try {
-        if (!(await claimAlert(getPool(), { installationId: installation.id, bookingId, now: new Date() }))) return;
-      } catch (error) {
-        console.error("[apps] could not claim the delivery alert:", error instanceof Error ? error.message : error);
-        return; // left unclaimed: the watchdog job sends it
-      }
-      await alertDeliveryNeedsAttention({
-        bookingId,
-        propertyId: installation.propertyId,
-        appKey: installation.appKey,
-        detail: parsed.data.detail,
-      });
-    });
+    const alert = {
+      installationId: installation.id,
+      bookingId,
+      propertyId: installation.propertyId,
+      appKey: installation.appKey,
+      detail: parsed.data.detail,
+    };
+    after(() => alertDeliveryNeedsAttention(getPool(), alert, new Date()));
   }
   return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 }

@@ -142,7 +142,8 @@ export async function recordDelivery(
             detail = $5,
             updated_at = $6,
             -- Leaving needs_attention re-arms the mail for the next time in.
-            mailed_at = CASE WHEN $3 = 'needs_attention' THEN mailed_at END
+            mailed_at = CASE WHEN $3 = 'needs_attention' THEN mailed_at END,
+            mail_failed_at = CASE WHEN $3 = 'needs_attention' THEN mail_failed_at END
       WHERE installation_id = $1::uuid AND booking_id = $2::uuid`,
     values,
   );

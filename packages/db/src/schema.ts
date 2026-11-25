@@ -1663,6 +1663,8 @@ export const appBookingDelivery = pgTable(
      * leaves needs_attention, so each move into it mails once.
      */
     mailedAt: timestamp("mailed_at", { withTimezone: true }),
+    /** When sending that mail first failed; the claim is released for a retry, and we are told once. */
+    mailFailedAt: timestamp("mail_failed_at", { withTimezone: true }),
   },
   (table) => [
     primaryKey({ columns: [table.installationId, table.bookingId] }),

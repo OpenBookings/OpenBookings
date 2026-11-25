@@ -211,9 +211,13 @@ CREATE TABLE IF NOT EXISTS app_booking_delivery (
   -- each move into it mails once (the delivery route, or the watchdog job when
   -- the route's mail never went out).
   mailed_at timestamptz,
+  -- When sending that mail first failed (the claim is then released so the
+  -- watchdog retries; we are told once per row, not on every retry).
+  mail_failed_at timestamptz,
   PRIMARY KEY (installation_id, booking_id)
 );
 ALTER TABLE app_booking_delivery ADD COLUMN IF NOT EXISTS mailed_at timestamptz;
+ALTER TABLE app_booking_delivery ADD COLUMN IF NOT EXISTS mail_failed_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS idx_app_booking_delivery_booking ON app_booking_delivery (booking_id);
 

@@ -6,19 +6,20 @@ const row = (bookingId: string): Row => ({ installationId: "i1", bookingId, prop
 
 let flagged: Row[] = [];
 let unmailed: Row[] = [];
-let claimable = new Set<string>();
+/** What the alert does per booking: sent, failed (mail down) or skipped (mailed already). */
+let outcomes: Record<string, "sent" | "failed" | "skipped"> = {};
 const alerts: string[] = [];
 
 await mockModules(import.meta.dir, {
   "@openbookings/db": () => ({ getPool: () => ({}) }),
   "@openbookings/db/apps": () => ({
     flagUnconfirmedDeliveries: async () => flagged,
-    claimAlert: async (_db: unknown, i: { bookingId: string }) => claimable.delete(i.bookingId),
-    claimUnmailedAlerts: async () => unmailed,
+    unmailedAlerts: async (_db: unknown, _now: Date, limit: number) => unmailed.slice(0, limit),
   }),
   "@/lib/apps/delivery-alert": () => ({
-    alertDeliveryNeedsAttention: async (i: Row) => {
+    alertDeliveryNeedsAttention: async (_db: unknown, i: Row) => {
       alerts.push(i.bookingId);
+      return outcomes[i.bookingId] ?? "sent";
     },
   }),
 });
@@ -33,18 +34,23 @@ describe("app delivery watchdog", () => {
     process.env.CRON_SECRET = "test-cron-secret";
     flagged = [];
     unmailed = [];
-    claimable = new Set();
+    outcomes = {};
     alerts.length = 0;
   });
 
-  test("mails each newly flagged booking it can claim, then every unmailed one", async () => {
+  test("alerts each newly flagged booking, then the older unmailed ones, one by one", async () => {
     flagged = [row("b1"), row("b2")];
-    claimable = new Set(["b1"]); // b2 was mailed by someone else meanwhile
-    unmailed = [row("b3")];
+    unmailed = [row("b3"), row("b4")];
+    outcomes = { b2: "skipped", b4: "failed" }; // b2 mailed by the route meanwhile; b4's mail is down
     const res = await POST(cron());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, flagged: 2, mailed: 2 });
-    expect(alerts).toEqual(["b1", "b3"]);
+    expect(await res.json()).toEqual({ ok: true, flagged: 2, mailed: 2, failed: 1 });
+    expect(alerts).toEqual(["b1", "b2", "b3", "b4"]);
+  });
+
+  test("takes at most 50 older unmailed alerts a run", async () => {
+    unmailed = Array.from({ length: 80 }, (_, n) => row(`old-${n}`));
+    expect(await (await POST(cron())).json()).toMatchObject({ mailed: 50 });
   });
 
   test("requires the cron secret", async () => {

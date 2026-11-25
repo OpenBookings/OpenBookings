@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@openbookings/db";
-import { claimAlert, claimUnmailedAlerts, flagUnconfirmedDeliveries } from "@openbookings/db/apps";
+import { flagUnconfirmedDeliveries, unmailedAlerts } from "@openbookings/db/apps";
 import { bearerAuthorized } from "@openbookings/messaging/cron-auth";
 import { alertDeliveryNeedsAttention } from "@/lib/apps/delivery-alert";
 
 export const dynamic = "force-dynamic";
+
+/** Older unmailed alerts mailed per run, on top of the ones flagged in it: well inside a request's time. */
+const MAILS_PER_RUN = 50;
 
 /**
  * Delivery watchdog for connected apps (SiteMinder): no booking may fail to
@@ -14,10 +17,12 @@ export const dynamic = "force-dynamic";
  *      the connection, is over 30 minutes old) but has not becomes "needs
  *      attention", and the hotel is emailed (we get a Sentry warning).
  *   2. A "needs attention" whose email never went out (the process stopped
- *      between storing the app's report and mailing) is emailed now.
+ *      between storing the app's report and mailing, or the mail failed) is
+ *      emailed now, up to MAILS_PER_RUN a run.
  *
- * Each move into "needs attention" is emailed once (`mailed_at`). Schedule it
- * every 5 minutes, like the other jobs:
+ * Each row is claimed right before its own email (`mailed_at`), so each move
+ * into "needs attention" is emailed once and a run cut short loses nothing.
+ * Schedule it every 5 minutes, like the other jobs:
  *
  *   gcloud scheduler jobs create http app-delivery-watchdog \
  *     --schedule="*\/5 * * * *" \
@@ -33,16 +38,14 @@ export async function POST(request: Request) {
 
   const db = getPool();
   const now = new Date();
-  let mailed = 0;
   const flagged = await flagUnconfirmedDeliveries(db, now);
-  for (const row of flagged) {
-    if (!(await claimAlert(db, { installationId: row.installationId, bookingId: row.bookingId, now }))) continue;
-    await alertDeliveryNeedsAttention(row);
-    mailed += 1;
+  const older = await unmailedAlerts(db, now, MAILS_PER_RUN);
+  let mailed = 0;
+  let failed = 0;
+  for (const row of [...flagged, ...older]) {
+    const outcome = await alertDeliveryNeedsAttention(db, row, now);
+    if (outcome === "sent") mailed += 1;
+    if (outcome === "failed") failed += 1;
   }
-  for (const row of await claimUnmailedAlerts(db, now)) {
-    await alertDeliveryNeedsAttention(row);
-    mailed += 1;
-  }
-  return NextResponse.json({ ok: true, flagged: flagged.length, mailed });
+  return NextResponse.json({ ok: true, flagged: flagged.length, mailed, failed });
 }

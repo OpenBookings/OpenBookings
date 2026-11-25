@@ -400,8 +400,8 @@ describeWithDb("Apps API v1 routes", () => {
     expect(messages[0]!.options.tags).toEqual({ app: "siteminder", property_id: ids.propertyId });
   });
 
-  test("delivery: a failing mail does not turn the 204 into an error", async () => {
-    const { apiKey, ids } = await setup();
+  test("delivery: a failing mail does not turn the 204 into an error, and is not lost", async () => {
+    const { apiKey, ids, installation } = await setup();
     const mine = await confirmedBooking(ids, "2031-06-10");
     mailFails = true;
     const quiet = spyOn(console, "error").mockImplementation(() => undefined);
@@ -411,7 +411,25 @@ describeWithDb("Apps API v1 routes", () => {
     );
     expect(res.status).toBe(204);
     await settled();
-    quiet.mockRestore();
+    // Not lost: the claim is released for the watchdog's retry, and we hear about it once.
+    const row = async () =>
+      (await db.query(`SELECT mailed_at, mail_failed_at FROM app_booking_delivery WHERE booking_id = $1`, [mine])).rows[0] as {
+        mailed_at: Date | null;
+        mail_failed_at: Date | null;
+      };
+    expect((await row()).mailed_at).toBeNull();
+    expect((await row()).mail_failed_at).not.toBeNull();
     expect(messages).toHaveLength(1);
+
+    // The watchdog's retry fails again: quiet. Then the mail goes out.
+    const { alertDeliveryNeedsAttention } = await import("@/lib/apps/delivery-alert");
+    const alert = { installationId: installation.id, bookingId: mine, propertyId: ids.propertyId, appKey: "siteminder", detail: null };
+    expect(await alertDeliveryNeedsAttention(pool, alert, now)).toBe("failed");
+    expect(messages).toHaveLength(1);
+    mailFails = false;
+    expect(await alertDeliveryNeedsAttention(pool, alert, now)).toBe("sent");
+    expect(emails).toEqual([{ bookingId: mine, detail: null }]);
+    expect(await alertDeliveryNeedsAttention(pool, alert, now)).toBe("skipped");
+    quiet.mockRestore();
   });
 });

@@ -4,7 +4,7 @@ import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import { recordDelivery } from "./delivery";
 import { connectApp, disconnectApp, type Installation } from "./installations";
-import { claimAlert, claimUnmailedAlerts, flagUnconfirmedDeliveries } from "./watchdog";
+import { claimAlert, flagUnconfirmedDeliveries, releaseAlert, unmailedAlerts } from "./watchdog";
 
 const NOW = new Date("2031-05-01T12:00:00Z");
 const MINUTE = 60_000;
@@ -119,7 +119,7 @@ describeWithDb("delivery watchdog", () => {
     expect(await claim()).toBe(true);
   });
 
-  test("an unmailed needs_attention row is claimed once, after the route's grace, only for active installations", async () => {
+  test("unmailed needs_attention rows are listed after the route's grace, only for active installations, up to the limit", async () => {
     const stale = await booking({ eventAt: ago(40), row: "needs_attention" }); // updated an hour ago, never mailed
     const fresh = await booking({ eventAt: ago(40) });
     await db.query(`INSERT INTO app_booking_delivery (installation_id, booking_id, status, updated_at) VALUES ($1, $2, 'needs_attention', $3)`, [
@@ -129,14 +129,29 @@ describeWithDb("delivery watchdog", () => {
     ]);
     const mailed = await booking({ eventAt: ago(40), row: "needs_attention" });
     await claimAlert(db, { installationId: installation.id, bookingId: mailed, now: ago(30) });
+    const another = await booking({ eventAt: ago(40), row: "needs_attention" });
 
-    const claimed = await claimUnmailedAlerts(db, NOW);
-    expect(claimed.map((c) => c.bookingId)).toEqual([stale]);
-    expect(claimed[0]).toMatchObject({ propertyId: ids.propertyId, appKey: "siteminder" });
-    expect(await claimUnmailedAlerts(db, NOW)).toEqual([]);
+    const listed = await unmailedAlerts(db, NOW, 10);
+    expect(listed.map((c) => c.bookingId).sort()).toEqual([stale, another].sort());
+    expect(listed[0]).toMatchObject({ propertyId: ids.propertyId, appKey: "siteminder" });
+    expect(await unmailedAlerts(db, NOW, 1)).toHaveLength(1);
+    // Listing claims nothing: each row is claimed right before its mail.
+    expect(await claimAlert(db, { installationId: installation.id, bookingId: stale, now: NOW })).toBe(true);
+    expect((await unmailedAlerts(db, NOW, 10)).map((c) => c.bookingId)).toEqual([another]);
 
-    await db.query(`UPDATE app_booking_delivery SET mailed_at = NULL WHERE booking_id = $1`, [stale]);
     await disconnectApp(db, { installationId: installation.id, now: NOW });
-    expect(await claimUnmailedAlerts(db, NOW)).toEqual([]);
+    expect(await unmailedAlerts(db, NOW, 10)).toEqual([]);
+  });
+
+  test("a failed mail releases the claim for a retry; only the first failure says so", async () => {
+    const id = await booking({ eventAt: ago(40), row: "needs_attention" });
+    const key = { installationId: installation.id, bookingId: id, now: NOW };
+    expect(await claimAlert(db, key)).toBe(true);
+    expect(await releaseAlert(db, key)).toBe(true); // first failure
+    expect((await unmailedAlerts(db, NOW, 10)).map((c) => c.bookingId)).toEqual([id]);
+    expect(await claimAlert(db, key)).toBe(true);
+    expect(await releaseAlert(db, key)).toBe(false); // again: quiet
+    expect(await claimAlert(db, key)).toBe(true); // and then it went out: stays claimed
+    expect(await claimAlert(db, key)).toBe(false);
   });
 });
