@@ -21,6 +21,7 @@ describe("ringDoorbell", () => {
     expect(calls[0]!.init.method).toBe("POST");
     expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe("Bearer tok_123");
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ installationId: "inst-1" });
+    expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal);
   });
 
   test("throws on a non-2xx response", async () => {
