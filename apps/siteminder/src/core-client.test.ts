@@ -73,7 +73,9 @@ describe("coreClient", () => {
       [413, false, "too_large"],
       [500, true, "server"],
       [502, true, "server"],
-      [503, true, "conflict"],
+      [503, true, "unavailable"],
+      [408, true, "unavailable"],
+      [429, true, "unavailable"],
     ];
     for (const [status, retryable, kind] of cases) {
       const e = await failure(coreClient(inst, fake(status, { error: "x" }).fetchImpl).writeAri(batch));
@@ -87,6 +89,26 @@ describe("coreClient", () => {
     }) as unknown as typeof fetch;
     const e = await failure(coreClient(inst, boom).changes(null));
     expect(`${e.kind}/${e.retryable}/${e.status}`).toBe("network/true/null");
+  });
+
+  it("a body that stops arriving (timeout, abort, dropped connection) is a retryable network failure", async () => {
+    const stalled = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new DOMException("The operation timed out.", "TimeoutError"));
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    const e = await failure(coreClient(inst, stalled).writeAri(batch));
+    expect(`${e.kind}/${e.retryable}`).toBe("network/true");
+  });
+
+  it("a complete body that is not JSON is an invalid response", async () => {
+    const html = (async () => new Response("<html>", { status: 200 })) as unknown as typeof fetch;
+    const e = await failure(coreClient(inst, html).writeAri(batch));
+    expect(`${e.kind}/${e.retryable}`).toBe("invalid_response/false");
   });
 
   it("changes sends cursor and limit, and validates the page", async () => {

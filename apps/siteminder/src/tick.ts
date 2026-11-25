@@ -61,6 +61,10 @@ export const DEFAULT_BUDGET_MS = 120_000;
 // A lease outlives any single call out (core or SiteMinder); it is renewed before each one.
 const LEASE_MS = Math.max(CORE_TIMEOUT_MS, SITEMINDER_TIMEOUT_MS) + 60_000;
 const MESSAGES_PER_ROUND = 200;
+/** Retryable failures of a merged batch before its messages go one at a time. */
+export const UNMERGE_AFTER_FAILURES = 3;
+/** A message that keeps failing is alerted about at the ALERT_AFTER_FAILURES-th failure, then at most this often. */
+const REALERT_MS = 60 * 60_000;
 
 export function defaultTickDeps(): TickDeps {
   return {
@@ -176,8 +180,11 @@ async function send(client: ReturnType<typeof coreClient>, pack: Pack): Promise<
     if (result.ok) return { ok: true };
     return { ok: false, retryable: false, error: `${result.error}: ${result.unknownCodes.join(", ")}`, unknownCodes: result.unknownCodes };
   } catch (e) {
-    // Anything but a known permanent answer may pass: try again.
-    return { ok: false, retryable: e instanceof CoreApiError ? e.retryable : true, error: errorText(e) };
+    // Core refuses a batch for good only with a 400 (and a 422, answered above). Anything else (a revoked or
+    // not yet active key, a 404 from a deploy in progress, throttling, 5xx, timeouts, a garbled reply) is the
+    // infrastructure, not the data: keep the message and try again.
+    const permanent = e instanceof CoreApiError && e.status === 400;
+    return { ok: false, retryable: !permanent, error: errorText(e) };
   }
 }
 
@@ -202,6 +209,9 @@ async function drain(deps: TickDeps, inst: AppInstallation, token: string, budge
       await deps.sleep(wait);
       continue;
     }
+    // A merged batch that keeps failing may hold one bad message: send them one at a time, so the ones before it
+    // go in and the failures point at the culprit.
+    if (head.attempts >= UNMERGE_AFTER_FAILURES) merge = false;
     const notDue = messages.findIndex((m) => m.nextAttemptAt !== null && m.nextAttemptAt > now);
     const due = notDue === -1 ? messages : messages.slice(0, notDue);
 
@@ -228,10 +238,13 @@ async function drain(deps: TickDeps, inst: AppInstallation, token: string, budge
         else alert("error", "core refused an inbox message for good; it will not be retried", extra);
         break;
       }
-      const attempts = Math.max(...due.filter((m) => pack.messageIds.includes(m.id)).map((m) => m.attempts)) + 1;
+      const inPack = due.filter((m) => pack.messageIds.includes(m.id));
+      const attempts = Math.max(...inPack.map((m) => m.attempts)) + 1;
       const delaySeconds = retryDelaySeconds(attempts);
-      await scheduleRetry(deps.db, pack.messageIds, outcome.error, new Date(at.getTime() + delaySeconds * 1000));
-      if (attempts === ALERT_AFTER_FAILURES) {
+      const lastAlert = Math.max(0, ...inPack.map((m) => m.alertedAt?.getTime() ?? 0));
+      const alertNow = attempts >= ALERT_AFTER_FAILURES && at.getTime() - lastAlert >= REALERT_MS;
+      await scheduleRetry(deps.db, pack.messageIds, outcome.error, new Date(at.getTime() + delaySeconds * 1000), alertNow ? at : undefined);
+      if (alertNow) {
         alert("error", `inbox message failed ${attempts} times; still retrying every ${delaySeconds} s`, { ...context, messageIds: pack.messageIds, error: outcome.error });
       }
       break;

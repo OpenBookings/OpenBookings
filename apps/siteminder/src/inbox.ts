@@ -24,22 +24,30 @@ export async function storeInbound(
   return rows.length > 0 ? "stored" : "duplicate";
 }
 
-export type PendingMessage = { id: string; changes: InboxChanges; receivedAt: Date; attempts: number; nextAttemptAt: Date | null };
+export type PendingMessage = {
+  id: string;
+  changes: InboxChanges;
+  receivedAt: Date;
+  attempts: number;
+  nextAttemptAt: Date | null;
+  /** When we last alerted about this message failing (null: never). */
+  alertedAt: Date | null;
+};
 
-type PendingRow = { id: string; changes: InboxChanges | null; received_at: Date; attempts: number; next_attempt_at: Date | null };
+type PendingRow = { id: string; changes: InboxChanges | null; received_at: Date; attempts: number; next_attempt_at: Date | null; alerted_at: Date | null };
 
 /** The installation's unprocessed messages, oldest first. */
 export async function pendingMessages(db: Queryable, installationId: string, limit: number): Promise<PendingMessage[]> {
   const { rows } = await db.query<PendingRow>(
     // Order by the bigint column, not the text alias (which would sort "10" before "9").
-    `SELECT b.id::text AS id, b.changes, b.received_at, b.attempts, b.next_attempt_at
+    `SELECT b.id::text AS id, b.changes, b.received_at, b.attempts, b.next_attempt_at, b.alerted_at
        FROM siteminder.inbox b
       WHERE b.installation_id = $1 AND b.processed_at IS NULL
       ORDER BY b.id
       LIMIT $2`,
     [installationId, limit],
   );
-  return rows.map((r) => ({ id: r.id, changes: r.changes ?? {}, receivedAt: r.received_at, attempts: r.attempts, nextAttemptAt: r.next_attempt_at }));
+  return rows.map((r) => ({ id: r.id, changes: r.changes ?? {}, receivedAt: r.received_at, attempts: r.attempts, nextAttemptAt: r.next_attempt_at, alertedAt: r.alerted_at }));
 }
 
 /** Whether the installation's oldest unprocessed message may be sent now (not waiting for a retry). */
@@ -68,10 +76,12 @@ export async function markFailed(db: Queryable, ids: string[], error: string, no
   );
 }
 
-export async function scheduleRetry(db: Queryable, ids: string[], error: string, nextAttemptAt: Date): Promise<void> {
+/** One more failure; `alertedAt` records an alert sent about it. */
+export async function scheduleRetry(db: Queryable, ids: string[], error: string, nextAttemptAt: Date, alertedAt?: Date): Promise<void> {
   await db.query(
-    `UPDATE siteminder.inbox SET attempts = attempts + 1, last_error = $2, next_attempt_at = $3 WHERE id = ANY($1::bigint[])`,
-    [ids, error, nextAttemptAt.toISOString()],
+    `UPDATE siteminder.inbox SET attempts = attempts + 1, last_error = $2, next_attempt_at = $3, alerted_at = COALESCE($4, alerted_at)
+      WHERE id = ANY($1::bigint[])`,
+    [ids, error, nextAttemptAt.toISOString(), alertedAt?.toISOString() ?? null],
   );
 }
 

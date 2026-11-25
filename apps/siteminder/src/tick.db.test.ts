@@ -187,7 +187,7 @@ describe.skipIf(skipDbTests)("tick (rolled back)", () => {
       await upsertInstallation(db, reg);
       const clock = fakeClock();
       await queue(db, { inventory: [inv("RA")] }, T0);
-      const down = () => new CoreApiError("core /ari answered 503", "conflict", 503, true);
+      const down = () => new CoreApiError("core /ari answered 503", "unavailable", 503, true);
       const core = fakeCore([down(), down(), down(), down(), down()]);
 
       // 0 s fails, waits 5 s, fails, waits 15 s, fails; the 30 s wait would use up the rest of the 50 s budget.
@@ -235,20 +235,88 @@ describe.skipIf(skipDbTests)("tick (rolled back)", () => {
     });
   });
 
-  it("a permanent error (401) marks the message failed and alerts, never retrying it", async () => {
+  it("a 400 is permanent: the message is marked failed and alerts, never retried", async () => {
     await withTestDb(async (db) => {
       clearLogs();
       await upsertInstallation(db, reg);
       const clock = fakeClock();
       await queue(db, { inventory: [inv("RA")] }, T0);
-      const core = fakeCore([new CoreApiError("core /ari answered 401", "unauthorized", 401, false)]);
+      const core = fakeCore([new CoreApiError("core /ari answered 400", "bad_request", 400, false)]);
 
       expect(await tick(deps(db, core, clock), SHORT)).toEqual({ inboxApplied: 0, inboxFailed: 1 });
-      expect(await inbox(db)).toMatchObject([{ processed_at: T0, last_error: "core /ari answered 401" }]);
+      expect(await inbox(db)).toMatchObject([{ processed_at: T0, last_error: "core /ari answered 400" }]);
       expect(logged.error).toHaveLength(1);
       clock.advance(3_600_000);
       await tick(deps(db, core, clock), SHORT);
       expect(core.calls).toHaveLength(1);
+    });
+  });
+
+  it("infrastructure failures (401, 403, 404, 408, 429, 5xx, network, invalid reply) keep the message and retry it", async () => {
+    const failures = [
+      new CoreApiError("core /ari answered 401", "unauthorized", 401, false),
+      new CoreApiError("core /ari answered 403", "bad_request", 403, false),
+      new CoreApiError("core /ari answered 404", "bad_request", 404, false),
+      new CoreApiError("core /ari answered 408", "unavailable", 408, true),
+      new CoreApiError("core /ari answered 429", "unavailable", 429, true),
+      new CoreApiError("core /ari answered 502", "server", 502, true),
+      new CoreApiError("core /ari unreachable", "network", null, true),
+      new CoreApiError("core /ari sent a malformed reply", "invalid_response", 200, false),
+    ];
+    for (const failure of failures) {
+      await withTestDb(async (db) => {
+        await upsertInstallation(db, reg);
+        const clock = fakeClock();
+        await queue(db, { inventory: [inv("RA")] }, T0);
+        const core = fakeCore([failure]);
+        expect(await tick(deps(db, core, clock), SHORT)).toEqual({ inboxApplied: 0, inboxFailed: 1 });
+        expect(await inbox(db)).toMatchObject([{ processed_at: null, attempts: 1, last_error: failure.message }]);
+        clock.advance(5_000);
+        expect(await tick(deps(db, core, clock), SHORT)).toEqual({ inboxApplied: 1, inboxFailed: 0 });
+      });
+    }
+  });
+
+  it("alerts at the 5th failure in a row, then at most once an hour, not on every retry", async () => {
+    await withTestDb(async (db) => {
+      clearLogs();
+      await upsertInstallation(db, reg);
+      const clock = fakeClock();
+      await queue(db, { inventory: [inv("RA")] }, T0);
+      const core = fakeCore(Array.from({ length: 200 }, () => new CoreApiError("core /ari answered 500", "server", 500, true)));
+      const failedAlerts = () => logged.error.filter((args) => String(args[0]).includes("inbox message failed")).length;
+
+      // 70 failures, one a minute (the 60 s retry): one alert at the 5th, the next an hour later.
+      for (let i = 0; i < 70; i++) {
+        await tick(deps(db, core, clock), SHORT);
+        clock.advance(60_000);
+      }
+      expect((await inbox(db))[0]!.attempts).toBe(70);
+      expect(failedAlerts()).toBe(2);
+    });
+  });
+
+  it("a merged batch that keeps failing is sent message by message after 3 tries, so the messages before a bad one go in", async () => {
+    await withTestDb(async (db) => {
+      await upsertInstallation(db, reg);
+      const clock = fakeClock();
+      await queue(db, { inventory: [inv("RA")] }, T0);
+      await queue(db, { inventory: [inv("RBAD")] }, T0);
+      await queue(db, { inventory: [inv("RC")] }, T0);
+      const core = fakeCore(Array.from({ length: 20 }, () => async (b: AriBatch): Promise<AriResult> => {
+        if (b.inventory.some((c) => c.roomCode === "RBAD")) throw new CoreApiError("core /ari answered 500", "server", 500, true);
+        return { ok: true, nights: 1 };
+      }));
+
+      for (let i = 0; i < 3; i++) {
+        expect(await tick(deps(db, core, clock), SHORT)).toEqual({ inboxApplied: 0, inboxFailed: 3 });
+        clock.advance(60_000);
+      }
+      expect(core.calls.map(rooms)).toEqual([["RA", "RBAD", "RC"], ["RA", "RBAD", "RC"], ["RA", "RBAD", "RC"]]);
+
+      expect(await tick(deps(db, core, clock), SHORT)).toEqual({ inboxApplied: 1, inboxFailed: 1 });
+      expect(core.calls.slice(3).map(rooms)).toEqual([["RA"], ["RBAD"]]);
+      expect((await inbox(db)).map((r) => r.processed_at !== null)).toEqual([true, false, false]);
     });
   });
 

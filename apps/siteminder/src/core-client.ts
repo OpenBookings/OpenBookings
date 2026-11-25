@@ -12,7 +12,7 @@ import type { AppInstallation } from "./installations";
 
 export const CORE_TIMEOUT_MS = 15_000;
 
-export type CoreErrorKind = "unauthorized" | "bad_request" | "too_large" | "unknown_booking" | "conflict" | "server" | "network" | "invalid_response";
+export type CoreErrorKind = "unauthorized" | "bad_request" | "too_large" | "unknown_booking" | "unavailable" | "server" | "network" | "invalid_response";
 
 /** A failed Apps API call. `retryable` tells the caller whether trying again can help. */
 export class CoreApiError extends Error {
@@ -39,7 +39,8 @@ function statusError(status: number, path: string): CoreApiError {
   const msg = `core ${path} answered ${status}`;
   if (status === 401) return new CoreApiError(msg, "unauthorized", status, false);
   if (status === 413) return new CoreApiError(msg, "too_large", status, false);
-  if (status === 503) return new CoreApiError(msg, "conflict", status, true);
+  // Busy, throttled or slow: asking again later can help.
+  if (status === 408 || status === 429 || status === 503) return new CoreApiError(msg, "unavailable", status, true);
   if (status >= 500) return new CoreApiError(msg, "server", status, true);
   // 400, 404 and anything else unexpected: asking again unchanged will not help.
   return new CoreApiError(msg, "bad_request", status, false);
@@ -66,8 +67,15 @@ export function coreClient(inst: AppInstallation, fetchImpl: typeof fetch = fetc
   }
 
   async function json(res: Response, path: string): Promise<unknown> {
+    let text: string;
     try {
-      return await res.json();
+      text = await res.text();
+    } catch (e) {
+      // The body stopped arriving (timeout, abort, dropped connection): the answer never came, so try again.
+      throw new CoreApiError(`core ${path} reply cut off: ${e instanceof Error ? e.message : String(e)}`, "network", res.status, true);
+    }
+    try {
+      return JSON.parse(text);
     } catch {
       throw new CoreApiError(`core ${path} sent a body that is not JSON`, "invalid_response", res.status, false);
     }
