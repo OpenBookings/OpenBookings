@@ -22,8 +22,9 @@ const structure: AppStructure = {
 
 const ECHO = "ed8835ff-6198-4f38-b589-3058397f677c";
 const NOW = new Date("2031-03-01T10:00:00.000Z");
-const stay = (room: string, roomName: string, max: number, rate: string, rateName: string) =>
-  `<RoomStay><RoomTypes><RoomType RoomTypeCode="${room}"><RoomDescription Name="${roomName}"><Text>${roomName}</Text></RoomDescription><Occupancy AgeQualifyingCode="10" MaxOccupancy="${max}"/></RoomType></RoomTypes>` +
+// No Occupancy element: the docs mark it "Only for OBP", and we use Per Day Pricing.
+const stay = (room: string, roomName: string, rate: string, rateName: string) =>
+  `<RoomStay><RoomTypes><RoomType RoomTypeCode="${room}"><RoomDescription Name="${roomName}"><Text>${roomName}</Text></RoomDescription></RoomType></RoomTypes>` +
   `<RatePlans><RatePlan RatePlanCode="${rate}"><RatePlanDescription Name="${rateName}"><Text>${rateName}</Text></RatePlanDescription></RatePlan></RatePlans></RoomStay>`;
 
 describe("roomsAndRatesPayload", () => {
@@ -32,19 +33,12 @@ describe("roomsAndRatesPayload", () => {
     const expected =
       `<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"><SOAP-ENV:Header/><SOAP-ENV:Body>` +
       `<OTA_HotelAvailRS xmlns="http://www.opentravel.org/OTA/2003/05" EchoToken="${ECHO}" TimeStamp="2031-03-01T10:00:00Z" Version="1.0"><Success/><RoomStays>` +
-      stay("SGL", "Single Room", 2, "BAR", "Single Room – Best Available Rate") +
-      stay("SGL", "Single Room", 2, "NR", "Single Room – Non Refundable") +
-      stay("DBL", "Double Room", 3, "BAR", "Double Room – Best Available Rate") +
-      stay("DBL", "Double Room", 3, "BNB", "Double Room – Bed &amp; Breakfast") +
+      stay("SGL", "Single Room", "BAR", "Single Room – Best Available Rate") +
+      stay("SGL", "Single Room", "NR", "Single Room – Non Refundable") +
+      stay("DBL", "Double Room", "BAR", "Double Room – Best Available Rate") +
+      stay("DBL", "Double Room", "BNB", "Double Room – Bed &amp; Breakfast") +
       `</RoomStays></OTA_HotelAvailRS></SOAP-ENV:Body></SOAP-ENV:Envelope>`;
     expect(xml).toBe(expected);
-  });
-
-  it("keeps MaxOccupancy within 1..50", () => {
-    const big = { ...structure, rooms: [{ ...structure.rooms[0]!, maxAdults: 40, maxChildren: 30 }, { ...structure.rooms[1]!, maxAdults: 0, maxChildren: 0 }] };
-    const stays = (roomsAndRatesPayload(big).RoomStays as { RoomStay: { RoomTypes: { RoomType: { Occupancy: Record<string, number> } } }[] }).RoomStay;
-    expect(stays[0]!.RoomTypes.RoomType.Occupancy["@_MaxOccupancy"]).toBe(50);
-    expect(stays[2]!.RoomTypes.RoomType.Occupancy["@_MaxOccupancy"]).toBe(1);
   });
 
   it("lists no RoomStay for a room without rate plans", () => {

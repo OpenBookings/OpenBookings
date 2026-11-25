@@ -8,17 +8,13 @@ export const STRUCTURE_MAX_AGE_MS = 10 * 60 * 1000;
 /** SiteMinder waits on this reply (a hotelier is looking at the mapping screen): well inside its 1-2 s budget. */
 export const STRUCTURE_FETCH_TIMEOUT_MS = 1_500;
 
-// SiteMinder's own sample value for the occupancy element; MaxOccupancy accepts 1 to 50.
-const AGE_QUALIFYING_CODE = 10;
-const MAX_OCCUPANCY_LIMIT = 50;
-
 /**
  * The `RoomStays` content of `OTA_HotelAvailRS`. SiteMinder wants every room/rate combination in its own
- * `RoomStay`, with unique names, so a rate plan's name carries its room's name.
+ * `RoomStay`, with unique names, so a rate plan's name carries its room's name. No `Occupancy`: the docs mark it
+ * "Only for OBP" (reference_rooms-and-rates.md), and we use Per Day Pricing.
  */
 export function roomsAndRatesPayload(s: AppStructure): Record<string, unknown> {
   const stays = s.rooms.flatMap((room) => {
-    const maxOccupancy = Math.min(Math.max(room.maxAdults + room.maxChildren, 1), MAX_OCCUPANCY_LIMIT);
     return room.ratePlans.map((plan) => {
       const planName = `${room.name} – ${plan.name}`;
       return {
@@ -26,7 +22,6 @@ export function roomsAndRatesPayload(s: AppStructure): Record<string, unknown> {
           RoomType: {
             "@_RoomTypeCode": room.code,
             RoomDescription: { "@_Name": room.name, Text: room.name },
-            Occupancy: { "@_AgeQualifyingCode": AGE_QUALIFYING_CODE, "@_MaxOccupancy": maxOccupancy },
           },
         },
         RatePlans: {
