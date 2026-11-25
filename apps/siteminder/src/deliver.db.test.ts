@@ -85,6 +85,8 @@ function fakeCore() {
   const reports: { bookingId: string; report: DeliveryReport }[] = [];
   let failures = 0;
   const tried = { calls: 0 };
+  /** Bookings the hotel chose not to send: core answers 409 not_sent. */
+  const notSent = new Set<string>();
   const client = () =>
     ({
       reportDelivery: async (bookingId: string, report: DeliveryReport) => {
@@ -93,10 +95,12 @@ function fakeCore() {
           failures -= 1;
           throw new CoreApiError("core /bookings/:bookingId/delivery answered 500", "server", 500, true);
         }
+        if (notSent.has(bookingId)) return "not_sent";
         reports.push({ bookingId, report });
+        return "stored";
       },
     }) as unknown as CoreClient;
-  return { reports, client, tried, failNext: (n: number) => { failures += n; } };
+  return { reports, client, tried, notSent, failNext: (n: number) => { failures += n; } };
 }
 
 type Row = {
@@ -130,6 +134,7 @@ const logged = { error: [] as unknown[][], warn: [] as unknown[][] };
 const spies = [
   spyOn(console, "error").mockImplementation((...args: unknown[]) => { logged.error.push(args); }),
   spyOn(console, "warn").mockImplementation((...args: unknown[]) => { logged.warn.push(args); }),
+  spyOn(console, "info").mockImplementation(() => {}),
 ];
 afterAll(() => { for (const s of spies) s.mockRestore(); });
 const clearLogs = () => { logged.error.length = 0; logged.warn.length = 0; };
@@ -665,6 +670,27 @@ describe.skipIf(skipDbTests)("deliver bookings to SiteMinder (rolled back)", () 
       expect(core.reports).toEqual([{ bookingId: B1, report: { status: "delivered", acknowledgedAt: T0.toISOString(), detail: null, version: 1 } }]);
       expect(await rowOf(db)).toMatchObject({ report_pending: false });
       expect(sm.received).toHaveLength(1);
+    });
+  });
+
+  it("core answers not_sent: the outbox row becomes not_sent and nothing more is sent for it", async () => {
+    await withTestDb(async (db) => {
+      const inst = await setup(db);
+      const core = fakeCore();
+      core.notSent.add(B1);
+      const clock = fakeClock();
+      await upsertFromFeed(db, inst, booking(B1, 1), T0);
+
+      await run(mkDeps(db, core, clock));
+      expect(await rowOf(db)).toMatchObject({ status: "not_sent", report_pending: false });
+      expect(sm.received).toHaveLength(1);
+
+      // A later change is not sent either.
+      clock.t += 60_000;
+      await upsertFromFeed(db, inst, booking(B1, 2), clock.now());
+      expect(await run(mkDeps(db, core, clock))).toEqual({ delivered: 0, retrying: 0, needsAttention: 0 });
+      expect(sm.received).toHaveLength(1);
+      expect(await rowOf(db)).toMatchObject({ status: "not_sent" });
     });
   });
 

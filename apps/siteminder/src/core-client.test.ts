@@ -129,6 +129,10 @@ describe("coreClient", () => {
     const e = await failure(coreClient(inst, fake(404, { error: "x" }).fetchImpl).reportDelivery("b-1", report));
     expect(e).toBeInstanceOf(UnknownBookingError);
     expect(e.retryable).toBe(false);
+    expect(await coreClient(inst, fake(204).fetchImpl).reportDelivery("b-1", report)).toBe("stored");
+    expect(await coreClient(inst, fake(409, { status: "not_sent" }).fetchImpl).reportDelivery("b-1", report)).toBe("not_sent");
+    const conflict = await failure(coreClient(inst, fake(409, { error: "x" }).fetchImpl).reportDelivery("b-1", report));
+    expect(conflict.retryable).toBe(false);
     const bad = await failure(coreClient(inst, fake(400, {}).fetchImpl).reportDelivery("b-1", report));
     expect(bad).not.toBeInstanceOf(UnknownBookingError);
     expect(bad.retryable).toBe(false);

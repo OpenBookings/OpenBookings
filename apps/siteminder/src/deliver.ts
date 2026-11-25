@@ -334,7 +334,16 @@ async function sendReport(ctx: Ctx, bookingId: string, report: DeliveryReport): 
   if (ctx.coreDown || !(await ctx.renew(0))) return false;
   const context = { installationId: ctx.inst.id, propertyCode: ctx.inst.propertyCode, bookingId, report };
   try {
-    await ctx.client.reportDelivery(bookingId, report);
+    if ((await ctx.client.reportDelivery(bookingId, report)) === "not_sent") {
+      // The hotel chose not to send this booking (it typed it in by hand): stop, for this and every later version.
+      await ctx.deps.db.query(
+        `UPDATE siteminder.outbox SET status = 'not_sent', report_pending = false, next_attempt_at = NULL, claim_token = NULL
+          WHERE installation_id = $1 AND booking_id = $2`,
+        [ctx.inst.id, bookingId],
+      );
+      console.info("[siteminder] core says this booking is not sent to SiteMinder; stopped delivering it", context);
+      return true;
+    }
   } catch (e) {
     // Core will never take this one (unknown booking, refused body): drop it rather than retry for ever.
     const never = e instanceof UnknownBookingError || (e instanceof CoreApiError && e.kind === "bad_request");

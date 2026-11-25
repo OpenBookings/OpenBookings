@@ -11,8 +11,9 @@ const MAX_BODY_BYTES = 64 * 1024;
 
 /**
  * The app's latest word on one booking: 204 when stored (or ignored, for a
- * stale report or a booking the hotel chose not to send), 404 for a booking
- * that is not this property's (whether it exists elsewhere is not revealed).
+ * stale report), 409 {status: "not_sent"} for a booking the hotel chose not to
+ * send (the app stops delivering it), 404 for a booking that is not this
+ * property's (whether it exists elsewhere is not revealed).
  */
 export async function PUT(request: Request, context: { params: Promise<{ bookingId: string }> }) {
   const installation = await authenticateApp(request);
@@ -33,6 +34,8 @@ export async function PUT(request: Request, context: { params: Promise<{ booking
   // The booking row is locked FOR SHARE, so this runs in a transaction.
   const result = await withTransaction((tx) => recordDelivery(tx, installation, bookingId, parsed.data, new Date()));
   if (result.result === "unknown-booking") return appsJson({ error: "not found" }, 404);
+  // The hotel chose not to send this booking (spec §3b): tell the app to stop.
+  if (result.previousStatus === "not_sent") return appsJson({ status: "not_sent" }, 409);
   // Only the move into needs_attention alerts: a repeated report, or one the
   // store ignored, leaves the status as it was. After the commit, never inside
   // it, and after the 204 is on its way (the mail transport has no deadline).

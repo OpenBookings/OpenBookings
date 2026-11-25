@@ -352,6 +352,19 @@ describeWithDb("Apps API v1 routes", () => {
     expect((await db.query(`SELECT 1 FROM app_booking_delivery WHERE booking_id = $1`, [theirs])).rows).toHaveLength(0);
   });
 
+  test("delivery: a report on a booking the hotel chose not to send is answered 409 not_sent, and stored nothing", async () => {
+    const { apiKey, ids, installation } = await setup();
+    const mine = await confirmedBooking(ids, "2031-06-10");
+    await db.query(`INSERT INTO app_booking_delivery (installation_id, booking_id, status) VALUES ($1, $2, 'not_sent')`, [installation.id, mine]);
+    const res = await delivery.PUT(
+      req(`/bookings/${mine}/delivery`, { method: "PUT", key: apiKey, body: report({ status: "delivered", acknowledgedAt: "2031-03-01T11:00:00Z" }) }),
+      ctx(mine),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ status: "not_sent" });
+    expect((await db.query(`SELECT status FROM app_booking_delivery WHERE booking_id = $1`, [mine])).rows[0]).toEqual({ status: "not_sent" });
+  });
+
   test("delivery refuses an invalid report with 400 and the first issue", async () => {
     const { apiKey, ids } = await setup();
     const mine = await confirmedBooking(ids, "2031-06-10");

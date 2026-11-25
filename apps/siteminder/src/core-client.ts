@@ -2,6 +2,7 @@ import {
   AppStructureSchema,
   AriResultSchema,
   BookingChangesPageSchema,
+  DeliveryNotSentSchema,
   type AppStructure,
   type AriBatch,
   type AriResult,
@@ -115,11 +116,17 @@ export function coreClient(inst: AppInstallation, fetchImpl: typeof fetch = fetc
       return parse(BookingChangesPageSchema, await json(res, path), "/bookings/changes", res.status);
     },
 
-    async reportDelivery(bookingId: string, report: DeliveryReport): Promise<void> {
+    /** "not_sent": core answered 409, the hotel chose not to send this booking; stop delivering it. */
+    async reportDelivery(bookingId: string, report: DeliveryReport): Promise<"stored" | "not_sent"> {
       const path = `/bookings/${encodeURIComponent(bookingId)}/delivery`;
       const res = await call(path, { method: "PUT", body: report });
       if (res.status === 404) throw new UnknownBookingError(bookingId);
+      if (res.status === 409) {
+        parse(DeliveryNotSentSchema, await json(res, path), "/bookings/:bookingId/delivery", res.status);
+        return "not_sent";
+      }
       if (!res.ok) throw statusError(res.status, "/bookings/:bookingId/delivery");
+      return "stored";
     },
   };
 }

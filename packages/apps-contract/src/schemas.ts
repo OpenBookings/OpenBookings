@@ -186,6 +186,14 @@ export const DeliveryReportSchema = z.object({
 });
 export type DeliveryReport = z.infer<typeof DeliveryReportSchema>;
 
+/**
+ * The 409 answer to a DeliveryReport on a booking the hotel chose not to send
+ * to the channel (connected with "send upcoming bookings" unticked): the app
+ * stops delivering it.
+ */
+export const DeliveryNotSentSchema = z.object({ status: z.literal("not_sent") });
+export type DeliveryNotSent = z.infer<typeof DeliveryNotSentSchema>;
+
 export const InstallationRegistrationSchema = z.object({
   installationId: z.string(),
   propertyCode: z.string(),
