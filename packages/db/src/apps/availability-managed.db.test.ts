@@ -288,6 +288,22 @@ describeWithDb("availability on an app-managed property", () => {
     }
   });
 
+  test("guest search's role (ob_web, row-level security on, nobody signed in) still sees the property as managed", async () => {
+    // The guest cannot read app_installations; the managed check must not fail open to our own stock (5 units).
+    await push({ unitsLeft: 2, receivedAt: ago(60) });
+    await db.query(`SET LOCAL ROLE ob_web`);
+    try {
+      const room = await stay();
+      expect(room.unitsLeft).toBe(2);
+      expect(room.ratePlans[0]!.reasons).toEqual([]);
+      const unpriced = await stay({ checkIn: "2031-11-20", checkOut: "2031-11-21" });
+      expect(unpriced.unitsLeft).toBe(0);
+      expect(unpriced.ratePlans[0]!.reasons).toEqual(["rate_closed"]);
+    } finally {
+      await db.query("RESET ROLE");
+    }
+  });
+
   test("a delivery row of another installation does not settle a booking", async () => {
     await push({ unitsLeft: 2, receivedAt: ago(60) });
     const bookingId = await confirmedBooking();

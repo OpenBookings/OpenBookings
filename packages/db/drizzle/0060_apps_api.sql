@@ -221,12 +221,32 @@ CREATE TRIGGER app_delivery_booking_changed AFTER INSERT ON booking_events
   EXECUTE FUNCTION app.app_delivery_booking_changed();
 
 -- ---------------------------------------------------------------------------
+-- Is a property managed by an app?
+-- ---------------------------------------------------------------------------
+
+-- Search, the quote and the host grid all ask this (MANAGED_PROPERTY_SQL in
+-- packages/db/src/apps/managed-sql.ts). Under row-level security a guest
+-- (ob_web) cannot read app_installations, and a plain EXISTS would then say
+-- "not managed" and sell from the hotel's own stock and prices: failing open.
+-- SECURITY DEFINER answers the one yes/no and reveals nothing else.
+CREATE OR REPLACE FUNCTION app.app_property_is_managed(p_property_id uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.app_installations ai
+     WHERE ai.property_id = p_property_id AND ai.status = 'active'
+  )
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Privileges and row-level security (same form as 0049/0057)
 -- ---------------------------------------------------------------------------
 
 REVOKE ALL ON FUNCTION app.channel_code_default(), app.channel_code_immutable() FROM PUBLIC;
 -- A trigger function runs whoever inserts; nobody calls it directly.
 REVOKE ALL ON FUNCTION app.app_delivery_booking_changed() FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.app_property_is_managed(uuid) FROM PUBLIC;
 
 DO $$
 DECLARE r text;
@@ -234,6 +254,13 @@ BEGIN
   FOREACH r IN ARRAY ARRAY['ob_app', 'ob_auth', 'ob_system'] LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
       EXECUTE format('GRANT EXECUTE ON FUNCTION app.channel_code_default(), app.channel_code_immutable() TO %I', r);
+    END IF;
+  END LOOP;
+  -- Everyone who prices or counts a stay: guests and hosts (ob_app, so
+  -- ob_web and ob_business), the system, and the admin console.
+  FOREACH r IN ARRAY ARRAY['ob_app', 'ob_system', 'ob_admin_read', 'ob_admin_write'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION app.app_property_is_managed(uuid) TO %I', r);
     END IF;
   END LOOP;
 

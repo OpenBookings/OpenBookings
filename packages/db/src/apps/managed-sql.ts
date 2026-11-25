@@ -17,12 +17,13 @@
  * tests decide what time it is; it is never SQL now() there.
  */
 
-/** Boolean: the room's property has an active app installation. */
-export const MANAGED_PROPERTY_SQL = `EXISTS (
-    SELECT 1 FROM app_installations ai
-    WHERE ai.property_id = r.property_id
-      AND ai.status = 'active'
-  )`;
+/**
+ * Boolean: the room's property has an active app installation. Through 0060's
+ * SECURITY DEFINER `app.app_property_is_managed`, so it holds under row-level
+ * security too: a guest (ob_web) cannot read app_installations, and a plain
+ * EXISTS would fail open to the hotel's own stock and prices.
+ */
+export const MANAGED_PROPERTY_SQL = `app.app_property_is_managed(r.property_id)`;
 
 /**
  * CTE body: (room_id, date, units) — per room and night, our reservations the
