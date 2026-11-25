@@ -9,15 +9,21 @@ description: The apps in the monorepo, where they run locally and in their image
 | Host dashboard | `@openbookings/business` | `http://business.localhost:3001` | 8081 | yes |
 | Support bot | `@openbookings/support-bot` | `http://localhost:3003` | 8080 | yes |
 | Docs | `@openbookings/docs` | `http://localhost:3004` | 8082 | yes |
+| SiteMinder app | `@openbookings/siteminder` | `http://localhost:3004` | 8080 | optional, not yet |
 | Admin console | `@openbookings/admin` | `http://127.0.0.1:3005` | — | never |
 | Invoice job | `@openbookings/invoice-job` | — (a CLI) | — | as a scheduled job |
 | Test database | — | `postgres://…@127.0.0.1:5433/openbookings` | — | never |
+
+The docs site and the SiteMinder app both use port 3004 locally: run one at a time. The SiteMinder
+app is optional; see [Environment variables](/self-hosted/reference/environment-variables#siteminder-app).
+It has its own Postgres database and talks to core only through the Apps API.
 
 ## Shared packages
 
 | Package | What it holds |
 | --- | --- |
 | `@openbookings/db` | The Postgres pool, Drizzle schema, migrations, booking lifecycle and the test harness |
+| `@openbookings/apps-contract` | The Apps API's request and response shapes, shared by core and the SiteMinder app (the app may use no other core package) |
 | `@openbookings/auth` | Better Auth for both portals: magic links, passkeys, two-factor, social sign-in |
 | `@openbookings/authz` | Tenant isolation: who may see or change which organisation, property, room or rate |
 | `@openbookings/pricing` | Rates, availability, cancellation policy and tourist tax maths |

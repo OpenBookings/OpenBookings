@@ -9,27 +9,29 @@
 -- STRIPE_CONNECT_ACCOUNT_ID on the Amsterdam hotel when it is set, so that
 -- hotel can take a test-mode payment.
 -- Images are the public backdrops the demo hotels use.
+-- Channel codes (what SiteMinder maps to) are set by hand: the default is
+-- taken from the start of the id, and the seed ids all start the same.
 
 INSERT INTO properties
   (id, name, slug, subtitle, address_line_1, postal_code, city, country, timezone, location,
    check_in_time, check_in_until, check_out_time, is_active, cancellation_tier,
-   organization_id, owner_user_id, stripe_account_id, created_at)
+   organization_id, owner_user_id, stripe_account_id, created_at, channel_code)
 VALUES
   ('5eed1000-0000-4000-8000-000000000001', 'Canal Lantern Hotel', 'canal-lantern-hotel',
    'A canal house hotel in the Jordaan', 'Testgracht 1', '1015 AA', 'Amsterdam', 'NL', 'Europe/Amsterdam',
    ST_SetSRID(ST_MakePoint(4.8840, 52.3738), 4326)::geography,
    '15:00', '23:00', '11:00', true, 'flex',
-   'seed-org-lantern', 'seed-user-owner', 'acct_seed_canal_lantern', now() - interval '118 days'),
+   'seed-org-lantern', 'seed-user-owner', 'acct_seed_canal_lantern', now() - interval '118 days', 'OBSEED000001'),
   ('5eed1000-0000-4000-8000-000000000002', 'Dom Garden Suites', 'dom-garden-suites',
    'Suites in the shadow of the Dom tower', 'Testplein 2', '3512 AA', 'Utrecht', 'NL', 'Europe/Amsterdam',
    ST_SetSRID(ST_MakePoint(5.1214, 52.0907), 4326)::geography,
    '14:00', '22:00', '11:00', true, 'standard',
-   'seed-org-lantern', 'seed-user-owner', 'acct_seed_dom_garden', now() - interval '110 days'),
+   'seed-org-lantern', 'seed-user-owner', 'acct_seed_dom_garden', now() - interval '110 days', 'OBSEED000002'),
   ('5eed1000-0000-4000-8000-000000000003', 'Singel Loft House', 'singel-loft-house',
    NULL, 'Testsingel 3', '1012 AA', 'Amsterdam', 'NL', 'Europe/Amsterdam',
    ST_SetSRID(ST_MakePoint(4.8900, 52.3700), 4326)::geography,
    '15:00', NULL, '10:00', false, 'standard',
-   'seed-org-lantern', 'seed-user-owner', NULL, now() - interval '5 days')
+   'seed-org-lantern', 'seed-user-owner', NULL, now() - interval '5 days', 'OBSEED000003')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO property_content
@@ -71,20 +73,20 @@ ON CONFLICT DO NOTHING;
 -- Rooms. total_units is how many identical rooms of the type exist.
 INSERT INTO rooms
   (id, property_id, name, description, room_type, bed_type, size_sqm,
-   max_adults, max_children, base_occupancy, total_units, sort_order, is_active)
+   max_adults, max_children, base_occupancy, total_units, sort_order, is_active, channel_code)
 VALUES
   ('5eed2000-0000-4000-8000-000000000001', '5eed1000-0000-4000-8000-000000000001',
-   'Classic Double', 'A quiet room on the courtyard side.', 'double', 'Queen bed', 18, 2, 1, 2, 8, 0, true),
+   'Classic Double', 'A quiet room on the courtyard side.', 'double', 'Queen bed', 18, 2, 1, 2, 8, 0, true, 'RSEED0000001'),
   ('5eed2000-0000-4000-8000-000000000002', '5eed1000-0000-4000-8000-000000000001',
-   'Canal View Double', 'Two tall windows over the canal.', 'double', 'King bed', 24, 2, 1, 2, 4, 1, true),
+   'Canal View Double', 'Two tall windows over the canal.', 'double', 'King bed', 24, 2, 1, 2, 4, 1, true, 'RSEED0000002'),
   ('5eed2000-0000-4000-8000-000000000003', '5eed1000-0000-4000-8000-000000000001',
-   'Family Room', 'A double bed and two single beds under the eaves.', 'family', 'King bed and two singles', 32, 2, 2, 4, 2, 2, true),
+   'Family Room', 'A double bed and two single beds under the eaves.', 'family', 'King bed and two singles', 32, 2, 2, 4, 2, 2, true, 'RSEED0000003'),
   ('5eed2000-0000-4000-8000-000000000004', '5eed1000-0000-4000-8000-000000000002',
-   'Garden Studio', 'A studio with a kitchenette, opening onto the garden.', 'studio', 'Queen bed', 28, 2, 0, 2, 6, 0, true),
+   'Garden Studio', 'A studio with a kitchenette, opening onto the garden.', 'studio', 'Queen bed', 28, 2, 0, 2, 6, 0, true, 'RSEED0000004'),
   ('5eed2000-0000-4000-8000-000000000005', '5eed1000-0000-4000-8000-000000000002',
-   'Dom View Suite', 'A separate living room with a view of the Dom tower.', 'suite', 'King bed', 45, 3, 1, 2, 2, 1, true),
+   'Dom View Suite', 'A separate living room with a view of the Dom tower.', 'suite', 'King bed', 45, 3, 1, 2, 2, 1, true, 'RSEED0000005'),
   ('5eed2000-0000-4000-8000-000000000006', '5eed1000-0000-4000-8000-000000000003',
-   'Loft', 'Not finished yet.', 'double', 'Queen bed', 30, 2, 0, 2, 3, 0, true)
+   'Loft', 'Not finished yet.', 'double', 'Queen bed', 30, 2, 0, 2, 3, 0, true, 'RSEED0000006')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO room_images (room_id, url, sort_order, alt_text) VALUES
@@ -97,15 +99,15 @@ INSERT INTO room_images (room_id, url, sort_order, alt_text) VALUES
 -- Rate plans. "Non-refundable" ignores the property's tier.
 INSERT INTO rate_plans
   (id, room_id, name, description, bar_cents, currency, is_refundable, min_stay,
-   includes_breakfast, sort_order, is_active)
+   includes_breakfast, sort_order, is_active, channel_code)
 VALUES
-  ('5eed3000-0000-4000-8000-000000000001', '5eed2000-0000-4000-8000-000000000001', 'Flexible',        NULL,                    16500, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     14900, 'EUR', false, 1, false, 1, true),
-  ('5eed3000-0000-4000-8000-000000000003', '5eed2000-0000-4000-8000-000000000002', 'Flexible',        NULL,                    21500, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000004', '5eed2000-0000-4000-8000-000000000003', 'Bed and breakfast','Breakfast for everyone', 26000, 'EUR', true,  2, true,  0, true),
-  ('5eed3000-0000-4000-8000-000000000005', '5eed2000-0000-4000-8000-000000000004', 'Flexible',        NULL,                    14500, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000006', '5eed2000-0000-4000-8000-000000000005', 'Flexible',        NULL,                    23000, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000007', '5eed2000-0000-4000-8000-000000000006', 'Flexible',        NULL,                    18000, 'EUR', true,  1, false, 0, true)
+  ('5eed3000-0000-4000-8000-000000000001', '5eed2000-0000-4000-8000-000000000001', 'Flexible',        NULL,                    16500, 'EUR', true,  1, false, 0, true, 'PSEED0000001'),
+  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     14900, 'EUR', false, 1, false, 1, true, 'PSEED0000002'),
+  ('5eed3000-0000-4000-8000-000000000003', '5eed2000-0000-4000-8000-000000000002', 'Flexible',        NULL,                    21500, 'EUR', true,  1, false, 0, true, 'PSEED0000003'),
+  ('5eed3000-0000-4000-8000-000000000004', '5eed2000-0000-4000-8000-000000000003', 'Bed and breakfast','Breakfast for everyone', 26000, 'EUR', true,  2, true,  0, true, 'PSEED0000004'),
+  ('5eed3000-0000-4000-8000-000000000005', '5eed2000-0000-4000-8000-000000000004', 'Flexible',        NULL,                    14500, 'EUR', true,  1, false, 0, true, 'PSEED0000005'),
+  ('5eed3000-0000-4000-8000-000000000006', '5eed2000-0000-4000-8000-000000000005', 'Flexible',        NULL,                    23000, 'EUR', true,  1, false, 0, true, 'PSEED0000006'),
+  ('5eed3000-0000-4000-8000-000000000007', '5eed2000-0000-4000-8000-000000000006', 'Flexible',        NULL,                    18000, 'EUR', true,  1, false, 0, true, 'PSEED0000007')
 ON CONFLICT (id) DO NOTHING;
 
 -- Fridays and Saturdays cost €30 more at the Amsterdam hotel's Classic Double.

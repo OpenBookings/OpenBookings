@@ -3,13 +3,13 @@ title: Environment variables
 description: Every variable the apps read, which app reads it, and what it does.
 ---
 
-Each app reads its own `.env.local`: `apps/web`, `apps/business`, `apps/admin` and
-`apps/support-bot`. Scripts run from the repository root (`packages/db`, `packages/demo`,
+Each app reads its own `.env.local`: `apps/web`, `apps/business`, `apps/admin`,
+`apps/support-bot` and `apps/siteminder`. Scripts run from the repository root (`packages/db`, `packages/demo`,
 `apps/invoice-job`) read the root `.env.local`. Every location has a commented `.env.example` to
 copy from.
 
 **Apps:** W = guest site, B = host dashboard, A = admin console, S = support bot,
-I = invoice job, R = root scripts.
+I = invoice job, R = root scripts. The SiteMinder app has [its own section](#siteminder-app).
 
 ## Database
 
@@ -168,6 +168,47 @@ ROLE admin_reader;` (or `admin_writer`).
 
 The host dashboard's chat widget also reads `NEXT_PUBLIC_CHATWOOT_BASE_URL`,
 `CHATWOOT_BUSINESS_INBOX_IDENTIFIER` and `CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN`.
+
+## SiteMinder app
+
+The SiteMinder app (`apps/siteminder`) connects hotels to the SiteMinder channel manager. It is
+optional: without it, hotels manage their rates on OpenBookings, and a hotel that tries to connect
+is told SiteMinder isn't available right now. QStash is optional too: without it the app polls core for booking
+changes, at most a poll interval late.
+
+The app needs core on **Postgres 17**, as every app does: the Apps API writes rates with
+`MERGE … RETURNING` inside a CTE, which older versions reject.
+
+### In the guest site and the host dashboard
+
+| Variable | Apps | Required | Description |
+| --- | --- | --- | --- |
+| `APP_SITEMINDER_URL` | W, B | with the app | The app's public URL. The host dashboard registers hotels there when they connect; both apps ring its doorbell. Unset: hotels can't connect, and no doorbell rings. |
+| `APP_SITEMINDER_REGISTRATION_SECRET` | B | with the app | Bearer secret for registering and removing hotels on the app. Same value as in the app. |
+| `APPS_API_BASE_URL` | B | with the app | The host dashboard's public URL as the app should reach the Apps API (`/api/apps/v1`). Sent to the app when a hotel connects. Unset: hotels can't connect. |
+| `QSTASH_URL` | W, B | no | Upstash QStash. Default `https://qstash.upstash.io`. |
+| `QSTASH_TOKEN` | W, B | no | Rings the app's doorbell through QStash when a booking changes, so it doesn't wait for its next poll. Off when unset (or when `APP_SITEMINDER_URL` is unset). |
+
+### In the SiteMinder app
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `SITEMINDER_DATABASE_URL` | yes | The app's own Postgres database (tables in schema `siteminder`), separate from core's. `bun run db:migrate` applies its migrations. |
+| `SITEMINDER_INBOUND_USERNAME` / `SITEMINDER_INBOUND_PASSWORD` | yes | The credentials SiteMinder presents when it calls the app's `/soap` endpoint. You choose them and give them to SiteMinder. |
+| `SITEMINDER_RESERVATION_URL` / `SITEMINDER_RESERVATION_USERNAME` / `SITEMINDER_RESERVATION_PASSWORD` | yes | SiteMinder's reservation endpoint and the credentials SiteMinder issues for it. Bookings go there. |
+| `SITEMINDER_REQUESTOR_ID` | yes | The channel code SiteMinder issues. |
+| `APP_SITEMINDER_REGISTRATION_SECRET` | yes | Same value as in the host dashboard. |
+| `SITEMINDER_TICK_SECRET` | yes | Bearer secret for `POST /tick`. |
+| `SITEMINDER_RUN_MODE` | no | `scale-to-zero` (default) or `always-on`. Always-on works on a timer in the process; scale-to-zero needs a scheduler that calls `/tick`. |
+| `SITEMINDER_POLL_SECONDS` | no | How often each hotel's booking changes are fetched. Default `60` always-on, `300` scale-to-zero. A whole number. |
+| `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | no | Verify the doorbell from core. With either unset, or `SERVICE_BASE_URL` unset, `/doorbell` answers `503` and polling still delivers. |
+| `SERVICE_BASE_URL` | with the doorbell | The app's own public URL. Must equal `APP_SITEMINDER_URL` in core: the doorbell's signature covers the URL QStash calls, so any difference refuses every ring. |
+| `PORT` | no | Default `8080` in the image, `3004` with `bun run dev`. |
+
+**The `/tick` scheduler.** In scale-to-zero, call `POST {app}/tick` with
+`Authorization: Bearer $SITEMINDER_TICK_SECRET` every 5 minutes (the default poll interval). One call
+works for up to 120 seconds, so give the caller and the container a request timeout of about
+**150 seconds**. In always-on mode you don't need the scheduler; an extra call does no harm.
 
 ## Observability
 

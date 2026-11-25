@@ -91,7 +91,9 @@ Bookings (dates relative to the day you ran `testing:setup`):
 
 Full IDs follow one pattern per table, e.g. booking `5eed4000-0000-4000-8000-000000000001`:
 properties `5eed1000-…`, rooms `5eed2000-…`, rate plans `5eed3000-…`, bookings `5eed4000-…`,
-reservations `5eed5000-…`, reviews `5eed6000-…`, message threads `5eed7000-…`.
+reservations `5eed5000-…`, reviews `5eed6000-…`, message threads `5eed7000-…`. Channel codes (what a
+channel manager maps to) are `OBSEED00000N` for hotels, `RSEED000000N` for rooms and `PSEED000000N` for rate
+plans, numbered like the ids.
 
 Seeded bookings carry the cancellation windows, per-night prices, tourist tax and commission
 that checkout would have written. They have no Stripe payment and no commission-ledger entries,

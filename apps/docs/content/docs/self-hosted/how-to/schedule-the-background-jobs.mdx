@@ -44,3 +44,11 @@ request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actio
 Commission invoices are made by `apps/invoice-job`, a command-line job that runs one step and exits:
 draft, issue, store, deliver. Run its image on a schedule after each month closes. Its README
 describes the steps, the guards and the variables it needs.
+
+## The SiteMinder app
+
+If you run the optional SiteMinder app in scale-to-zero mode (its default), schedule
+`POST {siteminder}/tick` every 5 minutes with `Authorization: Bearer $SITEMINDER_TICK_SECRET`. One
+call can work for up to 120 seconds, so allow the request about 150 seconds before it times out. In
+always-on mode the app keeps its own timer and needs no scheduler. See
+[Environment variables](/self-hosted/reference/environment-variables#siteminder-app).

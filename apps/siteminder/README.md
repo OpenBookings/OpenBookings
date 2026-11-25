@@ -46,9 +46,10 @@ SITEMINDER_INBOUND_USERNAME=replay-user SITEMINDER_INBOUND_PASSWORD=replay-pass 
 ```
 
 `replay.ts` sends every request sample (or the fixtures you name) with the hotel code and dates rewritten (earliest
-date lands on today + 7), a fresh UUID EchoToken per message and the inbound credentials, and prints status and
-reply time per message. `--days N` (1 to 750) adds a bulk load of availability, restrictions and rates for
-SGL/BAR. `--core` waits a few seconds and prints what the fake core received after the tick. Samples for features
+date lands on today + 7, unless `--keep-dates`), a fresh UUID EchoToken per message and the inbound credentials, and
+prints status and reply time per message. `--days N` (1 to 750) adds a bulk load of availability, restrictions and
+rates for one room and rate plan (`--room`/`--rate`, default SGL/BAR); `--no-samples` sends only that load. `--core`
+waits a few seconds and prints what the fake core received after the tick. Samples for features
 we do not offer (Included Occupancy, OBP) are expected to be rejected with the docs' "Invalid included occupancy";
 the script counts that as right. Exit code 1 means a wrong answer or a reply of 2 s or more.
 
@@ -69,8 +70,64 @@ Use the variable names of the forked environment. Run the inventory (Rooms and R
 requests against the local endpoint. The Reservation and Error Handling scenarios need SiteMinder's test platform
 (it calls the endpoint, or receives our reservations on `SITEMINDER_RESERVATION_URL`). Do not commit collections.
 
-### Against real business (deferred)
+### End to end against a local core
 
-Once the Apps API migration (`0060_apps_api.sql`) is on a database, start core (`business.localhost:3001`), connect
-a demo property to the SiteMinder app, register the app's installation, then run `replay.ts` with `--hotel <the
-property code>` and without `--core`, and check the rates grid shows the values as managed by the app.
+`scripts/e2e-local.ts` runs the whole loop with real business and web and a fake SiteMinder: it connects a hotel
+through the Channel manager's own connect function, replays a 750-day load, waits for the booking you make on the
+guest site with Stripe's test card, checks the Commit arrives and the booking shows "Sent", checks availability
+went down once and not twice once SiteMinder's next limit arrives, cancels as the host, checks the Cancel arrives and
+the room only comes back with SiteMinder's next limit, and disconnects. It takes about six minutes, three of them
+waiting: a booking only stops counting against SiteMinder's limit when a limit arrives three minutes after
+SiteMinder took it.
+
+The core-side steps run in `apps/business/scripts/siteminder-e2e-core.ts` (this app may not import core packages).
+Both the script and that helper refuse any database that is not on localhost, judged the way `pg` reads the URL
+(`?host=`, `?hostaddr=` and `?service=` are refused too). Never point them at the shared dev database: they write
+rows, and the app applies its migrations.
+
+1. The local test database, with the Apps API migration (`testing:setup` applies every pending migration). For the
+   seeded Canal Lantern Hotel to take a test payment, give it your test connected account:
+
+   ```sh
+   bun run testing:db
+   STRIPE_CONNECT_ACCOUNT_ID=acct_... bun run testing:setup
+   ```
+
+2. Business and web on that database, ready to take a test payment: in `apps/business/.env.local` and
+   `apps/web/.env.local` set `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/openbookings` (and no
+   `ENV_TYPE=dev`), plus the Stripe test keys, the webhook secret and Turnstile as in the docs' "Take a test payment"
+   guide (`apps/docs/content/docs/self-hosted/how-to/take-a-test-payment.mdx`). `EMAIL_TRANSPORT=console` for the
+   sign-in link. Nothing SiteMinder-specific is needed in either app: the script registers the installation itself,
+   and without QStash the app polls.
+
+   ```sh
+   bunx turbo run dev --filter=@openbookings/web --filter=@openbookings/business
+   stripe listen --forward-connect-to web.localhost:3002/api/stripe/webhook
+   ```
+
+   Don't run the docs site at the same time: it also uses port 3004.
+
+3. Run it, and book when it asks (as `guest@openbookings.test`, 2 adults, the room, rate and dates it prints, card
+   `4242 4242 4242 4242`, any future expiry and CVC):
+
+   ```sh
+   cd apps/siteminder
+   bun run scripts/e2e-local.ts
+   ```
+
+   It ends with `PASS: ...` and exit code 0, or `FAIL: <what>` and exit code 1. It starts the app on :3004 and the
+   fake SiteMinder on :4011 itself, in always-on mode with a 5-second poll.
+
+| Variable | Default | |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgres://postgres:postgres@127.0.0.1:5433/openbookings` | Core's database, the one business and web use. |
+| `SITEMINDER_DATABASE_URL` | `DATABASE_URL` | The app's database; its tables live in schema `siteminder`. |
+| `CORE_URL` / `WEB_URL` | `http://localhost:3001` / `http://web.localhost:3002` | Business (the Apps API) and the guest site. |
+| `PORT` / `FAKE_SITEMINDER_PORT` | `3004` / `4011` | The app and the fake SiteMinder. |
+| `E2E_PROPERTY_ID`, `E2E_ROOM_ID`, `E2E_RATE_PLAN_ID` | Canal Lantern Hotel, Classic Double, Flexible | What to connect and book (seed ids). |
+| `E2E_OWNER_EMAIL` | `owner@openbookings.test` | Who connects and cancels. |
+| `E2E_CHECK_IN` | the hotel's today + 40 | First night of the 2-night stay (the load sets a 2-night minimum). |
+
+Afterwards the hotel is disconnected and the test booking is cancelled and refunded in Stripe test mode. Run
+`bun run testing:setup` again for a clean core database; it leaves the app's schema `siteminder` alone (`DROP SCHEMA
+siteminder CASCADE` on that local database for a clean app).

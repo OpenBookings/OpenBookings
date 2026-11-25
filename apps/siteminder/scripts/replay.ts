@@ -4,10 +4,12 @@
  * shape: the earliest date lands on today + 7), EchoTokens are fresh UUIDs, the inbound credentials come from
  * SITEMINDER_INBOUND_USERNAME / SITEMINDER_INBOUND_PASSWORD.
  *
- *   bun run scripts/replay.ts --url http://localhost:3004/soap --hotel FAKE-HOTEL [--days 750] [--core http://localhost:4010] [fixture...]
+ *   bun run scripts/replay.ts --url http://localhost:3004/soap --hotel FAKE-HOTEL [--days 750] [--room SGL --rate BAR]
+ *     [--core http://localhost:4010] [--no-samples] [--keep-dates] [fixture...]
  *
- * With no fixtures, every request sample (`*-rq*.xml`) is sent. `--days N` adds a bulk load: availability, rates
- * and restrictions for SGL/BAR over N nights from today. `--core` prints what the fake core received afterwards.
+ * With no fixtures, every request sample (`*-rq*.xml`) is sent, unless `--no-samples`. `--days N` adds a bulk load:
+ * availability, rates and restrictions for one room and rate plan (`--room`/`--rate`, default SGL/BAR) over N nights
+ * from today. `--keep-dates` sends the fixtures' dates as they are. `--core` prints what the fake core received.
  * Exit code 1 when a reply is not Success (or, for the samples in EXPECTED_ERROR, not that error) or takes 2 s or more.
  */
 import { randomUUID } from "node:crypto";
@@ -30,13 +32,17 @@ function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
-const flagged = new Set(["--url", "--hotel", "--days", "--core"]);
+const flagged = new Set(["--url", "--hotel", "--days", "--core", "--room", "--rate"]);
 const files = process.argv.slice(2).filter((a, i, all) => !a.startsWith("--") && !flagged.has(all[i - 1] ?? ""));
 
 const url = arg("url") ?? "http://localhost:3004/soap";
 const hotel = arg("hotel");
 const days = arg("days") ? Number(arg("days")) : 0;
 const coreUrl = arg("core");
+const room = arg("room") ?? "SGL";
+const rate = arg("rate") ?? "BAR";
+const samples = !process.argv.includes("--no-samples");
+const keepDates = process.argv.includes("--keep-dates");
 if (!hotel) throw new Error("--hotel <code> is required");
 if (days && (!Number.isInteger(days) || days < 1 || days > 750)) throw new Error("--days must be a whole number from 1 to 750");
 const username = process.env.SITEMINDER_INBOUND_USERNAME;
@@ -66,16 +72,16 @@ function prepare(xml: string): string {
     .replace(/EchoToken="[^"]*"/g, () => `EchoToken="${randomUUID()}"`)
     .replace(/TimeStamp="[^"]*"/g, `TimeStamp="${new Date().toISOString()}"`);
   const dates = [...out.matchAll(/\b(?:Start|End)="(\d{4}-\d{2}-\d{2})"/g)].map((m) => dayNo(m[1]!));
-  if (dates.length > 0) {
+  if (dates.length > 0 && !keepDates) {
     const shift = dayNo(today) + 7 - Math.min(...dates);
     out = out.replace(/\b(Start|End)="(\d{4}-\d{2}-\d{2})"/g, (_, attr: string, d: string) => `${attr}="${isoOf(dayNo(d) + shift)}"`);
   }
   return out.trimStart().startsWith("<SOAP-ENV:Envelope") ? out : envelope(out);
 }
 
-/** Availability, rates and restrictions for SGL/BAR over `n` nights from today, as three messages. */
+/** Availability, rates and restrictions for one room and rate plan over `n` nights from today, as three messages. */
 function bulk(n: number): { name: string; xml: string }[] {
-  const range = `Start="${today}" End="${isoOf(dayNo(today) + n - 1)}" InvTypeCode="SGL" RatePlanCode="BAR"`;
+  const range = `Start="${today}" End="${isoOf(dayNo(today) + n - 1)}" InvTypeCode="${xmlEscape(room)}" RatePlanCode="${xmlEscape(rate)}"`;
   const head = (root: string) => `<${root} xmlns="${NS}" EchoToken="x" TimeStamp="x" Version="1.0">`;
   return [
     {
@@ -93,7 +99,8 @@ function bulk(n: number): { name: string; xml: string }[] {
   ];
 }
 
-const names = files.length > 0 ? files : (await readdir(FIXTURES_DIR)).filter((f) => f.endsWith(".xml") && /-rq/.test(f)).sort();
+const names =
+  files.length > 0 ? files : samples ? (await readdir(FIXTURES_DIR)).filter((f) => f.endsWith(".xml") && /-rq/.test(f)).sort() : [];
 const messages: { name: string; xml: string }[] = [];
 for (const f of names) {
   const file = path.isAbsolute(f) || f.includes("/") ? f : path.join(FIXTURES_DIR, f);

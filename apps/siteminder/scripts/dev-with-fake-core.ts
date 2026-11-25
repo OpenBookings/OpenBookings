@@ -7,12 +7,10 @@
  * at the fake core. Refuses any database that is not on localhost: never point it at a shared database.
  */
 import { applyMigrations } from "../src/db/migrate";
+import { assertLocalDatabase } from "./local-db";
 
-const dbUrl = process.env.SITEMINDER_DATABASE_URL?.trim();
-if (!dbUrl) throw new Error("Set SITEMINDER_DATABASE_URL to a local throwaway Postgres (see README, Testing locally)");
-if (!["localhost", "127.0.0.1", "::1"].includes(new URL(dbUrl).hostname)) {
-  throw new Error("SITEMINDER_DATABASE_URL must point at localhost; this script applies migrations and writes rows");
-}
+// Applies migrations and writes rows: a local throwaway Postgres only (see README, Testing locally).
+assertLocalDatabase("SITEMINDER_DATABASE_URL", process.env.SITEMINDER_DATABASE_URL);
 
 const hotel = process.env.FAKE_CORE_HOTEL ?? "FAKE-HOTEL";
 const defaults: Record<string, string> = {
