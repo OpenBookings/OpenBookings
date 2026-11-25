@@ -70,6 +70,9 @@ describeWithDb("delivery watchdog", () => {
     await booking({ eventAt: ago(40), row: "not_sent" });
     const already = await booking({ eventAt: ago(40), row: "needs_attention" });
     await booking({ eventAt: ago(600), checkIn: "2031-04-20", status: "completed" }); // stayed before connecting
+    // Checked out on the connect day (and an early departure), both completed: not in the connect snapshot either.
+    await booking({ eventAt: ago(3000), checkIn: "2031-04-29", status: "completed" });
+    await booking({ eventAt: ago(3000), checkIn: "2031-04-30", status: "completed" });
     const other = await seedProperty(db);
     await booking({ eventAt: ago(40), property: other }); // no app
 

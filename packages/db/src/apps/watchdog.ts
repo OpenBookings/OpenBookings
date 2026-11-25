@@ -30,7 +30,8 @@ const ROUTE_GRACE_MINUTES = 2;
  * installation `ai`: a delivery-relevant change since connecting, or a stay
  * that was upcoming when it connected (the backfill; a hotel that chose not
  * to send those has `not_sent` rows instead). Bookings that ended before the
- * connection were never sent and never will be. $kinds is DELIVERY_EVENT_KINDS.
+ * connection, or were already completed then, were never sent and never will
+ * be. $kinds is DELIVERY_EVENT_KINDS.
  */
 export const EXPECTED_DELIVERY_SQL = (kinds: string) => `(
     EXISTS (
@@ -38,7 +39,10 @@ export const EXPECTED_DELIVERY_SQL = (kinds: string) => `(
        WHERE e.booking_id = b.id AND e.kind = ANY (${kinds}::text[]) AND e.created_at > ai.connected_at
     )
     OR (
-      b.status::text IN ('confirmed', 'checked_in', 'completed')
+      -- The connect snapshot's own rule (upcomingBookings in installations.ts):
+      -- a booking already completed then (checked out that day, or left early)
+      -- was never in it.
+      b.status::text IN ('confirmed', 'checked_in')
       AND b.check_out_date >= (ai.connected_at AT TIME ZONE p.timezone)::date
     )
   )`;
