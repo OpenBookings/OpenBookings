@@ -7,3 +7,4 @@ export * from "./feed";
 export * from "./delivery";
 export * from "./structure";
 export * from "./notify";
+export * from "./watchdog";

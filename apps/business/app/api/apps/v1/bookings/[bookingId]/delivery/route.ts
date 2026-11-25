@@ -1,6 +1,7 @@
+import { after } from "next/server";
 import { DeliveryReportSchema } from "@openbookings/apps-contract";
-import { withTransaction } from "@openbookings/db";
-import { recordDelivery } from "@openbookings/db/apps";
+import { getPool, withTransaction } from "@openbookings/db";
+import { claimAlert, recordDelivery } from "@openbookings/db/apps";
 import { alertDeliveryNeedsAttention } from "@/lib/apps/delivery-alert";
 import { appsJson, authenticateApp, firstIssue, readBodyText, unauthorized } from "@/lib/apps/api-auth";
 
@@ -33,13 +34,24 @@ export async function PUT(request: Request, context: { params: Promise<{ booking
   const result = await withTransaction((tx) => recordDelivery(tx, installation, bookingId, parsed.data, new Date()));
   if (result.result === "unknown-booking") return appsJson({ error: "not found" }, 404);
   // Only the move into needs_attention alerts: a repeated report, or one the
-  // store ignored, leaves the status as it was. After the commit, never inside it.
+  // store ignored, leaves the status as it was. After the commit, never inside
+  // it, and after the 204 is on its way (the mail transport has no deadline).
+  // The mail is claimed first (mailed_at), so the watchdog job never sends it
+  // twice; if this process dies before claiming, the watchdog sends it.
   if (result.previousStatus !== "needs_attention" && result.status === "needs_attention") {
-    await alertDeliveryNeedsAttention({
-      bookingId,
-      propertyId: installation.propertyId,
-      appKey: installation.appKey,
-      detail: parsed.data.detail,
+    after(async () => {
+      try {
+        if (!(await claimAlert(getPool(), { installationId: installation.id, bookingId, now: new Date() }))) return;
+      } catch (error) {
+        console.error("[apps] could not claim the delivery alert:", error instanceof Error ? error.message : error);
+        return; // left unclaimed: the watchdog job sends it
+      }
+      await alertDeliveryNeedsAttention({
+        bookingId,
+        propertyId: installation.propertyId,
+        appKey: installation.appKey,
+        detail: parsed.data.detail,
+      });
     });
   }
   return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });

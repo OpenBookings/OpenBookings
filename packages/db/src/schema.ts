@@ -1657,6 +1657,12 @@ export const appBookingDelivery = pgTable(
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     detail: text("detail"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * When the hotel was emailed about this row being in needs_attention (and
+     * we were warned). Set when the mail is claimed; cleared when the row
+     * leaves needs_attention, so each move into it mails once.
+     */
+    mailedAt: timestamp("mailed_at", { withTimezone: true }),
   },
   (table) => [
     primaryKey({ columns: [table.installationId, table.bookingId] }),

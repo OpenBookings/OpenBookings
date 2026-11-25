@@ -13,6 +13,7 @@ import type { DeliveryReport } from "@openbookings/apps-contract";
 import type { Queryable } from "../reservation-policy";
 import { DELIVERY_EVENT_KINDS } from "./feed";
 import type { Installation } from "./installations";
+import { EXPECTED_DELIVERY_SQL } from "./watchdog";
 
 /**
  * The acknowledgement to store, given the stored one: the reported time ($4,
@@ -109,7 +110,9 @@ export async function recordDelivery(
         SET status = $3,
             acknowledged_at = ${ACKNOWLEDGED_SQL("acknowledged_at")},
             detail = $5,
-            updated_at = $6
+            updated_at = $6,
+            -- Leaving needs_attention re-arms the mail for the next time in.
+            mailed_at = CASE WHEN $3 = 'needs_attention' THEN mailed_at END
       WHERE installation_id = $1::uuid AND booking_id = $2::uuid`,
     values,
   );
@@ -142,11 +145,34 @@ export async function deliveryForBooking(
       [bookingId, opts.propertyId ?? null],
     )
   ).rows[0] as { app_key: string; status: string; acknowledged_at: Date | null; detail: string | null } | undefined;
-  if (!row) return null;
+  if (!row) return expectedWithoutReport(db, bookingId, opts.propertyId ?? null);
   return {
     appKey: row.app_key,
     status: row.status,
     acknowledgedAt: row.acknowledged_at ? row.acknowledged_at.toISOString() : null,
     detail: row.detail,
   };
+}
+
+/**
+ * A booking the property's active app should have but has not reported on
+ * yet (no row: the app has not polled since, or is down) is on its way:
+ * "pending", so the host sees Sending rather than nothing. The watchdog job
+ * turns it into needs_attention after 30 minutes. Null when the app was never
+ * meant to get it (e.g. a stay that ended before connecting).
+ */
+async function expectedWithoutReport(db: Queryable, bookingId: string, propertyId: string | null) {
+  const row = (
+    await db.query(
+      `SELECT ai.app_key
+         FROM bookings b
+         JOIN app_installations ai ON ai.property_id = b.hotel_id AND ai.status = 'active'
+         JOIN properties p ON p.id = b.hotel_id
+        WHERE b.id = $1::uuid
+          AND ($2::uuid IS NULL OR b.hotel_id = $2::uuid)
+          AND ${EXPECTED_DELIVERY_SQL("$3")}`,
+      [bookingId, propertyId, DELIVERY_EVENT_KINDS],
+    )
+  ).rows[0] as { app_key: string } | undefined;
+  return row ? { appKey: row.app_key, status: "pending", acknowledgedAt: null, detail: null } : null;
 }

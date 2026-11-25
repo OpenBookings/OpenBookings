@@ -16,6 +16,7 @@ request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actio
 | Message retention | `POST {business}/api/cron/messaging-retention` | daily, 03:00 | Redacts the text of messages older than `MESSAGE_RETENTION_DAYS` |
 | PII retention | `POST {business}/api/cron/pii-retention` | daily, 03:30 | Redacts guest notes and cancellation reasons on stays that ended more than `PII_RETENTION_MONTHS` ago (default 18) |
 | Consent retention | `POST {business}/api/cron/consent-retention` | daily, 04:00 | Deletes cookie-consent records older than 5 years, as the Privacy Policy promises |
+| Channel manager delivery watchdog | `POST {business}/api/cron/app-delivery-watchdog` | every 5 minutes | Only with the SiteMinder app. Marks a booking SiteMinder hasn't confirmed within 30 minutes as *Not delivered* and emails the hotel, and sends any such email that didn't go out |
 
 `{web}` and `{business}` are the public URLs of the guest site and the host dashboard.
 
@@ -35,6 +36,7 @@ request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actio
    0 3 * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/messaging-retention
    30 3 * * *    curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/pii-retention
    0 4 * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/consent-retention
+   */5 * * * *   curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/app-delivery-watchdog
    ```
 
 3. Check that a request without the header returns `401`.

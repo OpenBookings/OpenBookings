@@ -168,8 +168,14 @@ CREATE TABLE IF NOT EXISTS app_booking_delivery (
   acknowledged_at timestamptz,
   detail text,
   updated_at timestamptz NOT NULL DEFAULT now(),
+  -- When the hotel was emailed about this row being in needs_attention: set
+  -- when the mail is claimed, cleared when the row leaves needs_attention, so
+  -- each move into it mails once (the delivery route, or the watchdog job when
+  -- the route's mail never went out).
+  mailed_at timestamptz,
   PRIMARY KEY (installation_id, booking_id)
 );
+ALTER TABLE app_booking_delivery ADD COLUMN IF NOT EXISTS mailed_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS idx_app_booking_delivery_booking ON app_booking_delivery (booking_id);
 

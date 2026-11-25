@@ -155,7 +155,7 @@ export async function connectApp(
        SELECT $1::uuid, u.id, 'not_sent', 'Not sent when the app was connected', $3
          FROM (${upcomingBookings("$2", "$4")}) u
        ON CONFLICT (installation_id, booking_id) DO UPDATE
-          SET status = 'not_sent', detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at
+          SET status = 'not_sent', detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at, mailed_at = NULL
         WHERE app_booking_delivery.status <> 'delivered' AND app_booking_delivery.acknowledged_at IS NULL
        RETURNING booking_id`,
       [row.id, i.propertyId, i.now, today],

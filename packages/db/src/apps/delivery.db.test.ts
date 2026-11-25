@@ -65,9 +65,22 @@ describeWithDb("app delivery status", () => {
   const event = (bookingId: string, kind: BookingEventKind) =>
     recordBookingEvent(db, { bookingId, kind, actor: { kind: "system", id: null } });
 
+  test("no report and nothing the app should have: nothing to show", async () => {
+    const { ids } = await setup();
+    // Stayed and left before the app was connected.
+    const { bookingId } = await seedBooking(db, ids, { checkIn: "2031-01-10", nights: 2 });
+    await db.query(`UPDATE bookings SET status = 'completed' WHERE id = $1`, [bookingId]);
+    expect(await deliveryForBooking(db, bookingId)).toBeNull();
+    // And another hotel's booking is never this one's.
+    const other = await seedProperty(db);
+    const { bookingId: theirs } = await seedBooking(db, other, { checkIn: "2031-06-10", nights: 2 });
+    expect(await deliveryForBooking(db, theirs, { propertyId: ids.propertyId })).toBeNull();
+  });
+
   test("the first delivered report records the acknowledgement", async () => {
     const { installation, bookingId } = await setup();
-    expect(await deliveryForBooking(db, bookingId)).toBeNull();
+    // Not reported yet, but the app should have it: on its way.
+    expect(await deliveryForBooking(db, bookingId)).toEqual({ appKey: "siteminder", status: "pending", acknowledgedAt: null, detail: null });
     expect(await recordDelivery(db, installation, bookingId, delivered(0), later)).toEqual({
       result: "ok",
       previousStatus: null,

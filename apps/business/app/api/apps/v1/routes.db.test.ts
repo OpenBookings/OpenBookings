@@ -34,7 +34,13 @@ const emails: { bookingId: string; detail: string | null }[] = [];
 const messages: { message: string; options: { level: string; tags: Record<string, string> } }[] = [];
 let mailFails = false;
 
+/** Work the delivery route left for after the response: run at once, awaited by `settled()`. */
+const afterWork: Promise<unknown>[] = [];
+const settled = () => Promise.all(afterWork.splice(0));
+const realNextServer = await import("next/server");
+
 await mockModules(import.meta.dir, {
+  "next/server": () => ({ ...realNextServer, after: (fn: () => Promise<unknown>) => { afterWork.push(Promise.resolve().then(fn)); } }),
   "@openbookings/db": () => ({
     ...realDb,
     getPool: () => pool,
@@ -91,6 +97,7 @@ describeWithDb("Apps API v1 routes", () => {
     mailFails = false;
   });
   afterEach(async () => {
+    await settled();
     await db.query("ROLLBACK");
   });
 
@@ -368,8 +375,13 @@ describeWithDb("Apps API v1 routes", () => {
     expect(messages).toHaveLength(0);
 
     expect((await put(report({ status: "needs_attention", detail: "Hotel not found" }))).status).toBe(204);
+    expect(emails).toHaveLength(0); // the 204 does not wait for the mail
+    await settled();
     expect((await put(report({ status: "needs_attention", detail: "Hotel not found" }))).status).toBe(204);
+    await settled();
     expect(emails).toEqual([{ bookingId: mine, detail: "Hotel not found" }]);
+    const mailed = (await db.query(`SELECT mailed_at FROM app_booking_delivery WHERE booking_id = $1`, [mine])).rows[0] as { mailed_at: Date | null };
+    expect(mailed.mailed_at).not.toBeNull();
     expect(messages).toHaveLength(1);
     expect(messages[0]!.options.level).toBe("warning");
     expect(messages[0]!.options.tags).toEqual({ app: "siteminder", property_id: ids.propertyId });
@@ -384,8 +396,9 @@ describeWithDb("Apps API v1 routes", () => {
       req(`/bookings/${mine}/delivery`, { method: "PUT", key: apiKey, body: report({ status: "needs_attention" }) }),
       ctx(mine),
     );
-    quiet.mockRestore();
     expect(res.status).toBe(204);
+    await settled();
+    quiet.mockRestore();
     expect(messages).toHaveLength(1);
   });
 });
