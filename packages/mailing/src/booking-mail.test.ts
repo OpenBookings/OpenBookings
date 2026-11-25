@@ -271,6 +271,26 @@ test("the channel failure mail names the booking, the dates and links to the con
   expect(mail.html).toContain("https://biz.test/r");
 });
 
+test("the channel failure mail words the instruction by what did not get there", () => {
+  const cancelled = hostChannelDeliveryFailed({ ...failedInput, failure: "cancelled" });
+  expect(cancelled.subject).toBe("Cancellation of booking OB-B7B0-2A1C didn't reach SiteMinder");
+  expect(cancelled.html).toContain("the cancellation didn't reach SiteMinder");
+  expect(cancelled.html).toContain("Cancel it there by hand");
+  expect(cancelled.html).not.toContain("confirmed and paid");
+
+  const changed = hostChannelDeliveryFailed({ ...failedInput, failure: "changed" });
+  expect(changed.subject).toBe("Change to booking OB-B7B0-2A1C didn't reach SiteMinder");
+  expect(changed.html).toContain("the latest change didn't reach SiteMinder");
+  expect(changed.html).toContain("Update it in your channel manager or PMS by hand");
+
+  const reopened = hostChannelDeliveryFailed({ ...failedInput, failure: "reopened" });
+  expect(reopened.subject).toBe("Reopened booking OB-B7B0-2A1C isn't in SiteMinder");
+  expect(reopened.html).toContain("was reopened after SiteMinder received its cancellation");
+  expect(reopened.html).toContain("Add it again in your channel manager or PMS by hand");
+
+  expect(hostChannelDeliveryFailed({ ...failedInput, failure: "new" }).subject).toBe(hostChannelDeliveryFailed(failedInput).subject);
+});
+
 test("the app's detail is escaped, shortened and kept out of the subject", () => {
   const mail = hostChannelDeliveryFailed({ ...failedInput, detail: `<script>x</script>${"a".repeat(500)}` });
   expect(mail.html).toContain("&lt;script&gt;");

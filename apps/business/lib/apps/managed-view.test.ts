@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { appMoment, deliveryBadge, isUnlinkedRoom } from "./managed-view";
+import { appMoment, deliveryBadge, isUnlinkedRoom, notDeliveredAlert } from "./managed-view";
 
 const AMS = "Europe/Amsterdam";
 // Tue 24 Nov 2026, 15:00 in Amsterdam.
@@ -86,5 +86,27 @@ describe("isUnlinkedRoom", () => {
     expect(isUnlinkedRoom("r1", { unlinkedRoomIds: [] })).toBe(false);
     expect(isUnlinkedRoom("r1", { unlinkedRoomIds: ["r2"] })).toBe(false);
     expect(isUnlinkedRoom("r1", { unlinkedRoomIds: ["r1", "r2"] })).toBe(true);
+  });
+});
+
+describe("notDeliveredAlert", () => {
+  test("words the instruction by what didn't reach SiteMinder", () => {
+    expect(notDeliveredAlert("new")).toEqual({
+      title: "Not in SiteMinder yet",
+      description: "Add it in SiteMinder or your PMS by hand, or check the connection.",
+    });
+    expect(notDeliveredAlert()).toEqual(notDeliveredAlert("new"));
+    expect(notDeliveredAlert("cancelled")).toEqual({
+      title: "The cancellation didn't reach SiteMinder",
+      description: "Cancel it in SiteMinder or your PMS by hand, or check the connection.",
+    });
+    expect(notDeliveredAlert("changed")).toEqual({
+      title: "The latest change didn't reach SiteMinder",
+      description: "Update it in SiteMinder or your PMS by hand, or check the connection.",
+    });
+    expect(notDeliveredAlert("reopened")).toEqual({
+      title: "This booking was reopened after SiteMinder received its cancellation",
+      description: "Add it again in SiteMinder or your PMS by hand.",
+    });
   });
 });

@@ -278,4 +278,23 @@ describeWithDb("booking emails against Postgres", () => {
     expect(sent[0]!.html).toContain("Hotel &lt;not&gt; found");
     expect(sent[0]!.html).toContain("https://biz.test/dashboard/bookings/reservations");
   });
+
+  test("a channel delivery failure is worded by what did not get there", async () => {
+    const installation = (
+      await db.query(
+        `INSERT INTO app_installations (property_id, app_key, status, key_hash, key_last4, connected_at) VALUES ($1, 'siteminder', 'active', $2, 'abcd', NOW()) RETURNING id`,
+        [propertyId, `hash-${crypto.randomUUID()}`],
+      )
+    ).rows[0] as { id: string };
+    await db.query(
+      `INSERT INTO app_booking_delivery (installation_id, booking_id, status, acknowledged_at) VALUES ($1, $2, 'needs_attention', NOW())`,
+      [installation.id, bookingId],
+    );
+    await sendChannelDeliveryFailed(bookingId, null, deps());
+    expect(sent[0]!.subject).toBe(`Change to booking ${bookingReference(bookingId)} didn't reach SiteMinder`);
+    sent.length = 0;
+    await db.query(`UPDATE bookings SET status = 'cancelled' WHERE id = $1`, [bookingId]);
+    await sendChannelDeliveryFailed(bookingId, null, deps());
+    expect(sent[0]!.subject).toBe(`Cancellation of booking ${bookingReference(bookingId)} didn't reach SiteMinder`);
+  });
 });

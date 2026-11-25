@@ -20,5 +20,5 @@ export async function bookingDeliveryAction(bookingId: string): Promise<BookingD
   const propertyId = access.current.propertyId;
   if (!(await managedBy(propertyId))) return null;
   const delivery = await loadBookingDelivery(bookingId, propertyId);
-  return delivery ? { status: delivery.status, acknowledgedAt: delivery.acknowledgedAt } : null;
+  return delivery ? { status: delivery.status, acknowledgedAt: delivery.acknowledgedAt, failure: delivery.failure } : null;
 }

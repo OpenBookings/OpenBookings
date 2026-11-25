@@ -70,6 +70,13 @@ describe("booking panel, SiteMinder block", () => {
     expect(html.indexOf("Not in SiteMinder yet")).toBeLessThan(html.indexOf("Emma de Vries"));
   });
 
+  test("a cancellation that didn't get there says to cancel it by hand", () => {
+    const html = render({ loading: false, delivery: { status: "needs_attention", acknowledgedAt: "2031-10-01T12:02:00Z", failure: "cancelled" } });
+    expect(html).toContain("The cancellation didn&#x27;t reach SiteMinder");
+    expect(html).toContain("Cancel it in SiteMinder or your PMS by hand");
+    expect(html).not.toContain("Not in SiteMinder yet");
+  });
+
   test("never told: nothing to show", () => {
     expect(render({ loading: false, delivery: null })).not.toContain("SiteMinder");
   });

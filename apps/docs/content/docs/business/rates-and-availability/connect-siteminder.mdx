@@ -72,11 +72,20 @@ Open a booking in **Bookings → Reservations**. At the end of the panel, the **
 
 A change or cancellation is sent the same way, and the status shows how the latest one went.
 
-When a booking is **Not delivered**, the top of the panel says: *Not in SiteMinder yet. Add it in SiteMinder or your PMS by hand, or check the connection.* The booking itself is confirmed and paid: nothing is cancelled or refunded.
+When a booking is **Not delivered**, the top of the panel says what didn't arrive and what to do:
+
+| What didn't arrive | The panel says |
+| --- | --- |
+| A new booking | *Not in SiteMinder yet. Add it in SiteMinder or your PMS by hand, or check the connection.* |
+| A cancellation | *The cancellation didn't reach SiteMinder. Cancel it in SiteMinder or your PMS by hand, or check the connection.* |
+| A change (rooms cancelled, an early departure, new dates) | *The latest change didn't reach SiteMinder. Update it in SiteMinder or your PMS by hand, or check the connection.* |
+| A booking reopened after SiteMinder got its cancellation | *This booking was reopened after SiteMinder received its cancellation. Add it again in SiteMinder or your PMS by hand.* SiteMinder can't take a cancellation back. |
+
+Nothing is cancelled or refunded because of a delivery problem.
 
 ## The email when a booking doesn't arrive
 
-When a booking can't be delivered, we also email the hotel's team, with the subject *Booking OB-… didn't reach SiteMinder*. It names the booking and the dates, and what SiteMinder said if it gave a reason. Add the booking to SiteMinder or your PMS by hand, or check the connection on the Channel manager page. The Channel manager page also counts the bookings that need attention.
+When something can't be delivered, we also email the hotel's team. The subject says what didn't arrive: *Booking OB-… didn't reach SiteMinder*, *Change to booking OB-… didn't reach SiteMinder*, *Cancellation of booking OB-… didn't reach SiteMinder* or *Reopened booking OB-… isn't in SiteMinder*. It names the booking and the dates, what to do by hand, and what SiteMinder said if it gave a reason. You get one email each time a booking becomes **Not delivered**. The Channel manager page also counts the bookings that need attention.
 
 ## Running promotions
 

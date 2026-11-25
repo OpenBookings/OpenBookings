@@ -285,10 +285,49 @@ export function hostBookingCancelled(i: {
 
 const DETAIL_MAX = 200;
 
+/** What did not reach the channel manager (DeliveryFailureKind in @openbookings/db/apps). */
+export type ChannelFailureKind = "new" | "cancelled" | "changed" | "reopened";
+
+/** Subject, headline and instruction per failure, each naming what the hotel has to do by hand. */
+function channelFailureCopy(kind: ChannelFailureKind, i: { reference: string; propertyName: string; appName: string; stay: string }) {
+  const app = escapeHtml(i.appName);
+  const booking = `Booking ${STRONG(i.reference)} at ${STRONG(i.propertyName)} for ${i.stay}`;
+  switch (kind) {
+    case "cancelled":
+      return {
+        subject: `Cancellation of booking ${i.reference} didn't reach ${i.appName}`,
+        preheader: `Booking ${i.reference} at ${i.propertyName} is cancelled, but your channel manager may still hold it.`,
+        headline: `A cancellation didn't<br />reach ${app}.`,
+        body: `${booking} is cancelled, but the cancellation didn't reach ${app}, so your channel manager or PMS may still hold the room. Cancel it there by hand, or check the connection with ${app}.`,
+      };
+    case "changed":
+      return {
+        subject: `Change to booking ${i.reference} didn't reach ${i.appName}`,
+        preheader: `The latest change to booking ${i.reference} at ${i.propertyName} is not in your channel manager yet.`,
+        headline: `A booking change didn't<br />reach ${app}.`,
+        body: `${booking} changed, but the latest change didn't reach ${app}. Update it in your channel manager or PMS by hand, or check the connection with ${app}.`,
+      };
+    case "reopened":
+      return {
+        subject: `Reopened booking ${i.reference} isn't in ${i.appName}`,
+        preheader: `Booking ${i.reference} at ${i.propertyName} was reopened after ${i.appName} received its cancellation.`,
+        headline: `A reopened booking<br />isn't in ${app}.`,
+        body: `${booking} was reopened after ${app} received its cancellation, and ${app} can't take a cancellation back. Add it again in your channel manager or PMS by hand.`,
+      };
+    default:
+      return {
+        subject: `Booking ${i.reference} didn't reach ${i.appName}`,
+        preheader: `Booking ${i.reference} at ${i.propertyName} is not in your channel manager yet.`,
+        headline: `A booking didn't<br />reach ${app}.`,
+        body: `${booking} is confirmed and paid, but it isn't in your channel manager or PMS yet. Add it there by hand, or check the connection with ${app}.`,
+      };
+  }
+}
+
 /**
- * The booking is paid and confirmed with us but never reached the hotel's
- * channel manager. `detail` is the app's own words for why: untrusted text,
- * shortened and escaped, and never part of the subject.
+ * A booking (or its latest change, cancellation or reopening) never reached
+ * the hotel's channel manager. `detail` is the app's own words for why:
+ * untrusted text, shortened and escaped, and never part of the subject.
  */
 export function hostChannelDeliveryFailed(i: {
   propertyName: string;
@@ -298,14 +337,17 @@ export function hostChannelDeliveryFailed(i: {
   checkOut: string;
   bookingUrl: string;
   detail?: string | null;
+  /** What did not get there; "new" when not given. */
+  failure?: ChannelFailureKind;
 }): ActionMail {
   const detail = i.detail?.trim().slice(0, DETAIL_MAX);
+  const copy = channelFailureCopy(i.failure ?? "new", { ...i, stay: stay(i.checkIn, i.checkOut) });
   return composeActionMail({
-    subject: `Booking ${i.reference} didn't reach ${i.appName}`,
-    preheader: `Booking ${i.reference} at ${i.propertyName} is not in your channel manager yet.`,
+    subject: copy.subject,
+    preheader: copy.preheader,
     eyebrow: "Reservations",
-    headline: `A booking didn't<br />reach ${escapeHtml(i.appName)}.`,
-    body: `Booking ${STRONG(i.reference)} at ${STRONG(i.propertyName)} for ${stay(i.checkIn, i.checkOut)} is confirmed and paid, but it isn't in your channel manager or PMS yet. Add it there by hand, or check the connection with ${escapeHtml(i.appName)}.${detail ? `<br /><br />${escapeHtml(i.appName)} said: ${escapeHtml(detail)}` : ""}`,
+    headline: copy.headline,
+    body: `${copy.body}${detail ? `<br /><br />${escapeHtml(i.appName)} said: ${escapeHtml(detail)}` : ""}`,
     ctaUrl: i.bookingUrl,
     ctaLabel: "Open reservations",
     footnote: FOOTNOTE,

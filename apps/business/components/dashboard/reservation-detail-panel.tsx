@@ -7,7 +7,13 @@ import { AttentionAlert } from "@/components/dashboard/attention-alert";
 import { InlineLoader } from "@/components/dashboard/inline-loader";
 import { AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { deliveryBadge, type BookingDelivery, type DeliveryBadge } from "@/lib/apps/managed-view";
+import {
+  deliveryBadge,
+  notDeliveredAlert,
+  type BookingDelivery,
+  type DeliveryBadge,
+  type DeliveryFailure,
+} from "@/lib/apps/managed-view";
 import { SectionLabel } from "@/components/dashboard/page-header";
 import { BookingTimeline } from "@/components/dashboard/booking-timeline";
 import { GuestContactSeal } from "@/components/dashboard/break-the-glass";
@@ -206,14 +212,15 @@ function RoomsAndPayment({ reservation }: { reservation: HostReservation }) {
 }
 
 /** The one booking state the hotel must act on, at the top of the panel. */
-function NotDeliveredAlert() {
+function NotDeliveredAlert({ failure }: { failure?: DeliveryFailure }) {
+  const copy = notDeliveredAlert(failure);
   return (
     <AttentionAlert>
       <TriangleAlert aria-hidden />
-      <AlertTitle>Not in SiteMinder yet</AlertTitle>
+      <AlertTitle>{copy.title}</AlertTitle>
       <AlertDescription>
         <p>
-          Add it in SiteMinder or your PMS by hand, or check the connection.{" "}
+          {copy.description}{" "}
           <Link
             href="/dashboard/listings/channel-manager"
             className="text-foreground underline underline-offset-2 hover:no-underline"
@@ -260,7 +267,7 @@ export function ReservationDetailBody({
   const badge = siteMinder ? deliveryBadge(siteMinder.delivery, reservation.timezone) : null;
   return (
     <div className="flex flex-col gap-7">
-      {badge?.notDelivered ? <NotDeliveredAlert /> : null}
+      {badge?.notDelivered ? <NotDeliveredAlert failure={siteMinder?.delivery?.failure} /> : null}
       <DetailSection title="Guest">
         <DetailField label="Name" value={reservation.guestName} />
         <DetailField label="Party" value={reservation.partyLabel} />

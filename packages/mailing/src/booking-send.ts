@@ -1,4 +1,5 @@
 import { getPool } from "@openbookings/db";
+import { DELIVERY_FAILURE_KIND_SQL, type DeliveryFailureKind } from "@openbookings/db/apps";
 import { bookingReference } from "@openbookings/db/booking-reference";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { getEmailClient } from "./client";
@@ -393,8 +394,9 @@ export async function sendRefundIssued(
 const APP_NAMES: Record<string, string> = { siteminder: "SiteMinder" };
 
 /**
- * Tells the hotel (whoever gets its new-booking mail) that a booking never
- * reached its channel manager. `detail` is the app's own text, untrusted; the
+ * Tells the hotel (whoever gets its new-booking mail) that a booking, or its
+ * latest change, cancellation or reopening, never reached its channel manager
+ * (worded by DELIVERY_FAILURE_KIND_SQL). `detail` is the app's own text, untrusted; the
  * mail shortens and escapes it. Throws on failure: the caller reports it.
  */
 export async function sendChannelDeliveryFailed(bookingId: string, detail: string | null, deps: SendDeps = {}): Promise<void> {
@@ -407,15 +409,20 @@ export async function sendChannelDeliveryFailed(bookingId: string, detail: strin
       check_in_date: string;
       check_out_date: string;
       app_key: string | null;
+      failure: DeliveryFailureKind;
     }>(
       c.db,
       `SELECT p.id AS property_id, p.name AS property_name, u.email AS "guestEmail",
               b.check_in_date::text AS check_in_date, b.check_out_date::text AS check_out_date,
-              (SELECT ai.app_key FROM app_installations ai WHERE ai.property_id = p.id
-                ORDER BY (ai.status = 'active') DESC, ai.connected_at DESC LIMIT 1) AS app_key
+              ai.app_key, ${DELIVERY_FAILURE_KIND_SQL} AS failure
          FROM bookings b
          JOIN properties p ON p.id = b.hotel_id
          JOIN "user" u ON u.id = b.user_id
+         LEFT JOIN LATERAL (
+           SELECT ai.id, ai.app_key FROM app_installations ai WHERE ai.property_id = p.id
+            ORDER BY (ai.status = 'active') DESC, ai.connected_at DESC LIMIT 1
+         ) ai ON TRUE
+         LEFT JOIN app_booking_delivery d ON d.installation_id = ai.id AND d.booking_id = b.id
         WHERE b.id = $1::uuid`,
       [bookingId],
     )
@@ -432,6 +439,7 @@ export async function sendChannelDeliveryFailed(bookingId: string, detail: strin
       checkOut: row.check_out_date,
       bookingUrl: reservationsUrl(c),
       detail,
+      failure: row.failure,
     }),
   );
 }

@@ -48,7 +48,39 @@ function safeZone(timeZone: string): string {
   }
 }
 
-export type BookingDelivery = { status: string; acknowledgedAt: string | null };
+/** What did not reach SiteMinder (DeliveryFailureKind in @openbookings/db/apps). */
+export type DeliveryFailure = "new" | "cancelled" | "changed" | "reopened";
+
+export type BookingDelivery = { status: string; acknowledgedAt: string | null; failure?: DeliveryFailure };
+
+/**
+ * The booking panel's alert for a booking SiteMinder doesn't have as it is
+ * now, worded by what didn't get there (same wording as the email).
+ */
+export function notDeliveredAlert(failure: DeliveryFailure = "new"): { title: string; description: string } {
+  switch (failure) {
+    case "cancelled":
+      return {
+        title: "The cancellation didn't reach SiteMinder",
+        description: "Cancel it in SiteMinder or your PMS by hand, or check the connection.",
+      };
+    case "changed":
+      return {
+        title: "The latest change didn't reach SiteMinder",
+        description: "Update it in SiteMinder or your PMS by hand, or check the connection.",
+      };
+    case "reopened":
+      return {
+        title: "This booking was reopened after SiteMinder received its cancellation",
+        description: "Add it again in SiteMinder or your PMS by hand.",
+      };
+    default:
+      return {
+        title: "Not in SiteMinder yet",
+        description: "Add it in SiteMinder or your PMS by hand, or check the connection.",
+      };
+  }
+}
 
 export type DeliveryBadge = {
   tone: Extract<StatusTone, "positive" | "neutral" | "attention">;

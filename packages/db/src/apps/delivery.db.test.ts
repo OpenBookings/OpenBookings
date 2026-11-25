@@ -65,6 +65,30 @@ describeWithDb("app delivery status", () => {
   const event = (bookingId: string, kind: BookingEventKind) =>
     recordBookingEvent(db, { bookingId, kind, actor: { kind: "system", id: null } });
 
+  test("what did not get there: new, cancelled, changed, or reopened after a delivered cancellation", async () => {
+    const { installation, bookingId } = await setup();
+    const failure = async () => (await deliveryForBooking(db, bookingId))!.failure;
+    const ev = (kind: string, minutes: number) =>
+      db.query(`INSERT INTO booking_events (booking_id, kind, actor_kind, created_at) VALUES ($1, $2, 'system', $3)`, [bookingId, kind, at(minutes)]);
+    await db.query(`INSERT INTO app_booking_delivery (installation_id, booking_id, status) VALUES ($1, $2, 'needs_attention')`, [installation.id, bookingId]);
+    expect(await failure()).toBe("new");
+
+    await db.query(`UPDATE bookings SET status = 'cancelled' WHERE id = $1`, [bookingId]);
+    expect(await failure()).toBe("cancelled");
+
+    await db.query(`UPDATE bookings SET status = 'confirmed' WHERE id = $1`, [bookingId]);
+    await db.query(`UPDATE app_booking_delivery SET acknowledged_at = $2 WHERE booking_id = $1`, [bookingId, at(10)]);
+    expect(await failure()).toBe("changed");
+
+    // Cancelled at 5, the cancellation acknowledged at 10, reopened at 20.
+    await ev("forced_cancel", 5);
+    await ev("forced_uncancel", 20);
+    expect(await failure()).toBe("reopened");
+    // Reopened before the cancellation reached the app: just a change.
+    await db.query(`UPDATE app_booking_delivery SET acknowledged_at = $2 WHERE booking_id = $1`, [bookingId, at(2)]);
+    expect(await failure()).toBe("changed");
+  });
+
   test("no report and nothing the app should have: nothing to show", async () => {
     const { ids } = await setup();
     // Stayed and left before the app was connected.
@@ -80,7 +104,7 @@ describeWithDb("app delivery status", () => {
   test("the first delivered report records the acknowledgement", async () => {
     const { installation, bookingId } = await setup();
     // Not reported yet, but the app should have it: on its way.
-    expect(await deliveryForBooking(db, bookingId)).toEqual({ appKey: "siteminder", status: "pending", acknowledgedAt: null, detail: null });
+    expect(await deliveryForBooking(db, bookingId)).toEqual({ appKey: "siteminder", status: "pending", acknowledgedAt: null, detail: null, failure: "new" });
     expect(await recordDelivery(db, installation, bookingId, delivered(0), later)).toEqual({
       result: "ok",
       previousStatus: null,
@@ -91,6 +115,7 @@ describeWithDb("app delivery status", () => {
       status: "delivered",
       acknowledgedAt: at(0),
       detail: null,
+      failure: "changed",
     });
   });
 
@@ -131,6 +156,7 @@ describeWithDb("app delivery status", () => {
       status: "needs_attention",
       acknowledgedAt: at(10),
       detail: "Hotel not found in SiteMinder",
+      failure: "changed",
     });
     expect((await row(bookingId))?.updated_at).toEqual(later);
   });

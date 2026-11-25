@@ -24,6 +24,36 @@ const ACKNOWLEDGED_SQL = (stored: string) =>
   `CASE WHEN $4::timestamptz IS NULL THEN ${stored}
         ELSE GREATEST(${stored}, LEAST($4::timestamptz, $6::timestamptz)) END`;
 
+/**
+ * What did not reach the app, for wording the hotel's instruction (R29):
+ *
+ *   new        never acknowledged: the booking is not in the channel manager
+ *   cancelled  the booking is cancelled: the cancellation did not get there
+ *   changed    acknowledged before, not cancelled: the latest change did not
+ *   reopened   reopened after the app acknowledged its cancellation, which a
+ *              channel manager cannot take back (Cancel is final)
+ */
+export type DeliveryFailureKind = "new" | "cancelled" | "changed" | "reopened";
+
+/**
+ * SQL expression for DeliveryFailureKind, over `b` (bookings) and `d`
+ * (app_booking_delivery, may be NULL). "Reopened": an un-cancel after the
+ * latest acknowledgement, with a cancellation before it (so the
+ * acknowledgement was the cancellation's).
+ */
+export const DELIVERY_FAILURE_KIND_SQL = `CASE
+    WHEN b.status::text = 'cancelled' THEN 'cancelled'
+    WHEN d.acknowledged_at IS NOT NULL AND EXISTS (
+      SELECT 1 FROM booking_events u
+       WHERE u.booking_id = b.id AND u.kind = 'forced_uncancel' AND u.created_at > d.acknowledged_at
+    ) AND EXISTS (
+      SELECT 1 FROM booking_events c
+       WHERE c.booking_id = b.id AND c.kind IN ('forced_cancel', 'rooms_cancelled') AND c.created_at <= d.acknowledged_at
+    ) THEN 'reopened'
+    WHEN d.acknowledged_at IS NOT NULL THEN 'changed'
+    ELSE 'new'
+  END`;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -129,12 +159,19 @@ export async function deliveryForBooking(
   db: Queryable,
   bookingId: string,
   opts: { propertyId?: string } = {},
-): Promise<{ appKey: string; status: string; acknowledgedAt: string | null; detail: string | null } | null> {
+): Promise<{
+  appKey: string;
+  status: string;
+  acknowledgedAt: string | null;
+  detail: string | null;
+  /** What did not get there, for the wording when the hotel has to act. */
+  failure: DeliveryFailureKind;
+} | null> {
   if (!UUID_RE.test(bookingId)) return null;
   if (opts.propertyId !== undefined && !UUID_RE.test(opts.propertyId)) return null;
   const row = (
     await db.query(
-      `SELECT ai.app_key, d.status, d.acknowledged_at, d.detail
+      `SELECT ai.app_key, d.status, d.acknowledged_at, d.detail, ${DELIVERY_FAILURE_KIND_SQL} AS failure
          FROM app_booking_delivery d
          JOIN app_installations ai ON ai.id = d.installation_id
          JOIN bookings b ON b.id = d.booking_id AND b.hotel_id = ai.property_id
@@ -144,13 +181,16 @@ export async function deliveryForBooking(
         LIMIT 1`,
       [bookingId, opts.propertyId ?? null],
     )
-  ).rows[0] as { app_key: string; status: string; acknowledged_at: Date | null; detail: string | null } | undefined;
+  ).rows[0] as
+    | { app_key: string; status: string; acknowledged_at: Date | null; detail: string | null; failure: DeliveryFailureKind }
+    | undefined;
   if (!row) return expectedWithoutReport(db, bookingId, opts.propertyId ?? null);
   return {
     appKey: row.app_key,
     status: row.status,
     acknowledgedAt: row.acknowledged_at ? row.acknowledged_at.toISOString() : null,
     detail: row.detail,
+    failure: row.failure,
   };
 }
 
@@ -164,7 +204,7 @@ export async function deliveryForBooking(
 async function expectedWithoutReport(db: Queryable, bookingId: string, propertyId: string | null) {
   const row = (
     await db.query(
-      `SELECT ai.app_key
+      `SELECT ai.app_key, CASE WHEN b.status::text = 'cancelled' THEN 'cancelled' ELSE 'new' END AS failure
          FROM bookings b
          JOIN app_installations ai ON ai.property_id = b.hotel_id AND ai.status = 'active'
          JOIN properties p ON p.id = b.hotel_id
@@ -173,6 +213,8 @@ async function expectedWithoutReport(db: Queryable, bookingId: string, propertyI
           AND ${EXPECTED_DELIVERY_SQL("$3")}`,
       [bookingId, propertyId, DELIVERY_EVENT_KINDS],
     )
-  ).rows[0] as { app_key: string } | undefined;
-  return row ? { appKey: row.app_key, status: "pending", acknowledgedAt: null, detail: null } : null;
+  ).rows[0] as { app_key: string; failure: DeliveryFailureKind } | undefined;
+  return row
+    ? { appKey: row.app_key, status: "pending", acknowledgedAt: null, detail: null, failure: row.failure }
+    : null;
 }
