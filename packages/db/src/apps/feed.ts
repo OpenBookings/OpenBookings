@@ -292,9 +292,10 @@ async function loadBookings(db: Queryable, propertyId: string, ids: string[]): P
               b.commission_cents::text AS commission_cents,
               rf.room_price_refunded_cents::text AS room_price_refunded_cents,
               rf.disputed_cents::text AS disputed_cents,
-              u.first_name, u.last_name
+              COALESCE(u.first_name, '') AS first_name, COALESCE(u.last_name, '') AS last_name
          FROM bookings b
-         JOIN "user" u ON u.id = b.user_id
+         -- A booking outlives its guest's account: no account, no name ("Guest", see appName).
+         LEFT JOIN "user" u ON u.id = b.user_id
          LEFT JOIN LATERAL (
            SELECT max(e.seq) AS version, max(e.created_at) AS modified_at
              FROM booking_events e

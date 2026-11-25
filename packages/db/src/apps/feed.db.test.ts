@@ -314,6 +314,17 @@ describeWithDb("booking change feed", () => {
     expect(got.booker).toEqual({ givenName: "Zoë", surname: "O'Brien & Co" });
   });
 
+  test("a booking whose account is gone still appears, booked by \"Guest\"", async () => {
+    const { ids, installation } = await setup();
+    const a = await confirmed(ids, "2031-06-10");
+    // The real database refuses an orphan; drop the key inside this rolled-back transaction to make one.
+    await db.query(`ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_user_id_fkey`);
+    await db.query(`UPDATE bookings SET user_id = $2 WHERE id = $1`, [a.bookingId, `test-gone-${crypto.randomUUID()}`]);
+    const got = (await changes(installation, `${await ownTxid()}:0`)).bookings;
+    expect(got.map((b) => b.bookingId)).toEqual([a.bookingId]);
+    expect(got[0]!.booker).toEqual({ givenName: "", surname: "Guest" });
+  });
+
   test("events of a transaction still running stay out, and the cursor never passes them", async () => {
     const { ids, installation } = await setup();
     const snapshot = await loadBookingChanges(db, installation, { cursor: null, limit: 50 });
