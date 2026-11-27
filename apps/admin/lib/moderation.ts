@@ -373,8 +373,22 @@ export function keepItem(deps: DecisionDeps, i: DecisionInput): Promise<Decision
  * and open reports close as upheld (their reporters are told).
  */
 export function removeItem(deps: DecisionDeps, i: DecisionInput & { rules: string[]; note: string | null }): Promise<DecisionResult> {
-  const rules = rulesOf(Array.isArray(i.rules) ? i.rules : []);
+  const { rules, note } = removalOf(i.rules, i.note);
   if (rules.length === 0) return Promise.resolve({ ok: false, error: DECISION_ERRORS.rules_required });
-  const note = typeof i.note === "string" ? i.note.trim().slice(0, 1000) || null : null;
   return decide(deps, { ...i, decision: "removed", rules, note });
+}
+
+/** The longest note to the author a removal keeps. */
+const NOTE_MAX = 1000;
+
+/**
+ * What a removal uses from the browser's input: the known rules, once each,
+ * and the note trimmed to at most NOTE_MAX characters (null when empty). The
+ * audit row records the same.
+ */
+export function removalOf(rules: unknown, note: unknown): { rules: ReviewRuleId[]; note: string | null } {
+  return {
+    rules: rulesOf(Array.isArray(rules) ? rules.filter((r): r is string => typeof r === "string") : []),
+    note: typeof note === "string" ? note.trim().slice(0, NOTE_MAX) || null : null,
+  };
 }

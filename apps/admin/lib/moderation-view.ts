@@ -1,5 +1,5 @@
 import { bookingReference } from "@openbookings/db/booking-reference";
-import { REVIEW_RULE_IDS, REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
+import { fragmentRanges, REVIEW_RULE_IDS, REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
 import type { QueueRow } from "./moderation";
 
 /**
@@ -22,28 +22,14 @@ const rule = (id: ReviewRuleId): Rule => ({ id, title: REVIEW_RULES[id].title })
 export type Segment = { text: string; flagged: boolean };
 
 /**
- * The text cut into plain and flagged pieces, for <mark>. Every occurrence of
- * every fragment is found in the original, overlapping or touching ones merge,
- * as maskFragments masks them. Fragments that aren't in the text are ignored.
+ * The text cut into plain and flagged pieces, for <mark>: the ranges
+ * maskFragments masks (fragmentRanges). Fragments that aren't in the text
+ * are ignored.
  */
 export function highlightSegments(text: string, fragments: string[]): Segment[] {
-  const ranges: Array<[number, number]> = [];
-  for (const fragment of new Set(fragments)) {
-    if (!fragment) continue;
-    for (let from = text.indexOf(fragment); from !== -1; from = text.indexOf(fragment, from + 1)) {
-      ranges.push([from, from + fragment.length]);
-    }
-  }
-  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
-  const merged: Array<[number, number]> = [];
-  for (const [s, e] of ranges) {
-    const last = merged.at(-1);
-    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
-    else merged.push([s, e]);
-  }
   const out: Segment[] = [];
   let cursor = 0;
-  for (const [s, e] of merged) {
+  for (const [s, e] of fragmentRanges(text, fragments)) {
     if (s > cursor) out.push({ text: text.slice(cursor, s), flagged: false });
     out.push({ text: text.slice(s, e), flagged: true });
     cursor = e;
@@ -59,8 +45,8 @@ export type ItemView = {
   item: { kind: QueueRow["kind"]; id: string };
   version: string;
   kindLabel: string;
-  /** Property, booking reference, author, stay. */
-  context: string;
+  /** Property, then the booking reference (a link), then author and stay: the text around the reference. */
+  context: { before: string; after: string };
   bookingId: string;
   bookingRef: string;
   badge: { text: string; tone: Tone } | null;
@@ -112,11 +98,12 @@ function itemName(row: QueueRow): string {
     : `${row.authorName}'s answer to ${row.propertyName}'s reply`;
 }
 
-function context(row: QueueRow): string {
+function context(row: QueueRow): ItemView["context"] {
   const author = [row.authorName, row.authorCountry].filter(Boolean).join(", ");
   const stay = `stayed ${monthLabel(row.stayMonth)}`;
-  if (row.kind === "review") return `${row.propertyName} · ${bookingReference(row.bookingId)} · ${author} · ${stay}`;
-  return `${row.propertyName} · ${bookingReference(row.bookingId)} · on ${author}'s review (${stay})`;
+  const before = `${row.propertyName} · `;
+  if (row.kind === "review") return { before, after: ` · ${author} · ${stay}` };
+  return { before, after: ` · on ${author}'s review (${stay})` };
 }
 
 function foundBy(row: QueueRow): string | null {

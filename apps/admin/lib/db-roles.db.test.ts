@@ -30,7 +30,6 @@ import {
   seedProperty,
 } from "@openbookings/db/testing";
 import { sendBookingCancelled, sendRefundIssued, type SendDeps } from "@openbookings/mailing/booking-send";
-import type { ModerationItem } from "@openbookings/db/reviews";
 import { actorFor } from "./actor";
 import { loadAdminBooking } from "./booking";
 import { loadFlaggedPayments, resolvePaymentFlag } from "./flagged-payments";
@@ -42,7 +41,7 @@ import {
   forceStatus,
   forceUncancelRooms,
 } from "./forced-edits";
-import { keepItem, loadModerationCounts, loadModerationQueue, removeItem, type DecisionDeps } from "./moderation";
+import { keepItem, loadModerationCounts, loadModerationQueue, removeItem, type DecisionDeps, type QueueRow } from "./moderation";
 import { searchBookings } from "./search";
 
 const DAY = 86_400_000;
@@ -403,6 +402,15 @@ describeWithDb("admin console as its own database roles", () => {
     return { held, reply, reported, publicReport, masked, decided };
   }
 
+  /** One item of a loaded tab, by id: the tab's order isn't what a test is about. */
+  const byId = (rows: QueueRow[], id: string): QueueRow => {
+    const row = rows.find((r) => r.id === id);
+    if (!row) throw new Error(`item ${id} isn't in the tab`);
+    return row;
+  };
+  /** What a moderator's decision sends: the item, the version they saw, and who they are. */
+  const item = (row: QueueRow) => ({ item: { kind: row.kind, id: row.id }, version: row.version, decidedBy: ownerId });
+
   test("loadModerationQueue runs as ob_admin_read", async () => {
     const q = await seedQueue();
     await as("ob_admin_read", async () => {
@@ -459,25 +467,24 @@ describeWithDb("admin console as its own database roles", () => {
   test("keepItem and removeItem run as ob_admin_write", async () => {
     const q = await seedQueue();
     reset();
-    const [reported, masked] = await loadModerationQueue(db, "reported", later(2 * HOUR));
-    const [held, reply] = await loadModerationQueue(db, "held", later(2 * HOUR));
-    const item = (row: { kind: ModerationItem["kind"]; id: string; version: string }) => ({
-      item: { kind: row.kind, id: row.id },
-      version: row.version,
-      decidedBy: ownerId,
-    });
+    const reportedTab = await loadModerationQueue(db, "reported", later(2 * HOUR));
+    const heldTab = await loadModerationQueue(db, "held", later(2 * HOUR));
+    const reported = byId(reportedTab, q.reported.id);
+    const masked = byId(reportedTab, q.masked.id);
+    const held = byId(heldTab, q.held.id);
+    const reply = byId(heldTab, q.reply);
 
     await as("ob_admin_write", async () => {
       // Remove a reported review: its author is told, and the public reporter.
       expect(
-        await removeItem(decisionDeps(later(3 * HOUR)), { ...item(masked!), rules: ["abuse"], note: "Not about the stay." }),
+        await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reported), rules: ["abuse"], note: "Not about the stay." }),
       ).toEqual({ ok: true });
       // Keep a deadline-masked review a host reported: only the host hears.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(reported!))).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(masked))).toEqual({ ok: true });
       // Keep a held review: nobody to tell.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held!))).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held))).toEqual({ ok: true });
       // Decided already.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held!))).toEqual({ ok: false, error: "Already decided" });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held))).toEqual({ ok: false, error: "Already decided" });
     });
     expect(problems).toEqual([]);
     expect(sent).toEqual([
@@ -505,7 +512,7 @@ describeWithDb("admin console as its own database roles", () => {
     reset();
     await db.query(`UPDATE review_replies SET body = 'Call us.', edited_at = $2 WHERE id = $1`, [q.reply, later(2 * HOUR)]);
     await as("ob_admin_write", async () => {
-      expect(await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reply!), rules: ["links_contact"], note: null })).toEqual({
+      expect(await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reply), rules: ["links_contact"], note: null })).toEqual({
         ok: false,
         error: "This item changed since you opened it. Reload.",
       });
@@ -513,17 +520,36 @@ describeWithDb("admin console as its own database roles", () => {
     expect(sent).toEqual([]);
   });
 
+  test("a failing email or cache purge still leaves the decision made", async () => {
+    const q = await seedQueue();
+    reset();
+    const reported = byId(await loadModerationQueue(db, "reported", later(2 * HOUR)), q.reported.id);
+    const failing: DecisionDeps = {
+      ...decisionDeps(later(3 * HOUR)),
+      mail: { ...decisionDeps(later(3 * HOUR)).mail, transport: async () => Promise.reject(new Error("smtp down")) },
+      purgeReviews: async () => Promise.reject(new Error("upstash down")),
+    };
+    await as("ob_admin_write", async () => {
+      expect(await removeItem(failing, { ...item(reported), rules: ["abuse"], note: null })).toEqual({ ok: true });
+    });
+    expect((await db.query(`SELECT status, decision FROM reviews WHERE id = $1`, [q.reported.id])).rows[0]).toEqual({
+      status: "removed",
+      decision: "removed",
+    });
+    expect((await db.query(`SELECT status FROM review_reports WHERE id = $1`, [q.publicReport])).rows[0]).toEqual({ status: "upheld" });
+    // Each failure was reported, none of them thrown.
+    expect(problems.map((p) => (p as Error).message)).toEqual(expect.arrayContaining(["upstash down", "smtp down"]));
+  });
+
   test("removeItem without a rule is refused", async () => {
     const q = await seedQueue();
     reset();
-    const [held] = await loadModerationQueue(db, "held", later(2 * HOUR));
+    const held = byId(await loadModerationQueue(db, "held", later(2 * HOUR)), q.held.id);
     await as("ob_admin_write", async () => {
       for (const rules of [[], ["not_a_rule"]]) {
         expect(
           await removeItem(decisionDeps(later(3 * HOUR)), {
-            item: { kind: "review", id: held!.id },
-            version: held!.version,
-            decidedBy: ownerId,
+            ...item(held),
             rules,
             note: "Why",
           }),
@@ -541,19 +567,13 @@ describeWithDb("admin console as its own database roles", () => {
   test("an item its author deleted can't be removed, and nobody is emailed", async () => {
     const q = await seedQueue();
     reset();
-    const [reported] = (await loadModerationQueue(db, "reported", later(2 * HOUR))).filter((r) => r.id === q.reported.id);
+    const reported = byId(await loadModerationQueue(db, "reported", later(2 * HOUR)), q.reported.id);
     // As deleteGuestReview leaves it, with its open reports dismissed.
     await db.query(`UPDATE reviews SET status = 'deleted', body = NULL, score = NULL, deleted_at = $2 WHERE id = $1`, [q.reported.id, later(2 * HOUR)]);
     await db.query(`UPDATE review_reports SET status = 'dismissed', decided_at = $2 WHERE review_id = $1`, [q.reported.id, later(2 * HOUR)]);
     await as("ob_admin_write", async () => {
       expect(
-        await removeItem(decisionDeps(later(3 * HOUR)), {
-          item: { kind: "review", id: reported!.id },
-          version: reported!.version,
-          decidedBy: ownerId,
-          rules: ["abuse"],
-          note: null,
-        }),
+        await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reported), rules: ["abuse"], note: null }),
       ).toEqual({ ok: false, error: expect.stringMatching(/deleted/) });
     });
     expect(sent).toEqual([]);

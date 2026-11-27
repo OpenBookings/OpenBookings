@@ -53,7 +53,8 @@ describe("itemView", () => {
   test("a held review: countdown, rules, the score aside, the removal spelled out", () => {
     const view = itemView(row(), new Date(WRITTEN.getTime() + 31 * HOUR));
     expect(view.kindLabel).toBe("Review");
-    expect(view.context).toBe("Canal Lantern Hotel · OB-B7B0-2A1C · Anna, NL · stayed Nov 2031");
+    expect(view.context).toEqual({ before: "Canal Lantern Hotel · ", after: " · Anna, NL · stayed Nov 2031" });
+    expect(view.bookingRef).toBe("OB-B7B0-2A1C");
     expect(view.badge).toEqual({ text: "Publishes masked in 41 h", tone: "amber" });
     expect(view.rules.map((r) => r.id)).toEqual(["abuse", "links_contact"]);
     expect(view.foundBy).toBe("Found by the contact check and Mistral");

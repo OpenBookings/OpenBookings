@@ -5,7 +5,7 @@ import { propertyReviewsKey, purge } from "@openbookings/cache";
 import { dangerousAction } from "./dangerous";
 import type { Confirmation, DangerousResult } from "./dangerous-actions";
 import { withWriteTransaction, writePool } from "./db";
-import { DECISION_ERRORS, keepItem, parseItem, removeItem, type DecisionDeps, type DecisionResult } from "./moderation";
+import { DECISION_ERRORS, keepItem, parseItem, removalOf, removeItem, type DecisionDeps, type DecisionResult } from "./moderation";
 import { requireStaff } from "./staff";
 
 /**
@@ -50,8 +50,9 @@ export async function adminRemoveItem(
   await requireStaff();
   const item = parseItem(i?.item);
   if (!item) return { ok: true, value: gone };
-  // Refused before the step-up is spent.
-  if (!Array.isArray(i.rules) || i.rules.length === 0) return { ok: true, value: { ok: false, error: DECISION_ERRORS.rules_required } };
+  // What the decision will use, and the audit row records. Refused before the step-up is spent.
+  const removal = removalOf(i.rules, i.note);
+  if (removal.rules.length === 0) return { ok: true, value: { ok: false, error: DECISION_ERRORS.rules_required } };
   return dangerousAction(
     {
       action: "review.remove",
@@ -59,10 +60,10 @@ export async function adminRemoveItem(
       targetId: item.id,
       reason: confirm?.reason,
       stepUpToken: confirm?.stepUpToken,
-      detail: { rules: i.rules, note: i.note ?? null },
+      detail: removal,
     },
     async (staff) => {
-      const result = await removeItem(liveDeps(), { item, version: i.version, rules: i.rules, note: i.note, decidedBy: staff.userId });
+      const result = await removeItem(liveDeps(), { item, version: i.version, ...removal, decidedBy: staff.userId });
       revalidatePath("/reviews");
       return result;
     },

@@ -4,9 +4,23 @@ import {
   MODERATION_DEADLINE_HOURS,
   REVIEW_RULES,
   REVIEW_RULE_IDS,
+  fragmentRanges,
   isReviewRuleId,
   maskFragments,
 } from "./moderation";
+
+describe("fragmentRanges", () => {
+  test("every occurrence, overlapping and touching ones merged, in order", () => {
+    expect(fragmentRanges("ab cd ab", ["ab", "b c", "d"])).toEqual([
+      [0, 5],
+      [6, 8],
+    ]);
+  });
+
+  test("empty fragments and ones that aren't in the text are ignored", () => {
+    expect(fragmentRanges("lovely stay", ["", "rude"])).toEqual([]);
+  });
+});
 
 describe("maskFragments", () => {
   test("masks every occurrence of a fragment", () => {

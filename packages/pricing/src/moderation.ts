@@ -73,36 +73,42 @@ export function isReviewRuleId(x: unknown): x is ReviewRuleId {
 }
 
 /**
- * Replaces every occurrence of each fragment with MASKED_TEXT. All matches are
- * found in the original text, then overlapping or touching ranges are merged
- * and each merged range is replaced once, so a fragment can never match inside
- * an earlier mask and overlaps mask in one piece. Fragments are matched
- * literally. Fragments that aren't in the text (or are empty) are ignored; it
- * never throws.
+ * Where the fragments are in the text: every occurrence of each fragment,
+ * found in the original, with overlapping or touching ranges merged, sorted.
+ * Fragments are matched literally; empty ones, and ones that aren't in the
+ * text, are ignored. maskFragments masks these ranges, and the admin queue
+ * highlights them, so the two never disagree.
  */
-export function maskFragments(body: string, fragments: string[]): string {
+export function fragmentRanges(text: string, fragments: string[]): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   for (const fragment of new Set(fragments)) {
-    if (fragment.length === 0) continue;
-    let from = body.indexOf(fragment);
-    while (from !== -1) {
+    if (typeof fragment !== "string" || fragment.length === 0) continue;
+    for (let from = text.indexOf(fragment); from !== -1; from = text.indexOf(fragment, from + 1)) {
       ranges.push([from, from + fragment.length]);
-      from = body.indexOf(fragment, from + 1);
     }
   }
-  if (ranges.length === 0) return body;
   ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged: Array<[number, number]> = [];
+  for (const [s, e] of ranges) {
+    const last = merged.at(-1);
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+  return merged;
+}
+
+/**
+ * Replaces every occurrence of each fragment with MASKED_TEXT. Each merged
+ * range (fragmentRanges) is replaced once, so a fragment can never match
+ * inside an earlier mask and overlaps mask in one piece. Fragments that
+ * aren't in the text (or are empty) are ignored; it never throws.
+ */
+export function maskFragments(body: string, fragments: string[]): string {
   let out = "";
   let cursor = 0;
-  let [start, end] = ranges[0];
-  for (const [s, e] of ranges.slice(1)) {
-    if (s <= end) {
-      end = Math.max(end, e);
-      continue;
-    }
+  for (const [start, end] of fragmentRanges(body, fragments)) {
     out += body.slice(cursor, start) + MASKED_TEXT;
     cursor = end;
-    [start, end] = [s, e];
   }
-  return out + body.slice(cursor, start) + MASKED_TEXT + body.slice(end);
+  return out + body.slice(cursor);
 }

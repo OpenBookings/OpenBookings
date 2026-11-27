@@ -78,7 +78,6 @@ export function ReviewItem({ view }: { view: ItemView }) {
   const [rules, setRules] = useState<ReviewRuleId[]>(view.actions?.remove.preselected ?? []);
   const [note, setNote] = useState("");
 
-  const [beforeRef, afterRef] = view.context.split(view.bookingRef);
   const actions = view.actions;
   const ruleTitles = RULE_OPTIONS.filter((r) => rules.includes(r.id)).map((r) => r.title);
 
@@ -94,11 +93,11 @@ export function ReviewItem({ view }: { view: ItemView }) {
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3.5">
         <span className="font-semibold">{view.kindLabel}</span>
         <span className="text-muted-foreground">
-          {beforeRef}
+          {view.context.before}
           <Link href={`/bookings/${view.bookingId}`} className="font-mono underline">
             {view.bookingRef}
           </Link>
-          {afterRef}
+          {view.context.after}
         </span>
         {view.badge ? (
           <span className={cn("ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold", TONE[view.badge.tone])}>
