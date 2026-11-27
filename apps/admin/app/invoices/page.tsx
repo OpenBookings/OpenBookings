@@ -2,7 +2,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { previousMonth } from "@/lib/invoice-job-args";
-import { databaseHost, requireSuperAdmin } from "@/lib/super-admin";
+import { databaseHost } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 import { RunForm } from "./run-form";
 
 type RunRow = { step: string; period: string; status: string; dry_run: boolean; started: string; seconds: number | null };
@@ -13,7 +14,7 @@ const euro = (cents: string) =>
 
 /** Runs the monthly invoice job by hand, against this app's database and Stripe test key. Dev only. */
 export default async function InvoicesPage() {
-  requireSuperAdmin();
+  await requireStaff();
   const db = readPool();
   const ready = (await db.query(`SELECT to_regclass('public.invoice_runs') IS NOT NULL AS ok`)).rows[0]?.ok === true;
 

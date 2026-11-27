@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { bookingRef, loadFlaggedPayments, type FlaggedPayment, type FlagKind } from "@/lib/flagged-payments";
-import { requireSuperAdmin } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 import { ResolveForm } from "./resolve-form";
 
 const KIND_LABEL: Record<FlagKind, string> = {
@@ -49,7 +49,7 @@ const when = (d: Date) =>
  * responsibility).
  */
 export default async function FlaggedPaymentsPage() {
-  requireSuperAdmin();
+  await requireStaff();
   const flags = await loadFlaggedPayments(readPool());
   const open = flags.filter((f) => !f.resolvedAt).length;
 

@@ -21,7 +21,8 @@ import { sendBookingCancelled as sendCancellation, sendRefundIssued } from "@ope
 import { actorFor, type ActAs } from "./actor";
 import { readLifecycleDb, readPool, writeLifecycleDb, writePool } from "./db";
 import { UUID_RE } from "./search";
-import { isStripeTestMode, requireSuperAdmin } from "./super-admin";
+import { isStripeTestMode } from "./super-admin";
+import { requireStaff } from "./staff";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const invalid = { ok: false, error: "invalid" } as unknown as LifecycleResult;
@@ -62,7 +63,7 @@ async function run(
   as: ActAs,
   act: (actor: Actor) => Promise<LifecycleResult>,
 ): Promise<LifecycleResult> {
-  requireSuperAdmin();
+  await requireStaff();
   if (!isStripeTestMode()) return notTestMode;
   const actor = await actorFor(writePool(), bookingId, as);
   if (!actor) return notFound;
@@ -75,7 +76,7 @@ export async function allowedFor(
   bookingId: string,
   as: ActAs,
 ): Promise<{ actor: boolean; actions: BookingAction[] }> {
-  requireSuperAdmin();
+  await requireStaff();
   const actor = await actorFor(readPool(), bookingId, as);
   if (!actor) return { actor: false, actions: [] };
   const state = await loadBookingState(readPool(), bookingId, new Date(), false, as);
@@ -84,13 +85,13 @@ export async function allowedFor(
 
 /** What a guest cancellation of these rooms (null = all) would refund now. */
 export async function adminPreviewRefund(bookingId: string, reservationIds: string[] | null) {
-  requireSuperAdmin();
+  await requireStaff();
   if (!isStripeTestMode() || badIds(bookingId, reservationIds)) return null;
   return previewRefund({ bookingId, reservationIds }, { db: readLifecycleDb() });
 }
 
 export async function adminCancelRooms(bookingId: string, as: ActAs, reservationIds: string[] | null) {
-  requireSuperAdmin();
+  await requireStaff();
   if (badIds(bookingId, reservationIds)) return invalid;
   return run(bookingId, as, async (actor) => {
     const result = await cancelRooms(deps(), { bookingId, actor, reservationIds });
@@ -100,19 +101,19 @@ export async function adminCancelRooms(bookingId: string, as: ActAs, reservation
 }
 
 export async function adminMarkCheckedIn(bookingId: string, as: ActAs) {
-  requireSuperAdmin();
+  await requireStaff();
   if (badIds(bookingId, null)) return invalid;
   return run(bookingId, as, (actor) => markCheckedIn(deps(), { bookingId, actor }));
 }
 
 export async function adminMarkNoShow(bookingId: string, as: ActAs) {
-  requireSuperAdmin();
+  await requireStaff();
   if (badIds(bookingId, null)) return invalid;
   return run(bookingId, as, (actor) => markNoShow(deps(), { bookingId, actor }));
 }
 
 export async function adminRecordEarlyDeparture(bookingId: string, as: ActAs, lastNightStayed: string) {
-  requireSuperAdmin();
+  await requireStaff();
   if (badIds(bookingId, null) || typeof lastNightStayed !== "string" || !DATE_RE.test(lastNightStayed)) return invalid;
   return run(bookingId, as, async (actor) => {
     const result = await recordEarlyDeparture(deps(), { bookingId, actor, lastNightStayed });
@@ -123,7 +124,7 @@ export async function adminRecordEarlyDeparture(bookingId: string, as: ActAs, la
 
 /** Always as host. `amount` is the euros staff typed ("12,50"), read into cents here. */
 export async function adminGoodwillRefund(bookingId: string, amount: string) {
-  requireSuperAdmin();
+  await requireStaff();
   if (badIds(bookingId, null)) return invalid;
   const typed = typeof amount === "string" ? parseEuroInput(amount) : null;
   if (!typed?.ok || typed.cents <= 0) return { ok: false, error: "invalid_amount" } satisfies LifecycleResult;
@@ -136,7 +137,7 @@ export async function adminGoodwillRefund(bookingId: string, amount: string) {
 }
 
 export async function adminRetryRefunds(bookingId: string) {
-  requireSuperAdmin();
+  await requireStaff();
   if (!isStripeTestMode()) return notTestMode;
   if (badIds(bookingId, null)) return invalid;
   const result = await retryRefunds(deps(), { bookingId, via: "admin" });

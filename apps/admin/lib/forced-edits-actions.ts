@@ -11,10 +11,10 @@ import {
   type ForcedResult,
 } from "./forced-edits";
 import { withWriteTransaction } from "./db";
-import { requireSuperAdmin } from "./super-admin";
+import { requireStaff } from "./staff";
 
 async function run(bookingId: string, fn: (tx: import("pg").PoolClient) => Promise<ForcedResult>) {
-  requireSuperAdmin();
+  await requireStaff();
   const result = await withWriteTransaction(fn);
   revalidatePath(`/bookings/${bookingId}`);
   return result;

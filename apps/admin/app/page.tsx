@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { searchBookings } from "@/lib/search";
-import { requireSuperAdmin } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 
 const STATUSES = ["pending", "confirmed", "cancelled", "completed", "no_show", "checked_in"];
 
@@ -20,7 +20,7 @@ function first(v: string | string[] | undefined): string {
 const selectClass = "h-9 rounded-md border border-input bg-transparent px-3 text-sm";
 
 export default async function Page({ searchParams }: { searchParams: Promise<Params> }) {
-  requireSuperAdmin();
+  await requireStaff();
   const sp = await searchParams;
   const input = {
     q: first(sp.q),

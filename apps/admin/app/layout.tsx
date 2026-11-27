@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { adminDbLabel } from "@/lib/db";
-import { databaseHost, isStripeTestMode, requireSuperAdmin } from "@/lib/super-admin";
+import { databaseHost, isStripeTestMode } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 import "./globals.css";
 
 export const metadata: Metadata = { title: "OpenBookings admin" };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  requireSuperAdmin();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  await requireStaff();
   return (
     <html lang="en">
       <body className="font-sans antialiased">

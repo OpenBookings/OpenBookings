@@ -11,7 +11,7 @@ import { loadAdminBooking } from "@/lib/booking";
 import { readPool } from "@/lib/db";
 import { buildTimeline } from "@/lib/timeline";
 import { allowedFor } from "@/lib/real-actions";
-import { requireSuperAdmin } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 
 const eur = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
@@ -34,7 +34,7 @@ function Section({ id, title, children }: { id?: string; title: string; children
 }
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  requireSuperAdmin();
+  await requireStaff();
   const { id } = await params;
   const data = await loadAdminBooking(readPool(), id);
   if (!data) notFound();
