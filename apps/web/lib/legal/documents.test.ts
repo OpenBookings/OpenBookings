@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_MESSAGE_RETENTION_DAYS } from "@openbookings/messaging/redaction";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
 const CURRENT = "2026-11-23";
@@ -100,7 +101,9 @@ describe("current privacy policy content", () => {
 
     test(`${locale}: states message and booking-note retention`, () => {
       const source = read(CURRENT, locale);
-      expect(source).toMatch(/\| (Messages|Berichten) \| 365 (days|dagen|jours)/);
+      expect(source).toMatch(
+        new RegExp(`\\| (Messages|Berichten) \\| ${DEFAULT_MESSAGE_RETENTION_DAYS} (days|dagen|jours)`),
+      );
       expect(source).toMatch(/18 (months|maanden|mois)/);
     });
 
