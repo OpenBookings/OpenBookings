@@ -28,6 +28,28 @@ describe("maskFragments", () => {
     expect(maskFragments("lovely stay", [])).toBe("lovely stay");
   });
 
+  test("a short fragment never matches inside an earlier mask", () => {
+    expect(maskFragments("rude man, they moved my bags", ["rude man", "move"])).toBe(
+      "[removed], they [removed]d my bags",
+    );
+  });
+
+  test("a fragment that is part of the mask text is harmless", () => {
+    expect(maskFragments("rude man", ["rude man", "removed"])).toBe("[removed]");
+    expect(maskFragments("a removed b", ["[removed]", "removed"])).toBe("a [removed] b");
+    expect(maskFragments("x [removed] y", ["[removed]"])).toBe("x [removed] y");
+  });
+
+  test("partially overlapping fragments mask in one piece", () => {
+    expect(maskFragments("call 0612 x", ["call 06", "612 x"])).toBe("[removed]");
+  });
+
+  test("treats metacharacters literally", () => {
+    expect(maskFragments("a.b axb (x) $1 foo", ["a.b", "(x)", "$1", ".*"])).toBe(
+      "[removed] axb [removed] [removed] foo",
+    );
+  });
+
   test("ignores empty fragments", () => {
     expect(maskFragments("lovely stay", [""])).toBe("lovely stay");
   });

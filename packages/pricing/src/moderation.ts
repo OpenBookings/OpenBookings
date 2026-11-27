@@ -20,7 +20,7 @@ export const REVIEW_RULES: Record<ReviewRuleId, { title: string; description: st
   abuse: {
     title: "No abuse or hate",
     description:
-      "Criticise the stay, not the people. Insults, slurs, harassment and hate towards anyone, including because of who they are, are not allowed.",
+      "Criticise the stay, not the people. Insults, slurs, harassment and hate towards anyone, including hate based on who they are, are not allowed.",
   },
   threat: {
     title: "No threats",
@@ -70,13 +70,36 @@ export function isReviewRuleId(x: unknown): x is ReviewRuleId {
 }
 
 /**
- * Replaces every occurrence of each fragment with MASKED_TEXT. Longest
- * fragments go first so overlapping ones mask in one piece. Fragments that
- * aren't in the text (or are empty) are ignored; it never throws.
+ * Replaces every occurrence of each fragment with MASKED_TEXT. All matches are
+ * found in the original text, then overlapping or touching ranges are merged
+ * and each merged range is replaced once, so a fragment can never match inside
+ * an earlier mask and overlaps mask in one piece. Fragments are matched
+ * literally. Fragments that aren't in the text (or are empty) are ignored; it
+ * never throws.
  */
 export function maskFragments(body: string, fragments: string[]): string {
-  const ordered = [...new Set(fragments)].filter((f) => f.length > 0).sort((a, b) => b.length - a.length);
-  let out = body;
-  for (const fragment of ordered) out = out.split(fragment).join(MASKED_TEXT);
-  return out;
+  const ranges: Array<[number, number]> = [];
+  for (const fragment of new Set(fragments)) {
+    if (fragment.length === 0) continue;
+    let from = body.indexOf(fragment);
+    while (from !== -1) {
+      ranges.push([from, from + fragment.length]);
+      from = body.indexOf(fragment, from + 1);
+    }
+  }
+  if (ranges.length === 0) return body;
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  let out = "";
+  let cursor = 0;
+  let [start, end] = ranges[0];
+  for (const [s, e] of ranges.slice(1)) {
+    if (s <= end) {
+      end = Math.max(end, e);
+      continue;
+    }
+    out += body.slice(cursor, start) + MASKED_TEXT;
+    cursor = end;
+    [start, end] = [s, e];
+  }
+  return out + body.slice(cursor, start) + MASKED_TEXT + body.slice(end);
 }
