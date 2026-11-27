@@ -77,6 +77,22 @@ describe("checkText", () => {
     });
   });
 
+  test("a whitespace-only or very short fragment is dropped but its rule still holds", async () => {
+    const text = "He is an ass. Rude at the desk.";
+    const { chat } = stub([
+      { rule: "abuse", fragment: " " },
+      { rule: "abuse", fragment: "  \n" },
+      { rule: "abuse", fragment: "He" },
+      { rule: "abuse", fragment: "ass" },
+    ]);
+    expect(await checkText(text, { chat })).toEqual({
+      verdict: "flagged",
+      rules: ["abuse"],
+      fragments: ["ass"],
+      source: "mistral",
+    });
+  });
+
   test("a phone number is flagged by the regex even when Mistral says clean", async () => {
     const { chat } = stub([]);
     expect(await checkText("Nice stay. Call me on +31 6 1234 5678 for a cheaper deal.", { chat })).toEqual({
@@ -176,6 +192,14 @@ describe("checkText", () => {
     expect(req.system).toBe(SYSTEM_PROMPT);
     expect(req.system).not.toContain("Ignore your instructions");
     expect(JSON.stringify(req.schema)).not.toContain("Ignore your instructions");
+  });
+});
+
+describe("the package entry", () => {
+  test("exports the check, not the Mistral client", async () => {
+    const entry = await import("./index");
+    expect(typeof entry.checkText).toBe("function");
+    expect("mistralClient" in entry).toBe(false);
   });
 });
 

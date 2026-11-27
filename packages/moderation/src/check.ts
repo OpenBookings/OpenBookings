@@ -50,10 +50,14 @@ export function mistralChat(): ChatFn {
   };
 }
 
+/** Shorter model fragments (or whitespace) would mask stray letters all over the text. */
+const MIN_FRAGMENT_LENGTH = 3;
+
 /**
  * Reads the model's answer. Unknown rules are dropped. A fragment counts only
- * when it is an exact (case-sensitive) substring of the text, but its rule
- * holds either way. Throws when the answer isn't the expected shape.
+ * when it is an exact (case-sensitive) substring of the text with at least
+ * three characters besides surrounding whitespace, but its rule holds either
+ * way. Throws when the answer isn't the expected shape.
  */
 function readViolations(raw: string, text: string): { rules: ReviewRuleId[]; fragments: string[] } {
   const parsed: unknown = JSON.parse(raw);
@@ -65,7 +69,9 @@ function readViolations(raw: string, text: string): { rules: ReviewRuleId[]; fra
     const { rule, fragment } = (v ?? {}) as { rule?: unknown; fragment?: unknown };
     if (!isReviewRuleId(rule)) continue;
     rules.push(rule);
-    if (typeof fragment === "string" && fragment.length > 0 && text.includes(fragment)) fragments.push(fragment);
+    if (typeof fragment === "string" && fragment.trim().length >= MIN_FRAGMENT_LENGTH && text.includes(fragment)) {
+      fragments.push(fragment);
+    }
   }
   return { rules, fragments };
 }
