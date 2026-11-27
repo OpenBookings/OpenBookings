@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
 import { cached, purge, propertyReviewsKey } from "@openbookings/cache";
 import { getPool } from "@openbookings/db";
@@ -41,4 +42,16 @@ export async function getPropertyReviews(propertyId: string): Promise<PropertyRe
 /** Drops the cached reviews, so a deleted review leaves the page now rather than tomorrow. */
 export async function purgePropertyReviews(propertyId: string): Promise<void> {
   await purge([propertyReviewsKey(propertyId)], { onError: report });
+}
+
+/**
+ * After the moderation job changed what properties' pages show (a held review
+ * or reply published by the deadline or after its recheck): drops their
+ * cached reviews and marks their pages for a rebuild, as the review actions do.
+ */
+export async function refreshPropertyReviewPages(propertyIds: string[]): Promise<void> {
+  if (propertyIds.length === 0) return;
+  await purge(propertyIds.map((id) => propertyReviewsKey(id)), { onError: report });
+  const { rows } = await getPool().query(`SELECT slug FROM properties WHERE id = ANY($1::uuid[])`, [propertyIds]);
+  for (const { slug } of rows as { slug: string }[]) revalidatePath(`/p/${slug}`);
 }

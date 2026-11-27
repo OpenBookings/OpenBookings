@@ -195,10 +195,10 @@ describeWithDb("review moderation against Postgres", () => {
 
   test("publishOverdue publishes at 72 hours with fragments masked, not at 71", async () => {
     const held = await review(NAMED);
-    expect(await publishOverdue(db, later(71 * HOUR))).toBe(0);
+    expect((await publishOverdue(db, later(71 * HOUR))).published).toBe(0);
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", masked_body: null });
 
-    expect(await publishOverdue(db, later(72 * HOUR))).toBe(1);
+    expect((await publishOverdue(db, later(72 * HOUR))).published).toBe(1);
     expect(await reviewRow(held.reviewId)).toMatchObject({
       status: "published",
       published_at: later(72 * HOUR),
@@ -208,11 +208,11 @@ describeWithDb("review moderation against Postgres", () => {
       decided_at: null,
     });
     // Once only.
-    expect(await publishOverdue(db, later(73 * HOUR))).toBe(0);
+    expect((await publishOverdue(db, later(73 * HOUR))).published).toBe(0);
 
     // A held item without fragments publishes as written.
     const plain = await review(UNCHECKED, "Fine.", later(DAY));
-    expect(await publishOverdue(db, later(DAY + 72 * HOUR))).toBe(1);
+    expect((await publishOverdue(db, later(DAY + 72 * HOUR))).published).toBe(1);
     expect(await reviewRow(plain.reviewId)).toMatchObject({ status: "published", masked_body: null, published_by_deadline: true });
   });
 
@@ -253,7 +253,7 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "published", decision: "kept", decided_at: later(HOUR) });
 
     // And the deadline never overrides a decision.
-    expect(await publishOverdue(db, later(80 * HOUR))).toBe(0);
+    expect((await publishOverdue(db, later(80 * HOUR))).published).toBe(0);
     expect(await reviewRow(held.reviewId)).toMatchObject({ published_by_deadline: false, masked_body: null });
   });
 
@@ -397,7 +397,7 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reportStatus(open)).toEqual({ status: "dismissed", decided: true });
     expect(await decide(held.item, "removed", later(2 * HOUR))).toEqual({ ok: false, error: "not_found" });
     expect(await uncheckedItems(db, 10)).toEqual([]);
-    expect(await publishOverdue(db, later(80 * HOUR))).toBe(0);
+    expect((await publishOverdue(db, later(80 * HOUR))).published).toBe(0);
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "deleted", body: null, masked_body: null, flagged_fragments: [] });
   });
 
@@ -491,7 +491,7 @@ describeWithDb("review moderation against Postgres", () => {
       `UPDATE reviews SET flagged_reason = 'url', flagged_fragments = '[]', check_source = NULL, checked_at = NULL WHERE id = $1`,
       [held.reviewId],
     );
-    expect(await publishOverdue(db, later(30 * DAY))).toBe(0);
+    expect((await publishOverdue(db, later(30 * DAY))).published).toBe(0);
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", masked_body: null });
 
     // 0061's backfill (its UPDATE statements only: replaying the whole file
@@ -506,7 +506,7 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await uncheckedItems(db, 10)).toEqual([{ kind: "review", id: held.reviewId, body: RUDE }]);
     // The recheck finds the fragments, so the deadline masks them.
     await applyRecheck(db, held.item, NAMED, later(30 * DAY));
-    expect(await publishOverdue(db, later(30 * DAY))).toBe(1);
+    expect((await publishOverdue(db, later(30 * DAY))).published).toBe(1);
     expect(await reviewRow(held.reviewId)).toMatchObject({ masked_body: "[removed] at the desk was rude to us." });
   });
 
@@ -536,7 +536,7 @@ describeWithDb("review moderation against Postgres", () => {
         return result;
       },
     };
-    expect(await publishOverdue(racing, later(80 * HOUR))).toBe(0);
+    expect((await publishOverdue(racing, later(80 * HOUR))).published).toBe(0);
     expect(await one(`SELECT status, masked_body FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({
       status: "pending",
       masked_body: null,

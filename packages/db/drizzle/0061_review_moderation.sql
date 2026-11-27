@@ -169,11 +169,13 @@ CREATE POLICY ob_app_public_insert ON review_reports FOR INSERT TO ob_app
 --     apps connect as until they switch roles, a superuser, BYPASSRLS).
 -- The invoker is read from the `role` setting (SET ROLE, or a login role's
 -- default) or else session_user: inside SECURITY DEFINER current_user is the
--- owner. A role can only set `role` to a role it may become.
+-- owner. A role can only set `role` to a role it may become. Every table is
+-- schema-qualified and pg_temp comes last on the search_path, so a caller's
+-- temporary table can't stand in for one.
 CREATE OR REPLACE FUNCTION app.dismiss_deleted_review_reports(p_review_id uuid, p_reply_id uuid, p_now timestamptz)
 RETURNS integer
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   invoker text := coalesce(nullif(current_setting('role', true), 'none'), session_user::text);
@@ -185,22 +187,22 @@ BEGIN
           AND (r.rolsuper OR r.rolbypassrls OR r.oid = (SELECT c.relowner FROM pg_class c WHERE c.oid = 'public.review_reports'::regclass))
      )
      AND NOT EXISTS (
-       SELECT 1 FROM reviews rv
+       SELECT 1 FROM public.reviews rv
         WHERE rv.id = p_review_id AND app.user_id() IS NOT NULL
           AND (rv.guest_user_id = app.user_id() OR rv.property_id = ANY (app.readable_property_ids()))
      ) THEN
     RAISE EXCEPTION 'not allowed to close the reports on review %', p_review_id USING ERRCODE = '42501';
   END IF;
 
-  UPDATE review_reports rr
+  UPDATE public.review_reports rr
      SET status = 'dismissed', decided_at = p_now
    WHERE rr.status = 'open' AND rr.review_id = p_review_id
      AND CASE
            WHEN p_reply_id IS NULL THEN
-             EXISTS (SELECT 1 FROM reviews rv WHERE rv.id = p_review_id AND rv.status = 'deleted')
+             EXISTS (SELECT 1 FROM public.reviews rv WHERE rv.id = p_review_id AND rv.status = 'deleted')
            ELSE
              rr.reply_id = p_reply_id
-             AND EXISTS (SELECT 1 FROM review_replies x WHERE x.id = p_reply_id AND x.review_id = p_review_id AND x.status = 'deleted')
+             AND EXISTS (SELECT 1 FROM public.review_replies x WHERE x.id = p_reply_id AND x.review_id = p_review_id AND x.status = 'deleted')
          END;
   GET DIAGNOSTICS closed = ROW_COUNT;
   RETURN closed;

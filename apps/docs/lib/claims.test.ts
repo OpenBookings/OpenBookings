@@ -14,6 +14,8 @@ import { join, relative } from "node:path";
 import {
   EARLY_DEPARTURE_KEPT_NIGHTS,
   FREE_CANCELLATION_HOURS,
+  MODERATION_DEADLINE_HOURS,
+  MODERATION_RECORD_RETENTION_MONTHS,
   NON_REFUNDABLE_MIN_DISCOUNT_PERCENT,
   formatCancellationWindow,
   nonRefundableQualifies,
@@ -137,5 +139,13 @@ describe("early departure", () => {
     const stated = sweep(/(?:unused nights, the next|leaves? early[^.\n]*?the next) (\d+)\b/gi);
     const wrong = stated.filter((s) => Number(s.groups[0]) !== EARLY_DEPARTURE_KEPT_NIGHTS);
     expect(wrong.map((s) => s.where)).toEqual([]);
+  });
+});
+
+describe("review moderation", () => {
+  test("the background jobs page states the deadline and the retention the code applies", () => {
+    const text = page("self-hosted/how-to/schedule-the-background-jobs.mdx");
+    expect(text).toContain(`publishes held ones after ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(text).toContain(`deletes moderation records ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
   });
 });

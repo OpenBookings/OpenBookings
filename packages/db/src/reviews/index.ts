@@ -24,6 +24,7 @@ export * from "./shared";
 export * from "./invitations";
 export * from "./replies";
 export * from "./moderation";
+export * from "./moderation-sweep";
 import { authorFirstName, normalizeReviewBody } from "./shared";
 import { dismissReportsOfDeleted, storedCheck } from "./moderation";
 import { loadReviewReplies, type ReviewReply } from "./replies";

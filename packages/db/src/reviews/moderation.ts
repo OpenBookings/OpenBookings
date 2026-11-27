@@ -157,23 +157,39 @@ export async function dismissReportsOfDeleted(
 type HeldRow = { id: string; body: string | null; flagged_fragments: string[] };
 
 /**
+ * Whether the deadline may publish the item. `t` is the item's alias.
+ *   - Never one checked before 0061 (check_source NULL): 0061 marks the held
+ *     ones 'unchecked' so the recheck finds their fragments.
+ *   - Never an unchecked one held for a reason whose fragments aren't known
+ *     (a legacy item the old regex held): published, it would show the very
+ *     words it was held for. It waits for a recheck that finds them, or a
+ *     person. An unchecked item the new regex held has its fragments.
+ */
+const deadlineMaySql = (t: string) =>
+  `${t}.check_source IS NOT NULL AND NOT (${t}.check_source = 'unchecked' AND ${t}.flagged_reason IS NOT NULL AND ${t}.flagged_fragments = '[]'::jsonb)`;
+
+/** A published item's property, whose public page shows it. `t` is the item's alias. */
+const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
+  kind === "review" ? `${t}.property_id` : `(SELECT rv.property_id FROM reviews rv WHERE rv.id = ${t}.review_id)`;
+
+/**
  * Publishes every held item nobody decided within MODERATION_DEADLINE_HOURS,
  * each flagged fragment replaced by "[removed]" (masked_body; the original
  * stays for the moderator until the purge). A reply's clock restarts when its
- * host edits it, a review's when its guest rewrites it. Returns how many.
+ * host edits it, a review's when its guest rewrites it. Returns how many, and
+ * the properties whose public pages now show them (to refresh their caches).
  *
- * An item never checked under 0061 (check_source NULL) never publishes here:
- * 0061 marks the held ones 'unchecked' so the recheck finds their fragments.
- * The final UPDATE repeats every condition, so an edit or decision landing
- * after the SELECT is never published with a mask of the old text.
+ * Some held items never publish here (deadlineMaySql). The final UPDATE
+ * repeats every condition, so an edit or decision landing after the SELECT is
+ * never published with a mask of the old text.
  */
-export async function publishOverdue(db: Queryable, now: Date): Promise<number> {
+export async function publishOverdue(db: Queryable, now: Date): Promise<{ published: number; propertyIds: string[] }> {
   const cutoff = new Date(now.getTime() - MODERATION_DEADLINE_HOURS * HOUR);
   const held = {
     review: (
       await db.query(
         `SELECT t.id, t.body, t.flagged_fragments FROM reviews t
-          WHERE t.status = 'pending' AND t.decided_at IS NULL AND t.check_source IS NOT NULL AND ${heldSinceSql("review", "t")} <= $1
+          WHERE t.status = 'pending' AND t.decided_at IS NULL AND ${deadlineMaySql("t")} AND ${heldSinceSql("review", "t")} <= $1
           ORDER BY t.created_at
             FOR UPDATE SKIP LOCKED`,
         [cutoff],
@@ -182,7 +198,7 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<number> 
     reply: (
       await db.query(
         `SELECT rr.id, rr.body, rr.flagged_fragments FROM review_replies rr
-          WHERE rr.status = 'pending' AND rr.decided_at IS NULL AND rr.check_source IS NOT NULL
+          WHERE rr.status = 'pending' AND rr.decided_at IS NULL AND ${deadlineMaySql("rr")}
             AND ${heldSinceSql("reply", "rr")} <= $1 AND ${liveSql("reply", "rr")}
           ORDER BY rr.created_at
             FOR UPDATE OF rr SKIP LOCKED`,
@@ -191,6 +207,7 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<number> 
     ).rows as HeldRow[],
   };
   let published = 0;
+  const propertyIds = new Set<string>();
   for (const kind of ["review", "reply"] as const) {
     for (const row of held[kind]) {
       const fragments = Array.isArray(row.flagged_fragments) ? row.flagged_fragments : [];
@@ -198,15 +215,16 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<number> 
       const { rows } = await db.query(
         `UPDATE ${TABLE[kind]} t
             SET status = 'published', published_at = $2, masked_body = $3, published_by_deadline = true, updated_at = $2
-          WHERE t.id = $1 AND t.status = 'pending' AND t.decided_at IS NULL AND t.check_source IS NOT NULL
+          WHERE t.id = $1 AND t.status = 'pending' AND t.decided_at IS NULL AND ${deadlineMaySql("t")}
             AND ${heldSinceSql(kind, "t")} <= $4 AND t.body IS NOT DISTINCT FROM $5 AND ${liveSql(kind, "t")}
-          RETURNING t.id`,
+          RETURNING ${propertyIdSql(kind, "t")} AS property_id`,
         [row.id, now, masked, cutoff, row.body],
       );
+      for (const r of rows as { property_id: string }[]) propertyIds.add(r.property_id);
       published += rows.length;
     }
   }
-  return published;
+  return { published, propertyIds: [...propertyIds] };
 }
 
 // ── The recheck ──────────────────────────────────────────────────────────────
@@ -232,18 +250,32 @@ export async function uncheckedItems(db: Queryable, limit: number): Promise<Arra
 /**
  * Stores a recheck of an unchecked item: published when clean, else held with
  * what was found. A recheck that is itself unchecked changes nothing. Only an
- * item still held, unchecked and undecided is touched.
+ * item still held, unchecked and undecided is touched, and, given the `body`
+ * that was checked, only while its text is still that (an edit during the
+ * check has a check of its own). Returns whether it was stored, and the
+ * property whose public page shows it when it published.
  */
-export async function applyRecheck(db: Queryable, item: ModerationItem, check: TextCheck, now: Date): Promise<void> {
-  if (!Object.hasOwn(TABLE, item.kind) || !UUID.test(item.id) || check.verdict === "unchecked") return;
+export async function applyRecheck(
+  db: Queryable,
+  item: ModerationItem & { body?: string },
+  check: TextCheck,
+  now: Date,
+): Promise<{ stored: boolean; publishedPropertyId: string | null }> {
+  if (!Object.hasOwn(TABLE, item.kind) || !UUID.test(item.id) || check.verdict === "unchecked") {
+    return { stored: false, publishedPropertyId: null };
+  }
   const s = storedCheck(check, now);
-  await db.query(
-    `UPDATE ${TABLE[item.kind]}
+  const { rows } = await db.query(
+    `UPDATE ${TABLE[item.kind]} t
         SET status = $2, flagged_reason = $3, flagged_fragments = $4::jsonb, check_source = $5, checked_at = $6, updated_at = $6,
-            published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, $6) ELSE published_at END
-      WHERE id = $1::uuid AND status = 'pending' AND check_source = 'unchecked' AND decided_at IS NULL`,
-    [item.id, s.status, s.flaggedReason, s.fragments, s.source, now],
+            published_at = CASE WHEN $2 = 'published' THEN COALESCE(t.published_at, $6) ELSE t.published_at END
+      WHERE t.id = $1::uuid AND t.status = 'pending' AND t.check_source = 'unchecked' AND t.decided_at IS NULL
+        AND ($7::text IS NULL OR t.body = $7)
+      RETURNING t.status, ${propertyIdSql(item.kind, "t")} AS property_id`,
+    [item.id, s.status, s.flaggedReason, s.fragments, s.source, now, item.body ?? null],
   );
+  const updated = rows[0] as { status: string; property_id: string } | undefined;
+  return { stored: !!updated, publishedPropertyId: updated?.status === "published" ? updated.property_id : null };
 }
 
 // ── Retention ────────────────────────────────────────────────────────────────
