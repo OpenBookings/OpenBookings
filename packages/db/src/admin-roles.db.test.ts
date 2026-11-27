@@ -10,6 +10,26 @@ import { applyPendingMigrations, connectionString, describeWithDb } from "./test
 import { pendingMigrationSql } from "./testing/pending-migrations";
 
 const READ = [
+  // 0060: step-up credentials, without the TOTP secret or a step-up's challenge.
+  "admin_credentials.counter: SELECT",
+  "admin_credentials.created_at: SELECT",
+  "admin_credentials.credential_id: SELECT",
+  "admin_credentials.id: SELECT",
+  "admin_credentials.kind: SELECT",
+  "admin_credentials.label: SELECT",
+  "admin_credentials.last_used_at: SELECT",
+  "admin_credentials.public_key: SELECT",
+  "admin_credentials.transports: SELECT",
+  "admin_credentials.user_id: SELECT",
+  "admin_step_ups.action: SELECT",
+  "admin_step_ups.created_at: SELECT",
+  "admin_step_ups.expires_at: SELECT",
+  "admin_step_ups.id: SELECT",
+  "admin_step_ups.target_id: SELECT",
+  "admin_step_ups.used_at: SELECT",
+  "admin_step_ups.user_id: SELECT",
+  "admin_step_ups.verified_at: SELECT",
+  "admin_step_ups.verified_kind: SELECT",
   "audit_log: SELECT",
   "booking_events: SELECT",
   "booking_intents: SELECT",
@@ -36,6 +56,16 @@ const READ = [
 ];
 
 const WRITE = [
+  // 0060: enrolling step-up credentials and running step-ups.
+  "admin_credentials.counter: UPDATE",
+  "admin_credentials.last_used_at: UPDATE",
+  "admin_credentials: INSERT",
+  "admin_credentials: SELECT",
+  "admin_step_ups.used_at: UPDATE",
+  "admin_step_ups.verified_at: UPDATE",
+  "admin_step_ups.verified_kind: UPDATE",
+  "admin_step_ups: INSERT",
+  "admin_step_ups: SELECT",
   "audit_log: INSERT",
   "audit_log: SELECT",
   "booking_events: INSERT",

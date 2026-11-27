@@ -27,6 +27,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Link href="/flagged-payments" className="font-medium">
             Flagged payments
           </Link>
+          <Link href="/security" className="ml-auto font-medium">
+            Security
+          </Link>
         </header>
         <main className="p-4">{children}</main>
       </body>
