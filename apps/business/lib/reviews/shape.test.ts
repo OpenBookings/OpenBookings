@@ -21,6 +21,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     status: "published",
     flaggedReason: null,
     report: null,
+    replyReports: {},
     postedAt: "2031-11-15T10:00:00.000Z",
     replies: [],
     privateReplyAt: null,

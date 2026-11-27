@@ -134,6 +134,27 @@ describeWithDb("review reports against Postgres", () => {
     expect(await report(heldReply, host())).toEqual({ ok: false, error: "not_found" });
   });
 
+  test("a host reports a guest's answer, never a property's reply", async () => {
+    const published = await review();
+    const hostReply = await reply(published.item.id);
+    expect(await report(hostReply, host())).toEqual({ ok: false, error: "invalid" });
+
+    const answered = await postReviewReply(db, {
+      reviewId: published.item.id,
+      role: "guest",
+      authorUserId: published.guestId,
+      body: "You know that's not what happened.",
+      check: CLEAN,
+      now: later(90 * 60_000),
+    });
+    if (!answered.ok) throw new Error(`answer failed: ${answered.error}`);
+    const answer: ModerationItem = { kind: "reply", id: answered.replyId };
+    const result = await report(answer, host(), "abuse");
+    if (!result.ok) throw new Error(`report failed: ${result.error}`);
+    expect(await stored(result.reportId)).toMatchObject({ review_id: published.item.id, reply_id: answered.replyId, reporter_kind: "host" });
+    expect(await report(answer, host(), "abuse")).toEqual({ ok: false, error: "already_open" });
+  });
+
   test("an unknown rule, a long note or a malformed email is invalid", async () => {
     const { item } = await review();
     expect(await report(item, host(), "spam")).toEqual({ ok: false, error: "invalid" });

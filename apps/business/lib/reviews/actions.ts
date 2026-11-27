@@ -141,25 +141,26 @@ export async function skipReviewReply(reviewId: string, skipped: boolean): Promi
 export type ReportActionResult = { ok: true } | { ok: false; message: string };
 
 const REPORT_MESSAGES = {
-  not_found: "This review can't be reported. It may be held for a check, taken down, or deleted by the guest.",
-  already_open: "You've already reported this review. We'll email you the outcome.",
-  invalid: "Choose the rule it breaks, and keep your note under 1,000 characters.",
+  not_found: "This can't be reported. It may be held for a check, taken down, or deleted by the guest.",
+  already_open: "You've already reported this. We'll email you the outcome.",
+  invalid: "Choose the rule it breaks, and keep your note under 1,000 characters. Your own replies can't be reported.",
   rate_limited: "You're going a bit fast. Wait a few minutes and try again.",
 } as const;
 
 /**
- * Report a published review of the current hotel against one rule. Only a
- * member who can see the property's bookings (./actor, as for replies), and
- * one open report per organization per review (createReviewReport). The
- * review stays on the page until a person at OpenBookings decides; the
+ * Report a published review of the current hotel, or a guest's published
+ * answer under one, against one rule. Only a member who can see the
+ * property's bookings (./actor, as for replies), never a property's own reply
+ * (createReviewReport refuses it), and one open report per organization per
+ * item. It stays on the page until a person at OpenBookings decides; the
  * outcome is emailed to the member and shows on the Reviews page.
  */
-export async function reportReview(reviewId: string, input: { rule: string; note: string }): Promise<ReportActionResult> {
-  const actor = await reviewActor(await getServerSession(), { reviewId });
+async function reportAs(target: { reviewId: string } | { replyId: string }, input: { rule: string; note: string }): Promise<ReportActionResult> {
+  const actor = await reviewActor(await getServerSession(), target);
   if (!actor) return { ok: false, message: REPORT_MESSAGES.not_found };
   if (!checkRateLimit(`review-report:${actor.userId}`, 20, 60 * 60 * 1000).allowed) return { ok: false, message: REPORT_MESSAGES.rate_limited };
   const result = await createReviewReport(getPool(), {
-    item: { kind: "review", id: actor.reviewId },
+    item: "replyId" in target ? { kind: "reply", id: target.replyId } : { kind: "review", id: actor.reviewId },
     reporter: { kind: "host", userId: actor.userId },
     rule: input?.rule,
     note: input?.note,
@@ -168,4 +169,13 @@ export async function reportReview(reviewId: string, input: { rule: string; note
   if (!result.ok) return { ok: false, message: REPORT_MESSAGES[result.error] };
   revalidatePath(REVIEWS);
   return { ok: true };
+}
+
+export async function reportReview(reviewId: string, input: { rule: string; note: string }): Promise<ReportActionResult> {
+  return reportAs({ reviewId }, input);
+}
+
+/** A guest's answer to the property's reply. */
+export async function reportGuestAnswer(replyId: string, input: { rule: string; note: string }): Promise<ReportActionResult> {
+  return reportAs({ replyId }, input);
 }

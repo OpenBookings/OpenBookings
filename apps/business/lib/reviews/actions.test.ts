@@ -20,6 +20,7 @@ const edited: { body: string; check: Check }[] = [];
 const repliedMail: string[] = [];
 type Report = { item: unknown; reporter: unknown; rule: unknown; note: unknown; now?: Date };
 const reports: Report[] = [];
+const actorTargets: unknown[] = [];
 
 const statusOf = (c: Check) => (c.verdict === "clean" ? "published" : "pending");
 
@@ -66,14 +67,17 @@ await mockModules(
     "./actor": () => ({
       messageFor: (error: string) => `failed: ${error}`,
       // A review of a property this member can't see looks like no review at all.
-      reviewActor: async (_session: unknown, target: { reviewId?: string }) =>
-        target.reviewId === "review-other" ? null : { userId: "host-1", propertyId: "p", reviewId: target.reviewId ?? "review-1" },
+      reviewActor: async (_session: unknown, target: { reviewId?: string; replyId?: string }) => {
+        actorTargets.push(target);
+        if (target.reviewId === "review-other" || target.replyId === "answer-other") return null;
+        return { userId: "host-1", propertyId: "p", reviewId: target.reviewId ?? "review-1" };
+      },
     }),
   },
   ["@/lib/auth"],
 );
 
-const { editReviewReply, replyToReview, reportReview } = await import("./actions");
+const { editReviewReply, replyToReview, reportGuestAnswer, reportReview } = await import("./actions");
 
 beforeEach(() => {
   check = clean();
@@ -82,6 +86,7 @@ beforeEach(() => {
   edited.length = 0;
   repliedMail.length = 0;
   reports.length = 0;
+  actorTargets.length = 0;
 });
 
 describe("the moderation check on host replies", () => {
@@ -154,6 +159,17 @@ describe("reporting a review", () => {
   it("a host cannot report another property's review", async () => {
     const result = await reportReview("review-other", { rule: "abuse", note: "" });
     expect(result).toMatchObject({ ok: false });
+    expect(reports).toEqual([]);
+  });
+
+  it("a guest's answer is checked by the reply's property, and reported as that reply", async () => {
+    expect(await reportGuestAnswer("answer-1", { rule: "abuse", note: "" })).toEqual({ ok: true });
+    expect(actorTargets).toEqual([{ replyId: "answer-1" }]);
+    expect(reports[0]).toMatchObject({ item: { kind: "reply", id: "answer-1" }, reporter: { kind: "host", userId: "host-1" } });
+  });
+
+  it("a host cannot report an answer on another property's review", async () => {
+    expect(await reportGuestAnswer("answer-other", { rule: "abuse", note: "" })).toMatchObject({ ok: false });
     expect(reports).toEqual([]);
   });
 });

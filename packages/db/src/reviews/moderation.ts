@@ -8,8 +8,8 @@
  * Decisions are compare-and-set on `decided_at IS NULL`, so two tabs, or a
  * moderator and the deadline job, never both act on one item. The deadline
  * job never sets decided_at, so a decision after publish-by-deadline still
- * goes through (once). A kept item that is reported again may be decided
- * once more (openToDecideSql).
+ * goes through (once). A kept item with an open report may be decided once
+ * more (openToDecideSql).
  *
  * Rules, the deadline, the retention and the mask live in
  * @openbookings/pricing (moderation.ts).
@@ -67,14 +67,14 @@ const reportsOfSql = (kind: ModerationItem["kind"], t: string) =>
 
 /**
  * Whether a moderator may decide it (again): nobody has, or it has an open
- * report made after the decision. So a problem missed at a Keep stays
- * reportable, and the new report reopens the item. A removed item isn't
- * published, so it can't be reported again. `t` is the item's alias.
+ * report. A decision closes every open report on the item, so one that is
+ * open after a decision is new, or raced the decision: either way a person
+ * hasn't looked at it. So a problem missed at a Keep stays reportable. A
+ * removed item isn't published, so it can't be reported again. `t` is the
+ * item's alias.
  */
 const openToDecideSql = (kind: ModerationItem["kind"], t: string) =>
-  `(${t}.decided_at IS NULL OR EXISTS (
-     SELECT 1 FROM review_reports rp
-      WHERE rp.status = 'open' AND ${reportsOfSql(kind, t)} AND rp.created_at > ${t}.decided_at))`;
+  `(${t}.decided_at IS NULL OR EXISTS (SELECT 1 FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOfSql(kind, t)}))`;
 
 /** An item's property, whose public page shows it. `t` is the item's alias. */
 const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
@@ -121,7 +121,7 @@ export type DecideResult =
  * names them for the outcome emails.
  *
  * Only a held or published item is decided, and only once, unless it was
- * kept and reported since (then once more). With `version` (as
+ * kept and has an open report (then once more). With `version` (as
  * moderationVersionSql read it when the moderator opened the item), only that
  * version: an item edited since answers "changed", so a stale tab never
  * decides words nobody looked at. Already decided wins over changed.

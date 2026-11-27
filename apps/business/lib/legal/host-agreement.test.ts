@@ -127,8 +127,9 @@ describe("Host Agreement 1.6 states what the code does", () => {
     expect(reviews).toContain("provider based in the EU");
   });
 
-  test("6.5 names the report route; a reported review stays visible while it is assessed", () => {
-    expect(reviews).toContain("**Report** on the review in **Reviews**");
+  test("6.5 names the report route, for reviews and guests' answers; a reported review stays visible while it is assessed", () => {
+    expect(reviews).toContain("The Host may report a review, or a Guest's answer to its reply,");
+    expect(reviews).toContain("using **Report** on it in **Reviews**");
     expect(reviews).toContain("A reported review stays visible while OpenBookings assesses it");
     expect(reviews).toContain("tell the Host the outcome by email and on its **Reviews** page");
   });

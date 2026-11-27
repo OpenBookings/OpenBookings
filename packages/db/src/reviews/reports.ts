@@ -130,7 +130,8 @@ function reportNote(note: unknown): string | null | undefined {
  * Stores a report on a published review or reply. A second open report from
  * the same reporter on the same item is `already_open`; a held, removed or
  * deleted item is `not_found`; an unknown rule, a note over REPORT_NOTE_MAX
- * or a malformed email is `invalid`.
+ * or a malformed email is `invalid`. A host reports reviews and guests'
+ * answers, never a property's reply (its own, or a colleague's): `invalid`.
  *
  * A kept item reported again opens again for a moderator (decideItem).
  */
@@ -147,6 +148,7 @@ export async function createReviewReport(
 
   const target = await publishedTarget(db, i.item);
   if (!target) return { ok: false, error: "not_found" };
+  if (reporter.kind === "host" && target.reply_role === "host") return { ok: false, error: "invalid" };
 
   const id = crypto.randomUUID();
   const result = (await db.query(

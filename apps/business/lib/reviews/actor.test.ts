@@ -34,6 +34,27 @@ describe("reviewActor", () => {
     expect(await reviewActor(session, { reviewId: REVIEW }, d)).toBeNull();
   });
 
+  test("a reply (a guest's answer) is checked against its review's property", async () => {
+    const readable = new Set(["p1"]);
+    const asked: string[] = [];
+    const d = {
+      queryOne: async <T,>(sql: string, values: unknown[] = []) => {
+        expect(sql).toContain("FROM review_replies rr JOIN reviews rv ON rv.id = rr.review_id");
+        expect(values).toEqual([REPLY]);
+        return { property_id: "p2", review_id: REVIEW } as T;
+      },
+      userCan: async (_s: unknown, propertyId: string) => {
+        asked.push(propertyId);
+        return readable.has(propertyId);
+      },
+    };
+    // The answer sits on another property's review: nothing.
+    expect(await reviewActor(session, { replyId: REPLY }, d)).toBeNull();
+    expect(asked).toEqual(["p2"]);
+    readable.add("p2");
+    expect(await reviewActor(session, { replyId: REPLY }, d)).toEqual({ userId: "u1", propertyId: "p2", reviewId: REVIEW });
+  });
+
   test("an unknown id gets nothing", async () => {
     const { deps: d } = deps(null, true);
     expect(await reviewActor(session, { replyId: REPLY }, d)).toBeNull();

@@ -19,21 +19,22 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { reportReview } from "@/lib/reviews/actions";
+import { reportGuestAnswer, reportReview } from "@/lib/reviews/actions";
 
 const NOTE_MAX = 1000;
 const RULES_PAGE = `${process.env.NEXT_PUBLIC_WEB_URL ?? "https://openbookings.co"}/legal/review-rules`;
 
 /**
- * Report a review against one rule, with an optional note. A person at
- * OpenBookings decides; the review stays on the page meanwhile.
+ * Report a review, or a guest's answer, against one rule, with an optional
+ * note. A person at OpenBookings decides; it stays on the page meanwhile.
  */
 export function ReportDialog({
-  reviewId,
+  target,
   open,
   onOpenChange,
 }: {
-  reviewId: string;
+  /** A review, or a guest's answer under one. */
+  target: { kind: "review" | "answer"; id: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -45,7 +46,8 @@ export function ReportDialog({
   const send = () =>
     startTransition(async () => {
       setError(null);
-      const result = await reportReview(reviewId, { rule, note });
+      const input = { rule, note };
+      const result = target.kind === "review" ? await reportReview(target.id, input) : await reportGuestAnswer(target.id, input);
       if (!result.ok) return setError(result.message);
       toast.success("Reported. We'll email you the outcome.");
       onOpenChange(false);
@@ -55,7 +57,7 @@ export function ReportDialog({
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Report this review</DialogTitle>
+          <DialogTitle>{target.kind === "review" ? "Report this review" : "Report this answer"}</DialogTitle>
           <DialogDescription>
             A person at OpenBookings checks it against our{" "}
             <a
@@ -82,9 +84,9 @@ export function ReportDialog({
           >
             {REVIEW_RULE_IDS.map((id) => (
               <div key={id} className="flex items-center gap-2">
-                <RadioGroupItem id={`report-${reviewId}-${id}`} value={id} />
+                <RadioGroupItem id={`report-${target.id}-${id}`} value={id} />
                 <Label
-                  htmlFor={`report-${reviewId}-${id}`}
+                  htmlFor={`report-${target.id}-${id}`}
                   className="font-normal"
                 >
                   {REVIEW_RULES[id].title}
@@ -95,14 +97,14 @@ export function ReportDialog({
         </fieldset>
 
         <div className="grid gap-1.5">
-          <Label htmlFor={`report-${reviewId}-note`}>
+          <Label htmlFor={`report-${target.id}-note`}>
             What should we know?{" "}
             <span className="font-normal text-muted-foreground">
               (optional)
             </span>
           </Label>
           <Textarea
-            id={`report-${reviewId}-note`}
+            id={`report-${target.id}-note`}
             rows={3}
             maxLength={NOTE_MAX}
             value={note}

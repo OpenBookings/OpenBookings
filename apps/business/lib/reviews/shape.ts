@@ -30,6 +30,12 @@ export type HostReview = {
   flaggedReason: string | null;
   /** The property's own report on it: open, or the outcome of the current decision. */
   report: HostReportStatus | null;
+  /**
+   * The property's reports on guests' answers under it, by reply id: open, or
+   * the outcome of the answer's current decision. An upheld one's answer was
+   * removed, so it isn't in `replies`.
+   */
+  replyReports: Record<string, HostReportStatus>;
   /** ISO: published_at, or created_at while it is being checked. */
   postedAt: string;
   /** Published and held replies, oldest first. */

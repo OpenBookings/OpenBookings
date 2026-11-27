@@ -187,6 +187,33 @@ describeWithDb("loadHostReviews against Postgres", () => {
     expect(byId(rewritten)).toMatchObject({ status: "pending", report: null });
   });
 
+  test("the property's reports on guests' answers show by reply, a removed one's outcome included", async () => {
+    const reviewId = await addReview("published");
+    const answer = async (status: string, decidedAt: string | null) =>
+      (
+        await one(
+          `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, published_at, decision, decided_at)
+           VALUES ($1, 'guest', $2, 'Not true.', $3, NOW(), CASE WHEN $4::timestamptz IS NULL THEN NULL WHEN $3 = 'removed' THEN 'removed' ELSE 'kept' END, $4::timestamptz)
+           RETURNING id`,
+          [reviewId, guest, status, decidedAt],
+        )
+      ).id;
+    const report = (replyId: string, status: string, decidedAt: string | null) =>
+      db.query(
+        `INSERT INTO review_reports (review_id, reply_id, reporter_kind, reporter_user_id, rule, status, decided_at)
+         VALUES ($1, $2, 'host', $3, 'abuse', $4, $5::timestamptz)`,
+        [reviewId, replyId, owner, status, decidedAt],
+      );
+    const open = await answer("published", null);
+    await report(open, "open", null);
+    const removed = await answer("removed", "2031-01-02T10:00:00Z");
+    await report(removed, "upheld", "2031-01-02T10:00:00Z");
+
+    const [listed] = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(listed?.replyReports).toEqual({ [open]: "open", [removed]: "upheld" });
+    expect(listed?.replies.map((r) => r.id)).toEqual([open]);
+  });
+
   test("countReviewsNeedingReply counts the open ones", async () => {
     await addReview("published");
     await addReview("published");

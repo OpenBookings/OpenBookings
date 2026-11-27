@@ -82,7 +82,7 @@ export type QueueRow = {
   rewriteUsed: boolean;
   /** Open reports; on a decided item, the ones its decision closed too. */
   reports: QueueReport[];
-  /** Kept, then reported again: it can be decided once more. */
+  /** Kept, with an open report: it can be decided once more. */
   reopened: boolean;
   decision: {
     decision: "kept" | "removed";
@@ -125,10 +125,8 @@ const ITEMS = `
 const reportsOf = (i: string) => `
   (rp.reply_id = ${i}.id OR (${i}.kind = 'review' AND rp.review_id = ${i}.id AND rp.reply_id IS NULL))`;
 const OPEN_REPORT = (i: string) => `EXISTS (SELECT 1 FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf(i)})`;
-/** Nobody decided it, or it was kept and reported since: decideItem decides it (again). */
-const OPEN_TO_DECIDE = (i: string) =>
-  `(${i}.decided_at IS NULL OR EXISTS (
-     SELECT 1 FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf(i)} AND rp.created_at > ${i}.decided_at))`;
+/** Nobody decided it, or it was kept and has an open report: decideItem decides it (again). */
+const OPEN_TO_DECIDE = (i: string) => `(${i}.decided_at IS NULL OR ${OPEN_REPORT(i)})`;
 
 const TAB: Record<ModerationTab, { where: string; order: string; limit: number }> = {
   held: { where: `i.status = 'pending' AND i.decided_at IS NULL`, order: `i.written_at, i.id`, limit: QUEUE_LIMIT },
@@ -237,7 +235,7 @@ function toRow(r: Row, now: Date): QueueRow {
     rewriteUntil: closesAt && !r.rewrite_used && closesAt > now ? closesAt : null,
     rewriteUsed: r.rewrite_used,
     reports,
-    reopened: r.decided_at !== null && reports.some((p) => p.status === "open" && p.createdAt > r.decided_at!),
+    reopened: r.decided_at !== null && reports.some((p) => p.status === "open"),
     decision:
       r.decision && r.decided_at
         ? {

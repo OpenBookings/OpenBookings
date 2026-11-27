@@ -91,7 +91,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
         </div>
         {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
       </div>
-      {canReport ? <ReportDialog reviewId={review.id} open={reporting} onOpenChange={setReporting} /> : null}
+      {canReport ? <ReportDialog target={{ kind: "review", id: review.id }} open={reporting} onOpenChange={setReporting} /> : null}
 
       {/* A review removed on the property's report has no thread left to answer. */}
       <div className={cn("flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5", review.status === "removed" && "hidden")}>
@@ -107,6 +107,12 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
         {review.replies.map((reply) => (
           <ThreadReply key={reply.id} review={review} reply={reply} isLast={reply.id === lastId} />
         ))}
+
+        {Object.entries(review.replyReports).some(([id, status]) => status === "upheld" && !review.replies.some((r) => r.id === id)) ? (
+          <p className="text-xs text-muted-foreground">
+            {review.authorName}&apos;s answer you reported was removed for breaking our review rules.
+          </p>
+        ) : null}
 
         {review.privateReplyAt ? (
           <p className="text-xs text-muted-foreground">
@@ -132,6 +138,11 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
 function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: ReviewReply; isLast: boolean }) {
   const isHost = reply.role === "host";
   const [editing, setEditing] = React.useState(false);
+  const [reporting, setReporting] = React.useState(false);
+  const reportStatus = review.replyReports[reply.id] ?? null;
+  const report = reportStatus ? REPORT[reportStatus] : null;
+  // A guest's live answer on a live review; never the property's own replies.
+  const canReport = !isHost && reply.status === "published" && review.status === "published" && reportStatus !== "open";
   const [text, setText] = React.useState(reply.body);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, startTransition] = React.useTransition();
@@ -164,6 +175,12 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
           {reply.editedAt ? " · Edited" : ""}
           {reply.status === "pending" ? " · Being checked" : ""}
         </span>
+        {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
+        {canReport ? (
+          <Button variant="ghost" size="xs" onClick={() => setReporting(true)}>
+            Report…
+          </Button>
+        ) : null}
         {isHost && !editing ? (
           <span className="flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setEditing(true)} disabled={busy}>
@@ -195,6 +212,8 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
       ) : (
         <p className="text-sm leading-relaxed whitespace-pre-line [overflow-wrap:anywhere]">{reply.body}</p>
       )}
+      {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
+      {canReport ? <ReportDialog target={{ kind: "answer", id: reply.id }} open={reporting} onOpenChange={setReporting} /> : null}
     </div>
   );
 }

@@ -124,8 +124,8 @@ export default function ReviewRulesPage() {
 
       <Section id="reporting" number="6" title="Reporting a review">
         <P>
-          Properties report a review with <Strong>Report</Strong> on the review, in Reviews in their dashboard. We
-          email them the outcome, and it shows on their Reviews page.
+          Properties report a review, or a guest&apos;s answer to their reply, with <Strong>Report</Strong> on it, in
+          Reviews in their dashboard. We email them the outcome, and it shows on their Reviews page.
         </P>
         <P>
           Anyone can report a review from the property&apos;s page, with <Strong>Report this review</Strong>. If

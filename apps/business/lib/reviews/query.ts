@@ -22,6 +22,7 @@ type Row = {
   status: "published" | "pending" | "removed";
   flagged_reason: string | null;
   report_status: HostReportStatus | null;
+  reply_reports: Record<string, HostReportStatus> | null;
   posted_at: Date;
   private_reply_at: Date | null;
   reply_skipped_at: Date | null;
@@ -52,7 +53,8 @@ const ownReportsSql = `
  * Published reviews and reviews being checked, at the current hotel (`$1` the
  * member, `$2` the hotel, bound by getPropertyScopedDb), each with its public thread (published and
  * held replies), the time of the latest private reply, and the property's
- * report on it: open first, else the latest outcome. A removed review shows
+ * report on it and on each guest answer under it (by reply id, including an
+ * answer its report removed): open first, else the latest outcome. A removed review shows
  * only when the property's report was upheld by its removal, so the host sees
  * the outcome. Hidden and deleted reviews are left out. Text published by the
  * moderation deadline shows masked, as on the property page.
@@ -63,6 +65,14 @@ const hostReviewsSql = (testing: boolean) => `
          rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
          (SELECT rp.status ${ownReportsSql} ORDER BY (rp.status = 'open') DESC, rp.created_at DESC LIMIT 1) AS report_status,
+         (SELECT json_object_agg(x.reply_id, x.status) FROM (
+            SELECT DISTINCT ON (rp.reply_id) rp.reply_id, rp.status
+              FROM review_reports rp JOIN review_replies rr ON rr.id = rp.reply_id
+             WHERE rp.review_id = rv.id AND rp.reporter_kind = 'host'
+               AND rp.reporter_org_id IS NOT DISTINCT FROM p.organization_id
+               AND (rp.status = 'open' OR rp.decided_at = rr.decided_at)
+             ORDER BY rp.reply_id, (rp.status = 'open') DESC, rp.created_at DESC
+          ) x) AS reply_reports,
          COALESCE((
            SELECT json_agg(json_build_object(
              'id', rr.id, 'role', rr.author_role, 'body', COALESCE(rr.masked_body, rr.body), 'status', rr.status,
@@ -105,6 +115,7 @@ function toHostReview(row: Row): HostReview {
     status: row.status,
     flaggedReason: row.flagged_reason,
     report: row.report_status,
+    replyReports: row.reply_reports ?? {},
     postedAt: iso(row.posted_at)!,
     replies,
     privateReplyAt: iso(row.private_reply_at),

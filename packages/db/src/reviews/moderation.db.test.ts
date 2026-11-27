@@ -291,16 +291,20 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reviewRow(held.reviewId)).toMatchObject({ published_by_deadline: false, masked_body: null });
   });
 
-  test("a kept item reported after the decision can be decided once more", async () => {
+  test("a kept item with an open report can be decided once more", async () => {
     const held = await review(NAMED);
     expect(await decide(held.item, "kept", later(HOUR), [])).toMatchObject({ ok: true });
-    // An open report from before the decision (one that raced it) doesn't reopen it.
-    const raced = await report(held.reviewId, null, "org-raced", later(HOUR - 1));
     expect(await decide(held.item, "removed", later(2 * HOUR))).toEqual({ ok: false, error: "already_decided" });
 
-    // A new report does, for one more decision.
+    // A report that raced the Keep (made before it, saved after it, so still open) reopens it.
+    const raced = await report(held.reviewId, null, "org-raced", later(HOUR - 1));
+    expect(await decide(held.item, "kept", later(2 * HOUR), [])).toMatchObject({ ok: true, reportIds: [raced] });
+    expect(await reportStatus(raced)).toEqual({ status: "dismissed", decided: true });
+    expect(await decide(held.item, "removed", later(2 * HOUR))).toEqual({ ok: false, error: "already_decided" });
+
+    // A new report does too, for one more decision.
     const fresh = await report(held.reviewId, null, "org-new", later(3 * HOUR));
-    expect(await decide(held.item, "removed", later(4 * HOUR))).toMatchObject({ ok: true, reportIds: expect.arrayContaining([raced, fresh]) });
+    expect(await decide(held.item, "removed", later(4 * HOUR))).toMatchObject({ ok: true, reportIds: [fresh] });
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "removed", decision: "removed", decided_at: later(4 * HOUR) });
     expect(await reportStatus(fresh)).toEqual({ status: "upheld", decided: true });
     expect(await decide(held.item, "kept", later(5 * HOUR), [])).toEqual({ ok: false, error: "already_decided" });
