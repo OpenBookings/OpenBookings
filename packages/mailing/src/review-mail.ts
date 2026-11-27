@@ -1,4 +1,4 @@
-import { MASKED_TEXT, MODERATION_DEADLINE_HOURS, REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
+import { MASKED_TEXT, MODERATION_DEADLINE_HOURS } from "@openbookings/pricing";
 import { composeActionMail, type ActionMail } from "./action-mail";
 import { formatStayDate } from "./format";
 import { escapeHtml } from "./template";
@@ -147,10 +147,6 @@ export function hostUnconfirmedStays(i: {
 
 const NOUN = { review: "review", reply: "reply" } as const;
 type ItemKind = keyof typeof NOUN;
-
-/** What the decision mails say about who decided and how to object. */
-const DECIDED = "A person at OpenBookings decided this.";
-const OBJECT = "If you disagree, reply to this email and tell us why.";
 
 type NoticeInput = {
   itemKind: ItemKind;

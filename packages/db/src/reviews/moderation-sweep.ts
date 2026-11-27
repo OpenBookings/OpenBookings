@@ -27,12 +27,12 @@ export type ModerationSweepDeps = {
   now: Date;
   /** The moderation check: the text alone. */
   check: (text: string) => Promise<TextCheck>;
-  /** Told about every recheck that failed; the others still run. */
   /**
    * Told which items this run published with parts masked, once, right after
    * the publish. A throw is swallowed: the publish already happened.
    */
   notify?: (maskedItems: ModerationItem[]) => Promise<void> | void;
+  /** Told about every recheck that failed (the others still run), and a notify that threw. */
   onError?: (error: unknown, context: ModerationItem) => void;
 };
 

@@ -36,6 +36,16 @@ const heldSinceSql = (kind: ModerationItem["kind"], t: string) =>
   kind === "review" ? `${t}.created_at` : `COALESCE(${t}.edited_at, ${t}.created_at)`;
 
 /**
+ * The version of an item a moderator judges: when its words were written
+ * (heldSinceSql), in microseconds as text, so it survives a round trip
+ * through the browser exactly. A host's edit or a guest's rewrite changes it;
+ * a recheck or the deadline doesn't (the words stay the same). The admin
+ * queue loads it, and decideItem refuses a decision on another version.
+ */
+export const moderationVersionSql = (kind: ModerationItem["kind"], t: string) =>
+  `(extract(epoch FROM ${heldSinceSql(kind, t)}) * 1000000)::bigint::text`;
+
+/**
  * Whether an item is still there to moderate: not deleted by its author, and
  * for a reply, its review neither. `t` is the item's alias.
  */
@@ -49,6 +59,10 @@ const liveSql = (kind: ModerationItem["kind"], t: string) =>
  * Never a hidden row, or one removed before moderation existed.
  */
 const decidableSql = (kind: ModerationItem["kind"], t: string) => `${t}.status IN ('pending', 'published') AND ${liveSql(kind, t)}`;
+
+/** An item's property, whose public page shows it. `t` is the item's alias. */
+const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
+  kind === "review" ? `${t}.property_id` : `(SELECT rv.property_id FROM reviews rv WHERE rv.id = ${t}.review_id)`;
 
 /** What a check's outcome stores on the item. */
 export type StoredCheck = {
@@ -79,8 +93,9 @@ export function storedCheck(check: TextCheck, now: Date): StoredCheck {
 // ── Decisions ────────────────────────────────────────────────────────────────
 
 export type DecideResult =
-  | { ok: true; reportsClosed: number; reportIds: string[] }
-  | { ok: false; error: "already_decided" | "not_found" | "rules_required" };
+  /** `propertyId`: whose public page shows (or showed) the item. */
+  | { ok: true; reportsClosed: number; reportIds: string[]; propertyId: string }
+  | { ok: false; error: "already_decided" | "changed" | "not_found" | "rules_required" };
 
 /**
  * Keep or Remove. Remove sets the item 'removed'. Keep means a person judged
@@ -89,13 +104,25 @@ export type DecideResult =
  * open reports close as upheld (removed) or dismissed (kept); `reportIds`
  * names them for the outcome emails.
  *
- * Only a held or published item is decided. Run it in a transaction: it is
- * two statements (the item, then its reports), and they stand or fall
- * together.
+ * Only a held or published item is decided. With `version` (as
+ * moderationVersionSql read it when the moderator opened the item), only that
+ * version: an item edited since answers "changed", so a stale tab never
+ * decides words nobody looked at. Already decided wins over changed.
+ *
+ * Run it in a transaction: it is two statements (the item, then its reports),
+ * and they stand or fall together.
  */
 export async function decideItem(
   db: Queryable,
-  i: { item: ModerationItem; decision: "kept" | "removed"; rules: ReviewRuleId[]; note: string | null; decidedBy: string; now: Date },
+  i: {
+    item: ModerationItem;
+    decision: "kept" | "removed";
+    rules: ReviewRuleId[];
+    note: string | null;
+    decidedBy: string;
+    now: Date;
+    version?: string;
+  },
 ): Promise<DecideResult> {
   const { kind, id } = i.item;
   if (!Object.hasOwn(TABLE, kind) || !UUID.test(id)) return { ok: false, error: "not_found" };
@@ -111,14 +138,22 @@ export async function decideItem(
             published_at = CASE WHEN $2 = 'kept' THEN COALESCE(t.published_at, $6) ELSE t.published_at END,
             masked_body = CASE WHEN $2 = 'kept' THEN NULL ELSE t.masked_body END
       WHERE t.id = $1::uuid AND t.decided_at IS NULL AND ${decidableSql(kind, "t")}
-      RETURNING t.id`,
-    [id, i.decision, rules, note, i.decidedBy, i.now],
+        AND ($7::text IS NULL OR ${moderationVersionSql(kind, "t")} = $7::text)
+      RETURNING t.id, ${propertyIdSql(kind, "t")} AS property_id`,
+    [id, i.decision, rules, note, i.decidedBy, i.now, i.version ?? null],
   );
-  if (rows.length === 0) {
-    const decided =
-      (await db.query(`SELECT 1 FROM ${table} t WHERE t.id = $1::uuid AND t.decided_at IS NOT NULL AND ${liveSql(kind, "t")}`, [id]))
-        .rows.length > 0;
-    return { ok: false, error: decided ? "already_decided" : "not_found" };
+  const decided = rows[0] as { property_id: string } | undefined;
+  if (!decided) {
+    const found = (
+      await db.query(
+        `SELECT t.decided_at IS NOT NULL AS decided, (${decidableSql(kind, "t")}) AS decidable
+           FROM ${table} t WHERE t.id = $1::uuid AND ${liveSql(kind, "t")}`,
+        [id],
+      )
+    ).rows[0] as { decided: boolean; decidable: boolean } | undefined;
+    if (found?.decided) return { ok: false, error: "already_decided" };
+    // Still there and undecided, so only the version stopped it.
+    return { ok: false, error: found?.decidable && i.version !== undefined ? "changed" : "not_found" };
   }
 
   const reports = await db.query(
@@ -128,7 +163,7 @@ export async function decideItem(
     [id, i.decision === "removed" ? "upheld" : "dismissed", i.now],
   );
   const reportIds = (reports.rows as { id: string }[]).map((r) => r.id);
-  return { ok: true, reportsClosed: reportIds.length, reportIds };
+  return { ok: true, reportsClosed: reportIds.length, reportIds, propertyId: decided.property_id };
 }
 
 /**
@@ -167,10 +202,6 @@ type HeldRow = { id: string; body: string | null; flagged_fragments: string[] };
  */
 const deadlineMaySql = (t: string) =>
   `${t}.check_source IS NOT NULL AND NOT (${t}.check_source = 'unchecked' AND ${t}.flagged_reason IS NOT NULL AND ${t}.flagged_fragments = '[]'::jsonb)`;
-
-/** A published item's property, whose public page shows it. `t` is the item's alias. */
-const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
-  kind === "review" ? `${t}.property_id` : `(SELECT rv.property_id FROM reviews rv WHERE rv.id = ${t}.review_id)`;
 
 /**
  * Publishes every held item nobody decided within MODERATION_DEADLINE_HOURS,
@@ -212,7 +243,9 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<{ publis
   for (const kind of ["review", "reply"] as const) {
     for (const row of held[kind]) {
       const fragments = Array.isArray(row.flagged_fragments) ? row.flagged_fragments : [];
-      const masked = row.body && fragments.length > 0 ? maskFragments(row.body, fragments) : null;
+      // Only a mask that removed something: fragments the text doesn't hold publish it as written, with no notice.
+      const maskedText = row.body && fragments.length > 0 ? maskFragments(row.body, fragments) : null;
+      const masked = maskedText !== null && maskedText !== row.body ? maskedText : null;
       const { rows } = await db.query(
         `UPDATE ${TABLE[kind]} t
             SET status = 'published', published_at = $2, masked_body = $3, published_by_deadline = true, updated_at = $2

@@ -30,6 +30,7 @@ import {
 import {
   applyRecheck,
   decideItem,
+  moderationVersionSql,
   publishOverdue,
   purgeModerationRecords,
   uncheckedItems,
@@ -103,6 +104,15 @@ describeWithDb("review moderation against Postgres", () => {
   }
   const reportStatus = async (id: string) =>
     one<{ status: string; decided: boolean }>(`SELECT status, decided_at IS NOT NULL AS decided FROM review_reports WHERE id = $1`, [id]);
+
+  /** The version of an item the admin queue loads, as moderationVersionSql reads it. */
+  const moderationVersion = async (item: ModerationItem) =>
+    (
+      await one<{ v: string }>(
+        `SELECT ${moderationVersionSql(item.kind, "t")} AS v FROM ${item.kind === "review" ? "reviews" : "review_replies"} t WHERE t.id = $1`,
+        [item.id],
+      )
+    ).v;
 
   const decide = (item: ModerationItem, decision: "kept" | "removed", now: Date, rules: TextCheck["rules"] = ["personal_details"]) =>
     decideItem(db, { item, decision, rules, note: "Names a member of staff.", decidedBy: "staff-1", now });
@@ -232,6 +242,14 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reviewRow(plain.reviewId)).toMatchObject({ status: "published", masked_body: null, published_by_deadline: true });
   });
 
+  test("publishOverdue stores no mask when the fragments aren't in the text, and sends no notice", async () => {
+    // The model quoted words the text doesn't hold (paraphrased, or another case): nothing to mask.
+    const held = await review({ ...NAMED, fragments: ["jan jansen"] });
+    const result = await publishOverdue(db, later(72 * HOUR));
+    expect(result).toMatchObject({ published: 1, masked: [] });
+    expect(await reviewRow(held.reviewId)).toMatchObject({ status: "published", published_by_deadline: true, masked_body: null });
+  });
+
   test("the public loader shows the masked text, never the original", async () => {
     const held = await review(NAMED);
     const reply = await postReviewReply(db, {
@@ -255,7 +273,7 @@ describeWithDb("review moderation against Postgres", () => {
 
   test("decideItem keeps once; a second decision is already_decided", async () => {
     const held = await review(NAMED);
-    expect(await decide(held.item, "kept", later(HOUR), [])).toEqual({ ok: true, reportsClosed: 0, reportIds: [] });
+    expect(await decide(held.item, "kept", later(HOUR), [])).toEqual({ ok: true, reportsClosed: 0, reportIds: [], propertyId: ids.propertyId });
     expect(await reviewRow(held.reviewId)).toMatchObject({
       status: "published",
       published_at: later(HOUR),
@@ -271,6 +289,35 @@ describeWithDb("review moderation against Postgres", () => {
     // And the deadline never overrides a decision.
     expect((await publishOverdue(db, later(80 * HOUR))).published).toBe(0);
     expect(await reviewRow(held.reviewId)).toMatchObject({ published_by_deadline: false, masked_body: null });
+  });
+
+  test("decideItem refuses a decision on a version of the item the moderator didn't see", async () => {
+    const held = await review(NAMED);
+    const reply = await postReviewReply(db, {
+      reviewId: held.reviewId,
+      role: "host",
+      authorUserId: hostId,
+      body: "We spoke to Jan Jansen about it.",
+      check: { verdict: "flagged", rules: ["personal_details"], fragments: ["Jan Jansen"], source: "mistral" },
+      now: later(HOUR),
+    });
+    if (!reply.ok) throw new Error("reply failed");
+    const replyItem: ModerationItem = { kind: "reply", id: reply.replyId };
+    const seen = await moderationVersion(replyItem);
+
+    // The host edits the reply after the moderator opened the queue.
+    await db.query(`UPDATE review_replies SET body = 'We spoke to him.', edited_at = $2 WHERE id = $1`, [reply.replyId, later(2 * HOUR)]);
+    const stale = { item: replyItem, decision: "removed" as const, rules: ["personal_details" as const], note: null, decidedBy: "staff-1", now: later(3 * HOUR) };
+    expect(await decideItem(db, { ...stale, version: seen })).toEqual({ ok: false, error: "changed" });
+    expect(await one(`SELECT status, decided_at FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({ status: "pending", decided_at: null });
+
+    // Reloaded, the moderator sees the new version and may decide it.
+    expect(await decideItem(db, { ...stale, version: await moderationVersion(replyItem) })).toMatchObject({ ok: true });
+
+    // The review's version is its submission: unchanged, the decision goes through.
+    expect(await decideItem(db, { ...stale, item: held.item, version: await moderationVersion(held.item) })).toMatchObject({ ok: true });
+    // Decided meanwhile wins over changed: the moderator learns it's done.
+    expect(await decideItem(db, { ...stale, item: held.item, version: "1" })).toEqual({ ok: false, error: "already_decided" });
   });
 
   test("Remove needs a rule; unknown items are not_found", async () => {
