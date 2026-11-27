@@ -30,7 +30,13 @@ RUN bun install --frozen-lockfile
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# The admin reads no NEXT_PUBLIC_* values, so there are no build args.
+# The only NEXT_PUBLIC_* values the admin reads are the two origins the
+# emails it sends (cancel, refund) link to: Next inlines them at build time.
+ARG NEXT_PUBLIC_WEB_URL
+ARG NEXT_PUBLIC_BUSINESS_URL
+ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
+ENV NEXT_PUBLIC_BUSINESS_URL=$NEXT_PUBLIC_BUSINESS_URL
+
 COPY --from=installer /app/ .
 COPY --from=pruner /app/out/full/ .
 

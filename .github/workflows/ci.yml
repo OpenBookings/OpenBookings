@@ -630,6 +630,11 @@ jobs:
           tags: |
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-admin:${{ github.sha }}
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-admin:main
+          build-args: |
+            # The origins the emails the admin sends link to (cancel, refund),
+            # under the names the code reads.
+            NEXT_PUBLIC_WEB_URL=${{ vars.NEXT_PUBLIC_WEB_URL }}
+            NEXT_PUBLIC_BUSINESS_URL=${{ vars.NEXT_PUBLIC_BUSINESS_URL }}
 
   build-support:
     needs: detect

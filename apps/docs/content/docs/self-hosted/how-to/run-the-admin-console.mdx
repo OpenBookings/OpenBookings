@@ -55,9 +55,13 @@ dials out) with a minimum scale of 1, so the tunnel stays up. Set:
 | `ADMIN_RP_ID` | `admin.openbookings.co`. Required: passkeys are refused without it. |
 | `ADMIN_TOTP_KEY` | `openssl rand -base64 32` |
 | `ADMIN_BOOTSTRAP_CODE` | A long random code, only while enrolling (step 5) |
+| `LETTERMINT_PROJECT_TOKEN` | Required for the emails a cancel or refund sends to the guest and host. Without it the action still succeeds and nobody is emailed. |
+| `EMAIL_DOMAIN` | Optional; default `openbookings.co` |
 | `STRIPE_SECRET_KEY` | The live key; production allows it |
 | `INVOICE_DB_ENV` | `production` |
 | `SCW_JOBS_REGION`, `SCW_INVOICE_JOB_DEFINITION_ID`, `SCW_JOBS_SECRET_KEY` | To start the invoice job |
+
+The links in those emails use `NEXT_PUBLIC_WEB_URL` and `NEXT_PUBLIC_BUSINESS_URL`, which are fixed when the image is built (CI passes them as build arguments, like the other apps), not set on the container. Email open and click tracking is not used by the admin console: leave `EMAIL_TRACKING_*` unset.
 
 Do not set `ADMIN_SUPER_MODE` or `ADMIN_DEV_EMAIL`: they are development-only, and
 `ADMIN_SUPER_MODE` is ignored in production.
