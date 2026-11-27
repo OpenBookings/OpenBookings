@@ -24,17 +24,36 @@ export function screenReview(body: string | null): string | null {
 
 const URL_RE_ALL = new RegExp(URL_RE.source, "gi");
 const URL_TRAILING = new Set([".", ",", ";", ":", "!", "?", ")", "]", "'", '"']);
+/** Never part of a link in a review: "hotelname.com/rooms,it is cheaper". */
+const URL_STOP = new Set([",", ";", "!"]);
 
 /**
  * The whole link a URL_RE match starts: the pattern only anchors on the start
- * (`https://`, `www.example.`), so the fragment runs on to the next whitespace,
- * without trailing punctuation.
+ * (`https://`, `www.example.`), so the fragment runs on to the next whitespace
+ * or comma, semicolon or exclamation mark, without trailing punctuation.
  */
 function linkAt(body: string, start: number): string {
   let end = start;
-  while (end < body.length && !/\s/.test(body[end])) end++;
+  while (end < body.length && !/\s/.test(body[end]) && !URL_STOP.has(body[end])) end++;
   while (end > start && URL_TRAILING.has(body[end - 1])) end--;
   return body.slice(start, end);
+}
+
+/**
+ * dd.mm.yyyy, dd-mm-yyyy, dd/mm/yyyy (one-digit day and month too) and
+ * yyyy-mm-dd. Bounded, and not inside a longer run of digits.
+ */
+const DATE_RE = /(?<![\d+])(?:(\d{1,2})([./-])(\d{1,2})\2(\d{4})|(\d{4})-(\d{1,2})-(\d{1,2}))(?!\d)/g;
+
+const dayOrMonth = (s: string) => Number(s) >= 1 && Number(s) <= 31;
+const month = (s: string) => Number(s) >= 1 && Number(s) <= 12;
+
+/** The body with each date replaced by as many "x"s, so it can't be read as a phone number. */
+function withoutDates(body: string): string {
+  return body.replace(DATE_RE, (date, a, _sep, b, _y, _y2, m, d) => {
+    const isDate = a !== undefined ? dayOrMonth(a) && dayOrMonth(b) && (month(a) || month(b)) : month(m) && dayOrMonth(d);
+    return isDate ? "x".repeat(date.length) : date;
+  });
 }
 
 /**
@@ -46,11 +65,16 @@ function linkAt(body: string, start: number): string {
  */
 export function screenReviewFragments(body: string | null): { rules: "links_contact"[]; fragments: string[] } {
   if (!body) return { rules: [], fragments: [] };
-  const fragments = new Set<string>(
-    circumventionMatches(body)
-      .filter((m) => m.reason !== "messenger_handle")
+  // Phone numbers are read with dates blanked out; the blank is no phone
+  // character, so every number found is still the same text in the body.
+  const fragments = new Set<string>([
+    ...circumventionMatches(withoutDates(body))
+      .filter((m) => m.reason === "phone_number")
       .map((m) => m.text),
-  );
+    ...circumventionMatches(body)
+      .filter((m) => m.reason === "email_address")
+      .map((m) => m.text),
+  ]);
   for (const handle of contactHandles(body)) fragments.add(handle);
   let linkEnd = 0;
   for (const m of body.matchAll(URL_RE_ALL)) {

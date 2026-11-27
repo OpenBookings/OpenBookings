@@ -74,17 +74,27 @@ function trimDots(s: string): string {
   return s.slice(0, end);
 }
 
+/** A number with a unit or a time after it: "100mbps", "2.5ghz", "7pm". */
+const NUMBER_UNIT_RE = /^\d{1,6}(?:[.,]\d{1,3})?[a-z]{1,4}$/i;
+
+/** A token that could name an account: it has a letter and isn't a measurement or a time. */
+function nameLike(token: string): boolean {
+  return /[A-Za-z]/.test(token) && !NUMBER_UNIT_RE.test(token);
+}
+
 /**
  * Handles someone can actually be reached on: an @handle, or a token after a
  * messenger name that has a digit or underscore in it (so "on telegram
- * yesterday" is not one). A bare messenger name is not a handle. Every result
- * is an exact substring of the body.
+ * yesterday" is not one). Either way it needs a letter and can't be a number
+ * with a unit ("dinner @7pm", "wifi signal 100mbps"). A bare messenger name is
+ * not a handle. Every result is an exact substring of the body. Only the
+ * review check uses this; message screening is detectCircumvention.
  */
 export function contactHandles(body: string): string[] {
-  const handles = [...body.matchAll(AT_HANDLE_RE)].map((m) => trimDots(m[0]));
+  const handles = [...body.matchAll(AT_HANDLE_RE)].map((m) => trimDots(m[0])).filter((h) => nameLike(h.slice(1)));
   for (const m of body.matchAll(APP_HANDLE_RE)) {
     const token = trimDots(m[2]);
-    if (/[\d_]/.test(token) && !handles.some((h) => h.slice(1) === token)) handles.push(token);
+    if (/[\d_]/.test(token) && nameLike(token) && !handles.some((h) => h.slice(1) === token)) handles.push(token);
   }
   return handles.filter((h) => h.replace(/^@/, "").length >= 2);
 }

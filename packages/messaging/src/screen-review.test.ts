@@ -59,6 +59,38 @@ describe("screenReviewFragments", () => {
     expect(screenReviewFragments("Find me @anna.b. Great stay!").fragments).toEqual(["@anna.b"]);
   });
 
+  test("a number with a unit after an app name is not a handle", () => {
+    const empty = { rules: [], fragments: [] };
+    expect(screenReviewFragments("wifi signal 100mbps")).toEqual(empty);
+    expect(screenReviewFragments("the wifi signal: 100%")).toEqual(empty);
+    expect(screenReviewFragments("signal 2.5ghz in the room")).toEqual(empty);
+    expect(screenReviewFragments("on telegram guest99").fragments).toEqual(["guest99"]);
+  });
+
+  test("an @handle needs a letter and isn't a time", () => {
+    expect(screenReviewFragments("dinner @7pm was great")).toEqual({ rules: [], fragments: [] });
+    expect(screenReviewFragments("breakfast @ 8 and @9am")).toEqual({ rules: [], fragments: [] });
+    expect(screenReviewFragments("@hotelguest99").fragments).toEqual(["@hotelguest99"]);
+  });
+
+  test("dates are not phone numbers", () => {
+    const empty = { rules: [], fragments: [] };
+    expect(screenReviewFragments("from 01.05.2025 to 05.05.2025")).toEqual(empty);
+    expect(screenReviewFragments("from 01-05-2025 to 05-05-2025.")).toEqual(empty);
+    expect(screenReviewFragments("from 1/5/2025 - 5/5/2025")).toEqual(empty);
+    expect(screenReviewFragments("stayed 2025-05-01 until 2025-05-05")).toEqual(empty);
+    expect(screenReviewFragments("call +31 6 12345678").fragments).toEqual(["+31 6 12345678"]);
+    expect(screenReviewFragments("bel 06-12345678").fragments).toEqual(["06-12345678"]);
+    expect(screenReviewFragments("on 01.05.2025 call 06-12345678").fragments).toEqual(["06-12345678"]);
+  });
+
+  test("a link stops before punctuation that ends it", () => {
+    expect(screenReviewFragments("hotelname.com/rooms,it is cheaper").fragments).toEqual(["hotelname.com/rooms"]);
+    expect(screenReviewFragments("see https://example.com/a;b").fragments).toEqual(["https://example.com/a"]);
+    expect(screenReviewFragments("(see https://example.com/rooms).").fragments).toEqual(["https://example.com/rooms"]);
+    expect(screenReviewFragments("https://example.com/a.html?b=1 now").fragments).toEqual(["https://example.com/a.html?b=1"]);
+  });
+
   test("returns nothing for an ordinary review or no text", () => {
     expect(screenReviewFragments("Great breakfast. Stayed two nights in room 12.")).toEqual({ rules: [], fragments: [] });
     expect(screenReviewFragments(null)).toEqual({ rules: [], fragments: [] });
