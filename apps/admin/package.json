@@ -11,6 +11,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@openbookings/cache": "workspace:*",
     "@openbookings/db": "workspace:*",
     "@openbookings/mailing": "workspace:*",
     "@openbookings/pricing": "workspace:*",

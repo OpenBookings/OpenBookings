@@ -55,7 +55,8 @@ dials out) with a minimum scale of 1, so the tunnel stays up. Set:
 | `ADMIN_RP_ID` | `admin.openbookings.co`. Required: passkeys are refused without it. |
 | `ADMIN_TOTP_KEY` | `openssl rand -base64 32` |
 | `ADMIN_BOOTSTRAP_CODE` | A long random code, only while enrolling (step 5) |
-| `LETTERMINT_PROJECT_TOKEN` | Required for the emails a cancel or refund sends to the guest and host. Without it the action still succeeds and nobody is emailed. |
+| `LETTERMINT_PROJECT_TOKEN` | Required for the emails a cancel or refund sends to the guest and host, and the ones a review moderation decision sends to the author and the reporters. Without it the action still succeeds and nobody is emailed. |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | The guest site's values. Keep and Remove on `/reviews` drop the property's cached reviews, so the page shows the decision within five minutes. Unset, the cached copy lasts up to a day. |
 | `EMAIL_DOMAIN` | Optional; default `openbookings.co` |
 | `STRIPE_SECRET_KEY` | The live key; production allows it |
 | `INVOICE_DB_ENV` | `production` |

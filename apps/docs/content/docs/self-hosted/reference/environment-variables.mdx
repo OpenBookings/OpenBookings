@@ -81,7 +81,7 @@ I = invoice job, R = root scripts.
 | `R2_BUCKET_NAME` | B | for uploads | The public bucket for property and room photos. |
 | `MEDIA_BASE_URL` | B | for uploads | The public URL that bucket is served from. |
 | `R2_INVOICES_BUCKET_NAME` | B, I | for invoices | The private bucket for invoice PDFs and CSVs. |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B | no | Upstash Redis cache. The cache is off when unset. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B, A | no | Upstash Redis cache. The cache is off when unset. The admin console only drops a property's cached reviews after a moderation decision; without them a removed review can stay on the property page for up to a day. |
 | `CACHE_TTL_PROPERTY_PAGE_S`, `CACHE_TTL_PROPERTY_PAGE_MISS_S`, `CACHE_TTL_PROPERTY_REVIEWS_S`, `CACHE_MAX_AGE_PROPERTY_PAGE_S`, `CACHE_MAX_AGE_PROPERTY_REVIEWS_S` | W | no | Cache lifetimes, in seconds. |
 | `REVALIDATE_SECRET` | W, B | no | Shared secret the host dashboard uses to refresh a public property page. |
 | `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_PURGE_TOKEN` | B | no | Purge Cloudflare's cache for a property page after an edit. |

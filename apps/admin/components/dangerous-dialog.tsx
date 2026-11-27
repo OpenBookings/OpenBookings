@@ -2,7 +2,7 @@
 
 import { startAuthentication } from "@simplewebauthn/browser";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,29 +52,52 @@ type Props = {
    * adding a credential on /security.
    */
   stepUpOnly?: boolean;
+  /**
+   * A first step that asks for more than the reason, e.g. the rules a removal
+   * broke: its title, the fields (the caller holds their state), whether they
+   * are filled in enough to go on, and its button. There is no summary step
+   * then: `summary` describes this one.
+   */
+  form?: { title: string; fields: ReactNode; ready: boolean; continueLabel: string };
+  /** What the step-up says will run. Default: how to confirm, then the summary. */
+  stepUpSummary?: string;
+  /** The step-up's button for the 6-digit code. Default "Confirm". */
+  confirmLabel?: string;
 };
 
 /**
  * Every dangerous action goes through this: what will happen, "Are you
- * sure?" with a reason, then a passkey or a 6-digit code. The step-up is
- * begun only on that last step (with `stepUpOnly`, the only one), when the
- * staff member continues to it.
+ * sure?" with a reason (with `form`, one step with its fields and the
+ * reason), then a screen of its own to confirm it's you, with a passkey or a
+ * 6-digit code. The step-up is begun only on that last step (with
+ * `stepUpOnly`, the only one), when the staff member continues to it.
  */
 export function DangerousDialog(props: Props) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {/* Unmounted when closed: every opening starts at the summary. */}
-      <DialogContent>
+      {/* Unmounted when closed: every opening starts at the summary. With a form, the step-up screen is narrower. */}
+      <DialogContent className={props.form ? "sm:max-w-xl sm:has-[[data-step=step-up]]:max-w-md" : undefined}>
         <Steps {...props} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function Steps({ action, targetId, summary, onOpenChange, onConfirm, stepUpOnly = false }: Props) {
+function Steps({
+  action,
+  targetId,
+  summary,
+  onOpenChange,
+  onConfirm,
+  stepUpOnly = false,
+  form,
+  stepUpSummary,
+  confirmLabel = "Confirm",
+}: Props) {
   const key = `${action}:${targetId}`;
   const label = DANGEROUS_ACTIONS[action].label;
-  const first = stepUpOnly ? "step-up" : "summary";
+  const first = stepUpOnly ? "step-up" : form ? "reason" : "summary";
+  const codeFormId = useId();
   const [step, setStep] = useState<"summary" | "reason" | "step-up">(first);
   /** Whether a step-up was asked for yet (the button then says "Try again"). */
   const [started, setStarted] = useState(false);
@@ -85,7 +108,7 @@ function Steps({ action, targetId, summary, onOpenChange, onConfirm, stepUpOnly 
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
 
-  const reasonOk = reason.trim().length >= MIN_REASON;
+  const reasonOk = reason.trim().length >= MIN_REASON && (form?.ready ?? true);
 
   /** One request at a time: a second click never begins a second step-up. */
   async function work(fn: () => Promise<void>) {
@@ -220,82 +243,115 @@ function Steps({ action, targetId, summary, onOpenChange, onConfirm, stepUpOnly 
           }}
         >
           <DialogHeader>
-            <DialogTitle>Are you sure?</DialogTitle>
-            <DialogDescription className="text-foreground">{summary}</DialogDescription>
+            <DialogTitle>{form?.title ?? "Are you sure?"}</DialogTitle>
+            <DialogDescription className={form ? undefined : "text-foreground"}>{summary}</DialogDescription>
           </DialogHeader>
+          {form?.fields}
           <div className="grid gap-2">
-            <Label htmlFor="dangerous-reason">Reason</Label>
+            <Label htmlFor="dangerous-reason">{form ? "Reason for the audit log" : "Reason"}</Label>
             <Textarea
               id="dangerous-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              autoFocus
+              rows={form ? 2 : 3}
+              autoFocus={!form}
               placeholder="Why, for the audit log"
             />
             <p className="text-xs text-muted-foreground">At least {MIN_REASON} characters. Kept in the audit log.</p>
           </div>
           <Shown message={message} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setStep("summary")}>
-              Back
-            </Button>
-            <Button type="submit" disabled={!reasonOk || busy}>
-              Continue
+            {form ? (
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => setStep("summary")}>
+                Back
+              </Button>
+            )}
+            <Button type="submit" variant={form ? "destructive" : "default"} disabled={!reasonOk || busy}>
+              {form?.continueLabel ?? "Continue"}
             </Button>
           </DialogFooter>
         </form>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-4" data-step="step-up">
           <DialogHeader>
             <DialogTitle>Confirm it&apos;s you</DialogTitle>
             <DialogDescription>
-              Use your passkey or the 6-digit code from your authenticator app. Then this runs: {summary}
+              {stepUpSummary ?? `Use your passkey or the 6-digit code from your authenticator app. Then this runs: ${summary}`}
             </DialogDescription>
           </DialogHeader>
 
           {challenge?.passkeyOptions ? (
-            <Button type="button" variant="destructive" disabled={busy} onClick={answerWithPasskey}>
+            <Button type="button" disabled={busy} onClick={answerWithPasskey}>
               Use passkey
             </Button>
           ) : null}
+          {challenge?.passkeyOptions && challenge.totp ? (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              or use your authenticator app
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          ) : null}
           {challenge?.totp ? (
             <form
-              className="flex items-end gap-2"
+              id={codeFormId}
+              className="grid gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 void submitCode();
               }}
             >
-              <div className="grid gap-2">
-                <Label htmlFor="dangerous-code">6-digit code</Label>
-                <Input
-                  id="dangerous-code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  autoFocus={!challenge.passkeyOptions}
-                  placeholder="123456"
-                  className="w-32 font-mono"
-                />
-              </div>
-              <Button type="submit" variant="destructive" disabled={busy || !CODE_RE.test(code)}>
-                Confirm
-              </Button>
+              <Label htmlFor="dangerous-code">6-digit code</Label>
+              <Input
+                id="dangerous-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus={!challenge.passkeyOptions}
+                placeholder="123456"
+                className="font-mono tracking-[0.2em]"
+              />
             </form>
           ) : null}
           {!challenge && busy ? <p className="text-sm text-muted-foreground">Preparing…</p> : null}
 
           <Shown message={message} />
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
+            {stepUpOnly ? (
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  // The step-up stays open in this tab: continuing again answers the same one.
+                  setMessage(null);
+                  setCode("");
+                  setStep("reason");
+                }}
+              >
+                Back
+              </Button>
+            )}
             {!challenge && !busy ? (
               <Button type="button" onClick={toStepUp}>
                 {started ? "Try again" : "Continue"}
+              </Button>
+            ) : null}
+            {challenge?.totp ? (
+              <Button type="submit" form={codeFormId} variant="destructive" disabled={busy || !CODE_RE.test(code)}>
+                {confirmLabel}
               </Button>
             ) : null}
           </DialogFooter>

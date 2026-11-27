@@ -20,6 +20,8 @@ export const DANGEROUS_ACTIONS = {
   "booking.force_clear_markers": { label: "Clear booking markers" },
   "payment_flag.resolve": { label: "Resolve flagged payment" },
   "invoices.run": { label: "Run commission invoices" },
+  // Removing a reported item upholds its reports too: there is no separate action for that.
+  "review.remove": { label: "Remove review or reply" },
   "security.enrol": { label: "Add a passkey or authenticator app" },
 } as const satisfies Record<string, { label: string }>;
 

@@ -15,6 +15,7 @@
       "name": "@openbookings/admin",
       "version": "0.1.0",
       "dependencies": {
+        "@openbookings/cache": "workspace:*",
         "@openbookings/db": "workspace:*",
         "@openbookings/mailing": "workspace:*",
         "@openbookings/pricing": "workspace:*",
