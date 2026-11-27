@@ -6,7 +6,8 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/server";
 import type { Queryable, Staff } from "../staff";
-import { decryptSecret } from "./crypto";
+import { StepUpConfigError } from "./config";
+import { checkTotpKey, decryptSecret } from "./crypto";
 import { ENROL_ACTION, EnrolRefused, PENDING_ENROL_ACTIONS, totpStep, type RelyingParty, type RequireStepUp } from "./enrol";
 
 /**
@@ -22,9 +23,14 @@ import { ENROL_ACTION, EnrolRefused, PENDING_ENROL_ACTIONS, totpStep, type Relyi
  *             was begun for.
  *
  * Every try spends the row first (used_at), so one challenge never gets a
- * second guess, even from two tabs at once; a right answer opens it again,
- * verified, for consume to spend. Five wrong answers in fifteen minutes stop
- * new step-ups until they age out.
+ * second guess; a right answer opens it again, verified, for consume to spend.
+ *
+ * Guessing: a staff member gets five wrong answers in fifteen minutes, then
+ * every answer is refused until the oldest ages out, and at most five
+ * unanswered step-ups at a time. Begin and complete run in a transaction
+ * holding a lock per staff member, so counting and spending cannot race. A
+ * try that fails on configuration or the database rolls back: it is not a
+ * wrong answer.
  *
  * Replay: an authenticator-app code is accepted once. admin_credentials.counter
  * holds the time step of the last code accepted (enrolment's too), and only a
@@ -38,15 +44,29 @@ export const STEP_UP_TTL_MS = 5 * 60_000;
 
 const MAX_WRONG = 5;
 const WRONG_WINDOW_MS = 15 * 60_000;
+const MAX_OPEN = 5;
 const MAX_FIELD = 200;
+/** pg_advisory_xact_lock(STEP_UP_LOCK, hashtext(user_id)): one staff member's step-ups, one at a time. */
+const STEP_UP_LOCK = 5_370_001;
 
-/** A step-up that may not be begun, or a token that may not be spent. */
+const MESSAGES = {
+  wrong: "That is not right. Confirm again",
+  expired: "This confirmation expired. Confirm again",
+  throttled: "Too many wrong answers. Try again in 15 minutes.",
+  open: "Too many unanswered confirmations. Try again in 5 minutes.",
+  "no-credentials": "Enrol a passkey or authenticator app on /security first.",
+} as const;
+
+/** A step-up that may not be begun (not a confirmable action), or a token that may not be spent. */
 export class StepUpError extends Error {
   constructor(message = "Confirm this action again") {
     super(message);
     this.name = "StepUpError";
   }
 }
+
+/** The write connection, and a transaction on it. */
+export type StepUpDb = Queryable & { transaction: <T>(fn: (tx: Queryable) => Promise<T>) => Promise<T> };
 
 export type VerifyAuthentication = (o: {
   response: AuthenticationResponseJSON;
@@ -58,31 +78,67 @@ export type VerifyAuthentication = (o: {
 }) => Promise<{ verified: false } | { verified: true; authenticationInfo: { newCounter: number } }>;
 
 export type StepUpDeps = {
-  db: Queryable;
+  db: StepUpDb;
   /** ADMIN_TOTP_KEY. */
   totpKey: string;
   /** Resolved only when a passkey is involved: TOTP works without ADMIN_RP_ID. */
   rp: () => Promise<RelyingParty>;
   now: () => Date;
   verifyAuthentication?: VerifyAuthentication;
+  /** Where a credential that cannot be offered is reported. */
+  warn?: (message: string) => void;
 };
 
 export type StepUpProof = { kind: "passkey"; response: AuthenticationResponseJSON } | { kind: "totp"; code: string };
 
-export type StepUpChallenge = {
-  id: string;
-  /** For the browser's passkey prompt; null without a passkey. */
-  passkeyOptions: PublicKeyCredentialRequestOptionsJSON | null;
-  /** Whether an authenticator-app code can answer. */
-  totp: boolean;
-};
+/** A refusal the confirm dialog shows as it is. */
+export type StepUpRefusal<R extends string> = { ok: false; reason: R; message: string };
 
-export type StepUpResult = { ok: true; token: string } | { ok: false; reason: "wrong" | "expired" };
+export type StepUpChallenge =
+  | {
+      ok: true;
+      id: string;
+      /** For the browser's passkey prompt; null without a usable passkey. */
+      passkeyOptions: PublicKeyCredentialRequestOptionsJSON | null;
+      /** Whether an authenticator-app code can answer. */
+      totp: boolean;
+    }
+  | StepUpRefusal<"throttled" | "no-credentials" | "config">;
+
+export type StepUpResult = { ok: true; token: string } | StepUpRefusal<"wrong" | "expired" | "throttled" | "config">;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const field = (value: unknown): string | null =>
   typeof value === "string" && value.trim() !== "" && value.length <= MAX_FIELD ? value : null;
+
+const refuse = <R extends keyof typeof MESSAGES>(reason: R) => ({ ok: false as const, reason, message: MESSAGES[reason] });
+
+const configRefusal = (error: StepUpConfigError) => ({ ok: false as const, reason: "config" as const, message: error.message });
+
+async function lockStaff(tx: Queryable, userId: string): Promise<void> {
+  await tx.query(`SELECT pg_advisory_xact_lock($1, hashtext($2))`, [STEP_UP_LOCK, userId]);
+}
+
+/** Tries spent without being verified in the last fifteen minutes. */
+async function wrongAnswers(tx: Queryable, userId: string, now: Date): Promise<number> {
+  const { rows } = await tx.query(
+    `SELECT count(*)::int AS n FROM admin_step_ups
+      WHERE user_id = $1 AND action <> ALL($2::text[]) AND verified_at IS NULL AND used_at > $3`,
+    [userId, PENDING_ENROL_ACTIONS, new Date(now.getTime() - WRONG_WINDOW_MS)],
+  );
+  return Number(rows[0]!.n);
+}
+
+/** Step-ups begun, not yet answered, and still answerable. */
+async function openStepUps(tx: Queryable, userId: string, now: Date): Promise<number> {
+  const { rows } = await tx.query(
+    `SELECT count(*)::int AS n FROM admin_step_ups
+      WHERE user_id = $1 AND action <> ALL($2::text[]) AND verified_at IS NULL AND used_at IS NULL AND expires_at > $3`,
+    [userId, PENDING_ENROL_ACTIONS, now],
+  );
+  return Number(rows[0]!.n);
+}
 
 export async function beginStepUp(
   deps: StepUpDeps,
@@ -95,42 +151,61 @@ export async function beginStepUp(
   if (!a || !t || PENDING_ENROL_ACTIONS.includes(a)) throw new StepUpError("Not an action that can be confirmed");
   const now = deps.now();
 
-  const { rows: wrong } = await deps.db.query(
-    `SELECT count(*)::int AS n FROM admin_step_ups
-      WHERE user_id = $1 AND action <> ALL($2::text[]) AND verified_at IS NULL AND used_at > $3`,
-    [staff.userId, PENDING_ENROL_ACTIONS, new Date(now.getTime() - WRONG_WINDOW_MS)],
-  );
-  if (Number(wrong[0]!.n) >= MAX_WRONG) throw new StepUpError("Too many wrong answers. Try again in 15 minutes");
-
   const { rows: creds } = await deps.db.query(
     `SELECT kind, credential_id, transports FROM admin_credentials WHERE user_id = $1 ORDER BY created_at, id`,
     [staff.userId],
   );
-  const passkeys = creds.filter((c) => c.kind === "passkey");
-  const passkeyOptions =
-    passkeys.length > 0
-      ? await generateAuthenticationOptions({
-          rpID: (await deps.rp()).rpID,
-          allowCredentials: passkeys.map((c) => ({
-            id: String(c.credential_id),
-            transports: (c.transports as string[] | null) ?? [],
-          })),
-          userVerification: "required",
-        })
-      : null;
+  if (creds.length === 0) return refuse("no-credentials");
 
-  const { rows } = await deps.db.query(
-    `INSERT INTO admin_step_ups (user_id, action, target_id, challenge, expires_at)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [
-      staff.userId,
-      a,
-      t,
-      passkeyOptions?.challenge ?? randomBytes(32).toString("base64url"),
-      new Date(now.getTime() + STEP_UP_TTL_MS),
-    ],
-  );
-  return { id: String(rows[0]!.id), passkeyOptions, totp: creds.some((c) => c.kind === "totp") };
+  // Offer what works; a credential kind whose setting is missing is reported, not fatal while another works.
+  const problems: StepUpConfigError[] = [];
+  const passkeys = creds.filter((c) => c.kind === "passkey");
+  let passkeyOptions: PublicKeyCredentialRequestOptionsJSON | null = null;
+  if (passkeys.length > 0) {
+    try {
+      passkeyOptions = await generateAuthenticationOptions({
+        rpID: (await deps.rp()).rpID,
+        allowCredentials: passkeys.map((c) => ({
+          id: String(c.credential_id),
+          transports: (c.transports as string[] | null) ?? [],
+        })),
+        userVerification: "required",
+      });
+    } catch (error) {
+      if (!(error instanceof StepUpConfigError)) throw error;
+      problems.push(error);
+    }
+  }
+  let totp = false;
+  if (creds.some((c) => c.kind === "totp")) {
+    try {
+      checkTotpKey(deps.totpKey);
+      totp = true;
+    } catch (error) {
+      if (!(error instanceof StepUpConfigError)) throw error;
+      problems.push(error);
+    }
+  }
+  if (!passkeyOptions && !totp) return configRefusal(problems[0]!);
+  for (const p of problems) (deps.warn ?? console.warn)(`[admin] step-up offered without one kind: ${p.message}`);
+
+  return deps.db.transaction(async (tx) => {
+    await lockStaff(tx, staff.userId);
+    if ((await wrongAnswers(tx, staff.userId, now)) >= MAX_WRONG) return refuse("throttled");
+    if ((await openStepUps(tx, staff.userId, now)) >= MAX_OPEN) return { ...refuse("throttled"), message: MESSAGES.open };
+    const { rows } = await tx.query(
+      `INSERT INTO admin_step_ups (user_id, action, target_id, challenge, expires_at)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [
+        staff.userId,
+        a,
+        t,
+        passkeyOptions?.challenge ?? randomBytes(32).toString("base64url"),
+        new Date(now.getTime() + STEP_UP_TTL_MS),
+      ],
+    );
+    return { ok: true as const, id: String(rows[0]!.id), passkeyOptions, totp };
+  });
 }
 
 export async function completeStepUp(
@@ -139,27 +214,37 @@ export async function completeStepUp(
   id: string,
   proof: StepUpProof,
 ): Promise<StepUpResult> {
-  if (typeof id !== "string" || !UUID.test(id)) return { ok: false, reason: "expired" };
+  if (typeof id !== "string" || !UUID.test(id)) return refuse("expired");
   const now = deps.now();
+  try {
+    return await deps.db.transaction(async (tx): Promise<StepUpResult> => {
+      await lockStaff(tx, staff.userId);
+      if ((await wrongAnswers(tx, staff.userId, now)) >= MAX_WRONG) return refuse("throttled");
 
-  // Spend the try before checking it.
-  const { rows } = await deps.db.query(
-    `UPDATE admin_step_ups SET used_at = $3
-      WHERE id = $1 AND user_id = $2 AND action <> ALL($4::text[])
-        AND verified_at IS NULL AND used_at IS NULL AND expires_at > $3
-      RETURNING challenge`,
-    [id, staff.userId, now, PENDING_ENROL_ACTIONS],
-  );
-  if (rows.length !== 1) return { ok: false, reason: "expired" };
+      // Spend the try before checking it.
+      const { rows } = await tx.query(
+        `UPDATE admin_step_ups SET used_at = $3
+          WHERE id = $1 AND user_id = $2 AND action <> ALL($4::text[])
+            AND verified_at IS NULL AND used_at IS NULL AND expires_at > $3
+          RETURNING challenge`,
+        [id, staff.userId, now, PENDING_ENROL_ACTIONS],
+      );
+      if (rows.length !== 1) return refuse("expired");
 
-  const kind = await checkProof(deps, staff, String(rows[0]!.challenge), proof, now);
-  if (!kind) return { ok: false, reason: "wrong" };
+      const kind = await checkProof(deps, tx, staff, String(rows[0]!.challenge), proof, now);
+      if (!kind) return refuse("wrong");
 
-  await deps.db.query(
-    `UPDATE admin_step_ups SET verified_at = $2, verified_kind = $3, used_at = NULL WHERE id = $1 AND verified_at IS NULL`,
-    [id, now, kind],
-  );
-  return { ok: true, token: id };
+      await tx.query(
+        `UPDATE admin_step_ups SET verified_at = $2, verified_kind = $3, used_at = NULL WHERE id = $1 AND verified_at IS NULL`,
+        [id, now, kind],
+      );
+      return { ok: true, token: id };
+    });
+  } catch (error) {
+    // Rolled back: the try was not spent, and is no wrong answer.
+    if (error instanceof StepUpConfigError) return configRefusal(error);
+    throw error;
+  }
 }
 
 /**
@@ -205,28 +290,31 @@ export function enrolStepUp(db: Queryable, now: () => Date): RequireStepUp {
 
 async function checkProof(
   deps: StepUpDeps,
+  tx: Queryable,
   staff: Staff,
   challenge: string,
   proof: StepUpProof,
   now: Date,
 ): Promise<"passkey" | "totp" | null> {
-  if (proof?.kind === "totp" && typeof proof.code === "string") return (await checkTotp(deps, staff, proof.code, now)) ? "totp" : null;
+  if (proof?.kind === "totp" && typeof proof.code === "string") {
+    return (await checkTotp(deps, tx, staff, proof.code, now)) ? "totp" : null;
+  }
   if (proof?.kind === "passkey" && typeof proof.response?.id === "string") {
-    return (await checkPasskey(deps, staff, challenge, proof.response, now)) ? "passkey" : null;
+    return (await checkPasskey(deps, tx, staff, challenge, proof.response, now)) ? "passkey" : null;
   }
   return null;
 }
 
 /** Any of the staff member's authenticator apps, at a time step later than its last accepted code. */
-async function checkTotp(deps: StepUpDeps, staff: Staff, code: string, now: Date): Promise<boolean> {
-  const { rows } = await deps.db.query(
+async function checkTotp(deps: StepUpDeps, tx: Queryable, staff: Staff, code: string, now: Date): Promise<boolean> {
+  const { rows } = await tx.query(
     `SELECT id, totp_secret_enc FROM admin_credentials WHERE user_id = $1 AND kind = 'totp' ORDER BY created_at, id`,
     [staff.userId],
   );
   for (const row of rows) {
     const step = totpStep(decryptSecret(String(row.totp_secret_enc), deps.totpKey), code, now);
     if (step === null) continue;
-    const { rows: accepted } = await deps.db.query(
+    const { rows: accepted } = await tx.query(
       `UPDATE admin_credentials SET counter = $2, last_used_at = $3 WHERE id = $1 AND counter < $2 RETURNING id`,
       [row.id, step, now],
     );
@@ -238,12 +326,13 @@ async function checkTotp(deps: StepUpDeps, staff: Staff, code: string, now: Date
 /** The staff member's own passkey, verified against its stored key and counter; the counter then moves on. */
 async function checkPasskey(
   deps: StepUpDeps,
+  tx: Queryable,
   staff: Staff,
   challenge: string,
   response: AuthenticationResponseJSON,
   now: Date,
 ): Promise<boolean> {
-  const { rows } = await deps.db.query(
+  const { rows } = await tx.query(
     `SELECT id, credential_id, public_key, counter, transports FROM admin_credentials
       WHERE user_id = $1 AND kind = 'passkey' AND credential_id = $2`,
     [staff.userId, response.id],
@@ -268,9 +357,10 @@ async function checkPasskey(
   }).catch(() => ({ verified: false as const }));
   if (!result.verified) return false;
 
-  await deps.db.query(
-    `UPDATE admin_credentials SET counter = GREATEST(counter, $2), last_used_at = $3 WHERE id = $1`,
-    [row.id, result.authenticationInfo.newCounter, now],
-  );
+  await tx.query(`UPDATE admin_credentials SET counter = GREATEST(counter, $2), last_used_at = $3 WHERE id = $1`, [
+    row.id,
+    result.authenticationInfo.newCounter,
+    now,
+  ]);
   return true;
 }

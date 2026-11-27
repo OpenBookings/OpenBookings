@@ -16,6 +16,11 @@ function keyBytes(key: string): Buffer {
   return bytes;
 }
 
+/** Throws a StepUpConfigError unless `key` is a usable ADMIN_TOTP_KEY. */
+export function checkTotpKey(key: string): void {
+  keyBytes(key);
+}
+
 export function encryptSecret(plain: string, key: string): string {
   const k = keyBytes(key);
   const iv = randomBytes(12);
