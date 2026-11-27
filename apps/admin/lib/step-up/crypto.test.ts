@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import { StepUpConfigError } from "./config";
 import { decryptSecret, encryptSecret } from "./crypto";
 
 const key = randomBytes(32).toString("base64");
@@ -25,7 +26,21 @@ describe("TOTP secret encryption", () => {
 
   test("refuses a key that is not 32 bytes", () => {
     expect(() => encryptSecret("x", randomBytes(16).toString("base64"))).toThrow(/32 bytes/);
-    expect(() => encryptSecret("x", "")).toThrow(/32 bytes/);
     expect(() => decryptSecret(encryptSecret("x", key), randomBytes(31).toString("base64"))).toThrow(/32 bytes/);
+  });
+
+  test("a missing key is a configuration error that names the setting", () => {
+    for (const missing of ["", "  "]) {
+      const error = (() => {
+        try {
+          encryptSecret("x", missing);
+        } catch (e) {
+          return e;
+        }
+      })();
+      expect(error).toBeInstanceOf(StepUpConfigError);
+      expect((error as Error).message).toBe("ADMIN_TOTP_KEY is not set: authenticator apps need it");
+    }
+    expect(() => encryptSecret("x", randomBytes(16).toString("base64"))).toThrow(StepUpConfigError);
   });
 });

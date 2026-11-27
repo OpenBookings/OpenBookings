@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { StepUpConfigError } from "./config";
 
 /**
  * How authenticator-app seeds are stored: encrypted with AES-256 in GCM mode,
@@ -9,8 +10,9 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 const VERSION = "v1";
 
 function keyBytes(key: string): Buffer {
+  if (!key.trim()) throw new StepUpConfigError("ADMIN_TOTP_KEY is not set: authenticator apps need it");
   const bytes = Buffer.from(key, "base64");
-  if (bytes.length !== 32) throw new Error("ADMIN_TOTP_KEY must be 32 bytes, base64-encoded");
+  if (bytes.length !== 32) throw new StepUpConfigError("ADMIN_TOTP_KEY must be 32 bytes, base64-encoded");
   return bytes;
 }
 

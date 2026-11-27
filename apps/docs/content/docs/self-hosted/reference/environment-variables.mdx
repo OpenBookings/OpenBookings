@@ -118,7 +118,7 @@ I = invoice job, R = root scripts.
 | `ADMIN_DATABASE_URL_WRITE` | A | no | A login user acting as `ob_admin_write`, for admin actions only. Unset while `_READ` is set: the console is read-only. Set alone: refused. |
 | `ADMIN_TOTP_KEY` | A | for step-up | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts authenticator-app secrets at rest. Changing it makes every enrolled authenticator app unusable. |
 | `ADMIN_BOOTSTRAP_CODE` | A | for a first enrolment | A staff member with no passkey or authenticator app yet enters it on `/security` to add their first one. Unset or blank: nobody can bootstrap. Remove it once staff have enrolled; later ones need a step-up with an existing one. |
-| `ADMIN_RP_ID` | A | no | The admin console's host name for passkeys, e.g. `admin.openbookings.co`. Unset: the request's host. |
+| `ADMIN_RP_ID` | A | in production, for passkeys | The admin console's host name for passkeys, e.g. `admin.openbookings.co`. Unset in production: passkeys are refused (the request's host is never trusted). Unset in development: the request's host. |
 
 ### Admin console database roles
 

@@ -10,6 +10,7 @@ import * as OTPAuth from "otpauth";
 import { Client } from "pg";
 import { applyPendingMigrations, connectionString, describeWithDb, pendingMigrationSql } from "@openbookings/db/testing";
 import type { Staff } from "../staff";
+import { StepUpConfigError } from "./config";
 import { listCredentials } from "./credentials";
 import { decryptSecret } from "./crypto";
 import {
@@ -236,4 +237,64 @@ describeWithDb("step-up credentials and enrolment", () => {
     expect(await outcome(() => completePasskeyEnrolment(deps(), staff, rejected, RP, no))).toBe("not-verified");
     expect(await listCredentials(db, staff.userId)).toHaveLength(1);
   });
+
+  test("an enrolment begun with the bootstrap code cannot finish once a credential exists", async () => {
+    const options = await startPasskeyEnrolment(deps(), staff, { bootstrap: BOOTSTRAP }, RP);
+    // Meanwhile the first credential is added: the bootstrap code no longer lets anyone in.
+    await enrolTotp(deps(), { bootstrap: BOOTSTRAP });
+
+    let verified = 0;
+    const verify = async () => {
+      verified++;
+      return {
+        verified: true as const,
+        registrationInfo: { credential: { id: "cred-late", publicKey: new Uint8Array([1]), counter: 0 } },
+      };
+    };
+    expect(await outcome(() => completePasskeyEnrolment(deps(), staff, passkeyResponse(options.challenge, "cred-late"), RP, verify))).toBe(
+      "step-up",
+    );
+    expect(verified).toBe(0);
+    expect((await listCredentials(db, staff.userId)).map((c) => c.kind)).toEqual(["totp"]);
+  });
+
+  test("a passkey already registered (to anyone) is refused, not a crash", async () => {
+    const verify = async () => ({
+      verified: true as const,
+      registrationInfo: { credential: { id: "cred-shared", publicKey: new Uint8Array([1]), counter: 0 } },
+    });
+    const first = await startPasskeyEnrolment(deps(), staff, { bootstrap: BOOTSTRAP }, RP);
+    await completePasskeyEnrolment(deps(), staff, passkeyResponse(first.challenge, "cred-shared"), RP, verify);
+
+    const other: Staff = { userId: `staff-${crypto.randomUUID()}`, email: "other@example.test" };
+    const second = await startPasskeyEnrolment(deps(), other, { bootstrap: BOOTSTRAP }, RP);
+    // The refused insert aborts the test's transaction; the console runs it on its own.
+    await db.query("SAVEPOINT duplicate");
+    const refused = await completePasskeyEnrolment(deps(), other, passkeyResponse(second.challenge, "cred-shared"), RP, verify)
+      .then(() => null)
+      .catch((e: unknown) => e);
+    await db.query("ROLLBACK TO SAVEPOINT duplicate");
+    expect(refused).toBeInstanceOf(EnrolRefused);
+    expect((refused as EnrolRefused).reason).toBe("duplicate");
+    expect((refused as Error).message).toBe("This passkey is already registered");
+    expect(await listCredentials(db, other.userId)).toEqual([]);
+  });
+
+  test("a missing ADMIN_TOTP_KEY is a configuration error that names it", async () => {
+    const refused = await startTotpEnrolment(deps({ totpKey: "" }), staff, { bootstrap: BOOTSTRAP }).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(StepUpConfigError);
+    expect((refused as Error).message).toMatch(/^ADMIN_TOTP_KEY is not set/);
+  });
 });
+
+/** What the browser returns after registering a passkey for `challenge`. */
+function passkeyResponse(challenge: string, id: string) {
+  const clientDataJSON = Buffer.from(JSON.stringify({ type: "webauthn.create", challenge })).toString("base64url");
+  return {
+    id,
+    rawId: id,
+    type: "public-key" as const,
+    clientExtensionResults: {},
+    response: { clientDataJSON, attestationObject: "" },
+  };
+}

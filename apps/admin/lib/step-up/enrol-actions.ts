@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { writePool } from "../db";
 import { requireStaff } from "../staff";
+import { StepUpConfigError } from "./config";
 import {
   completePasskeyEnrolment,
   completeTotpEnrolment,
@@ -18,8 +19,9 @@ import {
 } from "./enrol";
 
 /**
- * Enrolling step-up credentials from /security. Refusals come back as a
- * message (a thrown error's text is hidden from the browser in production).
+ * Enrolling step-up credentials from /security. Refusals and missing settings
+ * come back as a message (a thrown error's text is hidden from the browser in
+ * production).
  */
 export type EnrolResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -36,7 +38,7 @@ async function attempt<T>(fn: () => Promise<T>): Promise<EnrolResult<T>> {
   try {
     return { ok: true, value: await fn() };
   } catch (error) {
-    if (error instanceof EnrolRefused) return { ok: false, error: error.message };
+    if (error instanceof EnrolRefused || error instanceof StepUpConfigError) return { ok: false, error: error.message };
     throw error;
   }
 }

@@ -14,6 +14,7 @@ import {
   passkeyIds,
   type AdminCredential,
 } from "./credentials";
+import { StepUpConfigError } from "./config";
 import { decryptSecret, encryptSecret } from "./crypto";
 
 /**
@@ -25,7 +26,9 @@ import { decryptSecret, encryptSecret } from "./crypto";
  * second factor. The check runs when the enrolment starts. Starting leaves a
  * pending challenge in admin_step_ups, bound to the staff member, valid for
  * five minutes and used once; finishing needs that challenge, so it carries
- * the check over.
+ * the check over. The pending row's verified_kind records which check let it
+ * in ("bootstrap" or "step-up"): one let in by the bootstrap code cannot
+ * finish once the staff member has a credential after all.
  */
 
 export const ENROL_ACTION = "security.enrol";
@@ -36,7 +39,7 @@ const PENDING_TTL_MS = 5 * 60_000;
 const RP_NAME = "OpenBookings admin";
 const TOTP_ISSUER = "OpenBookings admin";
 
-export type EnrolRefusal = "bootstrap" | "step-up" | "expired" | "wrong-code" | "not-verified";
+export type EnrolRefusal = "bootstrap" | "step-up" | "expired" | "wrong-code" | "not-verified" | "duplicate";
 
 const REFUSAL_MESSAGE: Record<EnrolRefusal, string> = {
   bootstrap: "The bootstrap code is not right",
@@ -44,6 +47,7 @@ const REFUSAL_MESSAGE: Record<EnrolRefusal, string> = {
   expired: "This enrolment expired. Start again",
   "wrong-code": "That code is not right",
   "not-verified": "The passkey could not be verified",
+  duplicate: "This passkey is already registered",
 };
 
 /** An expected refusal: the action shows its message instead of failing. */
@@ -92,43 +96,65 @@ export function bootstrapMatches(given: string | undefined, expected: string | u
 }
 
 /**
- * The WebAuthn relying party: ADMIN_RP_ID, else the request's host name.
- * Production origins are always https; development allows the dev server's own origin.
+ * The WebAuthn relying party. Production: ADMIN_RP_ID over https, never the
+ * request's host. Development: ADMIN_RP_ID, else the request's host name, at
+ * the dev server's own origin.
  */
 export function relyingParty(env: Record<string, string | undefined>, host: string | null): RelyingParty {
-  const hostName = (host ?? "").replace(/:\d+$/, "");
-  const rpID = env.ADMIN_RP_ID?.trim() || hostName;
-  if (!rpID) throw new Error("No relying party: set ADMIN_RP_ID");
-  const origin = env.NODE_ENV === "production" || !host ? `https://${rpID}` : `http://${host}`;
-  return { rpID, origin };
+  const configured = env.ADMIN_RP_ID?.trim();
+  if (env.NODE_ENV === "production") {
+    if (!configured) throw new StepUpConfigError("ADMIN_RP_ID is not set: passkeys need the admin console's host name");
+    return { rpID: configured, origin: `https://${configured}` };
+  }
+  const rpID = configured || (host ?? "").replace(/:\d+$/, "");
+  if (!rpID) throw new StepUpConfigError("ADMIN_RP_ID is not set and the request has no host");
+  return { rpID, origin: host ? `http://${host}` : `https://${rpID}` };
 }
 
-async function checkEnrolGate(deps: EnrolDeps, staff: Staff, proof: EnrolProof): Promise<void> {
+/** Which check let an enrolment start. */
+type EnrolGate = "bootstrap" | "step-up";
+
+async function checkEnrolGate(deps: EnrolDeps, staff: Staff, proof: EnrolProof): Promise<EnrolGate> {
   if (!(await hasCredentials(deps.db, staff.userId))) {
     if (!bootstrapMatches(proof.bootstrap, deps.bootstrapCode)) throw new EnrolRefused("bootstrap");
-    return;
+    return "bootstrap";
   }
   if (!proof.stepUpToken) throw new EnrolRefused("step-up");
   await deps.requireStepUp(staff, proof.stepUpToken);
+  return "step-up";
 }
 
-async function addPending(deps: EnrolDeps, staff: Staff, action: string, challenge: string): Promise<void> {
+async function addPending(deps: EnrolDeps, staff: Staff, action: string, gate: EnrolGate, challenge: string) {
   await deps.db.query(
-    `INSERT INTO admin_step_ups (user_id, action, target_id, challenge, expires_at) VALUES ($1, $2, $1, $3, $4)`,
-    [staff.userId, action, challenge, new Date(deps.now().getTime() + PENDING_TTL_MS)],
+    `INSERT INTO admin_step_ups (user_id, action, target_id, challenge, verified_kind, expires_at)
+     VALUES ($1, $2, $1, $3, $4, $5)`,
+    [staff.userId, action, challenge, gate, new Date(deps.now().getTime() + PENDING_TTL_MS)],
   );
 }
 
-/** Marks one pending challenge used; false when it was spent, expired or never issued to this staff member. */
-async function spendPending(deps: EnrolDeps, staff: Staff, action: string, match: { id?: string; challenge?: string }) {
+/**
+ * Marks one pending challenge used. Refuses ("expired") one that was spent,
+ * expired or never issued to this staff member; refuses ("step-up") one the
+ * bootstrap code let in when the staff member has a credential by now.
+ */
+async function spendPending(
+  deps: EnrolDeps,
+  staff: Staff,
+  action: string,
+  match: { id?: string; challenge?: string },
+): Promise<void> {
   const { rows } = await deps.db.query(
     `UPDATE admin_step_ups SET used_at = $3
       WHERE user_id = $1 AND action = $2 AND used_at IS NULL AND expires_at > $3
+        AND verified_kind IN ('bootstrap', 'step-up')
         AND ($4::uuid IS NULL OR id = $4::uuid) AND ($5::text IS NULL OR challenge = $5)
-      RETURNING id`,
+      RETURNING verified_kind`,
     [staff.userId, action, deps.now(), match.id ?? null, match.challenge ?? null],
   );
-  return rows.length === 1;
+  if (rows.length !== 1) throw new EnrolRefused("expired");
+  if (rows[0]!.verified_kind === "bootstrap" && (await hasCredentials(deps.db, staff.userId))) {
+    throw new EnrolRefused("step-up");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -144,9 +170,9 @@ export async function startTotpEnrolment(
   staff: Staff,
   proof: EnrolProof,
 ): Promise<{ uri: string; secretPreview: string }> {
-  await checkEnrolGate(deps, staff, proof);
+  const gate = await checkEnrolGate(deps, staff, proof);
   const secret = new OTPAuth.Secret({ size: 20 });
-  await addPending(deps, staff, PENDING_TOTP, encryptSecret(secret.base32, deps.totpKey));
+  await addPending(deps, staff, PENDING_TOTP, gate, encryptSecret(secret.base32, deps.totpKey));
   return { uri: totpFor(staff, secret).toString(), secretPreview: secret.base32.replace(/(.{4})(?=.)/g, "$1 ") };
 }
 
@@ -155,6 +181,7 @@ export async function completeTotpEnrolment(deps: EnrolDeps, staff: Staff, code:
   const { rows } = await deps.db.query(
     `SELECT id, challenge FROM admin_step_ups
       WHERE user_id = $1 AND action = $2 AND used_at IS NULL AND expires_at > $3
+        AND verified_kind IN ('bootstrap', 'step-up')
       ORDER BY created_at DESC LIMIT 1`,
     [staff.userId, PENDING_TOTP, deps.now()],
   );
@@ -168,7 +195,7 @@ export async function completeTotpEnrolment(deps: EnrolDeps, staff: Staff, code:
     totpFor(staff, OTPAuth.Secret.fromBase32(base32)).validate({ token, timestamp: deps.now().getTime(), window: 1 }) !== null;
   if (!ok) throw new EnrolRefused("wrong-code");
 
-  if (!(await spendPending(deps, staff, PENDING_TOTP, { id: String(pending.id) }))) throw new EnrolRefused("expired");
+  await spendPending(deps, staff, PENDING_TOTP, { id: String(pending.id) });
   return insertTotpCredential(deps.db, {
     userId: staff.userId,
     secretEnc: encryptSecret(base32, deps.totpKey),
@@ -201,7 +228,7 @@ export async function startPasskeyEnrolment(
   proof: EnrolProof,
   rp: RelyingParty,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> {
-  await checkEnrolGate(deps, staff, proof);
+  const gate = await checkEnrolGate(deps, staff, proof);
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: rp.rpID,
@@ -214,7 +241,7 @@ export async function startPasskeyEnrolment(
     })),
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
   });
-  await addPending(deps, staff, PENDING_PASSKEY, options.challenge);
+  await addPending(deps, staff, PENDING_PASSKEY, gate, options.challenge);
   return options;
 }
 
@@ -240,9 +267,8 @@ export async function completePasskeyEnrolment(
 ): Promise<AdminCredential> {
   const challenge = signedChallenge(response);
   // Spent before verifying: one try per challenge.
-  if (!challenge || !(await spendPending(deps, staff, PENDING_PASSKEY, { challenge }))) {
-    throw new EnrolRefused("expired");
-  }
+  if (!challenge) throw new EnrolRefused("expired");
+  await spendPending(deps, staff, PENDING_PASSKEY, { challenge });
   const result = await verify({
     response,
     expectedChallenge: challenge,
@@ -260,5 +286,9 @@ export async function completePasskeyEnrolment(
     counter: credential.counter,
     transports: credential.transports ?? [],
     label: "Passkey",
+  }).catch((error: unknown) => {
+    // credential_id is unique: this authenticator is registered already, maybe to someone else.
+    if ((error as { code?: unknown }).code === "23505") throw new EnrolRefused("duplicate");
+    throw error;
   });
 }
