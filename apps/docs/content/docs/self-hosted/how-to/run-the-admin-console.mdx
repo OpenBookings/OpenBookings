@@ -39,7 +39,9 @@ SHA-256 checked.
 
 Build and release it like the other apps ([Build the production images](/docs/self-hosted/how-to/build-the-production-images)):
 CI builds `openbookings-admin` and rolls the Scaleway container named by the repository variable
-`SCW_CONTAINER_ID_ADMIN`.
+`SCW_CONTAINER_ID_ADMIN`. Create the container and set that variable before you expect rolls: until
+it exists, a release that built the admin image logs a warning and skips the admin roll (the other
+apps still fail the release on a missing id).
 
 Create the Scaleway Serverless Container **private** (it needs no public endpoint: the tunnel
 dials out) with a minimum scale of 1, so the tunnel stays up. Set:
@@ -55,7 +57,6 @@ dials out) with a minimum scale of 1, so the tunnel stays up. Set:
 | `ADMIN_BOOTSTRAP_CODE` | A long random code, only while enrolling (step 5) |
 | `STRIPE_SECRET_KEY` | The live key; production allows it |
 | `INVOICE_DB_ENV` | `production` |
-| `R2_INVOICES_BUCKET_NAME` and the R2 credentials | For the invoice pages |
 | `SCW_JOBS_REGION`, `SCW_INVOICE_JOB_DEFINITION_ID`, `SCW_JOBS_SECRET_KEY` | To start the invoice job |
 
 Do not set `ADMIN_SUPER_MODE` or `ADMIN_DEV_EMAIL`: they are development-only, and

@@ -811,6 +811,13 @@ jobs:
               return 0
             fi
 
+            if [ -z "$container_id" ] && [ "$app" = "admin" ]; then
+              # The admin container may not exist yet: warn and skip, so a
+              # release is not red for want of it.
+              echo "::warning::admin image built but SCW_CONTAINER_ID_ADMIN is not set; not rolled"
+              return 0
+            fi
+
             if [ -z "$container_id" ]; then
               local var_name
               var_name="SCW_CONTAINER_ID_$(echo "$app" | tr '[:lower:]' '[:upper:]')"
@@ -852,7 +859,7 @@ jobs:
       # Access's login. Log what was rolled so the run shows which revision the
       # container was pointed at.
       - name: Log the admin revision
-        if: needs.detect.outputs.publish == 'true' && needs.detect.outputs.admin == 'true'
+        if: needs.detect.outputs.publish == 'true' && needs.detect.outputs.admin == 'true' && vars.SCW_CONTAINER_ID_ADMIN != ''
         run: echo "Rolled the admin console to ${GITHUB_SHA} (openbookings-admin:${GITHUB_SHA}); not probed, it is behind Cloudflare Access."
 
       # ---- Registry ----------------------------------------------------------

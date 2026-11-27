@@ -80,7 +80,7 @@ I = invoice job, R = root scripts.
 | `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | B, I | for uploads | An S3-compatible store (Cloudflare R2). |
 | `R2_BUCKET_NAME` | B | for uploads | The public bucket for property and room photos. |
 | `MEDIA_BASE_URL` | B | for uploads | The public URL that bucket is served from. |
-| `R2_INVOICES_BUCKET_NAME` | B, A, I | for invoices | The private bucket for invoice PDFs and CSVs. |
+| `R2_INVOICES_BUCKET_NAME` | B, I | for invoices | The private bucket for invoice PDFs and CSVs. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B | no | Upstash Redis cache. The cache is off when unset. |
 | `CACHE_TTL_PROPERTY_PAGE_S`, `CACHE_TTL_PROPERTY_PAGE_MISS_S`, `CACHE_TTL_PROPERTY_REVIEWS_S`, `CACHE_MAX_AGE_PROPERTY_PAGE_S`, `CACHE_MAX_AGE_PROPERTY_REVIEWS_S` | W | no | Cache lifetimes, in seconds. |
 | `REVALIDATE_SECRET` | W, B | no | Shared secret the host dashboard uses to refresh a public property page. |
