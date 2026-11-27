@@ -132,6 +132,8 @@ export type AuthorModeration = {
   publishedByDeadline: boolean;
   /** As the deadline published it, flagged parts replaced; null otherwise (a Keep clears it). */
   maskedBody: string | null;
+  /** The 12-month purge deleted the original text (written is null then; null without it means there was none). */
+  textPurged: boolean;
   /** When its words were written: the deadline counts from here. */
   heldSince: string;
 };

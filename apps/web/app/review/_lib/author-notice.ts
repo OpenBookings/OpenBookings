@@ -32,8 +32,11 @@ export type GuestNotice =
       lead: string;
       rules: Rule[];
       note: string | null;
-      /** Their own words, kept (not public) until the purge; after it, a line saying so. */
-      written: { text: string; purged: boolean };
+      /**
+       * Their own words, kept (not public) until the purge. Otherwise a line
+       * (`placeholder`): the purge deleted them, or there were none (a score only).
+       */
+      written: { text: string; placeholder: boolean };
       objection: Objection;
       /** Only for a review: whether it may be written once more. */
       rewrite: { open: true; title: string; detail: string } | { open: false; detail: string } | null;
@@ -105,8 +108,10 @@ export function guestNotice(i: {
         note: notice.note,
         written:
           i.moderation.written !== null
-            ? { text: i.moderation.written, purged: false }
-            : { text: `The text was deleted after ${MODERATION_RECORD_RETENTION_MONTHS} months.`, purged: true },
+            ? { text: i.moderation.written, placeholder: false }
+            : i.moderation.textPurged
+              ? { text: `The text was deleted after ${MODERATION_RECORD_RETENTION_MONTHS} months.`, placeholder: true }
+              : { text: 'You gave a score only, without a text.', placeholder: true },
         objection: objectionFor(i.kind, i.bookingId),
         rewrite: !rewrite
           ? null

@@ -200,7 +200,8 @@ export type SubmitReviewResult =
  *
  * A review a moderator removed may be written once more: the same row is
  * rewritten (new score, text and check; the old decision cleared;
- * rewrite_used set), never a second row.
+ * rewrite_used set), never a second row. The old thread under it closes
+ * (closeOldThread).
  */
 export async function submitReview(db: Queryable, i: SubmitReviewInput): Promise<SubmitReviewResult> {
   if (!Number.isInteger(i.score) || i.score < 1 || i.score > 10) return { ok: false, error: "invalid" };
@@ -271,9 +272,29 @@ export async function submitReview(db: Queryable, i: SubmitReviewInput): Promise
   ).rows[0] as { id: string } | undefined;
   // Lost a race with a second submit (or rewrite): the first one stands.
   if (!inserted) return { ok: false, error: "already_reviewed" };
+  if (context.review) await closeOldThread(db, inserted.id, i.now);
   // Spent: every emailed link for this booking is now useless, so drop them.
   await db.query(`DELETE FROM review_tokens WHERE booking_id = $1::uuid`, [context.bookingId]);
   return { ok: true, reviewId: inserted.id, status, context };
+}
+
+/**
+ * A rewritten review starts a new thread: the replies under the removed one
+ * answered words that are gone, so they close as deleted (without their
+ * content) and their open reports are dismissed. The host can reply afresh.
+ */
+async function closeOldThread(db: Queryable, reviewId: string, now: Date): Promise<void> {
+  const { rows } = await db.query(
+    `UPDATE review_replies
+        SET status = 'deleted', body = NULL, flagged_reason = NULL, masked_body = NULL, flagged_fragments = '[]',
+            deleted_at = $2, updated_at = $2
+      WHERE review_id = $1::uuid AND status <> 'deleted'
+      RETURNING id`,
+    [reviewId, now],
+  );
+  for (const { id } of rows as { id: string }[]) {
+    await dismissReportsOfDeleted(db, { reviewId, replyId: id, now });
+  }
 }
 
 /**

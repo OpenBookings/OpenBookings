@@ -1286,6 +1286,8 @@ export const reviews = pgTable(
     decidedBy: text("decided_by"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     publishedByDeadline: boolean("published_by_deadline").notNull().default(false),
+    /** When the 12-month purge deleted the original text (0061): null for a score-only review. */
+    textPurgedAt: timestamp("text_purged_at", { withTimezone: true }),
     /** The one rewrite after a removal has been used (0061). */
     rewriteUsed: boolean("rewrite_used").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1363,6 +1365,8 @@ export const reviewReplies = pgTable(
     decidedBy: text("decided_by"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     publishedByDeadline: boolean("published_by_deadline").notNull().default(false),
+    /** When the 12-month purge deleted the original text (0061). */
+    textPurgedAt: timestamp("text_purged_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

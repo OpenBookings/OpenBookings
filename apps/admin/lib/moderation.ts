@@ -1,4 +1,4 @@
-import { decideItem, moderationVersionSql, type ModerationItem } from "@openbookings/db/reviews";
+import { deadlineMaySql, decideItem, moderationVersionSql, type ModerationItem } from "@openbookings/db/reviews";
 import {
   isReviewRuleId,
   MODERATION_DEADLINE_HOURS,
@@ -7,6 +7,8 @@ import {
   type ReviewRuleId,
 } from "@openbookings/pricing";
 import { sendModerationDecision, sendReportOutcomes, type ReviewSendDeps } from "@openbookings/mailing/review-send";
+import { AdminReadOnlyError } from "./db";
+import { KEEP_REASON_MAX } from "./moderation-view";
 import type { Queryable } from "./staff";
 
 /**
@@ -54,8 +56,10 @@ export type QueueRow = {
   stayMonth: string;
   /** The review's score, for reviews only. Never part of the decision. */
   score: number | null;
-  /** The text as written (null once purged). */
+  /** The text as written (null once purged, or for a score-only review). */
   body: string | null;
+  /** The 12-month purge deleted the original text (text_purged_at). */
+  textPurged: boolean;
   /** The text as the deadline published it, parts masked. */
   maskedBody: string | null;
   fragments: string[];
@@ -68,6 +72,11 @@ export type QueueRow = {
   writtenAt: Date;
   /** When a held item publishes masked: writtenAt + MODERATION_DEADLINE_HOURS. */
   deadline: Date;
+  /**
+   * Whether the deadline job may publish it (deadlineMaySql). When not, it
+   * waits for a person: e.g. the flagged words couldn't be pinpointed.
+   */
+  deadlineMay: boolean;
   publishedAt: Date | null;
   publishedByDeadline: boolean;
   /** A reply's review: whether it is on the page. */
@@ -107,7 +116,8 @@ const ITEMS = `
          rv.score, rv.body, rv.masked_body, rv.flagged_fragments, rv.flagged_reason, rv.check_source, rv.status,
          rv.created_at AS written_at, rv.published_at, rv.published_by_deadline, NULL::text AS review_status,
          rv.guest_user_id IS NOT NULL AS author_reachable, rv.rewrite_used,
-         rv.decision, rv.decision_rules, rv.decision_note, rv.decided_by, rv.decided_at
+         rv.decision, rv.decision_rules, rv.decision_note, rv.decided_by, rv.decided_at,
+         rv.text_purged_at, ${deadlineMaySql("rv")} AS deadline_may
     FROM reviews rv
    WHERE rv.status IN ('pending', 'published', 'removed')
   UNION ALL
@@ -116,7 +126,8 @@ const ITEMS = `
          NULL::smallint, rr.body, rr.masked_body, rr.flagged_fragments, rr.flagged_reason, rr.check_source, rr.status,
          COALESCE(rr.edited_at, rr.created_at), rr.published_at, rr.published_by_deadline, rv.status,
          rr.author_user_id IS NOT NULL, false,
-         rr.decision, rr.decision_rules, rr.decision_note, rr.decided_by, rr.decided_at
+         rr.decision, rr.decision_rules, rr.decision_note, rr.decided_by, rr.decided_at,
+         rr.text_purged_at, ${deadlineMaySql("rr")}
     FROM review_replies rr
     JOIN reviews rv ON rv.id = rr.review_id
    WHERE rr.status IN ('pending', 'published', 'removed') AND rv.status <> 'deleted'`;
@@ -135,8 +146,9 @@ const TAB: Record<ModerationTab, { where: string; order: string; limit: number }
     order: `(SELECT min(rp.created_at) FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf("i")}), i.id`,
     limit: QUEUE_LIMIT,
   },
+  // Not once the purge left only the masked text: there are no original words left to decide on.
   deadline: {
-    where: `i.status = 'published' AND i.published_by_deadline AND i.decided_at IS NULL`,
+    where: `i.status = 'published' AND i.published_by_deadline AND i.decided_at IS NULL AND i.text_purged_at IS NULL`,
     order: `i.published_at, i.id`,
     limit: QUEUE_LIMIT,
   },
@@ -173,6 +185,8 @@ type Row = {
   decided_by: string | null;
   decided_by_email: string | null;
   decided_at: Date | null;
+  text_purged_at: Date | null;
+  deadline_may: boolean;
   check_out_date: string;
   check_out_time: string | null;
   timezone: string;
@@ -229,6 +243,7 @@ function toRow(r: Row, now: Date): QueueRow {
     stayMonth: r.stay_month,
     score: r.score,
     body: r.body,
+    textPurged: r.text_purged_at !== null,
     maskedBody: r.masked_body,
     fragments,
     rules: rulesOf(reasons),
@@ -237,6 +252,7 @@ function toRow(r: Row, now: Date): QueueRow {
     status: r.status,
     writtenAt: r.written_at,
     deadline: new Date(r.written_at.getTime() + MODERATION_DEADLINE_HOURS * HOUR),
+    deadlineMay: r.deadline_may,
     publishedAt: r.published_at,
     publishedByDeadline: r.published_by_deadline,
     reviewStatus: r.review_status,
@@ -306,7 +322,8 @@ export const DECISION_ERRORS = {
   rules_required: "Pick at least one rule.",
 } as const;
 
-export type DecisionResult = { ok: true } | { ok: false; error: (typeof DECISION_ERRORS)[keyof typeof DECISION_ERRORS] };
+/** A refusal from the item's state (DECISION_ERRORS), or the console's own (read-only). */
+export type DecisionResult = { ok: true } | { ok: false; error: string };
 
 export type DecisionDeps = {
   /** One transaction on the write connection: decideItem is two statements. */
@@ -341,10 +358,12 @@ export function parseItem(item: unknown): ModerationItem | null {
 async function decide(
   deps: DecisionDeps,
   i: DecisionInput & { decision: "kept" | "removed"; rules: ReviewRuleId[]; note: string | null },
+  /** Run in the decision's transaction once it went through, e.g. the audit row. */
+  andThen?: (tx: Queryable, reportsClosed: number) => Promise<unknown>,
 ): Promise<DecisionResult> {
   if (typeof i.version !== "string" || !/^\d+$/.test(i.version)) return { ok: false, error: DECISION_ERRORS.changed };
-  const result = await deps.transaction((tx) =>
-    decideItem(tx, {
+  const result = await deps.transaction(async (tx) => {
+    const decided = await decideItem(tx, {
       item: i.item,
       decision: i.decision,
       rules: i.rules,
@@ -352,8 +371,10 @@ async function decide(
       decidedBy: i.decidedBy,
       now: deps.now,
       version: i.version,
-    }),
-  );
+    });
+    if (decided.ok && andThen) await andThen(tx, decided.reportsClosed);
+    return decided;
+  });
   // A deleted item comes back not_found, so neither its author nor a reporter hears anything.
   if (!result.ok) return { ok: false, error: DECISION_ERRORS[result.error] };
 
@@ -377,9 +398,47 @@ async function decide(
  * Keep: the words follow the rules. A held item publishes as written, a
  * deadline-masked one loses its mask, and open reports close as dismissed
  * (their reporters are told). The author gets no email.
+ *
+ * Not dangerous (no step-up), but recorded: an audit_log row
+ * 'admin.review.keep' with the moderator's optional reason, written in the
+ * decision's transaction, so there is never one without the other.
  */
-export function keepItem(deps: DecisionDeps, i: DecisionInput): Promise<DecisionResult> {
-  return decide(deps, { ...i, decision: "kept", rules: [], note: null });
+export function keepItem(
+  deps: DecisionDeps,
+  i: DecisionInput & { actorEmail: string; reason?: unknown },
+): Promise<DecisionResult> {
+  const reason = keepReasonOf(i.reason);
+  return decide(deps, { ...i, decision: "kept", rules: [], note: null }, (tx, reportsClosed) =>
+    tx.query(`INSERT INTO audit_log (action, actor_user_id, reason, detail) VALUES ('admin.review.keep', $1, $2, $3::jsonb)`, [
+      i.decidedBy,
+      reason,
+      JSON.stringify({
+        target_type: i.item.kind === "review" ? "review" : "review_reply",
+        target_id: i.item.id,
+        actor_email: i.actorEmail,
+        reports_closed: reportsClosed,
+      }),
+    ]),
+  );
+}
+
+/**
+ * A decision on a read-only console (no write connection) answers with the
+ * message as a value, as the dangerous path does: Next hides a thrown
+ * error's text from the browser in production.
+ */
+export async function readOnlyAsRefusal(run: () => Promise<DecisionResult>): Promise<DecisionResult> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof AdminReadOnlyError) return { ok: false, error: error.message };
+    throw error;
+  }
+}
+
+/** A Keep's optional reason from the browser: trimmed, at most KEEP_REASON_MAX characters, null when empty. */
+export function keepReasonOf(reason: unknown): string | null {
+  return typeof reason === "string" ? reason.trim().slice(0, KEEP_REASON_MAX) || null : null;
 }
 
 /**

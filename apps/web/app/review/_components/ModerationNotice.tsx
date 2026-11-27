@@ -63,7 +63,7 @@ export function ModerationNotice({ notice }: { notice: GuestNotice }) {
         ) : null}
         <details className="rounded-lg bg-black/25 px-3 py-2.5">
           <summary className="cursor-pointer text-xs text-white/55 hover:text-white/80">What you wrote (not public)</summary>
-          <p className={`mt-1.5 leading-relaxed whitespace-pre-line ${notice.written.purged ? 'text-white/55' : 'text-white/75'}`}>
+          <p className={`mt-1.5 leading-relaxed whitespace-pre-line ${notice.written.placeholder ? 'text-white/55' : 'text-white/75'}`}>
             {notice.written.text}
           </p>
         </details>

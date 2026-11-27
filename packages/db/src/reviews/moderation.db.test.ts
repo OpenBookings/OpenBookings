@@ -8,7 +8,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
-import type { TextCheck } from "@openbookings/pricing";
+import { nextReplyRole, type TextCheck } from "@openbookings/pricing";
 import {
   applyPendingMigrations,
   connectionString,
@@ -67,7 +67,7 @@ describeWithDb("review moderation against Postgres", () => {
   }
 
   /** A review written at WRITTEN (or `now`) with `check`'s outcome. */
-  async function review(check: TextCheck, body = RUDE, now = WRITTEN) {
+  async function review(check: TextCheck, body: string | null = RUDE, now = WRITTEN) {
     const { bookingId, guestId } = await stay();
     const result = await submitReview(db, { bookingId, via: "session", score: 4, body, check, now });
     if (!result.ok) throw new Error(`review failed: ${result.error}`);
@@ -242,11 +242,30 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reviewRow(plain.reviewId)).toMatchObject({ status: "published", masked_body: null, published_by_deadline: true });
   });
 
-  test("publishOverdue stores no mask when the fragments aren't in the text, and sends no notice", async () => {
+  test("publishOverdue never publishes a flagged item whose fragments aren't in the text: it waits for a person", async () => {
     // The model quoted words the text doesn't hold (paraphrased, or another case): nothing to mask.
     const held = await review({ ...NAMED, fragments: ["jan jansen"] });
-    const result = await publishOverdue(db, later(72 * HOUR));
-    expect(result).toMatchObject({ published: 1, masked: [] });
+    // A rule with no fragment at all, from either check.
+    const bare = await review({ ...NAMED, fragments: [] }, "The manager was rude to us.", later(60_000));
+    const result = await publishOverdue(db, later(73 * HOUR));
+    expect(result).toEqual({
+      published: 0,
+      propertyIds: [],
+      masked: [],
+      waiting: expect.arrayContaining([held.item, bare.item]),
+    });
+    expect(result.waiting).toHaveLength(2);
+    expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", published_by_deadline: false, masked_body: null });
+    expect(await reviewRow(bare.reviewId)).toMatchObject({ status: "pending", published_by_deadline: false, masked_body: null });
+
+    // A person decides it: it no longer waits.
+    await decide(held.item, "kept", later(74 * HOUR), []);
+    expect((await publishOverdue(db, later(75 * HOUR))).waiting).toEqual([bare.item]);
+  });
+
+  test("an unchecked item held for no rule publishes as written at the deadline", async () => {
+    const held = await review(UNCHECKED, "Quiet room.");
+    expect(await publishOverdue(db, later(72 * HOUR))).toMatchObject({ published: 1, masked: [], waiting: [] });
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "published", published_by_deadline: true, masked_body: null });
   });
 
@@ -491,6 +510,43 @@ describeWithDb("review moderation against Postgres", () => {
     ).toEqual({ ok: false, error: "already_reviewed" });
   });
 
+  test("a rewrite closes the removed review's thread and dismisses its reports; the host replies first again", async () => {
+    const first = await review(CLEAN, "Fine stay.");
+    const hostReply = await postReviewReply(db, {
+      reviewId: first.reviewId, role: "host", authorUserId: hostId, body: "Thank you.", check: CLEAN, now: later(HOUR),
+    });
+    if (!hostReply.ok) throw new Error("reply failed");
+    const answer = await postReviewReply(db, {
+      reviewId: first.reviewId, role: "guest", authorUserId: first.guestId, body: "You're welcome.", check: CLEAN, now: later(2 * HOUR),
+    });
+    if (!answer.ok) throw new Error("answer failed");
+    const onReply = await publicReport(first.reviewId, hostReply.replyId);
+    const onAnswer = await report(first.reviewId, answer.replyId);
+    await decide(first.item, "removed", later(3 * HOUR));
+
+    const rewritten = await submitReview(db, {
+      bookingId: first.bookingId, via: "session", score: 6, body: "Fine stay, slow check-in.", check: CLEAN, now: later(DAY),
+    });
+    expect(rewritten).toMatchObject({ ok: true, status: "published" });
+
+    const { rows } = await db.query(
+      `SELECT status, body, masked_body, deleted_at FROM review_replies WHERE review_id = $1 ORDER BY created_at`,
+      [first.reviewId],
+    );
+    expect(rows).toEqual([
+      { status: "deleted", body: null, masked_body: null, deleted_at: later(DAY) },
+      { status: "deleted", body: null, masked_body: null, deleted_at: later(DAY) },
+    ]);
+    expect(await reportStatus(onReply)).toEqual({ status: "dismissed", decided: true });
+    expect(await reportStatus(onAnswer)).toEqual({ status: "dismissed", decided: true });
+
+    const context = await getReviewContext(db, first.bookingId, later(DAY + HOUR));
+    expect(context?.review?.replies).toEqual([]);
+    expect(context?.review?.threadRoles).toEqual([]);
+    expect(nextReplyRole(context?.review?.threadRoles ?? [])).toBe("host");
+    expect((await loadReviewReplies(db, [first.reviewId], { publicOnly: true })).get(first.reviewId) ?? []).toEqual([]);
+  });
+
   test("the author's page: held, removed with the decision, published with parts removed", async () => {
     const held = await review(NAMED);
     let context = await getReviewContext(db, held.bookingId, later(HOUR));
@@ -504,6 +560,7 @@ describeWithDb("review moderation against Postgres", () => {
       decidedAt: null,
       publishedByDeadline: false,
       maskedBody: null,
+      textPurged: false,
       heldSince: WRITTEN.toISOString(),
     });
 
@@ -603,14 +660,23 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reportStatus(open)).toEqual({ status: "open", decided: false });
     // Removed: the text goes, the score and the row stay.
     expect(await reviewRow(removed.reviewId)).toMatchObject({ status: "removed", body: null, masked_body: null, flagged_fragments: [] });
-    expect(await one(`SELECT score FROM reviews WHERE id = $1`, [removed.reviewId])).toEqual({ score: 4 });
+    expect(await one(`SELECT score, text_purged_at FROM reviews WHERE id = $1`, [removed.reviewId])).toEqual({
+      score: 4,
+      text_purged_at: yearLater,
+    });
+    // Its author is told the text was deleted, not that there never was one.
+    expect((await getReviewContext(db, removed.bookingId, yearLater))?.review?.moderation).toMatchObject({
+      written: null,
+      textPurged: true,
+    });
     // Kept: a person judged it fine, so there is nothing to purge.
     expect(await reviewRow(masked.reviewId)).toMatchObject({ status: "published", body: RUDE, masked_body: null });
     // The removed reply keeps its place in the thread, without its text.
-    expect(await one(`SELECT status, body, masked_body FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({
+    expect(await one(`SELECT status, body, masked_body, text_purged_at FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({
       status: "removed",
       body: null,
       masked_body: null,
+      text_purged_at: yearLater,
     });
     // Nothing left to do.
     expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 0, texts: 0 });
@@ -635,8 +701,26 @@ describeWithDb("review moderation against Postgres", () => {
       published_by_deadline: true,
       decided_at: null,
     });
+    expect(await one(`SELECT text_purged_at FROM reviews WHERE id = $1`, [held.reviewId])).toEqual({ text_purged_at: yearLater });
     expect((await loadPropertyReviews(db, ids.propertyId, yearLater)).reviews[0]?.body).toBe("[removed] at the desk was rude to us.");
     expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 0, texts: 0 });
+  });
+
+  test("a removed score-only review never had a text: the purge leaves it unmarked", async () => {
+    const scoreOnly = await review(CLEAN, null);
+    await report(scoreOnly.reviewId);
+    await decide(scoreOnly.item, "removed", later(DAY), ["conflict_of_interest"]);
+    const yearLater = new Date(later(DAY));
+    yearLater.setUTCMonth(yearLater.getUTCMonth() + 12);
+    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 1, texts: 0 });
+    expect(await one(`SELECT body, text_purged_at FROM reviews WHERE id = $1`, [scoreOnly.reviewId])).toEqual({
+      body: null,
+      text_purged_at: null,
+    });
+    expect((await getReviewContext(db, scoreOnly.bookingId, yearLater))?.review?.moderation).toMatchObject({
+      written: null,
+      textPurged: false,
+    });
   });
 
   test("purge deletes a report nobody decided 12 months after it was made", async () => {

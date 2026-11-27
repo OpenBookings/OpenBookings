@@ -117,6 +117,30 @@ describeWithDb("loadHostReviews against Postgres", () => {
     expect(b?.privateReplyAt).not.toBeNull();
   });
 
+  test("a guest's held review or answer shows with what the check flagged masked, never as written", async () => {
+    const held = await addReview("pending", 3, "Jan Jansen at the desk was rude.");
+    await db.query(`UPDATE reviews SET flagged_reason = 'personal_details', flagged_fragments = '["Jan Jansen"]' WHERE id = $1`, [held]);
+    const vague = await addReview("pending", 4, "The porter was awful.");
+    await db.query(`UPDATE reviews SET flagged_reason = 'abuse', flagged_fragments = '["the porter is awful"]' WHERE id = $1`, [vague]);
+    const published = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, flagged_reason, flagged_fragments, published_at, created_at)
+       VALUES ($1, 'host', $2, 'Sorry, call Piet Bakker.', 'pending', 'personal_details', '["Piet Bakker"]', NULL, NOW() - interval '2 minutes'),
+              ($1, 'guest', $3, 'Mail me at anna@example.com.', 'pending', 'links_contact', '["anna@example.com"]', NULL, NOW() - interval '1 minute')`,
+      [published, owner, guest],
+    );
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(list.find((r) => r.id === held)?.body).toBe("[removed] at the desk was rude.");
+    expect(list.find((r) => r.id === vague)?.body).toBe("[removed]");
+    // The host's own held reply is theirs to read; the guest's held answer is masked.
+    expect(list.find((r) => r.id === published)?.replies.map((r) => [r.role, r.body])).toEqual([
+      ["host", "Sorry, call Piet Bakker."],
+      ["guest", "Mail me at [removed]."],
+    ]);
+    expect(JSON.stringify(list)).not.toMatch(/Jan Jansen|porter was awful|anna@example\.com/);
+  });
+
   test("a stranger sees nothing", async () => {
     await addReview("published");
     expect(await loadHostReviews(session(stranger), propertyId, propertyDb(session(stranger)))).toEqual([]);

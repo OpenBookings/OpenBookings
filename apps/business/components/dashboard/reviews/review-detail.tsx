@@ -100,7 +100,8 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
           <AttentionAlert role="status">
             <TriangleAlertIcon />
             <AlertDescription className="text-foreground">
-              Our automated check held this review for a person. It isn&apos;t public yet.
+              Being checked by OpenBookings. Our automated check held this review for a person; it isn&apos;t public
+              yet, and the parts it flagged show as [removed].
             </AlertDescription>
           </AttentionAlert>
         ) : null}
@@ -180,7 +181,7 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
           </span>{" "}
           · {formatRelativeTime(when)}
           {reply.editedAt ? " · Edited" : ""}
-          {reply.status === "pending" && !notice ? " · Being checked" : ""}
+          {reply.status === "pending" && !notice ? " · Being checked by OpenBookings" : ""}
         </span>
         {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
         {notice ? <StatusBadge tone={notice.tone}>{notice.pill}</StatusBadge> : null}

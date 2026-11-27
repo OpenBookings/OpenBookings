@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewReply } from "@openbookings/db/reviews";
-import { filterHostReviews, hasHostReply, needsReply, summarize, type HostReview } from "./shape";
+import { filterHostReviews, hasHostReply, heldTextForHost, needsReply, summarize, type HostReview } from "./shape";
 
 const NOW = new Date("2031-11-20T12:00:00Z");
 
@@ -139,5 +139,23 @@ describe("filterHostReviews", () => {
     expect(sorted.map((r) => r.score)).toEqual([5, 7, 9]);
     const okay = filterHostReviews(list, { tab: "all", propertyId: "all", band: "okay", sort: "newest" });
     expect(okay.map((r) => r.score)).toEqual([5]);
+  });
+});
+
+describe("heldTextForHost", () => {
+  test("the flagged parts are masked, every occurrence", () => {
+    expect(
+      heldTextForHost({ body: "Jan Jansen was rude. Ask Jan Jansen.", flaggedReason: "personal_details", fragments: ["Jan Jansen"] }),
+    ).toBe("[removed] was rude. Ask [removed].");
+  });
+
+  test("a rule whose words couldn't be pinpointed withholds the whole text", () => {
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: ["the porter is awful"] })).toBe("[removed]");
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: [] })).toBe("[removed]");
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: null })).toBe("[removed]");
+  });
+
+  test("held for no rule (the check couldn't run and found nothing): as written", () => {
+    expect(heldTextForHost({ body: "Quiet room.", flaggedReason: null, fragments: [] })).toBe("Quiet room.");
   });
 });

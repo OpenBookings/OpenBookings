@@ -3,7 +3,7 @@ import { isTestingMode } from "@openbookings/mode";
 import { currentPropertySql, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { nextReplyRole, type ReplyRole } from "@openbookings/pricing";
 import { authorModerationSql, toAuthorModeration, type ReplyStatus, type ReviewReply } from "@openbookings/db/reviews";
-import { needsReply, type HostReportStatus, type HostReview } from "./shape";
+import { heldTextForHost, needsReply, type HostReportStatus, type HostReview } from "./shape";
 
 /** The newest reviews a host sees; older ones drop off the page. */
 const LIMIT = 500;
@@ -22,6 +22,7 @@ type Row = {
   room_label: string | null;
   status: "published" | "pending" | "removed";
   flagged_reason: string | null;
+  flagged_fragments: unknown;
   report_status: HostReportStatus | null;
   reply_reports: Record<string, HostReportStatus> | null;
   posted_at: Date;
@@ -35,6 +36,9 @@ type Row = {
     published_at: string | null;
     edited_at: string | null;
     created_at: string;
+    /** A guest's held answer: what the check flagged, so the host never sees it. */
+    flagged_reason: string | null;
+    flagged_fragments: unknown;
     /** The host's own replies only. */
     moderation: Parameters<typeof toAuthorModeration>[0] | null;
   }[];
@@ -62,14 +66,16 @@ const ownReportsSql = `
  * answer its report removed): open first, else the latest outcome. A removed review shows
  * only when the property's report was upheld by its removal, so the host sees
  * the outcome. Hidden and deleted reviews are left out. Text published by the
- * moderation deadline shows masked, as on the property page. The host's own
- * replies come with what moderation did with them (a removed one too, without
- * its words): theirs to see, never a guest's.
+ * moderation deadline shows masked, as on the property page. A guest's held
+ * review or answer shows with what the check flagged masked (heldTextForHost):
+ * the hold must not show the host the words it holds. The host's own replies
+ * come with what moderation did with them (a removed one too, without its
+ * words): theirs to see, never a guest's.
  */
 const hostReviewsSql = (testing: boolean) => `
   SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, p.timezone, rv.score, COALESCE(rv.masked_body, rv.body) AS body,
          rv.author_name, rv.author_country, rv.stay_month::text AS stay_month, rv.room_label,
-         rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
+         rv.status, rv.flagged_reason, rv.flagged_fragments, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
          (SELECT rp.status ${ownReportsSql} ORDER BY (rp.status = 'open') DESC, rp.created_at DESC LIMIT 1) AS report_status,
          (SELECT json_object_agg(x.reply_id, x.status) FROM (
@@ -85,6 +91,7 @@ const hostReviewsSql = (testing: boolean) => `
              'id', rr.id, 'role', rr.author_role,
              'body', CASE WHEN rr.status = 'removed' THEN '' ELSE COALESCE(rr.masked_body, rr.body) END, 'status', rr.status,
              'published_at', rr.published_at, 'edited_at', rr.edited_at, 'created_at', rr.created_at,
+             'flagged_reason', rr.flagged_reason, 'flagged_fragments', rr.flagged_fragments,
              'moderation', CASE WHEN rr.author_role = 'host' THEN ${authorModerationSql("reply", "rr")} END
            ) ORDER BY rr.created_at, rr.id)
            FROM review_replies rr
@@ -107,7 +114,10 @@ function toHostReview(row: Row): HostReview {
   const replies: ReviewReply[] = row.replies.map((r) => ({
     id: r.id,
     role: r.role,
-    body: r.body,
+    body:
+      r.role === "guest" && r.status === "pending"
+        ? heldTextForHost({ body: r.body, flaggedReason: r.flagged_reason, fragments: r.flagged_fragments })
+        : r.body,
     status: r.status,
     publishedAt: iso(r.published_at),
     editedAt: iso(r.edited_at),
@@ -121,7 +131,10 @@ function toHostReview(row: Row): HostReview {
     propertyName: row.property_name,
     timeZone: row.timezone,
     score: Number(row.score),
-    body: row.body,
+    body:
+      row.status === "pending" && row.body !== null
+        ? heldTextForHost({ body: row.body, flaggedReason: row.flagged_reason, fragments: row.flagged_fragments })
+        : row.body,
     authorName: row.author_name,
     authorCountry: row.author_country?.trim() || null,
     stayMonth: row.stay_month,

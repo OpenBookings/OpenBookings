@@ -1,6 +1,8 @@
 import {
   AVERAGE_WINDOW_MONTHS,
   displayedAverage,
+  MASKED_TEXT,
+  maskFragments,
   REVIEW_BANDS,
   reviewBand,
   type ReplyRole,
@@ -51,6 +53,20 @@ export type HostReview = {
   /** How many replies count for the turn: every one that isn't deleted, the ones the host can't see included. */
   threadLength: number;
 };
+
+/**
+ * A guest's held review or answer as the host may see it: the parts the
+ * check flagged replaced by "[removed]", never the words it held it for.
+ * When it flagged a rule but none of its fragments is in the text (nobody
+ * could say which words), the whole text is withheld. Held for no rule (the
+ * check couldn't run and found nothing) it shows as written.
+ */
+export function heldTextForHost(i: { body: string; flaggedReason: string | null; fragments: unknown }): string {
+  if (!i.flaggedReason) return i.body;
+  const fragments = Array.isArray(i.fragments) ? i.fragments.filter((f): f is string => typeof f === "string") : [];
+  const masked = maskFragments(i.body, fragments);
+  return masked !== i.body ? masked : MASKED_TEXT;
+}
 
 /** A property's report on a review: being checked, upheld (removed) or not upheld (kept). */
 export type HostReportStatus = "open" | "upheld" | "dismissed";

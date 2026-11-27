@@ -11,7 +11,7 @@ import type { TextCheck } from "@openbookings/pricing";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import { postReviewReply, submitReview } from "./index";
 import { publishOverdue, type ModerationItem } from "./moderation";
-import { runModerationSweep } from "./moderation-sweep";
+import { NeedsAPerson, runModerationSweep } from "./moderation-sweep";
 
 const HOUR = 3_600_000;
 const CHECK_IN = "2031-11-10";
@@ -97,7 +97,7 @@ describeWithDb("the moderation sweep against Postgres", () => {
 
     // The text alone, oldest first.
     expect(seen).toEqual(["Fine.", RUDE, "Thank you!"]);
-    expect(summary).toEqual({ rechecked: 3, published: 0, purged: { reports: 0, texts: 0 }, propertyIds: [ids.propertyId] });
+    expect(summary).toEqual({ rechecked: 3, published: 0, waiting: 0, purged: { reports: 0, texts: 0 }, propertyIds: [ids.propertyId] });
     expect(await row("reviews", fine.id)).toMatchObject({ status: "published", check_source: "mistral" });
     expect(await row("reviews", rude.id)).toMatchObject({
       status: "pending",
@@ -111,6 +111,7 @@ describeWithDb("the moderation sweep against Postgres", () => {
     expect(await runModerationSweep({ db, now: later(3 * HOUR), check: answers({}) })).toEqual({
       rechecked: 0,
       published: 0,
+      waiting: 0,
       purged: { reports: 0, texts: 0 },
       propertyIds: [],
     });
@@ -141,8 +142,8 @@ describeWithDb("the moderation sweep against Postgres", () => {
 
   test("publishOverdue reports masked items and the sweep notifies each once", async () => {
     const masked = await review(MAILED, REGEX_ONLY);
-    // Held, but its fragments are not in the text (stale): published unmasked, so nothing to tell.
-    const plain = await review("Lovely stay, thank you.", { verdict: "flagged", rules: ["abuse"], fragments: [], source: "mistral" });
+    // Unchecked, and the contact check found nothing: nothing to mask, so it publishes as written with nothing to tell.
+    const plain = await review("Lovely stay, thank you.", UNCHECKED);
     const told: ModerationItem[][] = [];
     const notify = async (items: ModerationItem[]) => {
       told.push(items);
@@ -177,7 +178,7 @@ describeWithDb("the moderation sweep against Postgres", () => {
     await db.query(`UPDATE reviews SET flagged_reason = 'url', flagged_fragments = '[]' WHERE id = $1`, [legacy.id]);
 
     // Past its deadline, while the model is down: never published unmasked.
-    expect(await publishOverdue(db, later(30 * 24 * HOUR))).toEqual({ published: 0, propertyIds: [], masked: [] });
+    expect(await publishOverdue(db, later(30 * 24 * HOUR))).toEqual({ published: 0, propertyIds: [], masked: [], waiting: [legacy] });
     expect(await runModerationSweep({ db, now: later(30 * 24 * HOUR), check: answers({}) })).toMatchObject({ published: 0 });
     expect(await row("reviews", legacy.id)).toMatchObject({ status: "pending", masked_body: null });
 
@@ -190,6 +191,37 @@ describeWithDb("the moderation sweep against Postgres", () => {
       status: "published",
       masked_body: "[removed] at the desk was rude to us.",
     });
+  });
+
+  test("a flagged item whose words couldn't be pinpointed waits for a person, raised once per run past the deadline", async () => {
+    // The model named a rule, but no fragment it gave is in the text.
+    const vague = await review("The night porter was awful to us.", {
+      verdict: "flagged",
+      rules: ["abuse"],
+      fragments: ["the porter was awful"],
+      source: "mistral",
+    });
+    const pinpointed = await review(RUDE, NAMED, later(60_000));
+    const raised: Array<[unknown, ModerationItem]> = [];
+    const onError = (error: unknown, item: ModerationItem) => raised.push([error, item]);
+    const modelDown = answers({});
+
+    // Before the deadline: nothing raised.
+    expect(await runModerationSweep({ db, now: later(71 * HOUR), check: modelDown, onError })).toMatchObject({ published: 0, waiting: 0 });
+    expect(raised).toEqual([]);
+
+    // Past it: the pinpointed one publishes masked; the vague one stays held and is raised, with its kind and id only.
+    expect(await runModerationSweep({ db, now: later(73 * HOUR), check: modelDown, onError })).toMatchObject({ published: 1, waiting: 1 });
+    expect(await row("reviews", pinpointed.id)).toMatchObject({ status: "published", masked_body: "[removed] at the desk was rude to us." });
+    expect(await row("reviews", vague.id)).toMatchObject({ status: "pending", masked_body: null, published_by_deadline: false });
+    expect(raised).toHaveLength(1);
+    expect(raised[0]![0]).toBeInstanceOf(NeedsAPerson);
+    expect((raised[0]![0] as Error).message).toBe("held item past deadline needs a person");
+    expect(raised[0]![1]).toEqual(vague);
+
+    // Every run raises it again (once each) until a person decides.
+    await runModerationSweep({ db, now: later(74 * HOUR), check: modelDown, onError });
+    expect(raised.map(([, item]) => item)).toEqual([vague, vague]);
   });
 
   test("one failing recheck does not stop the rest", async () => {

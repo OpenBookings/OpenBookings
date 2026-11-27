@@ -1,5 +1,5 @@
 import { bookingReference } from "@openbookings/db/booking-reference";
-import { fragmentRanges, REVIEW_RULE_IDS, REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
+import { fragmentRanges, MODERATION_RECORD_RETENTION_MONTHS, REVIEW_RULE_IDS, REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
 import type { QueueRow } from "./moderation";
 
 /**
@@ -14,6 +14,9 @@ const URGENT_HOURS = 12;
 const ZONE = "Europe/Amsterdam";
 
 export type Rule = { id: ReviewRuleId; title: string };
+
+/** The longest reason for a Keep its audit row keeps (the card's field allows no more). */
+export const KEEP_REASON_MAX = 500;
 
 /** Every rule, in the rules page's order, as the Remove picker lists them. */
 export const RULE_OPTIONS: Rule[] = REVIEW_RULE_IDS.map((id) => ({ id, title: REVIEW_RULES[id].title }));
@@ -56,8 +59,10 @@ export type ItemView = {
   /** Reasons an earlier check held it for, which aren't rules. */
   otherReasons: string[];
   foundBy: string | null;
-  /** The words as written, flagged parts marked; null once purged. */
+  /** The words as written, flagged parts marked; null once purged, or when there were none. */
   text: Segment[] | null;
+  /** Instead of `text` when it is null: whether the purge deleted it or there never was one. */
+  textNote: string | null;
   /** What the page shows when it differs from the words as written (masked by the deadline). */
   liveText: string | null;
   /** Small and grey: the score, never part of the decision; or the reply's review. */
@@ -122,10 +127,6 @@ function foundBy(row: QueueRow): string | null {
 /** Hours left until `at`, rounded up. */
 const hoursLeft = (at: Date, now: Date) => Math.ceil((at.getTime() - now.getTime()) / HOUR);
 
-/** Whether the deadline job will publish it, as deadlineMaySql decides. */
-const deadlineMay = (row: QueueRow) =>
-  row.checkSource !== null && !(row.checkSource === "unchecked" && row.rules.length + row.otherReasons.length > 0 && row.fragments.length === 0);
-
 function heldBadge(row: QueueRow, now: Date): { badge: ItemView["badge"]; explanation: string | null } {
   const left = hoursLeft(row.deadline, now);
   const masks = row.fragments.length > 0;
@@ -134,7 +135,7 @@ function heldBadge(row: QueueRow, now: Date): { badge: ItemView["badge"]; explan
   if (row.checkSource === "unchecked") {
     const found =
       row.rules.length > 0 ? "The contact check found the marked parts." : "Nothing was found by the contact check.";
-    const after = !deadlineMay(row)
+    const after = !row.deadlineMay
       ? "It waits for you: it was held before the new check, which hasn't run on it yet."
       : left > 0
         ? `It publishes on its own once a check passes, or ${masks ? "with the marked parts masked" : "as written"} ${when}. You can decide now.`
@@ -144,7 +145,14 @@ function heldBadge(row: QueueRow, now: Date): { badge: ItemView["badge"]; explan
       explanation: `The automatic check couldn't run (Mistral didn't answer). ${found} ${after}`,
     };
   }
-  if (!deadlineMay(row) || left <= 0) return { badge: { text: "Past the deadline · waits for you", tone: "red" }, explanation: null };
+  if (!row.deadlineMay && row.checkSource !== null) {
+    return {
+      badge: { text: "Needs a person: the flagged words couldn't be pinpointed", tone: left <= URGENT_HOURS ? "red" : "amber" },
+      explanation:
+        "The check says it breaks a rule but couldn't say which words, so there is nothing to mask. It won't publish on its own at the deadline: it waits for you.",
+    };
+  }
+  if (!row.deadlineMay || left <= 0) return { badge: { text: "Past the deadline · waits for you", tone: "red" }, explanation: null };
   return { badge: { text: `Publishes ${masks ? "masked" : "as written"} ${when}`, tone }, explanation: null };
 }
 
@@ -217,6 +225,12 @@ export function itemView(row: QueueRow, now: Date): ItemView {
     otherReasons: row.decision ? [] : row.otherReasons,
     foundBy: row.decision ? null : foundBy(row),
     text: row.body === null ? null : highlightSegments(row.body, row.decision ? [] : row.fragments),
+    textNote:
+      row.body !== null
+        ? null
+        : row.textPurged
+          ? `The text was deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision.`
+          : "No text: a score only.",
     liveText: masked ? row.maskedBody : null,
     footnote: footnote(row),
     reports: row.reports.map((r) => ({

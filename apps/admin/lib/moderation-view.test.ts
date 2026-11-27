@@ -18,6 +18,7 @@ const row = (over: Partial<QueueRow> = {}): QueueRow => ({
   stayMonth: "2031-11-01",
   score: 3,
   body: "The night man was a useless idiot. Text +31 6 12345678.",
+  textPurged: false,
   maskedBody: null,
   fragments: ["useless idiot", "+31 6 12345678"],
   rules: ["abuse", "links_contact"],
@@ -26,6 +27,7 @@ const row = (over: Partial<QueueRow> = {}): QueueRow => ({
   status: "pending",
   writtenAt: WRITTEN,
   deadline: new Date(WRITTEN.getTime() + 72 * HOUR),
+  deadlineMay: true,
   publishedAt: null,
   publishedByDeadline: false,
   reviewStatus: null,
@@ -73,7 +75,30 @@ describe("itemView", () => {
 
   test("red under 12 hours; past the deadline it waits", () => {
     expect(itemView(row(), new Date(WRITTEN.getTime() + 66 * HOUR)).badge).toEqual({ text: "Publishes masked in 6 h", tone: "red" });
-    expect(itemView(row({ checkSource: null }), new Date(WRITTEN.getTime() + 80 * HOUR)).badge?.text).toBe("Past the deadline · waits for you");
+    expect(itemView(row({ checkSource: null, deadlineMay: false }), new Date(WRITTEN.getTime() + 80 * HOUR)).badge?.text).toBe(
+      "Past the deadline · waits for you",
+    );
+  });
+
+  test("a flagged item whose words couldn't be pinpointed stays in Held, waiting for a person", () => {
+    const vague = row({ fragments: [], deadlineMay: false });
+    const early = itemView(vague, new Date(WRITTEN.getTime() + 10 * HOUR));
+    expect(early.badge).toEqual({ text: "Needs a person: the flagged words couldn't be pinpointed", tone: "amber" });
+    expect(early.explanation).toContain("won't publish on its own at the deadline");
+    expect(itemView(vague, new Date(WRITTEN.getTime() + 80 * HOUR)).badge).toEqual({
+      text: "Needs a person: the flagged words couldn't be pinpointed",
+      tone: "red",
+    });
+  });
+
+  test("a missing text says whether it was purged or never written", () => {
+    const decided = { decision: "removed" as const, rules: ["abuse" as const], note: null, decidedAt: WRITTEN, decidedBy: "staff@example.test" };
+    const purged = itemView(row({ status: "removed", body: null, textPurged: true, decision: decided }), WRITTEN);
+    expect(purged.text).toBeNull();
+    expect(purged.textNote).toBe("The text was deleted 12 months after the decision.");
+    const scoreOnly = itemView(row({ status: "removed", body: null, textPurged: false, decision: decided }), WRITTEN);
+    expect(scoreOnly.textNote).toBe("No text: a score only.");
+    expect(itemView(row(), WRITTEN).textNote).toBeNull();
   });
 
   test("an unchecked item says so", () => {

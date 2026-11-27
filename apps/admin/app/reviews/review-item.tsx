@@ -6,10 +6,11 @@ import type { ReviewRuleId } from "@openbookings/pricing";
 import { DangerousDialog } from "@/components/dangerous-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminKeepItem, adminRemoveItem } from "@/lib/moderation-actions";
-import { RULE_OPTIONS, type ItemView, type Rule, type Segment, type Tone } from "@/lib/moderation-view";
+import { KEEP_REASON_MAX, RULE_OPTIONS, type ItemView, type Rule, type Segment, type Tone } from "@/lib/moderation-view";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<Tone, string> = {
@@ -68,8 +69,9 @@ function RuleChips({ rules, otherReasons = [], foundBy }: { rules: Rule[]; other
 
 /**
  * One review or reply in the moderation queue. Keep publishes it as written
- * (not dangerous: no dialog). Remove asks for the rules it broke, a note to
- * its author and a reason, then a step-up of its own.
+ * (not dangerous: no dialog; an optional reason goes on its audit row).
+ * Remove asks for the rules it broke, a note to its author and a reason, then
+ * a step-up of its own.
  */
 export function ReviewItem({ view }: { view: ItemView }) {
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,7 @@ export function ReviewItem({ view }: { view: ItemView }) {
   const [removing, setRemoving] = useState(false);
   const [rules, setRules] = useState<ReviewRuleId[]>(view.actions?.remove.preselected ?? []);
   const [note, setNote] = useState("");
+  const [keepReason, setKeepReason] = useState("");
 
   const actions = view.actions;
   const ruleTitles = RULE_OPTIONS.filter((r) => rules.includes(r.id)).map((r) => r.title);
@@ -84,7 +87,7 @@ export function ReviewItem({ view }: { view: ItemView }) {
   const keep = () =>
     startKeep(async () => {
       setError(null);
-      const result = await adminKeepItem(view.item, view.version);
+      const result = await adminKeepItem(view.item, view.version, keepReason.trim() || null);
       if (!result.ok) setError(result.error);
     });
 
@@ -121,7 +124,7 @@ export function ReviewItem({ view }: { view: ItemView }) {
         ) : null}
 
         {view.text === null ? (
-          <p className="text-sm text-muted-foreground italic">The text was deleted 12 months after the decision.</p>
+          <p className="text-sm text-muted-foreground italic">{view.textNote}</p>
         ) : view.liveText !== null ? (
           <>
             <p className="max-w-[70ch] leading-relaxed whitespace-pre-line">{view.liveText}</p>
@@ -151,7 +154,19 @@ export function ReviewItem({ view }: { view: ItemView }) {
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-muted-foreground/70">{view.footnote}</span>
           {actions ? (
-            <span className="ml-auto flex gap-2">
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <Label htmlFor={`keep-reason-${view.key}`} className="sr-only">
+                Reason (optional)
+              </Label>
+              <Input
+                id={`keep-reason-${view.key}`}
+                value={keepReason}
+                onChange={(e) => setKeepReason(e.target.value)}
+                placeholder="Reason (optional)"
+                maxLength={KEEP_REASON_MAX}
+                disabled={keeping}
+                className="h-9 w-56"
+              />
               <Button variant="outline" onClick={keep} disabled={keeping}>
                 {actions.keepLabel}
               </Button>

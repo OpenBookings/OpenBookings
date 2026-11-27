@@ -16,6 +16,7 @@ const base: AuthorModeration = {
   decidedAt: null,
   publishedByDeadline: false,
   maskedBody: null,
+  textPurged: false,
   heldSince: '2026-11-20T10:00:00.000Z',
 };
 const removed: AuthorModeration = {
@@ -68,7 +69,7 @@ describe('guestNotice', () => {
       lead: 'Your review broke these',
       rules: [REVIEW_RULES.links_contact, REVIEW_RULES.abuse],
       note: "Your review can mention the staff, but not insult them.",
-      written: { text: 'Lovely stay. Call Jan on 0612345678.', purged: false },
+      written: { text: 'Lovely stay. Call Jan on 0612345678.', placeholder: false },
       objection: objection(`Review decision, booking ${bookingReference(BOOKING)}`),
       rewrite: {
         open: true,
@@ -79,8 +80,14 @@ describe('guestNotice', () => {
   });
 
   test('removed, its text purged after 12 months: nothing to show of what they wrote', () => {
-    expect(notice({ status: 'removed', moderation: { ...removed, written: null }, eligibility: OPEN })).toMatchObject({
-      written: { text: 'The text was deleted after 12 months.', purged: true },
+    expect(notice({ status: 'removed', moderation: { ...removed, written: null, textPurged: true }, eligibility: OPEN })).toMatchObject({
+      written: { text: 'The text was deleted after 12 months.', placeholder: true },
+    });
+  });
+
+  test('removed score-only review: it never had a text, so nothing was deleted', () => {
+    expect(notice({ status: 'removed', moderation: { ...removed, written: null, textPurged: false }, eligibility: OPEN })).toMatchObject({
+      written: { text: 'You gave a score only, without a text.', placeholder: true },
     });
   });
 
@@ -120,7 +127,7 @@ describe('guestNotice', () => {
       lead: 'Your answer broke these',
       rules: [REVIEW_RULES.links_contact, REVIEW_RULES.abuse],
       note: "Your review can mention the staff, but not insult them.",
-      written: { text: 'Lovely stay. Call Jan on 0612345678.', purged: false },
+      written: { text: 'Lovely stay. Call Jan on 0612345678.', placeholder: false },
       objection: objection(`Answer decision, booking ${bookingReference(BOOKING)}`),
       rewrite: null,
     });

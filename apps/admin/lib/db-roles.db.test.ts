@@ -410,6 +410,8 @@ describeWithDb("admin console as its own database roles", () => {
   };
   /** What a moderator's decision sends: the item, the version they saw, and who they are. */
   const item = (row: QueueRow) => ({ item: { kind: row.kind, id: row.id }, version: row.version, decidedBy: ownerId });
+  /** A Keep: the same, plus who the audit row names. */
+  const keep = (row: QueueRow, reason?: string) => ({ ...item(row), actorEmail: "moderator@example.test", reason });
 
   test("loadModerationQueue runs as ob_admin_read", async () => {
     const q = await seedQueue();
@@ -464,6 +466,30 @@ describeWithDb("admin console as its own database roles", () => {
     });
   });
 
+  test("Published by deadline leaves out an item the purge left with only its masked text", async () => {
+    const q = await seedQueue();
+    // q.masked published by the deadline; the 12-month purge keeps only the masked text.
+    await db.query(
+      `UPDATE reviews SET body = masked_body, masked_body = NULL, flagged_fragments = '[]', text_purged_at = $2 WHERE id = $1`,
+      [q.masked.id, later(400 * DAY)],
+    );
+    await db.query(`UPDATE review_reports SET status = 'dismissed', decided_at = $2 WHERE review_id = $1`, [q.masked.id, later(HOUR)]);
+    await as("ob_admin_read", async () => {
+      expect(await loadModerationQueue(db, "deadline", later(400 * DAY))).toEqual([]);
+      expect(await loadModerationCounts(db)).toEqual({ held: 2, reported: 1, deadline: 0 });
+    });
+  });
+
+  test("a held item whose flagged words couldn't be pinpointed loads as waiting for a person", async () => {
+    await seedQueue();
+    const vague = await seedReview({ status: "pending", body: "The porter was awful.", rules: "abuse", fragments: ["the porter is awful"] });
+    await as("ob_admin_read", async () => {
+      const held = await loadModerationQueue(db, "held", later(100 * HOUR));
+      expect(byId(held, vague.id)).toMatchObject({ deadlineMay: false, textPurged: false });
+      expect(held.filter((r) => r.id !== vague.id).every((r) => r.deadlineMay)).toBe(true);
+    });
+  });
+
   test("keepItem and removeItem run as ob_admin_write", async () => {
     const q = await seedQueue();
     reset();
@@ -480,11 +506,11 @@ describeWithDb("admin console as its own database roles", () => {
         await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reported), rules: ["abuse"], note: "Not about the stay." }),
       ).toEqual({ ok: true });
       // Keep a deadline-masked review a host reported: only the host hears.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(masked))).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(masked))).toEqual({ ok: true });
       // Keep a held review: nobody to tell.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held))).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(held))).toEqual({ ok: true });
       // Decided already.
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(held))).toEqual({ ok: false, error: "Already decided" });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(held))).toEqual({ ok: false, error: "Already decided" });
     });
     expect(problems).toEqual([]);
     expect(sent).toEqual([
@@ -518,6 +544,54 @@ describeWithDb("admin console as its own database roles", () => {
       });
     });
     expect(sent).toEqual([]);
+  });
+
+  test("Keep writes its audit row as ob_admin_write, in the decision's transaction", async () => {
+    const q = await seedQueue();
+    reset();
+    const masked = byId(await loadModerationQueue(db, "reported", later(2 * HOUR)), q.masked.id);
+    const held = byId(await loadModerationQueue(db, "held", later(2 * HOUR)), q.held.id);
+    const keeps = () =>
+      db.query(`SELECT actor_user_id, reason, detail FROM audit_log WHERE action = 'admin.review.keep' ORDER BY detail->>'target_id'`);
+
+    await as("ob_admin_write", async () => {
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(masked, "  Staff first name only.  "))).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(held))).toEqual({ ok: true });
+      // Already decided: no second row.
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(held, "again"))).toEqual({ ok: false, error: "Already decided" });
+    });
+    const rows = (await keeps()).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.detail.target_id === q.masked.id)).toEqual({
+      actor_user_id: ownerId,
+      reason: "Staff first name only.",
+      detail: { target_type: "review", target_id: q.masked.id, actor_email: "moderator@example.test", reports_closed: 1 },
+    });
+    expect(rows.find((r) => r.detail.target_id === q.held.id)).toEqual({
+      actor_user_id: ownerId,
+      reason: null,
+      detail: { target_type: "review", target_id: q.held.id, actor_email: "moderator@example.test", reports_closed: 0 },
+    });
+
+    // When the audit row can't be written, the decision is undone with it.
+    const reply = byId(await loadModerationQueue(db, "held", later(2 * HOUR)), q.reply);
+    const broken: DecisionDeps = {
+      ...decisionDeps(later(3 * HOUR)),
+      transaction: (fn) =>
+        decisionDeps(later(3 * HOUR)).transaction((tx) =>
+          fn({
+            query: (text: string, values?: unknown[]) =>
+              /INSERT INTO audit_log/.test(text) ? Promise.reject(new Error("audit down")) : tx.query(text, values),
+          } as typeof tx),
+        ),
+    };
+    await as("ob_admin_write", async () => {
+      await expect(keepItem(broken, keep(reply))).rejects.toThrow("audit down");
+    });
+    expect((await db.query(`SELECT status, decided_at FROM review_replies WHERE id = $1`, [q.reply])).rows[0]).toEqual({
+      status: "pending",
+      decided_at: null,
+    });
   });
 
   test("a failing email or cache purge still leaves the decision made", async () => {
@@ -561,7 +635,7 @@ describeWithDb("admin console as its own database roles", () => {
 
     await as("ob_admin_write", async () => {
       expect(await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reopened), rules: ["personal_details"], note: null })).toEqual({ ok: true });
-      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(reopened))).toEqual({ ok: false, error: "Already decided" });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), keep(reopened))).toEqual({ ok: false, error: "Already decided" });
     });
     expect((await db.query(`SELECT status FROM review_reports WHERE id = $1`, [again])).rows[0]).toEqual({ status: "upheld" });
     expect(sent).toEqual(

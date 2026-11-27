@@ -5,13 +5,23 @@ import { propertyReviewsKey, purge } from "@openbookings/cache";
 import { dangerousAction } from "./dangerous";
 import type { Confirmation, DangerousResult } from "./dangerous-actions";
 import { withWriteTransaction, writePool } from "./db";
-import { DECISION_ERRORS, keepItem, parseItem, removalOf, removeItem, type DecisionDeps, type DecisionResult } from "./moderation";
+import {
+  DECISION_ERRORS,
+  keepItem,
+  parseItem,
+  readOnlyAsRefusal,
+  removalOf,
+  removeItem,
+  type DecisionDeps,
+  type DecisionResult,
+} from "./moderation";
 import { requireStaff } from "./staff";
 
 /**
  * Keep and Remove on the review moderation queue (/reviews), on the write
  * connection (ob_admin_write). Keep is not dangerous: it publishes words as
- * their author wrote them. Remove is (./dangerous.ts): a reason, a step-up
+ * their author wrote them (an audit row with an optional reason, in the
+ * decision's transaction). Remove is (./dangerous.ts): a reason, a step-up
  * for the item, and an audit row first.
  *
  * Both send their emails after the decision commits (./moderation.ts) and
@@ -28,19 +38,27 @@ const liveDeps = (): DecisionDeps => ({
     purge([propertyReviewsKey(propertyId)], {
       onError: (error) => console.error("[admin] could not purge the property's cached reviews", error),
     }),
-  report: (error, context) => console.error(`[admin] review moderation: ${context} failed`, error),
+  report: (error, context) => console.error("[admin] review moderation step failed", { step: context }, error),
   now: new Date(),
 });
 
 const gone = { ok: false, error: DECISION_ERRORS.not_found } as const;
 
-export async function adminKeepItem(item: unknown, version: string): Promise<DecisionResult> {
+export async function adminKeepItem(item: unknown, version: string, reason?: unknown): Promise<DecisionResult> {
   const staff = await requireStaff();
   const parsed = parseItem(item);
   if (!parsed) return gone;
-  const result = await keepItem(liveDeps(), { item: parsed, version, decidedBy: staff.userId });
-  revalidatePath("/reviews");
-  return result;
+  return readOnlyAsRefusal(async () => {
+    const result = await keepItem(liveDeps(), {
+      item: parsed,
+      version,
+      decidedBy: staff.userId,
+      actorEmail: staff.email,
+      reason,
+    });
+    revalidatePath("/reviews");
+    return result;
+  });
 }
 
 export async function adminRemoveItem(

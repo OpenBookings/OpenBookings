@@ -58,7 +58,7 @@ export const authorModerationSql = (kind: ModerationItem["kind"], t: string) => 
   'written', ${t}.body, 'flagged_reason', ${t}.flagged_reason, 'decision', ${t}.decision,
   'decision_rules', ${t}.decision_rules, 'decision_note', ${t}.decision_note, 'decided_at', ${t}.decided_at,
   'published_by_deadline', ${t}.published_by_deadline, 'masked_body', ${t}.masked_body,
-  'held_since', ${heldSinceSql(kind, t)})`;
+  'text_purged', ${t}.text_purged_at IS NOT NULL, 'held_since', ${heldSinceSql(kind, t)})`;
 
 type AuthorModerationJson = {
   written: string | null;
@@ -69,6 +69,7 @@ type AuthorModerationJson = {
   decided_at: string | null;
   published_by_deadline: boolean;
   masked_body: string | null;
+  text_purged: boolean;
   held_since: string;
 };
 
@@ -86,6 +87,7 @@ export function toAuthorModeration(j: AuthorModerationJson): AuthorModeration {
     decidedAt: j.decided_at ? isoOf(j.decided_at) : null,
     publishedByDeadline: j.published_by_deadline,
     maskedBody: j.masked_body,
+    textPurged: j.text_purged === true,
     heldSince: isoOf(j.held_since),
   };
 }
@@ -256,13 +258,20 @@ type HeldRow = { id: string; body: string | null; flagged_fragments: string[] };
  * Whether the deadline may publish the item. `t` is the item's alias.
  *   - Never one checked before 0061 (check_source NULL): 0061 marks the held
  *     ones 'unchecked' so the recheck finds their fragments.
- *   - Never an unchecked one held for a reason whose fragments aren't known
- *     (a legacy item the old regex held): published, it would show the very
- *     words it was held for. It waits for a recheck that finds them, or a
- *     person. An unchecked item the new regex held has its fragments.
+ *   - Never one held for a reason (a rule, or a reason of the check before
+ *     0061) whose stored fragments mask nothing in its text: nobody could say
+ *     which words broke the rule, so a mask would publish the very words it
+ *     was held for. It waits for a person (and, if unchecked, a recheck that
+ *     finds them). A fragment counts when it occurs in the text exactly, as
+ *     maskFragments finds it (strpos: literal and case-sensitive).
+ * Held for no reason (the model couldn't run, the contact check found
+ * nothing), it publishes as written. The admin queue reads the same
+ * expression, so its badges never disagree with the job.
  */
-const deadlineMaySql = (t: string) =>
-  `${t}.check_source IS NOT NULL AND NOT (${t}.check_source = 'unchecked' AND ${t}.flagged_reason IS NOT NULL AND ${t}.flagged_fragments = '[]'::jsonb)`;
+export const deadlineMaySql = (t: string) =>
+  `(${t}.check_source IS NOT NULL AND (${t}.flagged_reason IS NULL OR EXISTS (
+     SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(${t}.flagged_fragments) = 'array' THEN ${t}.flagged_fragments ELSE '[]'::jsonb END) AS f(fragment)
+      WHERE f.fragment <> '' AND strpos(${t}.body, f.fragment) > 0)))`;
 
 /**
  * Publishes every held item nobody decided within MODERATION_DEADLINE_HOURS,
@@ -271,11 +280,15 @@ const deadlineMaySql = (t: string) =>
  * host edits it, a review's when its guest rewrites it. Returns how many, and
  * the properties whose public pages now show them (to refresh their caches).
  *
- * Some held items never publish here (deadlineMaySql). The final UPDATE
+ * Some held items never publish here (deadlineMaySql): past the deadline,
+ * they come back as `waiting`, for the job to raise. The final UPDATE
  * repeats every condition, so an edit or decision landing after the SELECT is
  * never published with a mask of the old text.
  */
-export async function publishOverdue(db: Queryable, now: Date): Promise<{ published: number; propertyIds: string[]; masked: ModerationItem[] }> {
+export async function publishOverdue(
+  db: Queryable,
+  now: Date,
+): Promise<{ published: number; propertyIds: string[]; masked: ModerationItem[]; waiting: ModerationItem[] }> {
   const cutoff = new Date(now.getTime() - MODERATION_DEADLINE_HOURS * HOUR);
   const held = {
     review: (
@@ -321,7 +334,25 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<{ publis
       if (rows.length > 0 && masked !== null) maskedItems.push({ kind, id: row.id });
     }
   }
-  return { published, propertyIds: [...propertyIds], masked: maskedItems };
+  return { published, propertyIds: [...propertyIds], masked: maskedItems, waiting: await waitingPastDeadline(db, cutoff) };
+}
+
+/**
+ * Held items past the deadline that it won't publish (deadlineMaySql) and
+ * nobody has decided: they wait for a person. Only the item, never its text.
+ */
+async function waitingPastDeadline(db: Queryable, cutoff: Date): Promise<ModerationItem[]> {
+  const { rows } = await db.query(
+    `SELECT 'review' AS kind, t.id FROM reviews t
+      WHERE t.status = 'pending' AND t.decided_at IS NULL AND NOT ${deadlineMaySql("t")} AND ${heldSinceSql("review", "t")} <= $1
+     UNION ALL
+     SELECT 'reply' AS kind, rr.id FROM review_replies rr
+      WHERE rr.status = 'pending' AND rr.decided_at IS NULL AND NOT ${deadlineMaySql("rr")}
+        AND ${heldSinceSql("reply", "rr")} <= $1 AND ${liveSql("reply", "rr")}
+     ORDER BY kind, id`,
+    [cutoff],
+  );
+  return rows as ModerationItem[];
 }
 
 // ── The recheck ──────────────────────────────────────────────────────────────
@@ -398,6 +429,9 @@ export async function applyRecheck(
  *     thread);
  *   - an item published masked by the deadline that nobody ever decided keeps
  *     only its masked text, counted from that publication.
+ * Either way text_purged_at records it, so nobody mistakes a purged text for
+ * one never written (a score-only review), and a purged deadline item
+ * leaves the queue (nothing is left to decide about its original words).
  * A kept item has nothing to purge: Keep published it as written.
  */
 export async function purgeModerationRecords(db: Queryable, now: Date): Promise<{ reports: number; texts: number }> {
@@ -415,7 +449,7 @@ export async function purgeModerationRecords(db: Queryable, now: Date): Promise<
     const table = TABLE[kind];
     const removed = await db.query(
       `UPDATE ${table}
-          SET body = NULL, masked_body = NULL, flagged_fragments = '[]', updated_at = $2
+          SET body = NULL, masked_body = NULL, flagged_fragments = '[]', text_purged_at = $2, updated_at = $2
         WHERE status = 'removed' AND decided_at <= $1
           AND (body IS NOT NULL OR masked_body IS NOT NULL OR flagged_fragments <> '[]')
         RETURNING id`,
@@ -425,7 +459,8 @@ export async function purgeModerationRecords(db: Queryable, now: Date): Promise<
     // limit, and one such row must not stop the purge.
     const masked = await db.query(
       `UPDATE ${table}
-          SET body = left(masked_body, ${BODY_MAX[kind]}), masked_body = NULL, flagged_fragments = '[]', updated_at = $2
+          SET body = left(masked_body, ${BODY_MAX[kind]}), masked_body = NULL, flagged_fragments = '[]', text_purged_at = $2,
+              updated_at = $2
         WHERE published_by_deadline AND decided_at IS NULL AND masked_body IS NOT NULL AND published_at <= $1
         RETURNING id`,
       [cutoff, now],

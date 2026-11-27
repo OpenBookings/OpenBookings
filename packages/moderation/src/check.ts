@@ -1,7 +1,7 @@
 import { Mistral } from "@mistralai/mistralai";
 import { screenReviewFragments } from "@openbookings/messaging/screen-review";
-import { REVIEW_RULE_IDS, isReviewRuleId, type ReviewRuleId, type TextCheck } from "@openbookings/pricing";
-import { SYSTEM_PROMPT, VIOLATIONS_SCHEMA } from "./prompt";
+import { REVIEW_RULE_IDS, type ReviewRuleId, type TextCheck } from "@openbookings/pricing";
+import { isModelRuleId, SYSTEM_PROMPT, VIOLATIONS_SCHEMA } from "./prompt";
 
 /** Mistral gets this long to answer; after that the text is held as unchecked. */
 export const MISTRAL_TIMEOUT_MS = 3000;
@@ -54,7 +54,8 @@ export function mistralChat(): ChatFn {
 const MIN_FRAGMENT_LENGTH = 3;
 
 /**
- * Reads the model's answer. Unknown rules are dropped. A fragment counts only
+ * Reads the model's answer. Unknown rules, and rules it wasn't asked about
+ * (MODEL_RULE_IDS), are dropped. A fragment counts only
  * when it is an exact (case-sensitive) substring of the text with at least
  * three characters besides surrounding whitespace, but its rule holds either
  * way. Throws when the answer isn't the expected shape.
@@ -67,7 +68,7 @@ function readViolations(raw: string, text: string): { rules: ReviewRuleId[]; fra
   const fragments: string[] = [];
   for (const v of violations) {
     const { rule, fragment } = (v ?? {}) as { rule?: unknown; fragment?: unknown };
-    if (!isReviewRuleId(rule)) continue;
+    if (!isModelRuleId(rule)) continue;
     rules.push(rule);
     if (typeof fragment === "string" && fragment.trim().length >= MIN_FRAGMENT_LENGTH && text.includes(fragment)) {
       fragments.push(fragment);

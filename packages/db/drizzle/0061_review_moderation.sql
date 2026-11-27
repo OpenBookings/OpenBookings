@@ -26,6 +26,11 @@
 --                       masked. It stays in the queue until somebody does,
 --                       and stays true after a decision, as history.
 --
+--   text_purged_at      when the 12-month purge deleted the original text
+--                       (a removed item's, or the original of one published
+--                       masked by the deadline). Tells "the text was deleted"
+--                       from "there never was a text" (a score-only review).
+--
 -- reviews.rewrite_used: a guest whose review was removed may write it once
 -- more (the same row, within the 30-day window). A second removal ends it.
 --
@@ -67,6 +72,7 @@ ALTER TABLE reviews
   ADD COLUMN IF NOT EXISTS decided_by text NULL,
   ADD COLUMN IF NOT EXISTS decided_at timestamptz NULL,
   ADD COLUMN IF NOT EXISTS published_by_deadline boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS text_purged_at timestamptz NULL,
   ADD COLUMN IF NOT EXISTS rewrite_used boolean NOT NULL DEFAULT false;
 
 ALTER TABLE review_replies
@@ -79,7 +85,8 @@ ALTER TABLE review_replies
   ADD COLUMN IF NOT EXISTS decision_note text NULL,
   ADD COLUMN IF NOT EXISTS decided_by text NULL,
   ADD COLUMN IF NOT EXISTS decided_at timestamptz NULL,
-  ADD COLUMN IF NOT EXISTS published_by_deadline boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS published_by_deadline boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS text_purged_at timestamptz NULL;
 
 -- Items held before this migration were never checked the new way: no
 -- fragments, so the deadline would publish them unmasked. Mark them

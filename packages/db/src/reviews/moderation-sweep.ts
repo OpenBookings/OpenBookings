@@ -7,7 +7,9 @@
  *                else stays held with what was found.
  *   2. deadline  held items nobody decided within 72 hours publish with their
  *                flagged fragments masked. After the recheck, so an item the
- *                model can now read publishes with its fragments known.
+ *                model can now read publishes with its fragments known. One
+ *                held for a rule whose words couldn't be pinpointed waits for
+ *                a person instead: each run raises it (NeedsAPerson).
  *   3. purge     reports and the original text of removed or masked items go
  *                12 months after the decision.
  *
@@ -18,6 +20,18 @@
 import type { TextCheck } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
 import { applyRecheck, publishOverdue, purgeModerationRecords, uncheckedItems, type ModerationItem } from "./moderation";
+
+/**
+ * Raised through onError for each held item past the deadline that the
+ * deadline won't publish (the flagged words couldn't be pinpointed), once
+ * per run until a person decides it. The message is fixed: never the text.
+ */
+export class NeedsAPerson extends Error {
+  constructor() {
+    super("held item past deadline needs a person");
+    this.name = "NeedsAPerson";
+  }
+}
 
 /** Rechecks per run, oldest first. At the check's 3-second timeout, a run stays under two minutes. */
 const RECHECKS_PER_RUN = 25;
@@ -32,7 +46,11 @@ export type ModerationSweepDeps = {
    * the publish. A throw is swallowed: the publish already happened.
    */
   notify?: (maskedItems: ModerationItem[]) => Promise<void> | void;
-  /** Told about every recheck that failed (the others still run), and a notify that threw. */
+  /**
+   * Told about every recheck that failed (the others still run), a notify
+   * that threw, and (a NeedsAPerson) each held item past the deadline that
+   * waits for a person.
+   */
   onError?: (error: unknown, context: ModerationItem) => void;
 };
 
@@ -41,6 +59,8 @@ export type ModerationSweepSummary = {
   rechecked: number;
   /** Held items published by the deadline. */
   published: number;
+  /** Held items past the deadline that wait for a person (raised as NeedsAPerson). */
+  waiting: number;
   purged: { reports: number; texts: number };
   /** Properties whose public reviews changed in this run: their cached pages are stale. */
   propertyIds: string[];
@@ -73,6 +93,8 @@ export async function runModerationSweep(deps: ModerationSweepDeps): Promise<Mod
     }
   }
 
+  for (const item of deadline.waiting) deps.onError?.(new NeedsAPerson(), item);
+
   const purged = await purgeModerationRecords(db, now);
-  return { rechecked, published: deadline.published, purged, propertyIds: [...propertyIds] };
+  return { rechecked, published: deadline.published, waiting: deadline.waiting.length, purged, propertyIds: [...propertyIds] };
 }

@@ -6,15 +6,28 @@ import { mockModules } from "@/lib/mock-modules";
 const refreshed: string[][] = [];
 const checkedTexts: string[] = [];
 const noticed: unknown[] = [];
+const captured: Array<{ error: unknown; hint: unknown }> = [];
+
+class NeedsAPerson extends Error {}
 
 await mockModules(import.meta.dir, {
-  "@sentry/nextjs": () => ({ captureException: () => {} }),
+  "@sentry/nextjs": () => ({
+    captureException: (error: unknown, hint: unknown) => {
+      captured.push({ error, hint });
+    },
+  }),
   "@openbookings/db": () => ({ getPool: () => ({}) }),
   "@openbookings/db/reviews": () => ({
-    runModerationSweep: async (deps: { check: (text: string) => Promise<unknown>; notify: (items: unknown[]) => Promise<void> }) => {
+    NeedsAPerson,
+    runModerationSweep: async (deps: {
+      check: (text: string) => Promise<unknown>;
+      notify: (items: unknown[]) => Promise<void>;
+      onError: (error: unknown, item: { kind: string; id: string }) => void;
+    }) => {
       await deps.check("Fine.");
       await deps.notify([{ kind: "review", id: "r1" }]);
-      return { rechecked: 1, published: 2, purged: { reports: 0, texts: 0 }, propertyIds: ["property-1"] };
+      deps.onError(new NeedsAPerson("held item past deadline needs a person"), { kind: "reply", id: "rr1" });
+      return { rechecked: 1, published: 2, waiting: 1, purged: { reports: 0, texts: 0 }, propertyIds: ["property-1"] };
     },
   }),
   "@openbookings/moderation": () => ({
@@ -51,6 +64,7 @@ beforeEach(() => {
   refreshed.length = 0;
   checkedTexts.length = 0;
   noticed.length = 0;
+  captured.length = 0;
 });
 
 describe("POST /api/cron/review-moderation", () => {
@@ -63,9 +77,20 @@ describe("POST /api/cron/review-moderation", () => {
   it("runs the sweep with the moderation check and refreshes the pages it changed", async () => {
     const res = await call("Bearer cron-secret");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ rechecked: 1, published: 2, purged: { reports: 0, texts: 0 } });
+    expect(await res.json()).toEqual({ rechecked: 1, published: 2, waiting: 1, purged: { reports: 0, texts: 0 } });
     expect(checkedTexts).toEqual(["Fine."]);
     expect(refreshed).toEqual([["property-1"]]);
     expect(noticed).toEqual([[{ kind: "review", id: "r1" }]]);
+  });
+
+  it("raises a held item past the deadline that needs a person as a warning, with its kind and id only", async () => {
+    await call("Bearer cron-secret");
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.error).toBeInstanceOf(NeedsAPerson);
+    expect(captured[0]!.hint).toEqual({
+      level: "warning",
+      tags: { area: "review-moderation", phase: "deadline" },
+      extra: { kind: "reply", id: "rr1" },
+    });
   });
 });

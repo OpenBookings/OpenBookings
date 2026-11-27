@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test, type Mock } from "bun:test";
 import { checkText, mistralClient, type ChatFn } from "./check";
-import type { TextCheck } from "@openbookings/pricing";
+import { REVIEW_RULE_IDS, REVIEW_RULES, type TextCheck } from "@openbookings/pricing";
 import { SYSTEM_PROMPT } from "./prompt";
 
 type ChatRequest = Parameters<ChatFn>[0];
@@ -61,6 +61,19 @@ describe("checkText", () => {
       fragments: [],
       source: "mistral",
     });
+  });
+
+  test("Mistral isn't asked about conflict_of_interest, and an answer naming it is dropped", async () => {
+    const text = "Best hotel ever, says the owner's cousin.";
+    const { chat, requests } = stub([{ rule: "conflict_of_interest", fragment: "the owner's cousin" }]);
+    expect(await checkText(text, { chat })).toEqual({ verdict: "clean", rules: [], fragments: [], source: "mistral" });
+    const [req] = requests;
+    const schema = req!.schema as { properties: { violations: { items: { properties: { rule: { enum: string[] } } } } } };
+    const asked = schema.properties.violations.items.properties.rule.enum;
+    expect(asked).toEqual(REVIEW_RULE_IDS.filter((id) => id !== "conflict_of_interest"));
+    expect(req!.system).not.toContain("conflict_of_interest");
+    expect(req!.system).not.toContain(REVIEW_RULES.conflict_of_interest.title);
+    for (const id of asked) expect(req!.system).toContain(`- ${id}: `);
   });
 
   test("a fragment not in the text is dropped but its rule still holds", async () => {

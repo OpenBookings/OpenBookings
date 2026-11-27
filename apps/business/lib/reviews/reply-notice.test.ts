@@ -16,6 +16,7 @@ const base: AuthorModeration = {
   decidedAt: null,
   publishedByDeadline: false,
   maskedBody: null,
+  textPurged: false,
   heldSince: "2026-11-20T10:00:00.000Z",
 };
 
