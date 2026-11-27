@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS admin_credentials (
   kind text NOT NULL CHECK (kind IN ('passkey', 'totp')),
   credential_id text UNIQUE,         -- passkey: base64url credential id
   public_key bytea,                  -- passkey: COSE public key
-  counter bigint NOT NULL DEFAULT 0, -- passkey: signature counter
+  counter bigint NOT NULL DEFAULT 0, -- passkey: signature counter; totp: time step of the last accepted code
   transports text[],                 -- passkey: hints for the browser
   totp_secret_enc text,              -- totp: v1:<iv>:<tag>:<ciphertext>
   label text,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS admin_step_ups (
   action text NOT NULL,
   target_id text NOT NULL,
   challenge text NOT NULL,
-  verified_kind text,
+  verified_kind text,                -- step-up: 'passkey' | 'totp'; enrolment row: 'bootstrap' | 'step-up' (the check that let it in)
   verified_at timestamptz,
   used_at timestamptz,
   expires_at timestamptz NOT NULL,

@@ -122,7 +122,7 @@ export async function runDangerous<T>(
     try {
       await audit(db, `admin.${i.action}.failed`, staff, reason, { ...detail, error: shortError(error) });
     } catch (auditError) {
-      console.error(`[admin] could not record that ${i.action} failed`, auditError);
+      console.error("[admin] could not record that a dangerous action failed", { action: i.action }, auditError);
     }
     throw error;
   }
@@ -132,7 +132,7 @@ export async function runDangerous<T>(
     try {
       await audit(db, `admin.${i.action}.refused`, staff, reason, { ...detail, refusal });
     } catch (auditError) {
-      console.error(`[admin] could not record that ${i.action} was refused`, auditError);
+      console.error("[admin] could not record that a dangerous action was refused", { action: i.action }, auditError);
     }
   }
   return result;
@@ -158,7 +158,11 @@ export async function dangerousAction<T>(
     if (error instanceof StepUpError) {
       return { ok: false, message: "This confirmation was used or has expired. Confirm again." };
     }
-    console.error(`[admin] ${i.action} on ${i.targetType} ${i.targetId} failed`, error);
+    console.error(
+      "[admin] dangerous action failed",
+      { action: i.action, targetType: i.targetType, targetId: i.targetId },
+      error,
+    );
     return { ok: false, message: "That didn't work. The details are in the server log and the audit trail." };
   }
 }

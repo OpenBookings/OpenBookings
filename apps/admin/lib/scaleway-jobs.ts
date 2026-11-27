@@ -18,9 +18,16 @@
  *   auth:    header X-Auth-Token: the API secret key.
  *
  * Errors are Scaleway's usual `{ message, type }` JSON.
+ *
+ * Every call gives up after SCALEWAY_TIMEOUT_MS with "Scaleway: timed out",
+ * so starting a run answers with that refusal and the invoices page renders
+ * without the run's state instead of hanging on Scaleway.
  */
 
 const API = "https://api.scaleway.com/serverless-jobs/v1alpha2";
+
+/** How long one Scaleway call may take, the response body included. */
+export const SCALEWAY_TIMEOUT_MS = 10_000;
 
 export type JobConfig = { region: string; jobDefinitionId: string; secretKey: string };
 
@@ -39,14 +46,38 @@ export function missingJobSettings(env: Record<string, string | undefined> = pro
   return ["SCW_JOBS_REGION", "SCW_INVOICE_JOB_DEFINITION_ID", "SCW_JOBS_SECRET_KEY"].filter((k) => !env[k]?.trim());
 }
 
-async function call(cfg: JobConfig, method: "GET" | "POST", url: string, body: unknown, fetchFn: typeof fetch) {
-  const res = await fetchFn(url, {
-    method,
-    headers: { "X-Auth-Token": cfg.secretKey, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-  });
-  const text = await res.text();
+async function call(
+  cfg: JobConfig,
+  method: "GET" | "POST",
+  url: string,
+  body: unknown,
+  fetchFn: typeof fetch,
+  timeoutMs: number,
+) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  // Also when a fetch (or a stub) doesn't listen to the signal.
+  const timedOut = new Promise<never>((_, reject) =>
+    signal.addEventListener("abort", () => reject(new Error("Scaleway: timed out")), { once: true }),
+  );
+  timedOut.catch(() => {});
+  const request = async () => {
+    const res = await fetchFn(url, {
+      method,
+      headers: { "X-Auth-Token": cfg.secretKey, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+      signal,
+    });
+    return { res, text: await res.text() };
+  };
+  let res: Response;
+  let text: string;
+  try {
+    ({ res, text } = await Promise.race([request(), timedOut]));
+  } catch (error) {
+    if (signal.aborted) throw new Error("Scaleway: timed out");
+    throw error;
+  }
   let json: Record<string, unknown> = {};
   try {
     json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
@@ -61,17 +92,27 @@ async function call(cfg: JobConfig, method: "GET" | "POST", url: string, body: u
 }
 
 /** Starts the job definition with these arguments; the run id to follow it by. */
-export async function startJobRun(cfg: JobConfig, args: string[], fetchFn: typeof fetch = fetch): Promise<{ runId: string }> {
+export async function startJobRun(
+  cfg: JobConfig,
+  args: string[],
+  fetchFn: typeof fetch = fetch,
+  timeoutMs: number = SCALEWAY_TIMEOUT_MS,
+): Promise<{ runId: string }> {
   const url = `${API}/regions/${encodeURIComponent(cfg.region)}/job-definitions/${encodeURIComponent(cfg.jobDefinitionId)}/start`;
-  const json = await call(cfg, "POST", url, { args }, fetchFn);
+  const json = await call(cfg, "POST", url, { args }, fetchFn, timeoutMs);
   const first = Array.isArray(json.job_runs) ? (json.job_runs[0] as { id?: unknown } | undefined) : undefined;
   if (typeof first?.id !== "string") throw new Error("Scaleway started no job run");
   return { runId: first.id };
 }
 
-export async function getJobRun(cfg: JobConfig, runId: string, fetchFn: typeof fetch = fetch): Promise<JobRunState> {
+export async function getJobRun(
+  cfg: JobConfig,
+  runId: string,
+  fetchFn: typeof fetch = fetch,
+  timeoutMs: number = SCALEWAY_TIMEOUT_MS,
+): Promise<JobRunState> {
   const url = `${API}/regions/${encodeURIComponent(cfg.region)}/job-runs/${encodeURIComponent(runId)}`;
-  const json = await call(cfg, "GET", url, undefined, fetchFn);
+  const json = await call(cfg, "GET", url, undefined, fetchFn, timeoutMs);
   const out: JobRunState = { state: typeof json.state === "string" ? json.state : "unknown_state" };
   if (typeof json.started_at === "string") out.startedAt = json.started_at;
   if (typeof json.terminated_at === "string") out.finishedAt = json.terminated_at;

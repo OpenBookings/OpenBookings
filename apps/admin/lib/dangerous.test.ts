@@ -89,6 +89,11 @@ describe("dangerousAction", () => {
       expect(result).toEqual({ ok: false, message: "That didn't work. The details are in the server log and the audit trail." });
       expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log", "INSERT INTO audit_log"]);
       expect(logged).toHaveBeenCalledTimes(1);
+      // A constant format string: the ids from the request go in as values.
+      expect(logged.mock.calls[0]!.slice(0, 2)).toEqual([
+        "[admin] dangerous action failed",
+        { action: input.action, targetType: input.targetType, targetId: input.targetId },
+      ]);
     } finally {
       logged.mockRestore();
     }

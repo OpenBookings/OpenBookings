@@ -16,12 +16,20 @@ const SAMPLES: Array<{ label: string; text: string; expect: "clean" | "flagged" 
 ];
 
 let failures = 0;
-console.log(`\nModeration check (model: ${process.env.MISTRAL_MODEL ?? "MISTRAL_MODEL not set"})\n`);
+console.log("\nModeration check (model: %s)\n", process.env.MISTRAL_MODEL ?? "MISTRAL_MODEL not set");
 for (const sample of SAMPLES) {
   const result = await checkText(sample.text);
   const pass = result.verdict === sample.expect && result.source === "mistral";
   if (!pass) failures++;
-  console.log(`  ${pass ? "PASS" : "FAIL"}  ${sample.label}: ${result.verdict} via ${result.source} [${result.rules.join(", ")}] ${JSON.stringify(result.fragments)}`);
+  console.log(
+    "  %s  %s: %s via %s [%s] %s",
+    pass ? "PASS" : "FAIL",
+    sample.label,
+    result.verdict,
+    result.source,
+    result.rules.join(", "),
+    JSON.stringify(result.fragments),
+  );
 }
 console.log(failures === 0 ? "\nMistral moderation OK\n" : `\n${failures} sample(s) off\n`);
 process.exit(failures === 0 ? 0 : 1);

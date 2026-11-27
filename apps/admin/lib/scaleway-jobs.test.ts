@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getJobRun, scalewayJobConfig, startJobRun, type JobConfig } from "./scaleway-jobs";
+import { getJobRun, SCALEWAY_TIMEOUT_MS, scalewayJobConfig, startJobRun, type JobConfig } from "./scaleway-jobs";
 
 const cfg: JobConfig = { region: "nl-ams", jobDefinitionId: "def-1", secretKey: "scw-secret" };
 
@@ -68,5 +68,38 @@ describe("getJobRun", () => {
   test("leaves out what Scaleway has not set yet", async () => {
     const { fetchFn } = stub(200, { state: "queued", started_at: null, terminated_at: null, exit_code: null });
     expect(await getJobRun(cfg, "run-9", fetchFn)).toEqual({ state: "queued" });
+  });
+});
+
+describe("a Scaleway that doesn't answer", () => {
+  /** Never resolves, and ignores the abort signal too. */
+  const hanging = (() => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = ((_url: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+    return { signals, fetchFn };
+  })();
+
+  test("gives up after ten seconds by default", () => {
+    expect(SCALEWAY_TIMEOUT_MS).toBe(10_000);
+  });
+
+  test("starting a run fails with 'timed out', and the request was given an abort signal", async () => {
+    await expect(startJobRun(cfg, ["--step=draft"], hanging.fetchFn, 20)).rejects.toThrow("Scaleway: timed out");
+    expect(hanging.signals.at(-1)?.aborted).toBe(true);
+  });
+
+  test("reading a run fails with 'timed out' instead of hanging the page", async () => {
+    await expect(getJobRun(cfg, "run-9", hanging.fetchFn, 20)).rejects.toThrow("Scaleway: timed out");
+  });
+
+  test("a fetch that honours the signal times out the same way", async () => {
+    const fetchFn = ((_url: string, init: RequestInit) =>
+      new Promise<Response>((_, reject) =>
+        init.signal!.addEventListener("abort", () => reject(new DOMException("The operation timed out.", "TimeoutError"))),
+      )) as unknown as typeof fetch;
+    await expect(getJobRun(cfg, "run-9", fetchFn, 20)).rejects.toThrow("Scaleway: timed out");
   });
 });
