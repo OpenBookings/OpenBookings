@@ -13,3 +13,9 @@
  * the messaging server entry (db pool, node:crypto).
  */
 export const REDACTED_MESSAGE_BODY = "[message removed — retention period expired]";
+
+/**
+ * Days after the last message in a conversation before its text is removed,
+ * unless MESSAGE_RETENTION_DAYS says otherwise. The Privacy Policy states it.
+ */
+export const DEFAULT_MESSAGE_RETENTION_DAYS = 365;
