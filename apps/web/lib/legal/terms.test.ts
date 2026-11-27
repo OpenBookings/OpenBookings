@@ -107,9 +107,33 @@ describe("current terms of service content", () => {
       const removal = clause(source, "10.12");
       expect(removal).toMatch(/person|medewerker|personne/);
       expect(removal).toMatch(/object|bezwaar|contester/);
+      expect(removal).toContain("support@openbookings.co");
       expect(removal).toMatch(/once more|nog één keer|une nouvelle fois/);
-      expect(removal).toMatch(/stays visible|blijft zichtbaar|reste visible/);
+      expect(removal).toMatch(/\[(section|artikel|article) 10\.7\]\(#messages-and-content\)/);
       expect(clause(source, "10.7")).toMatch(/\[(section|artikel|article) 10\.12\]\(#messages-and-content\)/);
+    });
+
+    test(`${locale}: removal and deadline masking both get a short email and the details on the review page`, () => {
+      // 10.4 promises what we did, why, whether it was automated and how to
+      // object; for reviews 10.12 keeps that promise, masking included.
+      const linkTo1012 = /\[(section|artikel|article) 10\.12\]\(#messages-and-content\)/;
+      expect(clause(source, "10.4")).toMatch(linkTo1012);
+      expect(clause(source, "10.9")).toMatch(linkTo1012);
+      const removal = clause(source, "10.12");
+      expect(removal).toContain(MASKED_TEXT);
+      expect(removal).toMatch(/short email|korte e-mail|court e-mail/);
+      expect(removal).toMatch(/review page|pagina van uw beoordeling|page de votre avis/);
+      expect(removal).toMatch(/automatically|automatisch|automatiquement/);
+      expect(removal).toMatch(/note|toelichting/);
+      expect(removal).toMatch(/don't email you when a review is kept|blijft staan, e-mailen wij u niet|pas d'e-mail lorsqu'un avis est conservé/);
+    });
+
+    test(`${locale}: anyone can report; only a signed-in reporter can get the outcome; the review stays visible`, () => {
+      const removal = clause(source, "10.12");
+      expect(removal).toMatch(/Anyone can report|Iedereen kan een beoordeling melden|Tout le monde peut signaler/);
+      expect(removal).toMatch(/signed in|ingelogd|connecté/);
+      expect(removal).toMatch(/account's email address|e-mailadres van uw account|adresse e-mail de votre compte/);
+      expect(removal).toMatch(/stays visible|blijft zichtbaar|reste visible/);
     });
 
     test(`${locale}: does not promise account deletion "at any time"`, () => {

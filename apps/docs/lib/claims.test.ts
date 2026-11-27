@@ -153,6 +153,7 @@ describe("review moderation", () => {
     const text = page("business/reviews/index.mdx");
     expect(text).toContain(`If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`);
     expect(text).toContain(`deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
+    expect(text).toContain(`A report nobody decided on is deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after it was made`);
   });
 
   test("no page gives the deadline another number of hours", () => {
@@ -164,7 +165,7 @@ describe("review moderation", () => {
   });
 
   test("no page keeps moderation records for another number of months", () => {
-    const stated = sweep(/(?:moderation records|reports)[^.|\n]*?\b(\d+) months\b/gi);
+    const stated = sweep(/(?:moderation records|reports?)[^.|\n]*?\b(\d+) months\b/gi);
     const wrong = stated.filter((s) => Number(s.groups[0]) !== MODERATION_RECORD_RETENTION_MONTHS);
     expect(wrong.map((s) => s.where)).toEqual([]);
   });

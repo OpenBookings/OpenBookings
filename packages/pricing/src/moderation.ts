@@ -48,6 +48,9 @@ export const REVIEW_RULES: Record<ReviewRuleId, { title: string; description: st
   },
 };
 
+/** The date on the public rules page (/legal/review-rules). Change it with REVIEW_RULES' wording or the process the page describes. */
+export const REVIEW_RULES_LAST_UPDATED = "2026-11-27";
+
 /** A held item publishes this many hours after submission if nobody decided. */
 export const MODERATION_DEADLINE_HOURS = 72;
 
