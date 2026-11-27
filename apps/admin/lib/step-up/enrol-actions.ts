@@ -13,10 +13,10 @@ import {
   relyingParty,
   startPasskeyEnrolment,
   startTotpEnrolment,
-  stepUpNotAvailable,
   type EnrolDeps,
   type EnrolProof,
 } from "./enrol";
+import { enrolStepUp } from "./step-up";
 
 /**
  * Enrolling step-up credentials from /security. Refusals and missing settings
@@ -25,14 +25,17 @@ import {
  */
 export type EnrolResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-const deps = (): EnrolDeps => ({
-  db: writePool(),
-  bootstrapCode: process.env.ADMIN_BOOTSTRAP_CODE,
-  totpKey: process.env.ADMIN_TOTP_KEY ?? "",
-  // Task 4 wires the real step-up (consumeStepUp for "security.enrol").
-  requireStepUp: stepUpNotAvailable,
-  now: () => new Date(),
-});
+const deps = (): EnrolDeps => {
+  const now = () => new Date();
+  return {
+    db: writePool(),
+    bootstrapCode: process.env.ADMIN_BOOTSTRAP_CODE,
+    totpKey: process.env.ADMIN_TOTP_KEY ?? "",
+    // A staff member with credentials spends a step-up for "security.enrol" on themselves.
+    requireStepUp: enrolStepUp(writePool(), now),
+    now,
+  };
+};
 
 async function attempt<T>(fn: () => Promise<T>): Promise<EnrolResult<T>> {
   try {

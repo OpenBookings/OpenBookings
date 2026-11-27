@@ -34,6 +34,8 @@ import { decryptSecret, encryptSecret } from "./crypto";
 export const ENROL_ACTION = "security.enrol";
 const PENDING_PASSKEY = "security.enrol-passkey";
 const PENDING_TOTP = "security.enrol-totp";
+/** Enrolment's own rows in admin_step_ups: never a step-up (see ./step-up.ts). */
+export const PENDING_ENROL_ACTIONS: readonly string[] = [PENDING_PASSKEY, PENDING_TOTP];
 const PENDING_TTL_MS = 5 * 60_000;
 
 const RP_NAME = "OpenBookings admin";
@@ -63,14 +65,10 @@ export class EnrolRefused extends Error {
 
 /**
  * Checks and spends a step-up token for "security.enrol" on the staff
- * member's own credentials. Throws (an EnrolRefused) when it is not valid.
+ * member's own credentials (enrolStepUp in ./step-up.ts). Throws (an
+ * EnrolRefused) when it is not valid.
  */
 export type RequireStepUp = (staff: Staff, token: string) => Promise<void>;
-
-/** The production wiring until step-ups exist: a second enrolment is refused, never allowed. */
-export const stepUpNotAvailable: RequireStepUp = async () => {
-  throw new EnrolRefused("step-up", "Step-up not available yet");
-};
 
 export type EnrolProof = { bootstrap?: string; stepUpToken?: string };
 
@@ -161,8 +159,20 @@ async function spendPending(
 // Authenticator app (TOTP)
 // ---------------------------------------------------------------------------
 
-const totpFor = (staff: Staff, secret: OTPAuth.Secret) =>
-  new OTPAuth.TOTP({ issuer: TOTP_ISSUER, label: staff.email, algorithm: "SHA1", digits: 6, period: 30, secret });
+const totpFor = (label: string, secret: OTPAuth.Secret) =>
+  new OTPAuth.TOTP({ issuer: TOTP_ISSUER, label, algorithm: "SHA1", digits: 6, period: 30, secret });
+
+/**
+ * The time step (30 s) a 6-digit code belongs to, accepting the steps either
+ * side of `now`; null when it is not a current code. Spaces are ignored.
+ */
+export function totpStep(base32: string, code: string, now: Date): number | null {
+  const token = code.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(token)) return null;
+  const totp = totpFor("", OTPAuth.Secret.fromBase32(base32));
+  const delta = totp.validate({ token, timestamp: now.getTime(), window: 1 });
+  return delta === null ? null : totp.counter({ timestamp: now.getTime() }) + delta;
+}
 
 /** A new secret for the authenticator app: the otpauth:// URI (for the QR code) and the secret to type in. */
 export async function startTotpEnrolment(
@@ -173,7 +183,7 @@ export async function startTotpEnrolment(
   const gate = await checkEnrolGate(deps, staff, proof);
   const secret = new OTPAuth.Secret({ size: 20 });
   await addPending(deps, staff, PENDING_TOTP, gate, encryptSecret(secret.base32, deps.totpKey));
-  return { uri: totpFor(staff, secret).toString(), secretPreview: secret.base32.replace(/(.{4})(?=.)/g, "$1 ") };
+  return { uri: totpFor(staff.email, secret).toString(), secretPreview: secret.base32.replace(/(.{4})(?=.)/g, "$1 ") };
 }
 
 /** Stores the authenticator app once it shows a current code for the pending secret. */
@@ -189,17 +199,16 @@ export async function completeTotpEnrolment(deps: EnrolDeps, staff: Staff, code:
   if (!pending) throw new EnrolRefused("expired");
 
   const base32 = decryptSecret(String(pending.challenge), deps.totpKey);
-  const token = code.replace(/\s/g, "");
-  const ok =
-    /^\d{6}$/.test(token) &&
-    totpFor(staff, OTPAuth.Secret.fromBase32(base32)).validate({ token, timestamp: deps.now().getTime(), window: 1 }) !== null;
-  if (!ok) throw new EnrolRefused("wrong-code");
+  const step = totpStep(base32, code, deps.now());
+  if (step === null) throw new EnrolRefused("wrong-code");
 
   await spendPending(deps, staff, PENDING_TOTP, { id: String(pending.id) });
+  // The code just shown is spent: it cannot also confirm a step-up.
   return insertTotpCredential(deps.db, {
     userId: staff.userId,
     secretEnc: encryptSecret(base32, deps.totpKey),
     label: "Authenticator app",
+    counter: step,
   });
 }
 

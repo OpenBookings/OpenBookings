@@ -47,14 +47,15 @@ export async function passkeyIds(db: Queryable, userId: string): Promise<{ id: s
   return rows.map((r) => ({ id: String(r.credential_id), transports: (r.transports as string[] | null) ?? [] }));
 }
 
+/** `counter`: the time step of the last code accepted, so it is not accepted again. */
 export async function insertTotpCredential(
   db: Queryable,
-  i: { userId: string; secretEnc: string; label: string },
+  i: { userId: string; secretEnc: string; label: string; counter: number },
 ): Promise<AdminCredential> {
   const { rows } = await db.query(
-    `INSERT INTO admin_credentials (user_id, kind, totp_secret_enc, label)
-     VALUES ($1, 'totp', $2, $3) RETURNING ${COLUMNS}`,
-    [i.userId, i.secretEnc, i.label],
+    `INSERT INTO admin_credentials (user_id, kind, totp_secret_enc, label, counter)
+     VALUES ($1, 'totp', $2, $3, $4) RETURNING ${COLUMNS}`,
+    [i.userId, i.secretEnc, i.label, i.counter],
   );
   return toCredential(rows[0]!);
 }

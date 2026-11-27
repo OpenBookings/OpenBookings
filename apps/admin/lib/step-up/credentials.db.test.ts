@@ -19,7 +19,6 @@ import {
   EnrolRefused,
   startPasskeyEnrolment,
   startTotpEnrolment,
-  stepUpNotAvailable,
   type EnrolDeps,
   type RequireStepUp,
 } from "./enrol";
@@ -27,6 +26,10 @@ import {
 const BOOTSTRAP = "correct horse battery staple";
 const TOTP_KEY = randomBytes(32).toString("base64");
 const RP = { rpID: "admin.example.test", origin: "https://admin.example.test" };
+/** No step-up is ever valid here; step-up.db.test.ts covers the real one. */
+const noStepUp: RequireStepUp = async () => {
+  throw new EnrolRefused("step-up");
+};
 
 describeWithDb("step-up credentials and enrolment", () => {
   let db: Client;
@@ -36,7 +39,7 @@ describeWithDb("step-up credentials and enrolment", () => {
     db,
     bootstrapCode: BOOTSTRAP,
     totpKey: TOTP_KEY,
-    requireStepUp: stepUpNotAvailable,
+    requireStepUp: noStepUp,
     now: () => new Date(),
     ...over,
   });
@@ -160,10 +163,8 @@ describeWithDb("step-up credentials and enrolment", () => {
   test("second enrolment needs a step-up, not the bootstrap code", async () => {
     await enrolTotp(deps(), { bootstrap: BOOTSTRAP });
 
-    // Until step-ups exist (Task 4), a second enrolment is refused outright.
-    const refused = await startTotpEnrolment(deps(), staff, { stepUpToken: "t" }).catch((e: unknown) => e);
-    expect(refused).toBeInstanceOf(EnrolRefused);
-    expect((refused as Error).message).toBe("Step-up not available yet");
+    expect(await outcome(() => startTotpEnrolment(deps(), staff, {}))).toBe("step-up");
+    expect(await outcome(() => startTotpEnrolment(deps(), staff, { stepUpToken: "t" }))).toBe("step-up");
 
     const calls: [Staff, string][] = [];
     const stub: RequireStepUp = async (who, token) => {
