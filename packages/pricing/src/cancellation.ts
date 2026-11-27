@@ -73,6 +73,15 @@ export interface RefundResult {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
+/**
+ * Annex B B.2: how long before check-in a refundable booking can still be
+ * cancelled for free, per tier. Copy, docs and legal tests read it from here.
+ */
+export const FREE_CANCELLATION_HOURS: Readonly<Record<PropertyCancellationTier, number>> = {
+  flex: 24,
+  standard: 7 * 24,
+};
+
 /** Annex B check-in time when the property states none. */
 const DEFAULT_CHECK_IN_TIME = "15:00";
 
@@ -147,9 +156,7 @@ export function buildPolicySnapshot(i: {
   const before = (ms: number) => new Date(checkIn - ms);
 
   const fullRefundUntil =
-    i.tier === "flex" ? before(DAY)
-    : i.tier === "standard" ? before(7 * DAY)
-    : null;
+    i.tier === "non_refundable" ? null : before(FREE_CANCELLATION_HOURS[i.tier] * HOUR);
 
   return {
     tier: i.tier,
@@ -166,7 +173,7 @@ export function buildPolicySnapshot(i: {
 const ceilCents = (cents: number) => Math.max(0, Math.ceil(cents - 1e-6));
 
 /** Annex B B.5.2: whatever the tier, the next 7 unused nights are kept, any after that refunded. */
-const EARLY_DEPARTURE_KEPT_NIGHTS = 7;
+export const EARLY_DEPARTURE_KEPT_NIGHTS = 7;
 
 function amounts(accommodationCents: number, touristTaxCents: number): Amounts {
   return { accommodationCents, touristTaxCents, totalCents: accommodationCents + touristTaxCents };
@@ -226,15 +233,23 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
 }
 
 /**
+ * Annex B B.4.2: next to a refundable rate, how much cheaper a Non-refundable
+ * rate must be, in whole percent.
+ */
+export const NON_REFUNDABLE_MIN_DISCOUNT_PERCENT = 10;
+
+/**
  * Annex B B.4: a Non-refundable rate may be offered on its own (B.4.1). Next to
- * refundable rates on the same room it must be at least 10% cheaper than one of
+ * refundable rates on the same room it must be at least
+ * NON_REFUNDABLE_MIN_DISCOUNT_PERCENT cheaper than one of
  * them (B.4.2). `refundableTotalsCents` are the refundable rates on offer, for
  * the same stay; none means there is nothing to compare with. Totals in cents;
  * integer maths, so 9000 vs 10000 is exact.
  */
 export function nonRefundableQualifies(nonRefundableTotalCents: number, refundableTotalsCents: number[]): boolean {
   if (refundableTotalsCents.length === 0) return true;
-  return refundableTotalsCents.some((r) => nonRefundableTotalCents * 10 <= r * 9);
+  const keep = 100 - NON_REFUNDABLE_MIN_DISCOUNT_PERCENT;
+  return refundableTotalsCents.some((r) => nonRefundableTotalCents * 100 <= r * keep);
 }
 
 /** What `offeredRates` needs to know about one rate, for the stay asked. */

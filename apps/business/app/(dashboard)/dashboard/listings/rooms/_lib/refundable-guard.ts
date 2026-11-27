@@ -1,4 +1,4 @@
-import { nonRefundableQualifies } from "@openbookings/pricing";
+import { NON_REFUNDABLE_MIN_DISCOUNT_PERCENT, nonRefundableQualifies } from "@openbookings/pricing";
 
 /**
  * Annex B B.4: a Non-refundable rate may sell on its own (B.4.1), but next to
@@ -18,9 +18,9 @@ export interface GuardRate {
 }
 
 export const NON_REFUNDABLE_MESSAGE =
-  "A non-refundable rate must be at least 10% cheaper than a refundable rate on this room.";
+  `A non-refundable rate must be at least ${NON_REFUNDABLE_MIN_DISCOUNT_PERCENT}% cheaper than a refundable rate on this room.`;
 export const DEPENDS_MESSAGE =
-  "This room's non-refundable rate would no longer be at least 10% cheaper than a refundable rate. Lower that rate first, or deactivate it.";
+  `This room's non-refundable rate would no longer be at least ${NON_REFUNDABLE_MIN_DISCOUNT_PERCENT}% cheaper than a refundable rate. Lower that rate first, or deactivate it.`;
 
 /**
  * `rates` are the room's non-archived rates as they are now (the one being

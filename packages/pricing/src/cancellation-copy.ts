@@ -2,7 +2,19 @@
  * The words hosts and guests see for a cancellation policy. Kept next to the
  * calculator so the sentences and the maths can't drift apart.
  */
-import type { CancellationTier, PolicySnapshot } from "./cancellation";
+import {
+  EARLY_DEPARTURE_KEPT_NIGHTS,
+  FREE_CANCELLATION_HOURS,
+  NON_REFUNDABLE_MIN_DISCOUNT_PERCENT,
+  type CancellationTier,
+  type PolicySnapshot,
+} from "./cancellation";
+
+/** A free-cancellation window in words: 24 → "24 hours", 168 → "7 days". */
+export function formatCancellationWindow(hours: number): string {
+  if (hours > 24 && hours % 24 === 0) return `${hours / 24} days`;
+  return hours === 1 ? "1 hour" : `${hours} hours`;
+}
 
 export const TIER_LABELS: Record<CancellationTier, string> = {
   flex: "Flex",
@@ -11,13 +23,17 @@ export const TIER_LABELS: Record<CancellationTier, string> = {
 };
 
 export const TIER_SUMMARIES: Record<CancellationTier, string> = {
-  flex: "Free cancellation until 24 hours before check-in. After that, the room price isn't refunded.",
-  standard: "Free cancellation until 7 days before check-in. After that, the room price isn't refunded.",
+  flex: `Free cancellation until ${formatCancellationWindow(FREE_CANCELLATION_HOURS.flex)} before check-in. After that, the room price isn't refunded.`,
+  standard: `Free cancellation until ${formatCancellationWindow(FREE_CANCELLATION_HOURS.standard)} before check-in. After that, the room price isn't refunded.`,
   non_refundable: "The room price isn't refunded if you cancel. Cheaper than the refundable rate.",
 };
 
 export const EARLY_DEPARTURE_LINE =
-  "If you leave early, the next 7 nights are charged and any nights after that are refunded.";
+  `If you leave early, the next ${EARLY_DEPARTURE_KEPT_NIGHTS} nights are charged and any nights after that are refunded.`;
+
+/** The Non-refundable rule as a host reads it next to the refundable choice. */
+export const NON_REFUNDABLE_PAIRING_LINE =
+  `Can be the room's only rate. Next to a refundable rate it must be at least ${NON_REFUNDABLE_MIN_DISCOUNT_PERCENT}% cheaper.`;
 export const TOURIST_TAX_LINE = "Tourist tax is refunded for nights you don't stay, unless you don't show up.";
 export const NO_SHOW_LINE = "If you don't show up, nothing is refunded, tourist tax included.";
 export const REFUND_TIMING_LINE =
