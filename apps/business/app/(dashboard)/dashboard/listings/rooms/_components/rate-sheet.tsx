@@ -459,7 +459,7 @@ function RateForm({
               {(
                 [
                   ["true", `Refundable — follows your property's policy (${TIER_LABELS[propertyTier]})`, TIER_SUMMARIES[propertyTier]],
-                  ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Must be at least 10% cheaper than a refundable rate on this room.`],
+                  ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Can be the room's only rate. Next to a refundable rate it must be at least 10% cheaper. Rooms that offer both usually get more bookings.`],
                 ] as const
               ).map(([value, label, summary]) => (
                 <RadioGroupCard
