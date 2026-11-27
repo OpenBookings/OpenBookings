@@ -53,16 +53,24 @@ export async function generateLegalMetadata(params: Params): Promise<Metadata> {
   const resolved = await resolve(params);
   if (!resolved) return {};
 
-  const { doc, title, status, isArchived, locale } = resolved;
+  const { doc, title, status, isArchived, locale, requestedLocale } = resolved;
 
   // A superseded version and an unreviewed translation must not compete with
   // the authoritative text in search results.
   const shouldIndex = !isArchived && status === "translated";
 
+  // A reviewed translation is its own page: pointing its canonical at the
+  // fallback language while listing it under `languages` tells search engines
+  // to drop it. Everything else (a draft, an archived version, or a language
+  // this document lacks, which renders the fallback text) points at the
+  // fallback language's current page.
+  const ownPage = shouldIndex && locale === requestedLocale;
+  const canonicalLocale = ownPage ? locale : doc.fallbackLocale;
+
   return {
     title: `${title} | OpenBookings`,
     alternates: {
-      canonical: `/legal/${doc.fallbackLocale}/${doc.slug}`,
+      canonical: `/legal/${canonicalLocale}/${doc.slug}`,
       languages: Object.fromEntries(
         (Object.keys(resolved.version.locales) as LegalLocale[]).map((code) => [
           code,

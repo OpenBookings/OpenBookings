@@ -17,7 +17,7 @@ export function OverviewSection({
   return (
     <section id="overview" className="bg-[#0a0a0a]">
       <div className="px-4 sm:px-8 md:px-24 py-16 sm:py-20 max-w-6xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Overview</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-white/55 mb-6 text-center">Overview</p>
         <h2 className="font-serif text-4xl sm:text-5xl md:text-6xl leading-tight mb-16 text-center">
           {hotel.overview_headline}
         </h2>

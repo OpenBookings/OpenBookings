@@ -10,7 +10,7 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
   return (
     <section id="location" className="bg-[#111111] border-t border-white/6 py-28 sm:py-36">
       <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Find us</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-white/55 mb-6 text-center">Find us</p>
         <h2 className="font-serif text-4xl sm:text-5xl mb-10 text-center">Location</h2>
 
         <div
@@ -20,7 +20,7 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
         >
           {/* About + address */}
           <div className="flex flex-col text-white/75 text-lg leading-relaxed">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-4">About</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50 mb-4">About</p>
             <p>{hotel.location_about}</p>
             <div className="mt-auto pt-8 flex items-center gap-4">
               <button
@@ -51,7 +51,7 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
               not an empty third column under a heading. */}
           {highlights.length > 0 && (
             <div className="flex flex-col min-h-0">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-4">Nearby</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-white/50 mb-4">Nearby</p>
               <div className="flex-1 overflow-y-auto space-y-px [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
                 {highlights.map(({ label, icon, distance }) => {
                   const Icon = getIcon(icon);
@@ -66,7 +66,7 @@ export function LocationSection({ hotel }: { hotel: HotelPageData }) {
                       <span className="flex-1 text-sm text-white/80 group-hover:text-white transition-colors truncate">
                         {label}
                       </span>
-                      <span className="text-xs text-white/30 shrink-0 tabular-nums">{distance}</span>
+                      <span className="text-xs text-white/50 shrink-0 tabular-nums">{distance}</span>
                     </div>
                   );
                 })}

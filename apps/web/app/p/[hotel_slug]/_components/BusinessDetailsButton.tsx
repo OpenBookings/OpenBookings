@@ -22,7 +22,7 @@ export function BusinessDetailsButton({ hotel }: { hotel: HotelPageData }) {
         <div className="bg-[#111] border border-white/10 rounded-2xl p-8 max-h-[80vh] overflow-y-auto [&::-webkit-scrollbar]:w-px [&::-webkit-scrollbar-thumb]:bg-white/10]">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Business Details</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/55 mb-2">Business Details</p>
               <h2 className="font-serif text-3xl sm:text-4xl text-white leading-tight">{hotel.name}</h2>
             </div>
             <button
@@ -45,30 +45,30 @@ export function BusinessDetailsButton({ hotel }: { hotel: HotelPageData }) {
           <div className="relative group mb-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 transition-[filter] duration-300 group-hover:blur-none blur-sm select-none group-hover:select-auto">
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Legal name</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">Legal name</p>
                 <p className="text-sm text-white/80 font-medium">{hotel.legal_company_name ?? hotel.name}</p>
               </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Address</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">Address</p>
                 <p className="text-sm text-white/80">{hotel.address_line_1}</p>
                 <p className="text-sm text-white/80">
                   {[hotel.postal_code, hotel.city, hotel.country].filter(Boolean).join(" ")}
                 </p>
               </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Email</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">Email</p>
                 <p className="text-sm text-white/80">{hotel.contact_email}</p>
               </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Phone</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">Phone</p>
                 <p className="text-sm text-white/80">{hotel.contact_phone}</p>
               </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">Company registration</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">Company registration</p>
                 <p className="text-sm text-white/80 font-mono tracking-wide">{hotel.company_registration}</p>
               </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-[0.15em] text-white/30 mb-2">VAT number</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-white/50 mb-2">VAT number</p>
                 <p className="text-sm text-white/80 font-mono tracking-wide">{hotel.vat_number}</p>
               </div>
             </div>
@@ -78,7 +78,7 @@ export function BusinessDetailsButton({ hotel }: { hotel: HotelPageData }) {
           </div>
 
           <div className="border-t border-white/8 pt-6">
-            <p className="text-xs text-white/30 leading-relaxed">
+            <p className="text-xs text-white/50 leading-relaxed">
               These details come from the property and are shown for transparency. OpenBookings
               doesn&apos;t verify them; you can check the VAT number on the European Commission&apos;s
               VIES service. For disputes or complaints, contact us at{" "}
