@@ -116,8 +116,9 @@ export default function ReviewRulesPage() {
         </P>
         <P>
           If you disagree, reply to that email or contact{" "}
-          <InlineLink href="mailto:support@openbookings.co">support@openbookings.co</InlineLink>. We don&apos;t
-          email you when a review is kept.
+          <InlineLink href="mailto:support@openbookings.co">support@openbookings.co</InlineLink>. If your review,
+          reply or answer is kept, we don&apos;t email you. People who reported it do hear the outcome, as section 6
+          explains.
         </P>
       </Section>
 

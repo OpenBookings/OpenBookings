@@ -125,7 +125,9 @@ describe("current terms of service content", () => {
       expect(removal).toMatch(/review page|pagina van uw beoordeling|page de votre avis/);
       expect(removal).toMatch(/automatically|automatisch|automatiquement/);
       expect(removal).toMatch(/note|toelichting/);
-      expect(removal).toMatch(/don't email you when a review is kept|blijft staan, e-mailen wij u niet|pas d'e-mail lorsqu'un avis est conservé/);
+      // The author isn't emailed when it's kept; reporters still hear the outcome.
+      expect(removal).toMatch(/is kept, we don't email you|blijft staan, e-mailen wij u niet|est conservé, nous ne vous envoyons pas d'e-mail/);
+      expect(removal).toMatch(/people who reported it hear the outcome|wie ze heeft gemeld, hoort de uitkomst|qui l'ont signalé sont informées du résultat/);
     });
 
     test(`${locale}: anyone can report; only a signed-in reporter can get the outcome; the review stays visible`, () => {

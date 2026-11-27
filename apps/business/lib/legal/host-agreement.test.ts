@@ -145,7 +145,7 @@ describe("Host Agreement 1.6 states what the code does", () => {
     expect(reviews).toContain("sends its author a short email");
     expect(reviews).toContain("for the Host on its **Reviews** page");
     expect(reviews).toContain("whether the decision was automatic");
-    expect(reviews).toContain("does not send an email when content is kept");
+    expect(reviews).toContain("When content is kept, OpenBookings does not email its author; anyone who reported it is told the outcome");
   });
 
   test("names Mistral for the review checks as well as support", () => {
