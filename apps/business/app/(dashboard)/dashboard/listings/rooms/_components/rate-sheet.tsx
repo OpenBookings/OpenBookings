@@ -38,7 +38,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
+import { NON_REFUNDABLE_PAIRING_LINE, TIER_LABELS, TIER_SUMMARIES, type PropertyCancellationTier } from "@openbookings/pricing";
 import { saveRate } from "../_lib/actions";
 import {
   LIMITS,
@@ -459,7 +459,7 @@ function RateForm({
               {(
                 [
                   ["true", `Refundable — follows your property's policy (${TIER_LABELS[propertyTier]})`, TIER_SUMMARIES[propertyTier]],
-                  ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} Can be the room's only rate. Next to a refundable rate it must be at least 10% cheaper. Rooms that offer both usually get more bookings.`],
+                  ["false", "Non-refundable", `${TIER_SUMMARIES.non_refundable} ${NON_REFUNDABLE_PAIRING_LINE} Rooms that offer both usually get more bookings.`],
                 ] as const
               ).map(([value, label, summary]) => (
                 <RadioGroupCard

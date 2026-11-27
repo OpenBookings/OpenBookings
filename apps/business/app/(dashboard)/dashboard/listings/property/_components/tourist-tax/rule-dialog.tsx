@@ -4,7 +4,7 @@ import * as React from "react";
 import { AlertCircleIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import posthog from "posthog-js";
 import { toast } from "sonner";
-import { describeCharge, vatRatesFor, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
+import { AGE_RANGES, describeCharge, vatRatesFor, type TouristTaxCharge, type TouristTaxRule } from "@openbookings/pricing";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -278,7 +278,7 @@ export function RuleDialog({
                 disabled={pending || childrenExempt}
               />
               <div className="flex flex-col gap-1">
-                <FieldLabel htmlFor="tt-infants">Infants (under 2) pay tourist tax</FieldLabel>
+                <FieldLabel htmlFor="tt-infants">Infants ({AGE_RANGES.infants}) pay tourist tax</FieldLabel>
                 <FieldDescription>
                   {childrenExempt
                     ? "Children don't pay, so infants don't either."

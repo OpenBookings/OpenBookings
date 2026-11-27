@@ -1,4 +1,4 @@
-import { localTimeToUtc, type CancellationTier } from '@openbookings/pricing';
+import { EARLY_DEPARTURE_KEPT_NIGHTS, localTimeToUtc, type CancellationTier } from '@openbookings/pricing';
 import { formatCents } from '@openbookings/pricing/money';
 import type { GuestBookingRow } from './shape';
 
@@ -139,10 +139,10 @@ export function buildTimeline(row: GuestBookingRow, now: Date): Timeline {
         at: checkOut,
         label: 'Check-out',
         showTime: true,
-        // Early departure keeps the next 7 nights; a stay that short loses them all.
+        // Early departure keeps the next nights (Annex B B.5.2); a stay that short loses them all.
         detail:
-          nights > 7
-            ? 'Leaving early? The next 7 nights are still charged.'
+          nights > EARLY_DEPARTURE_KEPT_NIGHTS
+            ? `Leaving early? The next ${EARLY_DEPARTURE_KEPT_NIGHTS} nights are still charged.`
             : 'Leaving early? The remaining nights are still charged.',
       },
     );

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { TouristTaxRule } from "@openbookings/pricing";
+import { AGE_RANGES, type TouristTaxRule } from "@openbookings/pricing";
 import { formatCents, parseEuroInput } from "@openbookings/pricing/money";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -97,8 +97,8 @@ export function ExampleCalculator({ rules, commissionRate, defaultArrival }: Exa
           inputMode: "decimal",
         })}
         {field("adults", "Adults", adults, setAdults, "col-span-3", { min: 1, max: 20 })}
-        {field("children", "Children (2–12)", children, setChildren, "col-span-3", { min: 0, max: 20 })}
-        {field("infants", "Infants (under 2)", infants, setInfants, "col-span-3", { min: 0, max: 20 })}
+        {field("children", `Children (${AGE_RANGES.children})`, children, setChildren, "col-span-3", { min: 0, max: 20 })}
+        {field("infants", `Infants (${AGE_RANGES.infants})`, infants, setInfants, "col-span-3", { min: 0, max: 20 })}
         {field("rooms", "Rooms", rooms, setRooms, "col-span-3", { min: 1, max: 20 })}
       </div>
 

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  EARLY_DEPARTURE_KEPT_NIGHTS,
+  FREE_CANCELLATION_HOURS,
+  NON_REFUNDABLE_MIN_DISCOUNT_PERCENT,
+  formatCancellationWindow,
+} from "@openbookings/pricing";
+import { DEFAULT_COMMISSION_LABEL } from "@openbookings/stripe/commission-rate";
 import { HOST_AGREEMENT_VERSION } from "@openbookings/authz/host-agreement";
 import { HOST_AGREEMENT_VERSIONS, currentHostAgreement, getHostAgreementVersion } from "./host-agreement";
 
@@ -55,13 +62,15 @@ describe("Host Agreement 1.5 states what the code does", () => {
   });
 
   test("states the commission and its base", () => {
-    expect(body).toContain("4.5% of the Accommodation Price");
+    expect(body).toContain(`${DEFAULT_COMMISSION_LABEL} of the Accommodation Price`);
     expect(body).toMatch(/never charged on Tourist Tax or on Pay-at-Property Extras/);
   });
 
   test("uses the cancellation tiers the code has", () => {
-    expect(body).toContain("**Flex** | 24 hours before Check-in Time");
-    expect(body).toContain("**Standard** | 7 days before Check-in Time");
+    expect(body).toContain(`**Flex** | ${formatCancellationWindow(FREE_CANCELLATION_HOURS.flex)} before Check-in Time`);
+    expect(body).toContain(
+      `**Standard** | ${formatCancellationWindow(FREE_CANCELLATION_HOURS.standard)} before Check-in Time`,
+    );
     expect(body).not.toMatch(/Moderate|Strict/);
   });
 
@@ -90,8 +99,15 @@ describe("Host Agreement 1.5 states what the code does", () => {
 
   test("lets a Non-refundable rate stand alone, 10% under a refundable rate beside it", () => {
     expect(body).toContain("A Non-refundable Rate Plan may be offered on its own");
-    expect(body).toContain("must be at least 10% lower than the price of at least one such refundable Rate Plan");
+    expect(body).toContain(
+      `must be at least ${NON_REFUNDABLE_MIN_DISCOUNT_PERCENT}% lower than the price of at least one such refundable Rate Plan`,
+    );
+    expect(body).toContain(`on their own or at least ${NON_REFUNDABLE_MIN_DISCOUNT_PERCENT}% below a refundable rate`);
     expect(body).not.toContain("may only be offered for a room type and dates for which the Host also offers");
+  });
+
+  test("keeps the same early-departure nights as the refund code", () => {
+    expect(body).toContain(`the next ${EARLY_DEPARTURE_KEPT_NIGHTS} Unused Nights are not refunded`);
   });
 
   test("names no retired providers", () => {

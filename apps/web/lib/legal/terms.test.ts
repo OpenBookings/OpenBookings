@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { REVIEW_OPENS_AFTER_MS, REVIEW_WINDOW_DAYS } from "@openbookings/pricing";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
 const CURRENT = "2026-11-20";
@@ -68,6 +69,12 @@ describe("current terms of service content", () => {
     test(`${locale}: describes reviews instead of saying they aren't available`, () => {
       expect(source).toMatch(/\*\*10\.7 (Reviews|Beoordelingen|Avis)\.\*\*/);
       expect(source).toMatch(/30 (days|dagen|jours)/);
+    });
+
+    test(`${locale}: states when a review opens and closes, as the review rules do`, () => {
+      const reviews = clause(source, "10.7");
+      expect(reviews).toMatch(new RegExp(`\\b${REVIEW_OPENS_AFTER_MS / 3_600_000} (hours|uur|heures) (after|na|après)`));
+      expect(reviews).toMatch(new RegExp(`\\b${REVIEW_WINDOW_DAYS} (days|dagen|jours) (after|na|après)`));
     });
 
     test(`${locale}: does not promise account deletion "at any time"`, () => {

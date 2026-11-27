@@ -3,7 +3,7 @@ import { getThreadForParticipant, type SessionLike, type ThreadRow } from "@open
 import { bearerAuthorized } from "./cron-auth";
 import { detectCircumvention } from "./circumvention";
 import { deliverMessageToRecipient, mintRealtimeToken } from "./realtime";
-import { REDACTED_MESSAGE_BODY } from "./redaction";
+import { DEFAULT_MESSAGE_RETENTION_DAYS, REDACTED_MESSAGE_BODY } from "./redaction";
 import { CIRCUMVENTION_WARNING, MAX_BODY_LENGTH, type MessageRow } from "./types";
 
 /**
@@ -33,7 +33,6 @@ type PropertyRow = { id: string; owner_user_id: string | null };
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-const DEFAULT_RETENTION_DAYS = 365;
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
@@ -279,7 +278,7 @@ export function createMessagingRoutes(config: MessagingRoutesConfig) {
       return json({ error: "Unauthorized" }, 401);
     }
 
-    const retentionDays = Number(process.env.MESSAGE_RETENTION_DAYS) || DEFAULT_RETENTION_DAYS;
+    const retentionDays = Number(process.env.MESSAGE_RETENTION_DAYS) || DEFAULT_MESSAGE_RETENTION_DAYS;
 
     const anonymized = await query<{ id: string }>(
       `UPDATE messages m

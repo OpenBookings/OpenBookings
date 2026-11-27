@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p ${PORT:-8082} -H 0.0.0.0",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "fumadocs-core": "^16.19.5",
@@ -21,7 +22,10 @@
   },
   "devDependencies": {
     "@openbookings/config": "workspace:*",
+    "@openbookings/pricing": "workspace:*",
+    "@openbookings/stripe": "workspace:*",
     "@tailwindcss/postcss": "^4.3.5",
+    "@types/bun": "^1.4.5",
     "@types/mdx": "^2.0.14",
     "@types/node": "^22.20.1",
     "@types/react": "19.3.0",
