@@ -113,6 +113,11 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Content-Security-Policy", value: ContentSecurityPolicy },
+          // The host console has nothing for search engines: every page is
+          // kept out, sign-in included. A header rather than a robots.txt
+          // Disallow, because a crawler that may not fetch a page never sees
+          // that it is noindex, and can still list its bare URL from a link.
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
     ];

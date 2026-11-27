@@ -1,3 +1,4 @@
+import { notifyIndexNow, type IndexNowDeps } from "./indexnow";
 import { isValidSlug } from "./slug";
 const TIMEOUT_MS = 3000;
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
@@ -10,12 +11,15 @@ export interface RefreshEnv {
   cloudflareZoneId?: string;
   /** API token with only the Zone → Cache Purge permission. */
   cloudflarePurgeToken?: string;
+  /** Same value as apps/web's INDEXNOW_KEY, which serves it for verification. */
+  indexNowKey?: string;
 }
 
 export interface RefreshDeps {
   env?: RefreshEnv;
   fetch?: typeof fetch;
-  onError?: (error: unknown, phase: "revalidate" | "cdn-purge") => void;
+  onError?: (error: unknown, phase: "revalidate" | "cdn-purge" | "indexnow") => void;
+  indexNow?: IndexNowDeps;
 }
 
 function readEnv(): RefreshEnv {
@@ -24,6 +28,7 @@ function readEnv(): RefreshEnv {
     revalidateSecret: process.env.REVALIDATE_SECRET,
     cloudflareZoneId: process.env.CLOUDFLARE_ZONE_ID,
     cloudflarePurgeToken: process.env.CLOUDFLARE_PURGE_TOKEN,
+    indexNowKey: process.env.INDEXNOW_KEY,
   };
 }
 
@@ -43,6 +48,8 @@ async function post(doFetch: typeof fetch, url: string, token: string, body: unk
  *
  * 1. The guest app rebuilds its cached page (Next.js ISR) from fresh data.
  * 2. Cloudflare drops its copy, so the next visitor fetches the rebuilt one.
+ * 3. IndexNow engines (Bing and others) are told to recrawl it, last, so they
+ *    fetch the rebuilt page too.
  *
  * The order matters: purging Cloudflare first would let it re-cache the old
  * page from the guest app in between.
@@ -83,5 +90,11 @@ export async function refreshPublicPropertyPage(slug: string, deps: RefreshDeps 
     } catch (error) {
       onError(error, "cdn-purge");
     }
+  }
+
+  try {
+    await notifyIndexNow(origin, path, env.indexNowKey, { fetch: doFetch, ...deps.indexNow });
+  } catch (error) {
+    onError(error, "indexnow");
   }
 }

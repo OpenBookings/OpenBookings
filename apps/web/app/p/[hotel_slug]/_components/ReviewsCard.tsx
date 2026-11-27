@@ -99,7 +99,7 @@ export function ReviewsCard({ data, propertyName }: { data: PropertyReviews; pro
           <>
             <div className="border-t border-white/6" />
             <div className="flex flex-col gap-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/40">Recent review</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-white/50">Recent review</p>
               {featured.body ? (
                 <blockquote className="text-sm text-white/75 leading-relaxed italic line-clamp-5">
                   &ldquo;{featured.body}&rdquo;
@@ -234,7 +234,7 @@ function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; 
                           <span className="truncate text-sm font-medium">{byline(r)}</span>
                           <span className="ml-auto shrink-0 text-xs text-white/45">{stayMonthLabel(r.stayMonth, true)}</span>
                         </span>
-                        <span className={cn("line-clamp-2 text-[13px] leading-normal", r.body ? "text-white/65" : "text-white/40 italic")}>
+                        <span className={cn("line-clamp-2 text-[13px] leading-normal", r.body ? "text-white/65" : "text-white/50 italic")}>
                           {r.body ?? "Score only, no written review"}
                         </span>
                       </button>
@@ -244,7 +244,7 @@ function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; 
               </ul>
             )}
             {data.total > data.reviews.length ? (
-              <p className="px-3 py-3 text-xs text-white/40">Showing the {data.reviews.length} most recent reviews.</p>
+              <p className="px-3 py-3 text-xs text-white/50">Showing the {data.reviews.length} most recent reviews.</p>
             ) : null}
           </div>
         </div>
@@ -308,7 +308,7 @@ function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; 
               {selected.replies.length > 0 ? <ReplyThread review={selected} propertyName={propertyName} /> : null}
 
               <div className="mt-auto flex items-center justify-between pt-2">
-                <span className="hidden text-xs text-white/40 md:inline">
+                <span className="hidden text-xs text-white/50 md:inline">
                   {position} of {list.length}
                 </span>
                 <a

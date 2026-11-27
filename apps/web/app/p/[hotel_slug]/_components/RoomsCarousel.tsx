@@ -655,7 +655,10 @@ function RoomSlide({
               <ChevronLeft className="size-3.5" strokeWidth={2} />
             </button>
 
-            <div className="flex items-center gap-1.5">
+            {/* The dot is drawn inside a 24px-tall button padded to at least
+                24px wide: a tap target the size of the 6px dot is too small
+                to hit, and neighbouring targets must not overlap. */}
+            <div className="flex items-center">
               {room.images.map((_, i) => (
                 <button
                   key={i}
@@ -663,12 +666,16 @@ function RoomSlide({
                   aria-label={`Image ${i + 1}`}
                   aria-current={i === imageIndex ? "true" : undefined}
                   onClick={() => onImageIndex(i)}
-                  className={`rounded-full transition-all duration-300 ${
-                    i === imageIndex
-                      ? "w-6 h-1.5 bg-white"
-                      : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"
-                  }`}
-                />
+                  className="group flex h-6 items-center px-[9px]"
+                >
+                  <span
+                    className={`block rounded-full transition-all duration-300 ${
+                      i === imageIndex
+                        ? "w-6 h-1.5 bg-white"
+                        : "w-1.5 h-1.5 bg-white/40 group-hover:bg-white/70"
+                    }`}
+                  />
+                </button>
               ))}
             </div>
 

@@ -40,6 +40,26 @@ describe("refreshPublicPropertyPage", () => {
     ]);
   });
 
+  test("pings IndexNow last, once the rebuilt page is what a crawler gets", async () => {
+    const { fetch, calls } = recordingFetch();
+    await refreshPublicPropertyPage("terme-di-saturnia", {
+      env: { ...FULL_ENV, indexNowKey: "indexnow-test-key" },
+      fetch,
+      indexNow: { sent: new Map() },
+    });
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://openbookings.co/api/revalidate",
+      "https://api.cloudflare.com/client/v4/zones/zone-1/purge_cache",
+      "https://api.indexnow.org/indexnow",
+    ]);
+    expect(calls[2]?.body).toEqual({
+      host: "openbookings.co",
+      key: "indexnow-test-key",
+      keyLocation: "https://openbookings.co/indexnow-key.txt",
+      urlList: ["https://openbookings.co/p/terme-di-saturnia"],
+    });
+  });
+
   test("skips each step whose env vars are missing", async () => {
     const { fetch, calls } = recordingFetch();
     await refreshPublicPropertyPage("a", { env: { webUrl: "https://x.test" }, fetch });

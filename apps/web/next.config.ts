@@ -62,6 +62,16 @@ const nextConfig: NextConfig = {
 
   allowedDevOrigins: ["127.0.0.1"],
 
+  // Ship the stylesheets inside the HTML as <style> tags instead of <link>s,
+  // so the first paint does not wait on separate CSS requests (Lighthouse's
+  // "render-blocking requests"). Most guests arrive cold from search or a
+  // shared link, so a fresh copy per page (about 30 KB compressed, though Next
+  // also repeats it in the RSC payload) costs less than the extra round trip.
+  // Production builds only; the CSP already allows inline styles.
+  experimental: {
+    inlineCss: true,
+  },
+
   async rewrites() {
     return [
       {
@@ -112,6 +122,12 @@ const nextConfig: NextConfig = {
           },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Puts our pages in their own browsing context group, so a page we
+          // link to or that opens us cannot reach back through window.opener.
+          // `allow-popups` rather than `same-origin`: popups our pages open
+          // themselves (Stripe's Link and 3-D Secure flows can) keep their
+          // opener, so those flows can still report back.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
           {
             key: "Content-Security-Policy",
             value: ContentSecurityPolicy,

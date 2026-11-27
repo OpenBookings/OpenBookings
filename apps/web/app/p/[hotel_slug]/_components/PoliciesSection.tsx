@@ -102,13 +102,13 @@ export function PoliciesSection({
   return (
     <section id="policies" className="bg-[#0a0a0a] border-t border-white/6 py-28 sm:py-36">
       <div className="px-4 sm:px-8 md:px-16 max-w-7xl mx-auto">
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-6 text-center">Policies</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-white/55 mb-6 text-center">Policies</p>
         <h2 className="font-serif text-4xl sm:text-5xl mb-16 text-center">House Rules</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           {/* Check-in / Check-out */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30">Arrival &amp; Departure</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Arrival &amp; Departure</p>
             <div className="flex flex-col gap-4">
               {arrival.map(({ Icon, title, body }) => (
                 <div key={title} className="flex items-center gap-4">
@@ -126,7 +126,7 @@ export function PoliciesSection({
 
           {/* Cancellation & Prepayment */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30">Cancellation &amp; Prepayment</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Cancellation &amp; Prepayment</p>
             <div className="flex flex-col gap-4">
               {cancellation.map(({ Icon, title, body }) => (
                 <div key={title} className="flex items-center gap-4">
@@ -146,7 +146,7 @@ export function PoliciesSection({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-12">
           {/* Children & Beds */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30">Children &amp; Beds</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Children &amp; Beds</p>
             <div className="flex flex-col gap-3">
               {childrenAndBeds.map(({ Icon, text }) => (
                 <div key={text} className="flex items-center gap-3">
@@ -159,7 +159,7 @@ export function PoliciesSection({
 
           {/* Payment Methods */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30">Payment Methods</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Payment Methods</p>
             <div className="flex flex-wrap gap-3">
               {paymentMethods.map(({ code, label, artwork_url, note }) => (
                 <div
@@ -187,7 +187,7 @@ export function PoliciesSection({
 
           {/* Other */}
           <div className="rounded-2xl border border-white/8 bg-white/2 p-7 flex flex-col gap-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30">Other</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Other</p>
             <div className="flex flex-col gap-3">
               {other.map(({ Icon, text }) => (
                 <div key={text} className="flex items-center gap-3">
@@ -206,7 +206,7 @@ export function PoliciesSection({
               not written any fine print yet. */}
           {finePrint.length > 0 && (
             <>
-              <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-5">The Not-So-Small Print</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-white/50 mb-5">The Not-So-Small Print</p>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2.5 text-sm text-white/60 leading-relaxed">
                 {finePrint.map((item) => (
                   <li key={item} className="flex items-start gap-2.5">
@@ -219,7 +219,7 @@ export function PoliciesSection({
           )}
 
           <div className={finePrint.length > 0 ? "border-t border-white/6 mt-6 pt-6" : ""}>
-            <p className="text-xs uppercase tracking-[0.18em] text-white/30 mb-3">Legal information</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/50 mb-3">Legal information</p>
             <p className="text-sm text-white/60 leading-relaxed">
               OpenBookings acts as Online Travel Agent and payment intermediary on behalf of{" "}
               {hotel.legal_company_name ?? hotel.name}.

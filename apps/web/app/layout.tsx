@@ -39,7 +39,8 @@ export const metadata: Metadata = {
     siteName: "OpenBookings",
     title: "OpenBookings",
     description: "Quick, Easy & Open-Source",
-    url: siteUrl,
+    // No `url`: every page that sets no Open Graph of its own would inherit
+    // it and preview as the homepage. Without one, the shared URL counts.
     images: [
       {
         url: "/Open-graph-image.png",

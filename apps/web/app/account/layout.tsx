@@ -10,7 +10,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { AccountNav } from "./_components/AccountNav";
 import { SignedOut } from "./_components/SignedOut";
 
-export const metadata: Metadata = { title: { default: "Your account", template: "%s · OpenBookings" } };
+// Private to the signed-in guest: never in search results.
+export const metadata: Metadata = {
+  title: { default: "Your account", template: "%s · OpenBookings" },
+  robots: { index: false, follow: false },
+};
 
 /**
  * The guest account area: Console components (DESIGN_SYSTEM.md §3.3) on the
