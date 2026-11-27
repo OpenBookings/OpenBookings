@@ -1,11 +1,12 @@
 import { getPool } from "@openbookings/db";
-import type { ReviewMail } from "@openbookings/db/reviews";
+import { getReviewContext, type ModerationItem, type ReviewMail } from "@openbookings/db/reviews";
+import type { ReviewRuleId } from "@openbookings/pricing";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { bookingMailUrls, type BookingMailUrls } from "./booking-send";
 import { getEmailClient } from "./client";
 import { sender, type SenderRole } from "./senders";
 import { trackMail } from "./tracking";
-import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays } from "./review-mail";
+import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays, moderationKept, moderationRemoved, reportOutcome } from "./review-mail";
 
 /**
  * Sends the review emails: what the invitation job hands over, and the
@@ -15,7 +16,7 @@ import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestRev
 type Db = { query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[] }> };
 type Transport = (m: { from: string; to: string; subject: string; html: string }) => Promise<void>;
 
-export type ReviewSendDeps = { db?: Db; transport?: Transport; testing?: boolean; urls?: BookingMailUrls; track?: typeof trackMail };
+export type ReviewSendDeps = { db?: Db; transport?: Transport; testing?: boolean; urls?: BookingMailUrls; track?: typeof trackMail; now?: () => Date };
 
 const resolve = (d: ReviewSendDeps) => ({
   db: d.db ?? getPool(),
@@ -26,6 +27,7 @@ const resolve = (d: ReviewSendDeps) => ({
   testing: d.testing ?? isTestingMode(),
   urls: d.urls ?? bookingMailUrls(),
   track: d.track ?? trackMail,
+  now: d.now ?? (() => new Date()),
 });
 
 const trim = (url: string) => url.replace(/\/$/, "");
@@ -169,5 +171,122 @@ export async function sendReviewReplied(
     await c.transport({ from: sender("roy"), to: row.email, ...message });
   } catch (error) {
     i.report?.(error);
+  }
+}
+
+/** The first 120 characters of a text on one line, for the statement of reasons. */
+export function excerptOf(text: string | null): string {
+  const line = (text ?? "").replace(/\s+/g, " ").trim();
+  return line.length > 120 ? `${line.slice(0, 120).trimEnd()}…` : line;
+}
+
+type AuthorRow = {
+  email: string | null;
+  author_user_id: string | null;
+  author_is_host: boolean;
+  property_name: string;
+  booking_id: string;
+  text: string | null;
+  opted_out: boolean;
+};
+
+const AUTHOR_SQL = {
+  review: `SELECT u.email, rv.guest_user_id AS author_user_id, false AS author_is_host, p.name AS property_name, rv.booking_id,
+                  COALESCE(rv.body, rv.masked_body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+             FROM reviews rv
+             JOIN properties p ON p.id = rv.property_id
+             LEFT JOIN "user" u ON u.id = rv.guest_user_id
+             LEFT JOIN guest_profile gp ON gp.user_id = rv.guest_user_id
+            WHERE rv.id = $1::uuid`,
+  reply: `SELECT u.email, rr.author_user_id, (rr.author_role = 'host') AS author_is_host, p.name AS property_name, rv.booking_id,
+                 COALESCE(rr.body, rr.masked_body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+            FROM review_replies rr
+            JOIN reviews rv ON rv.id = rr.review_id
+            JOIN properties p ON p.id = rv.property_id
+            LEFT JOIN "user" u ON u.id = rr.author_user_id
+            LEFT JOIN guest_profile gp ON gp.user_id = rr.author_user_id
+           WHERE rr.id = $1::uuid`,
+} as const;
+
+/**
+ * Tells the author of a review or reply what a moderator decided.
+ *   - removed: the statement of reasons (rules, note, a person decided, how to
+ *     object). A service message: sent even when the author turned review
+ *     emails off. Says the guest can write the review once more only when
+ *     that is true now: a review, rewrite unused, 30-day window open.
+ *   - kept: tells the author a report didn't change anything. Respects the
+ *     review-email opt-out.
+ * An anonymized author (no account left) gets nothing. A review links to the
+ * signed-in review page; a host's reply to the business reviews page.
+ * Never throws: the decision is stored; `report` hears about failures.
+ */
+export async function sendModerationDecision(
+  item: ModerationItem,
+  decision: "kept" | "removed",
+  i: { rules: ReviewRuleId[]; note: string | null; report?: (error: unknown) => void },
+  deps: ReviewSendDeps = {},
+): Promise<void> {
+  try {
+    const c = resolve(deps);
+    const row = (await c.db.query(AUTHOR_SQL[item.kind], [item.id])).rows[0] as AuthorRow | undefined;
+    if (!row?.author_user_id || !row.email) return;
+    if (decision === "kept" && !row.author_is_host && row.opted_out) return;
+    const manageUrl = row.author_is_host ? `${trim(c.urls.businessUrl)}/dashboard/bookings/reviews` : reviewManageUrl(c.urls.webUrl, row.booking_id);
+    const message =
+      decision === "kept"
+        ? moderationKept({ itemKind: item.kind, propertyName: row.property_name, manageUrl })
+        : moderationRemoved({
+            itemKind: item.kind,
+            propertyName: row.property_name,
+            excerpt: excerptOf(row.text),
+            rules: i.rules,
+            note: i.note?.trim() || null,
+            canRewrite: item.kind === "review" && (await getReviewContext(c.db, row.booking_id, c.now()))?.eligibility.ok === true,
+            manageUrl,
+          });
+    await c.transport({ from: sender("roy"), to: row.email, ...message });
+  } catch (error) {
+    i.report?.(error);
+  }
+}
+
+/**
+ * Tells each reporter what became of their report: upheld (the item was
+ * removed) or not. A host reporter is the reporting member's own address; a
+ * public reporter needs to have left one. Service messages, sent whatever the
+ * review-email opt-out says. Never throws: one failed address doesn't stop the
+ * others, and `deps.report` hears about each.
+ */
+export async function sendReportOutcomes(
+  reportIds: string[],
+  upheld: boolean,
+  deps: ReviewSendDeps & { report?: (error: unknown) => void } = {},
+): Promise<void> {
+  try {
+    if (reportIds.length === 0) return;
+    const c = resolve(deps);
+    const rows = (
+      await c.db.query(
+        `SELECT rp.reporter_kind, rp.reporter_email, u.email AS user_email, p.name AS property_name
+           FROM review_reports rp
+           JOIN reviews rv ON rv.id = rp.review_id
+           JOIN properties p ON p.id = rv.property_id
+           LEFT JOIN "user" u ON u.id = rp.reporter_user_id
+          WHERE rp.id = ANY($1::uuid[])`,
+        [reportIds],
+      )
+    ).rows as { reporter_kind: "host" | "public"; reporter_email: string | null; user_email: string | null; property_name: string }[];
+    for (const r of rows) {
+      try {
+        const to = r.reporter_kind === "host" ? r.user_email : r.reporter_email || r.user_email;
+        if (!to) continue;
+        const message = reportOutcome({ upheld, propertyName: r.property_name });
+        await c.transport({ from: sender("roy"), to, ...message });
+      } catch (error) {
+        deps.report?.(error);
+      }
+    }
+  } catch (error) {
+    deps.report?.(error);
   }
 }

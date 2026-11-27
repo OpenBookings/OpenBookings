@@ -1,3 +1,4 @@
+import { REVIEW_RULES, type ReviewRuleId } from "@openbookings/pricing";
 import { composeActionMail, type ActionMail } from "./action-mail";
 import { formatStayDate } from "./format";
 import { escapeHtml } from "./template";
@@ -139,5 +140,84 @@ export function hostUnconfirmedStays(i: {
     ctaUrl: i.reservationsUrl,
     ctaLabel: "Open reservations",
     footnote: `Guests who did stay need nothing from you. ${SUPPORT}`,
+  });
+}
+
+// ── Moderation (statement of reasons and report outcomes) ────────────────────
+
+const NOUN = { review: "review", reply: "reply" } as const;
+type ItemKind = keyof typeof NOUN;
+
+/** What the decision mails say about who decided and how to object. */
+const DECIDED = "A person at OpenBookings decided this.";
+const OBJECT = "If you disagree, reply to this email and tell us why.";
+
+/**
+ * To the author of a review or reply a moderator removed: the statement of
+ * reasons. Names the content (a short excerpt, never the whole text), each
+ * rule broken, the moderator's note, says a person decided and how to object.
+ * It mentions writing a review once more only when `canRewrite`.
+ */
+export function moderationRemoved(i: {
+  itemKind: ItemKind;
+  propertyName: string;
+  /** A short single-line excerpt of the removed text; empty when none is left. */
+  excerpt: string;
+  rules: ReviewRuleId[];
+  note: string | null;
+  canRewrite: boolean;
+  manageUrl: string;
+}): ActionMail {
+  const noun = NOUN[i.itemKind];
+  const rules = i.rules
+    .map((id) => `<li style="margin:0 0 6px;">${STRONG(REVIEW_RULES[id].title)}<br />${escapeHtml(REVIEW_RULES[id].description)}</li>`)
+    .join("");
+  const details = [
+    i.excerpt ? `<p style="margin:0 0 12px;border-left:2px solid #444444;padding-left:12px;font-size:14px;line-height:1.6;color:#CCCCCC;">${escapeHtml(i.excerpt)}</p>` : "",
+    `<p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#AAAAAA;">It broke ${i.rules.length === 1 ? "this rule" : "these rules"}:</p>`,
+    `<ul style="margin:0 0 12px;padding-left:18px;font-size:14px;line-height:1.6;color:#AAAAAA;">${rules}</ul>`,
+    i.note ? `<p style="margin:0;font-size:14px;line-height:1.6;color:#AAAAAA;">${STRONG("Note from the moderator")}<br />${escapeHtml(i.note)}</p>` : "",
+  ].join("");
+  return composeActionMail({
+    subject: `Your ${noun} of ${i.propertyName} was removed`,
+    preheader: "Why it was removed, and what you can do.",
+    eyebrow: "Review",
+    headline: `Your ${noun} was<br />removed.`,
+    body: `We removed your ${noun} of ${STRONG(i.propertyName)}.${i.canRewrite ? " You can write your review once more, as long as it follows the rules." : ""} ${DECIDED}`,
+    details,
+    ctaUrl: i.manageUrl,
+    ctaLabel: i.itemKind === "review" ? "See your review" : "Open reviews",
+    footnote: `${OBJECT} ${SUPPORT}`,
+  });
+}
+
+/** To the author of an item that was reported and then kept: a person looked, and it stays. */
+export function moderationKept(i: { itemKind: ItemKind; propertyName: string; manageUrl: string }): ActionMail {
+  const noun = NOUN[i.itemKind];
+  return composeActionMail({
+    subject: `Your ${noun} of ${i.propertyName} stays`,
+    preheader: "Someone reported it. A person checked and it stays.",
+    eyebrow: "Review",
+    headline: `Your ${noun}<br />stays.`,
+    body: `Your ${noun} of ${STRONG(i.propertyName)} was looked at by a person and it follows the review rules. Nothing changes: it stays as you wrote it.`,
+    ctaUrl: i.manageUrl,
+    ctaLabel: i.itemKind === "review" ? "See your review" : "Open reviews",
+    footnote: `You're getting this because the ${noun} was checked. ${SUPPORT}`,
+  });
+}
+
+/** To whoever reported a review or reply: what the person who decided did. */
+export function reportOutcome(i: { upheld: boolean; propertyName: string }): ActionMail {
+  return composeActionMail({
+    subject: `Your report about ${i.propertyName}`,
+    preheader: i.upheld ? "We removed it." : "We looked, and it stays.",
+    eyebrow: "Review",
+    headline: i.upheld ? "We removed<br />what you reported." : "We looked at<br />your report.",
+    body: i.upheld
+      ? `Thanks for your report about a review at ${STRONG(i.propertyName)}. A person looked at it and removed it because it broke our review rules.`
+      : `Thanks for your report about a review at ${STRONG(i.propertyName)}. A person looked at it and decided it follows our review rules, so it stays.`,
+    ctaUrl: "mailto:support@openbookings.co",
+    ctaLabel: "Reply to us",
+    footnote: `If you disagree, reply to this email and tell us why. ${SUPPORT}`,
   });
 }
