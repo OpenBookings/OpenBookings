@@ -68,7 +68,7 @@ describe("dangerousAction", () => {
     });
   });
 
-  test("an action that throws: a short message, the error logged", async () => {
+  test("an action that throws: a fixed message, the error logged", async () => {
     const logged = spyOn(console, "error").mockImplementation(() => {});
     try {
       const db = stubDb();
@@ -79,7 +79,7 @@ describe("dangerousAction", () => {
         },
         deps(db),
       );
-      expect(result).toEqual({ ok: false, message: "That didn't work: card_declined" });
+      expect(result).toEqual({ ok: false, message: "That didn't work. The details are in the server log and the audit trail." });
       expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log", "INSERT INTO audit_log"]);
       expect(logged).toHaveBeenCalledTimes(1);
     } finally {

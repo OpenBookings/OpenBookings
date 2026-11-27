@@ -1,3 +1,4 @@
+import "server-only";
 import { unstable_rethrow } from "next/navigation";
 import { AdminReadOnlyError, writePool } from "./db";
 import type { DangerousAction, DangerousResult } from "./dangerous-actions";
@@ -153,6 +154,6 @@ export async function dangerousAction<T>(
       return { ok: false, message: "This confirmation was used or has expired. Confirm again." };
     }
     console.error(`[admin] ${i.action} on ${i.targetType} ${i.targetId} failed`, error);
-    return { ok: false, message: `That didn't work: ${shortError(error)}` };
+    return { ok: false, message: "That didn't work. The details are in the server log and the audit trail." };
   }
 }

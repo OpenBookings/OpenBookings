@@ -146,7 +146,7 @@ export function RealActionsPanel({
       const p = await adminPreviewRefund(bookingId, null, as, date);
       return {
         action: "booking.early_departure",
-        summary: `Record that the guest left ${ref} after the night of ${date}, as the ${as}. ${refundLine(p?.totalCents)} ${IRREVERSIBLE}`,
+        summary: `Record that the guest left ${ref} after the night of ${date}, as the ${as}. ${refundLine(p?.totalCents)} The guest gets an email about the refund. ${IRREVERSIBLE}`,
         run: (c) => adminRecordEarlyDeparture(bookingId, as, date, c),
       };
     });
@@ -154,14 +154,14 @@ export function RealActionsPanel({
   const askGoodwill = () =>
     confirm(async () => ({
       action: "booking.goodwill_refund",
-      summary: `Refund ${eur(goodwillCents!)} to ${guestName} on ${ref}, as goodwill from the host. ${IRREVERSIBLE}`,
+      summary: `Refund ${eur(goodwillCents!)} to ${guestName} on ${ref}, as goodwill from the host. The guest gets an email about the refund. ${IRREVERSIBLE}`,
       run: (c) => adminGoodwillRefund(bookingId, amount, c),
     }));
 
   const askRetry = () =>
     confirm(async () => ({
       action: "booking.retry_refunds",
-      summary: `Send ${openRefunds.count === 1 ? "the 1 open refund" : `the ${openRefunds.count} open refunds`} of ${eur(openRefunds.cents)} in total to ${guestName} on ${ref} through Stripe again. ${IRREVERSIBLE}`,
+      summary: `Send ${openRefunds.count === 1 ? "the 1 open refund" : `the ${openRefunds.count} open refunds`} of ${eur(openRefunds.cents)} in total to ${guestName} on ${ref} through Stripe again. The guest gets an email about each refund. ${IRREVERSIBLE}`,
       run: (c) => adminRetryRefunds(bookingId, c),
     }));
 
