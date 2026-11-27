@@ -12,6 +12,18 @@ const KIND_LABEL: Record<FlagKind, string> = {
   "dispute-lost": "Lost dispute",
 };
 
+/** The flag as a confirm summary names it. */
+const KIND_NOUN: Record<FlagKind, string> = {
+  "refund-outside": "refund outside OpenBookings",
+  "dispute-lost": "lost dispute",
+};
+
+function describeFlag(f: FlaggedPayment): string {
+  const amount = f.amountCents === null ? "" : ` of ${euro(f.amountCents)}`;
+  const booking = f.bookingId ? ` on ${bookingRef(f.bookingId)}` : " with no booking";
+  return `the ${KIND_NOUN[f.kind]}${amount}${booking} (${f.organizationName ?? "unknown organisation"})`;
+}
+
 const euro = (cents: number | null) =>
   cents === null ? "—" : formatCents(cents, { whole: "always-decimals" });
 
@@ -122,7 +134,7 @@ export default async function FlaggedPaymentsPage() {
                       {f.resolvedNote && <div className="text-xs text-muted-foreground">{f.resolvedNote}</div>}
                     </div>
                   ) : (
-                    <ResolveForm flagId={f.id} recordCents={f.record?.amountCents ?? null} />
+                    <ResolveForm flagId={f.id} recordCents={f.record?.amountCents ?? null} what={describeFlag(f)} />
                   )}
                 </TableCell>
               </TableRow>

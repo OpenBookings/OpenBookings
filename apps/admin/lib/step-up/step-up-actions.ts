@@ -1,7 +1,8 @@
 "use server";
 
 import { headers } from "next/headers";
-import { withWriteTransaction, writePool } from "../db";
+import { isDangerousAction } from "../dangerous-actions";
+import { AdminReadOnlyError, withWriteTransaction, writePool } from "../db";
 import { requireStaff } from "../staff";
 import { relyingParty } from "./enrol";
 import * as stepUp from "./step-up";
@@ -11,8 +12,10 @@ import type { StepUpChallenge, StepUpDeps, StepUpProof, StepUpResult } from "./s
  * The browser's half of a step-up (the confirm dialog): begin one for an
  * action and target, then answer it once with a passkey or a code. A wrong
  * answer spends it; begin again to retry. Refusals (too many wrong answers,
- * nothing enrolled, a missing setting) come back with a message to show. The
- * action itself spends the token it gets back (consumeStepUp in ./step-up.ts).
+ * nothing enrolled, a missing setting, a read-only console) come back with a
+ * message to show. The action itself spends the token it gets back
+ * (consumeStepUp in ./step-up.ts). Only the dangerous actions
+ * (../dangerous-actions.ts) can be confirmed.
  */
 
 const deps = (): StepUpDeps => ({
@@ -22,12 +25,23 @@ const deps = (): StepUpDeps => ({
   now: () => new Date(),
 });
 
+/** No write connection: nothing can be confirmed (or done) here. */
+async function writable<T>(fn: () => Promise<T>): Promise<T | stepUp.StepUpRefusal<"config">> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof AdminReadOnlyError) return { ok: false, reason: "config", message: error.message };
+    throw error;
+  }
+}
+
 export async function beginStepUp(action: string, targetId: string): Promise<StepUpChallenge> {
   const staff = await requireStaff();
-  return stepUp.beginStepUp(deps(), staff, action, targetId);
+  if (!isDangerousAction(action)) throw new stepUp.StepUpError("Not an action that can be confirmed");
+  return writable(() => stepUp.beginStepUp(deps(), staff, action, targetId));
 }
 
 export async function completeStepUp(id: string, proof: StepUpProof): Promise<StepUpResult> {
   const staff = await requireStaff();
-  return stepUp.completeStepUp(deps(), staff, id, proof);
+  return writable(() => stepUp.completeStepUp(deps(), staff, id, proof));
 }

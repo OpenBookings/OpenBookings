@@ -61,6 +61,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     })),
   );
   const pending = sum(refunds.filter((r) => r.status !== "succeeded"));
+  // What Retry refunds sends again (retryRefunds: OpenBookings' own, pending or failed).
+  const retryable = refunds.filter((r) => !isOutside(r) && (r.status === "pending" || r.status === "failed"));
   const failedCharges = sum(transactions.filter((t) => t.type === "charge" && t.status !== "succeeded"));
 
   return (
@@ -282,6 +284,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           bookingId={booking.id}
           rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
           initial={initial}
+          guestName={guest?.name || guest?.email || "the guest"}
+          heldCents={paid - refunded - refundedOutside}
+          openRefunds={{ count: retryable.length, cents: sum(retryable) }}
         />
         <ForcedPanel
           bookingId={booking.id}

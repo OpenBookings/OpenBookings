@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { bookingReference } from "@openbookings/db/booking-reference";
+import { formatCents } from "@openbookings/pricing/money";
+import { DangerousDialog } from "@/components/dangerous-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
-import { formatCents } from "@openbookings/pricing/money";
+import type { Confirmation, DangerousAction, DangerousResult } from "@/lib/dangerous-actions";
 import {
   adminForceCancelRooms,
   adminForceClearMarkers,
@@ -20,6 +22,18 @@ const REFUND_STATUSES = ["pending", "succeeded", "failed"] as const;
 type RefundStatus = (typeof REFUND_STATUSES)[number];
 
 const selectClass = "h-8 rounded-md border bg-background px-2 text-sm";
+
+const eur = (cents: number) => formatCents(cents, { whole: "always-decimals" });
+const DB_ONLY = "Only the database changes: Stripe is not touched and nobody is emailed.";
+
+/** A forced edit waiting for the confirm dialog. */
+type Ask = {
+  action: DangerousAction;
+  /** The booking, or the refund row for refund edits. */
+  targetId: string;
+  summary: string;
+  run: (c: Confirmation) => Promise<DangerousResult<ForcedResult>>;
+};
 
 export function ForcedPanel({
   bookingId,
@@ -37,32 +51,17 @@ export function ForcedPanel({
   const [refundStatus, setRefundStatus] = useState<Record<string, RefundStatus>>({});
   const [noShow, setNoShow] = useState(false);
   const [early, setEarly] = useState(false);
-  const [reason, setReason] = useState("");
   const [result, setResult] = useState<ForcedResult | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [ask, setAsk] = useState<Ask | null>(null);
 
-  const perform = (fn: (reason: string | undefined) => Promise<ForcedResult>) =>
-    start(async () => {
-      setFailure(null);
-      try {
-        setResult(await fn(reason.trim() || undefined));
-      } catch (e) {
-        setResult(null);
-        setFailure(e instanceof Error ? e.message : String(e));
-      }
-    });
+  const ref = bookingReference(bookingId);
+  const names = rooms.filter((r) => selected.includes(r.id)).map((r) => r.name).join(", ");
+  const cancelsAll = rooms.every((r) => r.cancelled || selected.includes(r.id));
+  const refundText = (f: (typeof refunds)[number]) => `the ${f.status} ${f.reason} refund of ${eur(f.amountCents)}`;
 
   return (
     <div className="space-y-4 rounded-md border border-red-500 p-4">
       <h3 className="text-sm font-medium text-red-600">Forced edits — database only, Stripe is not touched</h3>
-
-      <div className="space-y-1">
-        <label className="text-sm" htmlFor="forced-reason">
-          Reason (optional, used by every button)
-        </label>
-        <Textarea id="forced-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
-      </div>
 
       <div className="flex items-center gap-2 text-sm">
         <span>Status</span>
@@ -76,8 +75,15 @@ export function ForcedPanel({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending}
-          onClick={() => perform((r) => adminForceStatus({ bookingId, status: newStatus, reason: r }))}
+          disabled={newStatus === status}
+          onClick={() =>
+            setAsk({
+              action: "booking.force_status",
+              targetId: bookingId,
+              summary: `Set ${ref} from ${status} to ${newStatus}. ${DB_ONLY}`,
+              run: (c) => adminForceStatus({ bookingId, status: newStatus }, c),
+            })
+          }
         >
           Set
         </Button>
@@ -100,16 +106,30 @@ export function ForcedPanel({
           <Button
             size="sm"
             variant="outline"
-            disabled={pending || selected.length === 0}
-            onClick={() => perform((r) => adminForceUncancelRooms({ bookingId, reservationIds: selected, reason: r }))}
+            disabled={selected.length === 0}
+            onClick={() =>
+              setAsk({
+                action: "booking.force_uncancel",
+                targetId: bookingId,
+                summary: `Un-cancel ${names} on ${ref}${status === "cancelled" ? ", and set the booking back to confirmed" : ""}. Refunds already made stay made. ${DB_ONLY}`,
+                run: (c) => adminForceUncancelRooms({ bookingId, reservationIds: selected }, c),
+              })
+            }
           >
             Un-cancel
           </Button>
           <Button
             size="sm"
             variant="destructive"
-            disabled={pending || selected.length === 0}
-            onClick={() => perform((r) => adminForceCancelRooms({ bookingId, reservationIds: selected, reason: r }))}
+            disabled={selected.length === 0}
+            onClick={() =>
+              setAsk({
+                action: "booking.force_cancel",
+                targetId: bookingId,
+                summary: `Cancel ${names} on ${ref}${cancelsAll ? ", which cancels the booking" : ""}. Nothing is refunded. ${DB_ONLY}`,
+                run: (c) => adminForceCancelRooms({ bookingId, reservationIds: selected }, c),
+              })
+            }
           >
             Cancel (no refund)
           </Button>
@@ -125,14 +145,20 @@ export function ForcedPanel({
               <Button
                 size="sm"
                 variant="destructive"
-                disabled={pending}
-                onClick={() => perform((r) => adminForceDeleteRefund({ bookingId, refundId: f.id, reason: r }))}
+                onClick={() =>
+                  setAsk({
+                    action: "refund.force_delete",
+                    targetId: f.id,
+                    summary: `Delete ${refundText(f)} from ${ref}. The money is not moved back. ${DB_ONLY} This can't be undone.`,
+                    run: (c) => adminForceDeleteRefund({ bookingId, refundId: f.id }, c),
+                  })
+                }
               >
                 Delete
               </Button>
               <select
                 className={selectClass}
-                value={refundStatus[f.id] ?? "pending"}
+                value={refundStatus[f.id] ?? (f.status as RefundStatus)}
                 onChange={(e) => setRefundStatus((m) => ({ ...m, [f.id]: e.target.value as RefundStatus }))}
               >
                 {REFUND_STATUSES.map((s) => (
@@ -144,17 +170,16 @@ export function ForcedPanel({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  perform((r) =>
-                    adminForceRefundStatus({
-                      bookingId,
-                      refundId: f.id,
-                      status: refundStatus[f.id] ?? "pending",
-                      reason: r,
-                    }),
-                  )
-                }
+                disabled={(refundStatus[f.id] ?? (f.status as RefundStatus)) === f.status}
+                onClick={() => {
+                  const to = refundStatus[f.id] ?? (f.status as RefundStatus);
+                  setAsk({
+                    action: "refund.force_status",
+                    targetId: f.id,
+                    summary: `Set ${refundText(f)} on ${ref} to ${to}. ${DB_ONLY}`,
+                    run: (c) => adminForceRefundStatus({ bookingId, refundId: f.id, status: to }, c),
+                  });
+                }}
               >
                 Set status
               </Button>
@@ -175,17 +200,37 @@ export function ForcedPanel({
         <Button
           size="sm"
           variant="outline"
-          disabled={pending || (!noShow && !early)}
-          onClick={() => perform((r) => adminForceClearMarkers({ bookingId, noShow, earlyDeparture: early, reason: r }))}
+          disabled={!noShow && !early}
+          onClick={() =>
+            setAsk({
+              action: "booking.force_clear_markers",
+              targetId: bookingId,
+              summary: `Clear the ${[noShow && "no-show", early && "early-departure"].filter(Boolean).join(" and ")} marker on ${ref}. Its status and refunds stay as they are. ${DB_ONLY}`,
+              run: (c) => adminForceClearMarkers({ bookingId, noShow, earlyDeparture: early }, c),
+            })
+          }
         >
           Clear
         </Button>
       </div>
 
-      {failure ? (
-        <div className="text-sm text-destructive" role="alert">
-          {failure}
-        </div>
+      {ask ? (
+        <DangerousDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setAsk(null);
+          }}
+          action={ask.action}
+          targetId={ask.targetId}
+          summary={ask.summary}
+          onConfirm={async (reason, stepUpToken) => {
+            const answer = await ask.run({ reason, stepUpToken });
+            if (!answer.ok) return answer.message;
+            setResult(answer.value);
+            if (answer.value.ok) setSelected([]);
+            return null;
+          }}
+        />
       ) : null}
       {result ? (
         <div className="text-sm" role="status">

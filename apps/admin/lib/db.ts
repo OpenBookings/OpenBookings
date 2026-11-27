@@ -41,7 +41,7 @@ export function adminDbConfig(env: Env = process.env): AdminDbConfig {
 
 export class AdminReadOnlyError extends Error {
   constructor() {
-    super("The admin console is read-only here: ADMIN_DATABASE_URL_WRITE is not set.");
+    super("The console is read-only here: ADMIN_DATABASE_URL_WRITE is not set.");
     this.name = "AdminReadOnlyError";
   }
 }

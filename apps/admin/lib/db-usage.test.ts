@@ -19,7 +19,14 @@ const FILES = ["app", "lib", "components"].flatMap(sources);
 const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 const isServerAction = (src: string) => /^\s*["']use server["']/.test(src);
 
-const WRITE_HELPERS = /\b(writePool|withWriteTransaction|writeLifecycleDb)\b/;
+/**
+ * Not server actions themselves ("use server" would make every export an
+ * endpoint), but called only from them: runDangerous writes its audit row on
+ * the write connection.
+ */
+const SERVER_ACTION_HELPERS = ["lib/dangerous.ts"];
+
+const WRITE_HELPERS =/\b(writePool|withWriteTransaction|writeLifecycleDb)\b/;
 /** Lifecycle calls that fall back to the shared pool without a `db`. */
 const LIFECYCLE_CALL = /\b(cancelRooms|markCheckedIn|markNoShow|recordEarlyDeparture|issueGoodwillRefund|retryRefunds|previewRefund)\(/;
 /** Mail sends that fall back to the shared pool without `deps.db`. */
@@ -46,10 +53,21 @@ describe("admin database connections", () => {
   });
 
   test("only server actions use the write connection", () => {
-    const offenders = FILES.filter((file) => file !== "lib/db.ts")
+    const offenders = FILES.filter((file) => file !== "lib/db.ts" && !SERVER_ACTION_HELPERS.includes(file))
       .filter((file) => WRITE_HELPERS.test(read(file)))
       .filter((file) => !isServerAction(read(file)));
     expect(offenders).toEqual([]);
+  });
+
+  test("helpers that use the write connection are imported by server actions only", () => {
+    for (const helper of SERVER_ACTION_HELPERS) {
+      const name = path.basename(helper, ".ts");
+      const importers = FILES.filter((file) =>
+        new RegExp(`from\\s*["'](?:@/lib/|\\.{1,2}/)${name}["']`).test(read(file)),
+      );
+      expect(importers.length).toBeGreaterThan(0);
+      expect(importers.filter((file) => !isServerAction(read(file)))).toEqual([]);
+    }
   });
 
   test("every page that reads the database reads through readPool", () => {
