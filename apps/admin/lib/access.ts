@@ -41,11 +41,14 @@ export async function verifyAccessJwt(
     const { payload } = await jwtVerify(token, keys, {
       issuer: `https://${cfg.teamDomain}`,
       audience: cfg.aud,
+      algorithms: ["RS256"],
     });
     const email = payload.email;
     if (typeof email !== "string" || email === "") return { ok: false, reason: "invalid" };
     return { ok: true, email: email.toLowerCase() };
-  } catch {
+  } catch (error) {
+    // The jose error code only (never the token), so a misconfigured deployment can be diagnosed.
+    console.warn("[admin access]", (error as { code?: string }).code ?? "unknown");
     return { ok: false, reason: "invalid" };
   }
 }
@@ -66,7 +69,7 @@ export async function decide(
 
   if (env.NODE_ENV !== "production") {
     if (!isSuperAdminEnabled(env)) return { kind: "deny", status: 404, body: "Not found" };
-    headers.set(STAFF_EMAIL_HEADER, env.ADMIN_DEV_EMAIL ?? "dev@localhost");
+    headers.set(STAFF_EMAIL_HEADER, env.ADMIN_DEV_EMAIL?.trim().toLowerCase() || "dev@localhost");
     return { kind: "allow", headers };
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 import { STAFF_EMAIL_HEADER, accessConfig, decide, verifyAccessJwt } from "./access";
 
@@ -24,6 +24,20 @@ async function sign(
 }
 
 describe("verifyAccessJwt", () => {
+  let warn: ReturnType<typeof spyOn>;
+  beforeEach(() => {
+    warn = spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => warn.mockRestore());
+
+  test("logs the error code, never the token, when verification fails", async () => {
+    const { privateKey, keys } = await setup();
+    const token = await sign(privateKey, { aud: "other" });
+    expect(await verifyAccessJwt(token, cfg, keys)).toEqual({ ok: false, reason: "invalid" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]).toEqual(["[admin access]", "ERR_JWT_CLAIM_VALIDATION_FAILED"]);
+  });
+
   test("accepts a token for our audience and issuer", async () => {
     const { privateKey, keys } = await setup();
     const r = await verifyAccessJwt(await sign(privateKey), cfg, keys);
@@ -125,5 +139,36 @@ describe("decide", () => {
     const r = await decide(req({ [STAFF_EMAIL_HEADER]: "attacker@example.com" }), env, verifyNever);
     expect(r.kind).toBe("allow");
     if (r.kind === "allow") expect(r.headers.get(STAFF_EMAIL_HEADER)).toBe("dev@localhost");
+  });
+
+  test("development normalises the dev email and falls back when it is blank", async () => {
+    const base = { NODE_ENV: "development", ADMIN_SUPER_MODE: "1" };
+    const email = async (dev: string) => {
+      const r = await decide(req(), { ...base, ADMIN_DEV_EMAIL: dev }, verifyNever);
+      return r.kind === "allow" ? r.headers.get(STAFF_EMAIL_HEADER) : null;
+    };
+    expect(await email("  Dev@Example.COM ")).toBe("dev@example.com");
+    expect(await email("")).toBe("dev@localhost");
+    expect(await email("   ")).toBe("dev@localhost");
+  });
+
+  test("a client-sent cf-access-authenticated-user-email is stripped", async () => {
+    const r = await decide(
+      req({ "cf-access-authenticated-user-email": "attacker@example.com", "cf-access-jwt-assertion": "t" }),
+      prodEnv,
+      verifyOk,
+    );
+    expect(r.kind).toBe("allow");
+    if (r.kind === "allow") expect(r.headers.has("cf-access-authenticated-user-email")).toBe(false);
+  });
+
+  test("the cf-access-jwt-assertion value is what gets verified", async () => {
+    const seen: (string | null)[] = [];
+    const verify = async (token: string | null) => {
+      seen.push(token);
+      return { ok: true as const, email: "staff@example.com" };
+    };
+    await decide(req({ "cf-access-jwt-assertion": "the.jwt.value" }), prodEnv, verify);
+    expect(seen).toEqual(["the.jwt.value"]);
   });
 });
