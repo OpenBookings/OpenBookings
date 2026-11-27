@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewMail } from "@openbookings/db/reviews";
-import { excerptOf, sendModerationDecision, sendReportOutcomes, sendReviewMail, sendReviewReplied } from "./review-send";
+import { sendMaskedPublicationNotices, sendModerationDecision, sendReportOutcomes, sendReviewMail, sendReviewReplied } from "./review-send";
 import type { trackMail } from "./tracking";
 
 const REVIEW = "11111111-1111-4111-8111-111111111111";
@@ -166,151 +166,92 @@ describe("sendReviewMail tracking", () => {
   });
 });
 
-describe("sendModerationDecision", () => {
+describe("decision notices", () => {
   const BOOKING = "22222222-2222-4222-8222-222222222222";
-  type Author = { email: string | null; author_user_id: string | null; author_is_host: boolean; property_name: string; booking_id: string; text: string | null; opted_out: boolean };
-  const author: Author = {
-    email: "anna@example.com",
-    author_user_id: "g1",
-    author_is_host: false,
-    property_name: "Canal House",
-    booking_id: BOOKING,
-    text: "Jan Jansen\nat the desk was rude",
-    opted_out: false,
-  };
-  /** The author lookup, and the review context the rewrite check reads. */
-  function setup(row: Author | null, rewriteOpen = true) {
+  type Author = { email: string | null; author_user_id: string | null; author_is_host: boolean; property_name: string; booking_id: string };
+  const author: Author = { email: "anna@example.com", author_user_id: "g1", author_is_host: false, property_name: "Canal House", booking_id: BOOKING };
+  function setup(row: Author | null) {
     const sent: { from: string; to: string; subject: string; html: string }[] = [];
     const reported: unknown[] = [];
+    const queries: string[] = [];
     const deps = {
-      db: {
-        query: async (sql: string) => {
-          if (sql.includes("FROM bookings b")) {
-            // getReviewContext: a removed review, rewrite unused, checked out a week ago or long ago.
-            return {
-              rows: [
-                {
-                  booking_id: BOOKING, user_id: "g1", status: "confirmed", no_show_reported_at: null,
-                  check_out_date: rewriteOpen ? "2027-03-10" : "2026-01-10", check_out_time: "11:00", timezone: "Europe/Amsterdam",
-                  property_id: "p1", property_name: "Canal House", property_slug: "canal-house", guest_first_name: "Anna", guest_country: "NL",
-                  room_label: null, review_id: "r1", review_score: 4, review_body: "x", review_status: "removed", review_rewrite_used: false,
-                  review_created_at: new Date("2027-03-12T00:00:00Z"),
-                },
-              ],
-            };
-          }
-          if (sql.includes("FROM review_replies rr") && sql.includes("review_id =")) return { rows: [] };
-          return { rows: row ? [row] : [] };
-        },
-      },
-      transport: async (m: { from: string; to: string; subject: string; html: string }) => {
-        sent.push(m);
-      },
+      db: { query: async (sql: string) => { queries.push(sql); return { rows: row ? [row] : [] }; } },
+      transport: async (m: { from: string; to: string; subject: string; html: string }) => { sent.push(m); },
       testing: false,
       urls,
-      now: () => new Date("2027-03-14T00:00:00Z"),
     };
-    const run = (decision: "kept" | "removed", item: { kind: "review" | "reply"; id: string } = { kind: "review", id: REVIEW }) =>
-      sendModerationDecision(item, decision, { rules: ["personal_details"], note: "Names staff", report: (e) => reported.push(e) }, deps);
-    return { sent, reported, run };
+    const item = (kind: "review" | "reply" = "review") => ({ kind, id: REVIEW });
+    return { sent, reported, queries, deps, item, report: (e: unknown) => reported.push(e) };
   }
 
-  test("a removal goes to the guest with the rules, the note and a one-line excerpt", async () => {
-    const { sent, run } = setup(author);
-    await run("removed");
+  test("removal notice links to the review page and carries no rules, note or excerpt", async () => {
+    const { sent, deps, item } = setup(author);
+    await sendModerationDecision(item(), "removed", {}, deps);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toBe("anna@example.com");
     expect(sent[0]!.subject).toBe("Your review of Canal House was removed");
-    expect(sent[0]!.html).toContain("Names staff");
-    expect(sent[0]!.html).toContain("Jan Jansen at the desk was rude");
     expect(sent[0]!.html).toContain(`https://openbookings.co/bookings/${BOOKING}/review`);
-  });
-
-  test("a removal is sent even with review emails turned off, a kept mail is not", async () => {
-    const { sent, run } = setup({ ...author, opted_out: true });
-    await run("kept");
-    expect(sent).toEqual([]);
-    await run("removed");
-    expect(sent).toHaveLength(1);
-  });
-
-  test("a kept mail is sent when review emails are on", async () => {
-    const { sent, run } = setup(author);
-    await run("kept");
-    expect(sent[0]!.subject).toBe("Your review of Canal House stays");
-  });
-
-  test("an anonymized guest gets no email", async () => {
-    const { sent, run } = setup({ ...author, author_user_id: null, email: null });
-    await run("removed");
-    await run("kept");
-    expect(sent).toEqual([]);
-  });
-
-  test("the rewrite is offered only while it is unused and the window is open", async () => {
-    const open = setup(author, true);
-    await open.run("removed");
-    expect(open.sent[0]!.html).toContain("write your review once more");
-    const closed = setup(author, false);
-    await closed.run("removed");
-    expect(closed.sent[0]!.html).not.toContain("write your review once more");
-  });
-
-  test("a reply never offers a rewrite, and a host reply links to the business reviews page", async () => {
-    const { sent, run } = setup({ ...author, author_is_host: true, email: "host@example.com" });
-    await run("removed", { kind: "reply", id: REVIEW });
-    expect(sent[0]!.to).toBe("host@example.com");
+    expect(sent[0]!.html).not.toContain("Note from the moderator");
+    expect(sent[0]!.html).not.toContain("border-left");
     expect(sent[0]!.html).not.toContain("write your review once more");
-    expect(sent[0]!.html).toContain("https://business.openbookings.co/dashboard/bookings/reviews");
   });
 
-  test("a failed send is reported, not thrown", async () => {
-    const { reported, run } = setup(author);
-    const failing = {
+  test("masked notice is sent only when parts were masked", async () => {
+    // The sweep hands over only items it published with masking; nothing handed over, nothing sent.
+    const { sent, deps, item } = setup(author);
+    await sendMaskedPublicationNotices([], {}, deps);
+    expect(sent).toEqual([]);
+    await sendMaskedPublicationNotices([item(), item("reply")], {}, deps);
+    expect(sent.map((m) => m.subject)).toEqual([
+      "Your review of Canal House is live with some parts removed",
+      "Your reply of Canal House is live with some parts removed",
+    ]);
+  });
+
+  test("host reply notices link to the business reviews page", async () => {
+    const { sent, deps, item } = setup({ ...author, author_is_host: true, email: "host@example.com" });
+    await sendModerationDecision(item("reply"), "removed", {}, deps);
+    await sendMaskedPublicationNotices([item("reply")], {}, deps);
+    expect(sent.map((m) => m.to)).toEqual(["host@example.com", "host@example.com"]);
+    for (const m of sent) expect(m.html).toContain("https://business.openbookings.co/dashboard/bookings/reviews");
+  });
+
+  test("no email when an item is kept", async () => {
+    const { sent, queries, deps, item } = setup(author);
+    await sendModerationDecision(item(), "kept", {}, deps);
+    expect(sent).toEqual([]);
+    expect(queries).toEqual([]);
+  });
+
+  test("notices are sent with review emails turned off, never to anonymized authors", async () => {
+    // The lookup doesn't read the opt-out at all: service messages.
+    const { sent, queries, deps, item } = setup(author);
+    await sendModerationDecision(item(), "removed", {}, deps);
+    await sendMaskedPublicationNotices([item()], {}, deps);
+    expect(sent).toHaveLength(2);
+    for (const q of queries) expect(q).not.toContain("opt_out");
+
+    const gone = setup({ ...author, author_user_id: null, email: null });
+    await sendModerationDecision(gone.item(), "removed", {}, gone.deps);
+    await sendMaskedPublicationNotices([gone.item()], {}, gone.deps);
+    expect(gone.sent).toEqual([]);
+  });
+
+  test("a failed send is reported, not thrown, and doesn't stop the next notice", async () => {
+    const reported: unknown[] = [];
+    let calls = 0;
+    const deps = {
       db: { query: async () => ({ rows: [author] }) },
       transport: async () => {
-        throw new Error("smtp down");
+        if (++calls === 1) throw new Error("smtp down");
       },
       urls,
     };
-    await sendModerationDecision({ kind: "reply", id: REVIEW }, "kept", { rules: [], note: null, report: (e) => reported.push(e) }, failing);
+    await sendMaskedPublicationNotices([{ kind: "review", id: REVIEW }, { kind: "review", id: REVIEW }], { report: (e) => reported.push(e) }, deps);
     expect(reported).toHaveLength(1);
-    await run("removed");
-  });
-});
-
-describe("moderation decision fixes", () => {
-  const author = {
-    email: "anna@example.com", author_user_id: "g1", author_is_host: false, property_name: "Canal House",
-    booking_id: "22222222-2222-4222-8222-222222222222", text: "Call me on [removed]", opted_out: false,
-  };
-  test("the excerpt comes from the masked text first, never the original", async () => {
-    const queries: string[] = [];
-    const sent: { html: string }[] = [];
-    const deps = {
-      db: { query: async (sql: string) => { queries.push(sql); return { rows: [author] }; } },
-      transport: async (m: { html: string }) => { sent.push(m); },
-      urls,
-    };
-    await sendModerationDecision({ kind: "reply", id: REVIEW }, "removed", { rules: ["links_contact"], note: null }, deps);
-    await sendModerationDecision({ kind: "review", id: REVIEW }, "removed", { rules: ["links_contact"], note: null }, deps);
-    expect(queries.filter((q) => q.includes("COALESCE(r"))).toHaveLength(2);
-    for (const q of queries.filter((q) => q.includes("COALESCE(r"))) expect(q).toMatch(/COALESCE\(r[rv]\.masked_body, r[rv]\.body\)/);
-    expect(sent[0]!.html).toContain("Call me on [removed]");
-  });
-
-  test("a failing rewrite lookup still sends the removal, without the rewrite offer", async () => {
-    const reported: unknown[] = [];
-    const sent: { html: string }[] = [];
-    const deps = {
-      db: { query: async (sql: string) => { if (sql.includes("FROM bookings b")) throw new Error("db down"); return { rows: [author] }; } },
-      transport: async (m: { html: string }) => { sent.push(m); },
-      urls,
-    };
-    await sendModerationDecision({ kind: "review", id: REVIEW }, "removed", { rules: ["abuse"], note: null, report: (e) => reported.push(e) }, deps);
-    expect(sent).toHaveLength(1);
-    expect(sent[0]!.html).not.toContain("write your review once more");
-    expect(reported).toHaveLength(1);
+    expect(calls).toBe(2);
+    await sendModerationDecision({ kind: "review", id: REVIEW }, "removed", { report: (e) => reported.push(e) }, { ...deps, db: { query: async () => { throw new Error("db"); } } });
+    expect(reported).toHaveLength(2);
   });
 
   test("a public reporter is emailed only at the address on the form; a reply report says reply", async () => {
@@ -323,14 +264,6 @@ describe("moderation decision fixes", () => {
     await sendReportOutcomes([REVIEW, REVIEW], true, deps);
     expect(sent.map((m) => m.to)).toEqual(["pat@example.com"]);
     expect(sent[0]!.html).toContain("about a reply at");
-  });
-});
-
-describe("excerptOf", () => {
-  test("is one line of at most 120 characters", () => {
-    expect(excerptOf("a\n\n b")).toBe("a b");
-    expect(excerptOf("x".repeat(300))).toBe(`${"x".repeat(120)}…`);
-    expect(excerptOf(null)).toBe("");
   });
 });
 

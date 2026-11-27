@@ -5,13 +5,15 @@ import { mockModules } from "@/lib/mock-modules";
 // secret, the injected check, and refreshing the pages the sweep changed).
 const refreshed: string[][] = [];
 const checkedTexts: string[] = [];
+const noticed: unknown[] = [];
 
 await mockModules(import.meta.dir, {
   "@sentry/nextjs": () => ({ captureException: () => {} }),
   "@openbookings/db": () => ({ getPool: () => ({}) }),
   "@openbookings/db/reviews": () => ({
-    runModerationSweep: async (deps: { check: (text: string) => Promise<unknown> }) => {
+    runModerationSweep: async (deps: { check: (text: string) => Promise<unknown>; notify: (items: unknown[]) => Promise<void> }) => {
       await deps.check("Fine.");
+      await deps.notify([{ kind: "review", id: "r1" }]);
       return { rechecked: 1, published: 2, purged: { reports: 0, texts: 0 }, propertyIds: ["property-1"] };
     },
   }),
@@ -19,6 +21,11 @@ await mockModules(import.meta.dir, {
     checkText: async (text: string) => {
       checkedTexts.push(text);
       return { verdict: "clean", rules: [], fragments: [], source: "mistral" };
+    },
+  }),
+  "@openbookings/mailing/review-send": () => ({
+    sendMaskedPublicationNotices: async (items: unknown[]) => {
+      noticed.push(items);
     },
   }),
   "@/lib/property-reviews": () => ({
@@ -43,6 +50,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = "cron-secret";
   refreshed.length = 0;
   checkedTexts.length = 0;
+  noticed.length = 0;
 });
 
 describe("POST /api/cron/review-moderation", () => {
@@ -58,5 +66,6 @@ describe("POST /api/cron/review-moderation", () => {
     expect(await res.json()).toEqual({ rechecked: 1, published: 2, purged: { reports: 0, texts: 0 } });
     expect(checkedTexts).toEqual(["Fine."]);
     expect(refreshed).toEqual([["property-1"]]);
+    expect(noticed).toEqual([[{ kind: "review", id: "r1" }]]);
   });
 });

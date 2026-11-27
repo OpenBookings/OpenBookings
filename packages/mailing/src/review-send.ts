@@ -1,12 +1,11 @@
 import { getPool } from "@openbookings/db";
-import { getReviewContext, type ModerationItem, type ReviewMail } from "@openbookings/db/reviews";
-import type { ReviewRuleId } from "@openbookings/pricing";
+import { type ModerationItem, type ReviewMail } from "@openbookings/db/reviews";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { bookingMailUrls, type BookingMailUrls } from "./booking-send";
 import { getEmailClient } from "./client";
 import { sender, type SenderRole } from "./senders";
 import { trackMail } from "./tracking";
-import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays, moderationKept, moderationRemoved, reportOutcome } from "./review-mail";
+import { guestReviewInvitation, guestReviewPosted, guestReviewReminder, guestReviewReplied, hostUnconfirmedStays, moderationMaskedNotice, moderationRemovedNotice, reportOutcome } from "./review-mail";
 
 /**
  * Sends the review emails: what the invitation job hands over, and the
@@ -174,90 +173,79 @@ export async function sendReviewReplied(
   }
 }
 
-/** The first 120 characters of a text on one line, for the statement of reasons. */
-export function excerptOf(text: string | null): string {
-  const line = (text ?? "").replace(/\s+/g, " ").trim();
-  return line.length > 120 ? `${line.slice(0, 120).trimEnd()}…` : line;
-}
-
 type AuthorRow = {
   email: string | null;
   author_user_id: string | null;
   author_is_host: boolean;
   property_name: string;
   booking_id: string;
-  text: string | null;
-  opted_out: boolean;
 };
 
 const AUTHOR_SQL = {
-  review: `SELECT u.email, rv.guest_user_id AS author_user_id, false AS author_is_host, p.name AS property_name, rv.booking_id,
-                  COALESCE(rv.masked_body, rv.body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+  review: `SELECT u.email, rv.guest_user_id AS author_user_id, false AS author_is_host, p.name AS property_name, rv.booking_id
              FROM reviews rv
              JOIN properties p ON p.id = rv.property_id
              LEFT JOIN "user" u ON u.id = rv.guest_user_id
-             LEFT JOIN guest_profile gp ON gp.user_id = rv.guest_user_id
             WHERE rv.id = $1::uuid`,
-  reply: `SELECT u.email, rr.author_user_id, (rr.author_role = 'host') AS author_is_host, p.name AS property_name, rv.booking_id,
-                 COALESCE(rr.masked_body, rr.body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+  reply: `SELECT u.email, rr.author_user_id, (rr.author_role = 'host') AS author_is_host, p.name AS property_name, rv.booking_id
             FROM review_replies rr
             JOIN reviews rv ON rv.id = rr.review_id
             JOIN properties p ON p.id = rv.property_id
             LEFT JOIN "user" u ON u.id = rr.author_user_id
-            LEFT JOIN guest_profile gp ON gp.user_id = rr.author_user_id
            WHERE rr.id = $1::uuid`,
 } as const;
 
-/** Whether the guest may write the removed review once more. A failed lookup is "no" and never stops the email. */
-async function rewriteOpen(c: ReturnType<typeof resolve>, bookingId: string, report?: (error: unknown) => void): Promise<boolean> {
-  try {
-    return (await getReviewContext(c.db, bookingId, c.now()))?.eligibility.ok === true;
-  } catch (error) {
-    report?.(error);
-    return false;
-  }
-}
-
 /**
- * Tells the author of a review or reply what a moderator decided.
- *   - removed: the statement of reasons (rules, note, a person decided, how to
- *     object). A service message: sent even when the author turned review
- *     emails off. Says the guest can write the review once more only when
- *     that is true now: a review, rewrite unused, 30-day window open.
- *   - kept: tells the author a report didn't change anything. Respects the
- *     review-email opt-out.
- * An anonymized author (no account left) gets nothing. A review links to the
- * signed-in review page; a host's reply to the business reviews page.
- * Never throws: the decision is stored; `report` hears about failures.
+ * Sends one short decision notice to the author of a review or reply. A
+ * service message: sent even when the author turned review emails off. An
+ * anonymized author (no account left) gets nothing. A guest's notice links to
+ * their review page, a host's to the business Reviews page. Never throws:
+ * the decision is stored; `report` hears about failures.
  */
-export async function sendModerationDecision(
+async function sendNotice(
   item: ModerationItem,
-  decision: "kept" | "removed",
-  i: { rules: ReviewRuleId[]; note: string | null; report?: (error: unknown) => void },
-  deps: ReviewSendDeps = {},
+  build: typeof moderationRemovedNotice,
+  report: ((error: unknown) => void) | undefined,
+  deps: ReviewSendDeps,
 ): Promise<void> {
   try {
     const c = resolve(deps);
     const row = (await c.db.query(AUTHOR_SQL[item.kind], [item.id])).rows[0] as AuthorRow | undefined;
     if (!row?.author_user_id || !row.email) return;
-    if (decision === "kept" && !row.author_is_host && row.opted_out) return;
-    const manageUrl = row.author_is_host ? `${trim(c.urls.businessUrl)}/dashboard/bookings/reviews` : reviewManageUrl(c.urls.webUrl, row.booking_id);
-    const message =
-      decision === "kept"
-        ? moderationKept({ itemKind: item.kind, propertyName: row.property_name, manageUrl })
-        : moderationRemoved({
-            itemKind: item.kind,
-            propertyName: row.property_name,
-            excerpt: excerptOf(row.text),
-            rules: i.rules,
-            note: i.note?.trim() || null,
-            canRewrite: item.kind === "review" && (await rewriteOpen(c, row.booking_id, i.report)),
-            manageUrl,
-          });
+    const audience = row.author_is_host ? "host" : "guest";
+    const pageUrl = row.author_is_host ? `${trim(c.urls.businessUrl)}/dashboard/bookings/reviews` : reviewManageUrl(c.urls.webUrl, row.booking_id);
+    const message = build({ itemKind: item.kind, audience, propertyName: row.property_name, pageUrl });
     await c.transport({ from: sender("roy"), to: row.email, ...message });
   } catch (error) {
-    i.report?.(error);
+    report?.(error);
   }
+}
+
+/**
+ * Tells the author of a review or reply that a moderator removed it: a short
+ * email linking to the page with the rules and the way to object. A kept item
+ * sends nothing. Never throws.
+ */
+export async function sendModerationDecision(
+  item: ModerationItem,
+  decision: "kept" | "removed",
+  i: { report?: (error: unknown) => void } = {},
+  deps: ReviewSendDeps = {},
+): Promise<void> {
+  if (decision !== "removed") return;
+  await sendNotice(item, moderationRemovedNotice, i.report, deps);
+}
+
+/**
+ * Tells the authors of items the 72-hour deadline published with some parts
+ * masked. One failed address doesn't stop the others. Never throws.
+ */
+export async function sendMaskedPublicationNotices(
+  items: ModerationItem[],
+  i: { report?: (error: unknown) => void } = {},
+  deps: ReviewSendDeps = {},
+): Promise<void> {
+  for (const item of items) await sendNotice(item, moderationMaskedNotice, i.report, deps);
 }
 
 /**

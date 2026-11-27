@@ -152,57 +152,50 @@ type ItemKind = keyof typeof NOUN;
 const DECIDED = "A person at OpenBookings decided this.";
 const OBJECT = "If you disagree, reply to this email and tell us why.";
 
-/**
- * To the author of a review or reply a moderator removed: the statement of
- * reasons. Names the content (a short excerpt, never the whole text), each
- * rule broken, the moderator's note, says a person decided and how to object.
- * It mentions writing a review once more only when `canRewrite`.
- */
-export function moderationRemoved(i: {
+type NoticeInput = {
   itemKind: ItemKind;
+  /** Who gets it: a guest links to their review page, a host to the business Reviews page. */
+  audience: "guest" | "host";
   propertyName: string;
-  /** A short single-line excerpt of the removed text; empty when none is left. */
-  excerpt: string;
-  rules: ReviewRuleId[];
-  note: string | null;
-  canRewrite: boolean;
-  manageUrl: string;
-}): ActionMail {
+  pageUrl: string;
+};
+
+const noticeCta = (i: NoticeInput) => (i.audience === "host" ? "Open reviews" : i.itemKind === "review" ? "See your review" : "See your answer");
+
+/**
+ * To the author of a review or reply a moderator removed. Short on purpose:
+ * that it was removed and where. The rules, the note and the way to object are
+ * shown on the page the link opens.
+ */
+export function moderationRemovedNotice(i: NoticeInput): ActionMail {
   const noun = NOUN[i.itemKind];
-  const rules = i.rules
-    .map((id) => `<li style="margin:0 0 6px;">${STRONG(REVIEW_RULES[id].title)}<br />${escapeHtml(REVIEW_RULES[id].description)}</li>`)
-    .join("");
-  const details = [
-    i.excerpt ? `<p style="margin:0 0 12px;border-left:2px solid #444444;padding-left:12px;font-size:14px;line-height:1.6;color:#CCCCCC;">${escapeHtml(i.excerpt)}</p>` : "",
-    `<p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#AAAAAA;">It broke ${i.rules.length === 1 ? "this rule" : "these rules"}:</p>`,
-    `<ul style="margin:0 0 12px;padding-left:18px;font-size:14px;line-height:1.6;color:#AAAAAA;">${rules}</ul>`,
-    i.note ? `<p style="margin:0;font-size:14px;line-height:1.6;color:#AAAAAA;">${STRONG("Note from the moderator")}<br />${escapeHtml(i.note)}</p>` : "",
-  ].join("");
   return composeActionMail({
     subject: `Your ${noun} of ${i.propertyName} was removed`,
-    preheader: "Why it was removed, and what you can do.",
+    preheader: "Details are on your review page.",
     eyebrow: "Review",
     headline: `Your ${noun} was<br />removed.`,
-    body: `We removed your ${noun} of ${STRONG(i.propertyName)}.${i.canRewrite ? " You can write your review once more, as long as it follows the rules." : ""} ${DECIDED}`,
-    details,
-    ctaUrl: i.manageUrl,
-    ctaLabel: i.itemKind === "review" ? "See your review" : "Open reviews",
-    footnote: `${OBJECT} ${SUPPORT}`,
+    body: `A person at OpenBookings removed your ${noun} of ${STRONG(i.propertyName)} because it broke the review rules. The details are on the page below.`,
+    ctaUrl: i.pageUrl,
+    ctaLabel: noticeCta(i),
+    footnote: SUPPORT,
   });
 }
 
-/** To the author of an item that was reported and then kept: a person looked, and it stays. */
-export function moderationKept(i: { itemKind: ItemKind; propertyName: string; manageUrl: string }): ActionMail {
+/**
+ * To the author of a review or reply the 72-hour deadline published with some
+ * parts removed automatically. Same shape as the removal notice.
+ */
+export function moderationMaskedNotice(i: NoticeInput): ActionMail {
   const noun = NOUN[i.itemKind];
   return composeActionMail({
-    subject: `Your ${noun} of ${i.propertyName} stays`,
-    preheader: "Someone reported it. A person checked and it stays.",
+    subject: `Your ${noun} of ${i.propertyName} is live with some parts removed`,
+    preheader: "Details are on your review page.",
     eyebrow: "Review",
-    headline: `Your ${noun}<br />stays.`,
-    body: `Your ${noun} of ${STRONG(i.propertyName)} was looked at by a person and it follows the review rules. Nothing changes: it stays as you wrote it.`,
-    ctaUrl: i.manageUrl,
-    ctaLabel: i.itemKind === "review" ? "See your review" : "Open reviews",
-    footnote: `You're getting this because the ${noun} was checked. ${SUPPORT}`,
+    headline: `Your ${noun} is live,<br />with some parts removed.`,
+    body: `Your ${noun} of ${STRONG(i.propertyName)} is published. We removed some parts of it automatically because they broke the review rules. The details are on the page below.`,
+    ctaUrl: i.pageUrl,
+    ctaLabel: noticeCta(i),
+    footnote: SUPPORT,
   });
 }
 

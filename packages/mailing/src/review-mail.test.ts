@@ -6,8 +6,8 @@ import {
   guestReviewPosted,
   guestReviewReplied,
   hostUnconfirmedStays,
-  moderationKept,
-  moderationRemoved,
+  moderationMaskedNotice,
+  moderationRemovedNotice,
   reportOutcome,
 } from "./review-mail";
 
@@ -92,46 +92,34 @@ describe("review mails", () => {
 });
 
 describe("moderation mails", () => {
-  const removed = {
+  const notice = {
     itemKind: "review" as const,
+    audience: "guest" as const,
     propertyName: "Hotel <Test>",
-    excerpt: "Jan Jansen at the desk was rude",
-    rules: ["personal_details", "abuse"] as ("personal_details" | "abuse")[],
-    note: "Names a member of staff & more",
-    canRewrite: false,
-    manageUrl: "https://openbookings.co/bookings/b1/review",
+    pageUrl: "https://openbookings.co/bookings/b1/review",
   };
 
-  test("the removal email names each rule, the note and the excerpt, escaped", () => {
-    const mail = moderationRemoved(removed);
+  test("the removal notice is short: it says removed, names the property, links the page", () => {
+    const mail = moderationRemovedNotice(notice);
     expect(mail.subject).toBe("Your review of Hotel <Test> was removed");
-    for (const id of removed.rules) expect(mail.html).toContain(REVIEW_RULES[id].title);
-    expect(mail.html).toContain("Names a member of staff &amp; more");
-    expect(mail.html).toContain("Jan Jansen at the desk was rude");
     expect(mail.html).toContain("Hotel &lt;Test&gt;");
+    expect(mail.html).toContain("https://openbookings.co/bookings/b1/review");
+    expect(mail.html).not.toContain("Note from the moderator");
+    expect(mail.html).not.toContain("border-left");
+    for (const rule of Object.values(REVIEW_RULES)) expect(mail.html).not.toContain(rule.title);
+  });
+
+  test("the masked notice says it is live with some parts removed", () => {
+    const mail = moderationMaskedNotice(notice);
+    expect(mail.subject).toBe("Your review of Hotel <Test> is live with some parts removed");
     expect(mail.html).toContain("https://openbookings.co/bookings/b1/review");
   });
 
-  test("the removal email says a person decided and to reply to object", () => {
-    const html = moderationRemoved(removed).html;
-    expect(html).toContain("A person at OpenBookings decided this.");
-    expect(html).toContain("reply to this email");
-  });
-
-  test("it mentions writing the review once more only when it can", () => {
-    expect(moderationRemoved(removed).html).not.toContain("write your review once more");
-    expect(moderationRemoved({ ...removed, canRewrite: true }).html).toContain("write your review once more");
-  });
-
-  test("without a note or excerpt those parts are left out", () => {
-    const html = moderationRemoved({ ...removed, note: null, excerpt: "" }).html;
-    expect(html).not.toContain("Note from the moderator");
-    expect(html).not.toContain("border-left");
-  });
-
-  test("a reply is called a reply", () => {
-    expect(moderationRemoved({ ...removed, itemKind: "reply" }).subject).toBe("Your reply of Hotel <Test> was removed");
-    expect(moderationKept({ itemKind: "reply", propertyName: "Hotel", manageUrl: "https://x/y" }).subject).toBe("Your reply of Hotel stays");
+  test("a reply is called a reply, and a host gets the reviews button", () => {
+    const reply = { ...notice, itemKind: "reply" as const, audience: "host" as const, pageUrl: "https://business.openbookings.co/dashboard/bookings/reviews" };
+    expect(moderationRemovedNotice(reply).subject).toBe("Your reply of Hotel <Test> was removed");
+    expect(moderationMaskedNotice(reply).subject).toBe("Your reply of Hotel <Test> is live with some parts removed");
+    expect(moderationRemovedNotice(reply).html).toContain("Open reviews");
   });
 
   test("the outcome email says upheld or not", () => {

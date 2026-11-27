@@ -183,7 +183,7 @@ const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
  * repeats every condition, so an edit or decision landing after the SELECT is
  * never published with a mask of the old text.
  */
-export async function publishOverdue(db: Queryable, now: Date): Promise<{ published: number; propertyIds: string[] }> {
+export async function publishOverdue(db: Queryable, now: Date): Promise<{ published: number; propertyIds: string[]; masked: ModerationItem[] }> {
   const cutoff = new Date(now.getTime() - MODERATION_DEADLINE_HOURS * HOUR);
   const held = {
     review: (
@@ -208,6 +208,7 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<{ publis
   };
   let published = 0;
   const propertyIds = new Set<string>();
+  const maskedItems: ModerationItem[] = [];
   for (const kind of ["review", "reply"] as const) {
     for (const row of held[kind]) {
       const fragments = Array.isArray(row.flagged_fragments) ? row.flagged_fragments : [];
@@ -222,9 +223,11 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<{ publis
       );
       for (const r of rows as { property_id: string }[]) propertyIds.add(r.property_id);
       published += rows.length;
+      // Only this run's compare-and-set winner reports the item, so a notice goes out once.
+      if (rows.length > 0 && masked !== null) maskedItems.push({ kind, id: row.id });
     }
   }
-  return { published, propertyIds: [...propertyIds] };
+  return { published, propertyIds: [...propertyIds], masked: maskedItems };
 }
 
 // ── The recheck ──────────────────────────────────────────────────────────────

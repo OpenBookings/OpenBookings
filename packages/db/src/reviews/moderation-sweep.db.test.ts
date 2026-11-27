@@ -27,6 +27,8 @@ const MAILED = "Mail anna@example.com for the best tips.";
 /** What the check says when the model is down but the regex found a contact detail. */
 const REGEX_ONLY: TextCheck = { verdict: "unchecked", rules: ["links_contact"], fragments: ["anna@example.com"], source: "regex" };
 
+const REGEX_ONLY_PHONE: TextCheck = { verdict: "unchecked", rules: ["links_contact"], fragments: ["0612345678"], source: "regex" };
+
 describeWithDb("the moderation sweep against Postgres", () => {
   let db: Client;
   let ids: Awaited<ReturnType<typeof seedProperty>>;
@@ -137,13 +139,45 @@ describeWithDb("the moderation sweep against Postgres", () => {
     });
   });
 
+  test("publishOverdue reports masked items and the sweep notifies each once", async () => {
+    const masked = await review(MAILED, REGEX_ONLY);
+    // Held, but its fragments are not in the text (stale): published unmasked, so nothing to tell.
+    const plain = await review("Lovely stay, thank you.", { verdict: "flagged", rules: ["abuse"], fragments: [], source: "mistral" });
+    const told: ModerationItem[][] = [];
+    const notify = async (items: ModerationItem[]) => {
+      told.push(items);
+    };
+    const modelDown = answers({});
+
+    await runModerationSweep({ db, now: later(71 * HOUR), check: modelDown, notify });
+    expect(told).toEqual([]);
+
+    const summary = await runModerationSweep({ db, now: later(72 * HOUR), check: modelDown, notify });
+    expect(summary.published).toBe(2);
+    expect(told).toEqual([[masked]]);
+    expect(await row("reviews", plain.id)).toMatchObject({ status: "published", masked_body: null });
+
+    // Later runs find nothing to publish, so nothing is sent again.
+    await runModerationSweep({ db, now: later(80 * HOUR), check: modelDown, notify });
+    expect(told).toHaveLength(1);
+
+    // A notify that throws doesn't undo the publish or stop the sweep.
+    const another = await review("Call 0612345678 now.", REGEX_ONLY_PHONE);
+    const errors: unknown[] = [];
+    await runModerationSweep({
+      db, now: later(200 * HOUR), check: modelDown, notify: async () => { throw new Error("mail down"); }, onError: (e) => errors.push(e),
+    });
+    expect(await row("reviews", another.id)).toMatchObject({ status: "published" });
+    expect(errors).toHaveLength(1);
+  });
+
   test("a held item whose fragments aren't known yet waits for a recheck that finds them", async () => {
     // As 0061's backfill leaves an item 0038's regex held: a reason, no fragments.
     const legacy = await review(RUDE, UNCHECKED);
     await db.query(`UPDATE reviews SET flagged_reason = 'url', flagged_fragments = '[]' WHERE id = $1`, [legacy.id]);
 
     // Past its deadline, while the model is down: never published unmasked.
-    expect(await publishOverdue(db, later(30 * 24 * HOUR))).toEqual({ published: 0, propertyIds: [] });
+    expect(await publishOverdue(db, later(30 * 24 * HOUR))).toEqual({ published: 0, propertyIds: [], masked: [] });
     expect(await runModerationSweep({ db, now: later(30 * 24 * HOUR), check: answers({}) })).toMatchObject({ published: 0 });
     expect(await row("reviews", legacy.id)).toMatchObject({ status: "pending", masked_body: null });
 

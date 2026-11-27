@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { getPool } from '@openbookings/db';
 import { runModerationSweep } from '@openbookings/db/reviews';
+import { sendMaskedPublicationNotices } from '@openbookings/mailing/review-send';
 import { bearerAuthorized } from '@openbookings/messaging/cron-auth';
 import { checkText } from '@openbookings/moderation';
 import { refreshPropertyReviewPages } from '@/lib/property-reviews';
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
       db: getPool(),
       now: new Date(),
       check: (text) => checkText(text),
+      notify: (items) =>
+        sendMaskedPublicationNotices(items, {
+          report: (error) => Sentry.captureException(error, { tags: { area: 'review-moderation', phase: 'masked-notice' } }),
+        }),
       onError: (error, item) =>
         Sentry.captureException(error, { tags: { area: 'review-moderation', phase: 'recheck' }, extra: { ...item } }),
     });
