@@ -58,7 +58,8 @@ export const authorModerationSql = (kind: ModerationItem["kind"], t: string) => 
   'written', ${t}.body, 'flagged_reason', ${t}.flagged_reason, 'decision', ${t}.decision,
   'decision_rules', ${t}.decision_rules, 'decision_note', ${t}.decision_note, 'decided_at', ${t}.decided_at,
   'published_by_deadline', ${t}.published_by_deadline, 'masked_body', ${t}.masked_body,
-  'text_purged', ${t}.text_purged_at IS NOT NULL, 'held_since', ${heldSinceSql(kind, t)})`;
+  'text_purged', ${t}.text_purged_at IS NOT NULL, 'deadline_may', ${deadlineMaySql(t)},
+  'held_since', ${heldSinceSql(kind, t)})`;
 
 type AuthorModerationJson = {
   written: string | null;
@@ -70,6 +71,7 @@ type AuthorModerationJson = {
   published_by_deadline: boolean;
   masked_body: string | null;
   text_purged: boolean;
+  deadline_may: boolean;
   held_since: string;
 };
 
@@ -88,6 +90,7 @@ export function toAuthorModeration(j: AuthorModerationJson): AuthorModeration {
     publishedByDeadline: j.published_by_deadline,
     maskedBody: j.masked_body,
     textPurged: j.text_purged === true,
+    deadlineMay: j.deadline_may === true,
     heldSince: isoOf(j.held_since),
   };
 }

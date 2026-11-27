@@ -69,15 +69,13 @@ async function store(context: ReviewContext, via: 'session' | 'token', input: { 
   // What submitReview would refuse anyway is refused before the check: that is a model call.
   if (!context.eligibility.ok) return { ok: false, error: context.eligibility.reason };
   if (!(score >= 1 && score <= 10) || (body && body.length > REVIEW_BODY_MAX)) return { ok: false, error: 'invalid' };
-  return submitReview(getPool(), {
-    bookingId: context.bookingId,
-    via,
-    score,
-    body,
-    // The moderation check: clean publishes, flagged or unchecked is held for a person.
-    check: await checkText(body),
-    now: new Date(),
-  });
+  // The moderation check: clean publishes, flagged or unchecked is held for a person.
+  // Before the transaction: it is a model call of up to three seconds.
+  const check = await checkText(body);
+  // One transaction: a rewrite after a removal and the closing of the old
+  // thread under it land together or not at all, so a failure never spends
+  // the guest's one rewrite. The emails go out after it commits (the callers).
+  return withTransaction((tx) => submitReview(tx, { bookingId: context.bookingId, via, score, body, check, now: new Date() }));
 }
 
 function refresh(bookingId: string, slug: string) {

@@ -257,6 +257,9 @@ describeWithDb("review moderation against Postgres", () => {
     expect(result.waiting).toHaveLength(2);
     expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", published_by_deadline: false, masked_body: null });
     expect(await reviewRow(bare.reviewId)).toMatchObject({ status: "pending", published_by_deadline: false, masked_body: null });
+    // Its author isn't promised a publication at the deadline.
+    expect((await getReviewContext(db, held.bookingId, later(73 * HOUR)))?.review?.moderation?.deadlineMay).toBe(false);
+    expect((await getReviewContext(db, (await review(NAMED, RUDE, later(120_000))).bookingId, later(HOUR)))?.review?.moderation?.deadlineMay).toBe(true);
 
     // A person decides it: it no longer waits.
     await decide(held.item, "kept", later(74 * HOUR), []);
@@ -547,6 +550,35 @@ describeWithDb("review moderation against Postgres", () => {
     expect((await loadReviewReplies(db, [first.reviewId], { publicOnly: true })).get(first.reviewId) ?? []).toEqual([]);
   });
 
+  test("in one transaction, a failing close of the old thread undoes the rewrite: the guest keeps their one rewrite", async () => {
+    const first = await review(CLEAN, "Fine stay.");
+    const hostReply = await postReviewReply(db, {
+      reviewId: first.reviewId, role: "host", authorUserId: hostId, body: "Thank you.", check: CLEAN, now: later(HOUR),
+    });
+    if (!hostReply.ok) throw new Error("reply failed");
+    await decide(first.item, "removed", later(2 * HOUR));
+
+    // As withTransaction runs it (apps/web's store), with the close failing.
+    const failingClose = {
+      query: (text: string, values?: unknown[]) =>
+        /UPDATE review_replies/.test(text) ? Promise.reject(new Error("close failed")) : db.query(text, values),
+    };
+    await db.query("SAVEPOINT rewrite");
+    await expect(
+      submitReview(failingClose as unknown as Client, {
+        bookingId: first.bookingId, via: "session", score: 6, body: "Second try.", check: CLEAN, now: later(DAY),
+      }),
+    ).rejects.toThrow("close failed");
+    await db.query("ROLLBACK TO SAVEPOINT rewrite");
+
+    expect(await reviewRow(first.reviewId)).toMatchObject({ status: "removed", rewrite_used: false, body: "Fine stay." });
+    expect(await one(`SELECT status FROM review_replies WHERE id = $1`, [hostReply.replyId])).toEqual({ status: "published" });
+    // And the guest can still write it once more.
+    expect(
+      await submitReview(db, { bookingId: first.bookingId, via: "session", score: 6, body: "Second try.", check: CLEAN, now: later(DAY) }),
+    ).toMatchObject({ ok: true, status: "published" });
+  });
+
   test("the author's page: held, removed with the decision, published with parts removed", async () => {
     const held = await review(NAMED);
     let context = await getReviewContext(db, held.bookingId, later(HOUR));
@@ -561,6 +593,7 @@ describeWithDb("review moderation against Postgres", () => {
       publishedByDeadline: false,
       maskedBody: null,
       textPurged: false,
+      deadlineMay: true,
       heldSince: WRITTEN.toISOString(),
     });
 

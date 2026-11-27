@@ -115,11 +115,18 @@ describe("authorNotice", () => {
     publishedByDeadline: false,
     maskedBody: null,
     textPurged: false,
+    deadlineMay: true,
     heldSince: "2026-11-20T10:00:00.000Z",
   };
 
   test("held: waiting for a person, with the deadline 72 hours after it was written", () => {
-    expect(authorNotice("pending", base)).toEqual({ state: "held", deadline: new Date("2026-11-23T10:00:00.000Z") });
+    expect(authorNotice("pending", base)).toEqual({
+      state: "held",
+      deadline: new Date("2026-11-23T10:00:00.000Z"),
+      publishesAtDeadline: true,
+    });
+    // The deadline can't publish it (deadlineMaySql): it waits for a person.
+    expect(authorNotice("pending", { ...base, deadlineMay: false })).toMatchObject({ state: "held", publishesAtDeadline: false });
   });
 
   test("removed: the rules and note the person gave, and when", () => {

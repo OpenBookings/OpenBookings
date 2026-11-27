@@ -17,6 +17,7 @@ const base: AuthorModeration = {
   publishedByDeadline: false,
   maskedBody: null,
   textPurged: false,
+  deadlineMay: true,
   heldSince: '2026-11-20T10:00:00.000Z',
 };
 const removed: AuthorModeration = {
@@ -59,6 +60,15 @@ describe('guestNotice', () => {
       state: 'held',
       text: "Waiting for a person to check it. It isn't shown yet.",
     });
+  });
+
+  test("held, but the deadline can't publish it (the flagged words couldn't be pinpointed): no deadline promised", () => {
+    for (const kind of ['review', 'answer'] as const) {
+      expect(notice({ kind, status: 'pending', moderation: { ...base, deadlineMay: false } })).toEqual({
+        state: 'held',
+        text: "A person will check it before it's shown.",
+      });
+    }
   });
 
   test('removed review, rewrite open: who and when, the rules, the note, how to object, and the one rewrite', () => {

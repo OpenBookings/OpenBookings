@@ -1,5 +1,5 @@
 import { getPool } from "@openbookings/db";
-import { type ModerationItem, type ReviewMail } from "@openbookings/db/reviews";
+import { deadlineMaySql, type ModerationItem, type ReviewMail } from "@openbookings/db/reviews";
 import { hostRecipients, isTestingMode } from "@openbookings/demo";
 import { bookingMailUrls, type BookingMailUrls } from "./booking-send";
 import { getEmailClient } from "./client";
@@ -103,16 +103,18 @@ export async function sendReviewPosted(
     const c = resolve(deps);
     const row = (
       await c.db.query(
-        `SELECT u.email, p.name AS property_name
+        `SELECT u.email, p.name AS property_name, ${deadlineMaySql("rv")} AS deadline_may
            FROM bookings b JOIN "user" u ON u.id = b.user_id JOIN properties p ON p.id = b.hotel_id
+           LEFT JOIN reviews rv ON rv.booking_id = b.id
           WHERE b.id = $1::uuid`,
         [bookingId],
       )
-    ).rows[0] as { email: string | null; property_name: string } | undefined;
+    ).rows[0] as { email: string | null; property_name: string; deadline_may: boolean | null } | undefined;
     if (!row?.email) return;
     const message = guestReviewPosted({
       propertyName: row.property_name,
       pending: i.pending,
+      publishesAtDeadline: row.deadline_may !== false,
       manageUrl: reviewManageUrl(c.urls.webUrl, bookingId),
     });
     await c.transport({ from: sender("roy"), to: row.email, ...message });

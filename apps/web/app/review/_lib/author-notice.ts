@@ -90,8 +90,9 @@ export function guestNotice(i: {
     case 'held':
       return {
         state: 'held',
-        text:
-          notice.deadline > i.now
+        text: !notice.publishesAtDeadline
+          ? "A person will check it before it's shown."
+          : notice.deadline > i.now
             ? `Waiting for a person to check it. If nobody has by ${dayTime(notice.deadline, i.timeZone)}, it publishes with the flagged parts replaced by ${MASKED_TEXT}.`
             : "Waiting for a person to check it. It isn't shown yet.",
       };

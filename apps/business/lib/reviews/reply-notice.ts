@@ -59,8 +59,9 @@ export function hostReplyNotice(i: {
       state: "held",
       pill: "Being checked",
       tone: "attention",
-      line:
-        deadline > i.now
+      line: !notice.publishesAtDeadline
+        ? "A person will check it before it's shown."
+        : deadline > i.now
           ? `Waiting for a person to check it. If nobody has by ${day(i.timeZone).format(deadline)}, ${time(i.timeZone).format(deadline)}, it publishes with the flagged parts replaced by ${MASKED_TEXT}.`
           : "Waiting for a person to check it. It isn't shown yet.",
     };

@@ -42,6 +42,10 @@ describe("review mails", () => {
     expect(pending.html).toContain("A person looks at it");
     expect(pending.html).toContain(`within ${MODERATION_DEADLINE_HOURS} hours`);
     expect(pending.html).not.toContain("such as a link or contact details");
+    const waits = guestReviewPosted({ propertyName: "Hotel", pending: true, publishesAtDeadline: false, manageUrl: "https://x/y" });
+    expect(waits.html).toMatch(/A person will check it before it(&#39;|&#x27;|')s shown\./);
+    expect(waits.html).not.toContain(`within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(waits.html).not.toContain("[removed]");
     const posted = guestReviewPosted({ propertyName: "Hotel", pending: false, manageUrl: "https://x/y" });
     expect(posted.html).toContain("is posted");
   });

@@ -23,6 +23,9 @@ const limited = new Set<string>();
 const limitKeys: { key: string; max: number; windowMs: number }[] = [];
 // When set, the check answers with the fragments this picks out of the text it was given.
 let fragmentsOf: ((text: string) => string[]) | null = null;
+// The order of the check, the transaction, the store and the email.
+const events: string[] = [];
+const TX = { transaction: true };
 
 function clean() {
   return { verdict: "clean", rules: [], fragments: [], source: "mistral" };
@@ -33,7 +36,15 @@ await mockModules(import.meta.dir, {
   "next/headers": () => ({ headers: async () => new Headers() }),
   "next/cache": () => ({ revalidatePath: () => {} }),
   "@sentry/nextjs": () => ({ captureException: () => {} }),
-  "@openbookings/db": () => ({ getPool: () => ({}), withTransaction: async (fn: (tx: unknown) => unknown) => fn({}) }),
+  "@openbookings/db": () => ({
+    getPool: () => ({}),
+    withTransaction: async (fn: (tx: unknown) => unknown) => {
+      events.push("begin");
+      const out = await fn(TX);
+      events.push("commit");
+      return out;
+    },
+  }),
   "@openbookings/db/reviews": () => ({
     bookingForReviewToken: async () => "booking-1",
     deleteGuestReview: async () => true,
@@ -58,13 +69,15 @@ await mockModules(import.meta.dir, {
       return { ok: true, status: i.check.verdict === "clean" ? "published" : "pending" };
     },
     setReviewEmails: async () => {},
-    submitReview: async (_db: unknown, i: { check: unknown }) => {
+    submitReview: async (db: unknown, i: { check: unknown }) => {
+      events.push(db === TX ? "submit in transaction" : "submit outside a transaction");
       submitted.push(i);
       return storeResult;
     },
   }),
   "@openbookings/mailing/review-send": () => ({
     sendReviewPosted: async (_id: string, o: { pending: boolean }) => {
+      events.push("email");
       postedMail.push({ pending: o.pending });
     },
   }),
@@ -84,6 +97,7 @@ await mockModules(import.meta.dir, {
   }),
   "@openbookings/moderation": () => ({
     checkText: async (text: string | null) => {
+      events.push("check");
       checked.push(text);
       return fragmentsOf && text ? { ...check, verdict: "flagged", rules: ["links_contact"], fragments: fragmentsOf(text) } : check;
     },
@@ -109,6 +123,14 @@ beforeEach(() => {
   limited.clear();
   limitKeys.length = 0;
   fragmentsOf = null;
+  events.length = 0;
+});
+
+describe("storing a review", () => {
+  it("checks the text first, stores it in one transaction, and emails after the commit", async () => {
+    await submitReviewWithToken("token", input);
+    expect(events).toEqual(["check", "begin", "submit in transaction", "commit", "email"]);
+  });
 });
 
 describe("review outcome events", () => {

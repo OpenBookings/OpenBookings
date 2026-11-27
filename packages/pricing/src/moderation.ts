@@ -134,13 +134,19 @@ export type AuthorModeration = {
   maskedBody: string | null;
   /** The 12-month purge deleted the original text (written is null then; null without it means there was none). */
   textPurged: boolean;
+  /**
+   * While held: whether the deadline publishes it with the flagged parts
+   * masked (deadlineMaySql in @openbookings/db). False: it waits for a
+   * person, e.g. the flagged words couldn't be pinpointed.
+   */
+  deadlineMay: boolean;
   /** When its words were written: the deadline counts from here. */
   heldSince: string;
 };
 
 /** What happened to it, for its author. Nothing to say when it is published as written, or kept. */
 export type AuthorNotice =
-  | { state: "held"; deadline: Date }
+  | { state: "held"; deadline: Date; publishesAtDeadline: boolean }
   | { state: "removed"; rules: ReviewRuleId[]; note: string | null; decidedAt: Date | null }
   | { state: "masked"; rules: ReviewRuleId[]; published: string; written: string | null };
 
@@ -154,7 +160,11 @@ export function authorNotice(
   m: AuthorModeration,
 ): AuthorNotice | null {
   if (status === "pending") {
-    return { state: "held", deadline: new Date(Date.parse(m.heldSince) + MODERATION_DEADLINE_HOURS * 60 * 60 * 1000) };
+    return {
+      state: "held",
+      deadline: new Date(Date.parse(m.heldSince) + MODERATION_DEADLINE_HOURS * 60 * 60 * 1000),
+      publishesAtDeadline: m.deadlineMay,
+    };
   }
   if (status === "removed") {
     return {

@@ -71,14 +71,24 @@ export function guestReviewReminder(i: ReviewInvitationInput): ActionMail {
  * Sent to the account's own address after a review is posted, so a review
  * written through a forwarded email gets noticed by the real guest.
  */
-export function guestReviewPosted(i: { propertyName: string; pending: boolean; manageUrl: string }): ActionMail {
+export function guestReviewPosted(i: {
+  propertyName: string;
+  pending: boolean;
+  /** Held: whether the deadline publishes it masked (deadlineMaySql); false, it waits for a person. */
+  publishesAtDeadline?: boolean;
+  manageUrl: string;
+}): ActionMail {
   return composeActionMail({
     subject: `Your review of ${i.propertyName}`,
     preheader: i.pending ? "A person looks at it first." : "Thanks for helping the next guests.",
     eyebrow: "Review",
     headline: i.pending ? "Thanks. We'll<br />take a look first." : "Thanks for<br />your review.",
     body: i.pending
-      ? `Our automatic check held back your review of ${STRONG(i.propertyName)}: it may break our review rules, or the check couldn't run. A person looks at it. If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours, it's shown with the parts that may break a rule replaced by "${MASKED_TEXT}".`
+      ? `Our automatic check held back your review of ${STRONG(i.propertyName)}: it may break our review rules, or the check couldn't run. ${
+          i.publishesAtDeadline === false
+            ? "A person will check it before it's shown."
+            : `A person looks at it. If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours, it's shown with the parts that may break a rule replaced by "${MASKED_TEXT}".`
+        }`
       : `Your review of ${STRONG(i.propertyName)} is posted. You can see it, and delete it, in your account.`,
     ctaUrl: i.manageUrl,
     ctaLabel: "See your review",

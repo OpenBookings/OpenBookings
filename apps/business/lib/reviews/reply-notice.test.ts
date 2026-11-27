@@ -17,6 +17,7 @@ const base: AuthorModeration = {
   publishedByDeadline: false,
   maskedBody: null,
   textPurged: false,
+  deadlineMay: true,
   heldSince: "2026-11-20T10:00:00.000Z",
 };
 
@@ -33,6 +34,15 @@ describe("hostReplyNotice", () => {
     });
     expect(notice("pending", base, new Date("2026-11-24T09:00:00Z"))).toMatchObject({
       line: "Waiting for a person to check it. It isn't shown yet.",
+    });
+  });
+
+  test("held, but the deadline can't publish it (the flagged words couldn't be pinpointed): no deadline promised", () => {
+    expect(notice("pending", { ...base, deadlineMay: false })).toEqual({
+      state: "held",
+      pill: "Being checked",
+      tone: "attention",
+      line: "A person will check it before it's shown.",
     });
   });
 
