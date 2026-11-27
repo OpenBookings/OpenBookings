@@ -139,9 +139,11 @@ Lorsque vous écrivez à notre équipe d'assistance, nous conservons la conversa
 
 <DataCard title="2.9 Signalements d'avis">
 
-Tout le monde peut signaler un avis, une réponse ou une réaction publiés qui semblent enfreindre nos règles relatives aux avis. Lorsque vous envoyez un signalement, nous conservons l'avis ou la réponse signalés, la règle que vous avez choisie, la note que vous avez éventuellement ajoutée, le fait qu'il provienne d'un établissement ou d'un membre du public, et sa date d'envoi.
+Tout le monde peut signaler un avis ou une réponse publiés qui semblent enfreindre nos règles relatives aux avis. Lorsque vous envoyez un signalement, nous conservons l'avis ou la réponse signalés, la règle que vous avez choisie, la note que vous avez éventuellement ajoutée, le fait qu'il provienne d'un établissement ou d'un membre du public, et sa date d'envoi.
 
-Si vous êtes connecté, nous conservons aussi votre compte avec le signalement. Si vous demandez des nouvelles, nous conservons aussi l'adresse e-mail de votre compte, afin de pouvoir vous envoyer le résultat par e-mail. Si vous n'êtes pas connecté, nous ne savons pas qui vous êtes : Cloudflare vérifie que le formulaire est envoyé par une personne, et nous utilisons votre adresse IP uniquement pour limiter le nombre de signalements envoyés depuis celle-ci ; elle n'est pas enregistrée avec le signalement.
+Si vous êtes connecté, nous conservons aussi votre compte avec le signalement. Si vous demandez des nouvelles, nous conservons aussi l'adresse e-mail de votre compte, afin de pouvoir vous envoyer le résultat par e-mail. Si vous n'êtes pas connecté, nous ne savons pas qui vous êtes.
+
+Quel que soit l'auteur du signalement, Cloudflare vérifie que le formulaire est envoyé par une personne, et cette vérification reçoit votre adresse IP. Nous utilisons aussi votre adresse IP pour limiter le nombre de signalements envoyés depuis celle-ci. Elle n'est pas enregistrée avec le signalement.
 
 <Meta why="Pour vérifier les avis signalés au regard de nos règles, et vous informer du résultat si vous l'avez demandé." basis="Intérêt légitime à ce que les avis respectent nos règles ; votre demande, pour l'e-mail de résultat." />
 
@@ -214,7 +216,7 @@ Nous ne vendons pas vos données. Nous ne les partageons qu'avec les prestataire
 | **Lettermint** | Adresse e-mail, détails de réservation | Envoi des e-mails transactionnels | UE |
 | **Upstash** | Avis publiés (prénom, pays, texte) ; tâches de conversation d'assistance en attente de traitement | Cache et file de tâches | UE |
 | **Chatwoot** | Conversations d'assistance, adresse e-mail | Boîte de réception de l'assistance (logiciel que nous exploitons nous-mêmes) | UE |
-| **Mistral** | Conversations d'assistance, détails de réservation consultés par l'assistant ; le texte des avis, des réponses et des réactions (sans note, nom, établissement ni réservation) | Assistant IA de l'assistance ; vérification des avis et des réponses au regard de nos règles relatives aux avis | EEE |
+| **Mistral** | Conversations d'assistance, détails de réservation consultés par l'assistant ; le texte des avis et des réponses (sans note, nom, établissement ni réservation) | Assistant IA de l'assistance ; vérification des avis et des réponses au regard de nos règles relatives aux avis | EEE |
 | **PostHog** | Événements d'usage, enregistrements de session, identifiant de compte lorsque vous êtes connecté (ni nom ni e-mail) | Analyse produit, uniquement avec votre consentement | UE |
 | **Sentry** | Rapports d'erreur, traces d'appels, type de navigateur, temps de chargement des pages | Suivi des erreurs et des performances | UE (Allemagne) |
 | **Cloudflare** | Adresse IP, métadonnées de requête ; messages entre vous et un établissement, en cours d'acheminement vers le destinataire | CDN, protection anti-DDoS et anti-bots ; distribution des messages en direct | UE/États-Unis (CCT) |
@@ -222,7 +224,7 @@ Nous ne vendons pas vos données. Nous ne les partageons qu'avec les prestataire
 
 <Note>Pour Cloudflare et Stripe, lorsque des données peuvent quitter l'UE, nous recourons aux clauses contractuelles types approuvées par la Commission européenne.</Note>
 
-<Note>Mistral agit pour nous en tant que sous-traitant, dans le cadre de son avenant relatif au traitement des données (Data Processing Addendum), et n'utilise pas ce que nous lui envoyons pour entraîner ses modèles. Mistral traite ces données dans l'Espace économique européen, les conserve pendant toute la durée de notre contrat avec Mistral et les supprime dans les 30 jours suivant sa fin. Lorsque des sous-traitants ultérieurs de Mistral se trouvent hors de l'UE, les clauses contractuelles types s'appliquent.</Note>
+<Note>Mistral agit pour nous en tant que sous-traitant, dans le cadre de son avenant relatif au traitement des données (Data Processing Addendum), et n'utilise pas ce que nous lui envoyons pour entraîner ses modèles. Mistral traite ces données dans l'Espace économique européen, les conserve pendant toute la durée de notre contrat avec Mistral et les supprime dans les 30 jours suivant sa fin. Lorsque des sous-traitants ultérieurs de Mistral se trouvent hors de l'EEE, les clauses contractuelles types s'appliquent.</Note>
 
 **Fournisseurs de connexion.** Si vous choisissez de vous connecter avec Google ou Apple, cette société gère la connexion selon sa propre politique de confidentialité et nous transmet votre adresse e-mail et votre nom. Vous pouvez toujours vous connecter par lien e-mail.
 

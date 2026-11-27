@@ -64,7 +64,8 @@ The packages hold the rules that must not differ between apps:
 | Cloudflare R2 | Photos and invoice files | Only to upload photos |
 | Upstash Redis | Page cache | No |
 | MapTiler | Maps | No (maps stay empty) |
-| Chatwoot + Mistral | Support chat | Only for the support bot |
+| Chatwoot | Support chat | Only for the support bot |
+| Mistral | The support bot, and checking review and reply texts (guest site and host dashboard) | No: without it the support bot is off, and new review and reply texts are held for a person to check |
 | Sentry, PostHog | Errors, analytics | No |
 
 ## Where to read next

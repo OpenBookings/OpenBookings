@@ -173,6 +173,10 @@ describe("current privacy policy content", () => {
     expect(read("2026-10-02", "en")).toContain("**Scaleway**");
   });
 
+  test("fr: the guest's answer is a « réponse », never an undefined « réaction »", () => {
+    expect(read(CURRENT, "fr")).not.toMatch(/réaction/i);
+  });
+
   test("the previous version's files are untouched", () => {
     expect(read("2026-09-21", "en")).toContain("**Google Cloud**");
     expect(read("2026-11-15", "en")).toContain("No tracking pixels.");
@@ -206,6 +210,7 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
   ipNotSaved: RegExp;
   personRemoves: RegExp;
   stale: RegExp;
+  sccOutside: RegExp;
 }> = {
   en: {
     purpose: "checking reviews and replies",
@@ -222,9 +227,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`,
     reporterAccount: /If you're signed in, we also keep your account with the report/,
     reporterEmail: /If you ask for updates, we also keep your account's email address/,
-    ipNotSaved: /IP address only to limit how many reports can be sent from it; it isn't saved/,
+    ipNotSaved: /Whoever sends a report, Cloudflare checks that the form is sent by a person, and that check receives your IP address\. We also use your IP address to limit how many reports can be sent from it\. It isn't saved with the report\./,
     personRemoves: /Only a person can remove a review or an answer/,
     stale: /contain contact details or links are held/,
+    sccOutside: /sub-processors are outside the EEA, Standard Contractual Clauses apply/,
   },
   nl: {
     purpose: "beoordelingen en reacties controleren",
@@ -241,9 +247,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `Heeft niemand binnen ${MODERATION_DEADLINE_HOURS} uur besloten`,
     reporterAccount: /Bent u ingelogd, dan bewaren wij ook uw account bij de melding/,
     reporterEmail: /Vraagt u om updates, dan bewaren wij ook het e-mailadres van uw account/,
-    ipNotSaved: /IP-adres alleen om te beperken hoeveel meldingen ervandaan kunnen worden verstuurd; het wordt niet/,
+    ipNotSaved: /Wie er ook meldt, Cloudflare controleert dat het formulier door een mens wordt verstuurd, en die controle ontvangt uw IP-adres\. Wij gebruiken uw IP-adres ook om te beperken hoeveel meldingen ervandaan kunnen worden verstuurd\. Het wordt niet bij de melding opgeslagen\./,
     personRemoves: /Alleen een medewerker kan een beoordeling of een antwoord verwijderen/,
     stale: /met contactgegevens of links houden wij vast/,
+    sccOutside: /subverwerkers van Mistral buiten de EER zitten, gelden standaardcontractbepalingen/,
   },
   fr: {
     purpose: "vérification des avis et des réponses",
@@ -260,9 +267,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `Si personne n'a décidé dans les ${MODERATION_DEADLINE_HOURS} heures`,
     reporterAccount: /Si vous êtes connecté, nous conservons aussi votre compte avec le signalement/,
     reporterEmail: /Si vous demandez des nouvelles, nous conservons aussi l'adresse e-mail de votre compte/,
-    ipNotSaved: /adresse IP uniquement pour limiter le nombre de signalements envoyés depuis celle-ci ; elle n'est pas enregistrée/,
+    ipNotSaved: /Quel que soit l'auteur du signalement, Cloudflare vérifie que le formulaire est envoyé par une personne, et cette vérification reçoit votre adresse IP\. Nous utilisons aussi votre adresse IP pour limiter le nombre de signalements envoyés depuis celle-ci\. Elle n'est pas enregistrée avec le signalement\./,
     personRemoves: /Seule une personne peut supprimer un avis ou une réponse/,
     stale: /contenant des coordonnées ou des liens sont retenus/,
+    sccOutside: /sous-traitants ultérieurs de Mistral se trouvent hors de l'EEE, les clauses contractuelles types s'appliquent/,
   },
 };
 
@@ -317,6 +325,10 @@ describe("current privacy policy: review moderation", () => {
 
     test(`${locale}: no longer says only contact details or links hold a review`, () => {
       expect(source()).not.toMatch(m.stale);
+    });
+
+    test(`${locale}: SCCs cover Mistral's sub-processors outside the EEA`, () => {
+      expect(source()).toMatch(m.sccOutside);
     });
   }
 });
