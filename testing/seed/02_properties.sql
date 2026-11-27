@@ -100,7 +100,7 @@ INSERT INTO rate_plans
    includes_breakfast, sort_order, is_active)
 VALUES
   ('5eed3000-0000-4000-8000-000000000001', '5eed2000-0000-4000-8000-000000000001', 'Flexible',        NULL,                    16500, 'EUR', true,  1, false, 0, true),
-  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     14900, 'EUR', false, 1, false, 1, true),
+  ('5eed3000-0000-4000-8000-000000000002', '5eed2000-0000-4000-8000-000000000001', 'Non-refundable',  'Pay now, save 10%',     14800, 'EUR', false, 1, false, 1, true),
   ('5eed3000-0000-4000-8000-000000000003', '5eed2000-0000-4000-8000-000000000002', 'Flexible',        NULL,                    21500, 'EUR', true,  1, false, 0, true),
   ('5eed3000-0000-4000-8000-000000000004', '5eed2000-0000-4000-8000-000000000003', 'Bed and breakfast','Breakfast for everyone', 26000, 'EUR', true,  2, true,  0, true),
   ('5eed3000-0000-4000-8000-000000000005', '5eed2000-0000-4000-8000-000000000004', 'Flexible',        NULL,                    14500, 'EUR', true,  1, false, 0, true),
