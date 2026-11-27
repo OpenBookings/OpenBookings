@@ -41,9 +41,10 @@ function linkAt(body: string, start: number): string {
 
 /**
  * dd.mm.yyyy, dd-mm-yyyy, dd/mm/yyyy (one-digit day and month too) and
- * yyyy-mm-dd. Bounded, and not inside a longer run of digits.
+ * yyyy-mm-dd with a year 1900-2099 ("call 0800-11-22" is a number). Bounded,
+ * and not inside a longer run of digits.
  */
-const DATE_RE = /(?<![\d+])(?:(\d{1,2})([./-])(\d{1,2})\2(\d{4})|(\d{4})-(\d{1,2})-(\d{1,2}))(?!\d)/g;
+const DATE_RE = /(?<![\d+])(?:(\d{1,2})([./-])(\d{1,2})\2(\d{4})|((?:19|20)\d{2})-(\d{1,2})-(\d{1,2}))(?!\d)/g;
 
 const dayOrMonth = (s: string) => Number(s) >= 1 && Number(s) <= 31;
 const month = (s: string) => Number(s) >= 1 && Number(s) <= 12;

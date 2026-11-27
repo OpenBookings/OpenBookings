@@ -73,6 +73,16 @@ describe("screenReviewFragments", () => {
     expect(screenReviewFragments("@hotelguest99").fragments).toEqual(["@hotelguest99"]);
   });
 
+  test("only a known unit makes a number a measurement", () => {
+    expect(screenReviewFragments("find me @123anna").fragments).toEqual(["@123anna"]);
+    expect(screenReviewFragments("I'm @2cool").fragments).toEqual(["@2cool"]);
+    expect(screenReviewFragments("insta: 007bond").fragments).toEqual(["007bond"]);
+    const empty = { rules: [], fragments: [] };
+    for (const text of ["wifi 100Mbps", "dinner @7PM", "on whatsapp 5min later", "insta: 20km away", "telegram 3gb used", "@10am"]) {
+      expect(screenReviewFragments(text)).toEqual(empty);
+    }
+  });
+
   test("dates are not phone numbers", () => {
     const empty = { rules: [], fragments: [] };
     expect(screenReviewFragments("from 01.05.2025 to 05.05.2025")).toEqual(empty);
@@ -82,6 +92,8 @@ describe("screenReviewFragments", () => {
     expect(screenReviewFragments("call +31 6 12345678").fragments).toEqual(["+31 6 12345678"]);
     expect(screenReviewFragments("bel 06-12345678").fragments).toEqual(["06-12345678"]);
     expect(screenReviewFragments("on 01.05.2025 call 06-12345678").fragments).toEqual(["06-12345678"]);
+    // Only years 1900-2099 make a yyyy-mm-dd date.
+    expect(screenReviewFragments("call 0800-11-22").fragments).toEqual(["0800-11-22"]);
   });
 
   test("a link stops before punctuation that ends it", () => {

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { maskFragments } from "@openbookings/pricing";
+import { normalizeReviewBody } from "@openbookings/db/reviews";
 import { mockModules } from "@/lib/mock-modules";
 
 /**
@@ -38,6 +40,7 @@ await mockModules(
         return { ok: true, status: statusOf(i.check), propertyId: "p" };
       },
       setReplySkipped: async () => ({ ok: true }),
+      normalizeReviewBody,
     }),
     "@openbookings/mailing/review-send": () => ({
       sendReviewReplied: async (reviewId: string) => {
@@ -48,7 +51,8 @@ await mockModules(
     "@openbookings/moderation": () => ({
       checkText: async (text: string) => {
         checked.push(text);
-        return check;
+        // A contact detail, as the check would copy it out of the text it was given.
+        return text.includes("0612") ? { ...check, verdict: "flagged", rules: ["links_contact"], fragments: [text.slice(text.indexOf("0612"))] } : check;
       },
     }),
     "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => ({ user: { id: "host-1" } }) }),
@@ -113,5 +117,19 @@ describe("the moderation check on host replies", () => {
     expect(result.ok).toBe(false);
     expect(await editReviewReply("reply-1", "x".repeat(1001))).toMatchObject({ ok: false });
     expect(checked).toEqual([]);
+  });
+});
+
+describe("one normalised text", () => {
+  it("a new reply's fragment next to a trailing line break still masks", async () => {
+    await replyToReview("review-1", { mode: "public", body: "Call 0612345678\r\nKees\r\n" });
+    expect(checked).toEqual(["Call 0612345678\nKees"]);
+    expect(maskFragments(normalizeReviewBody(posted[0]!.body)!, posted[0]!.check.fragments)).toBe("Call [removed]");
+  });
+
+  it("an edited reply's fragment next to a trailing line break still masks", async () => {
+    await editReviewReply("reply-1", "  Call 0612345678\r\nKees\r\n");
+    expect(checked).toEqual(["Call 0612345678\nKees"]);
+    expect(maskFragments(normalizeReviewBody(edited[0]!.body)!, edited[0]!.check.fragments)).toBe("Call [removed]");
   });
 });

@@ -9,6 +9,7 @@ import {
   bookingForReviewToken,
   deleteGuestReview,
   getReviewContext,
+  normalizeReviewBody,
   postReviewReply,
   REVIEW_BODY_MAX,
   setReviewEmails,
@@ -22,7 +23,7 @@ import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { checkText } from '@openbookings/moderation';
-import { REPLY_BODY_MAX } from '@openbookings/pricing';
+import { nextReplyRole, REPLY_BODY_MAX } from '@openbookings/pricing';
 
 /**
  * The review form's actions. Two ways to prove the booking, one rule for
@@ -61,11 +62,12 @@ function parseScore(score: unknown): number {
 }
 
 async function store(context: ReviewContext, via: 'session' | 'token', input: { score: unknown; body: unknown }): Promise<SubmitReviewResult> {
-  const body = typeof input.body === 'string' ? input.body : null;
+  // Normalised once, as stored: the check's fragments must be found in the stored text to mask.
+  const body = normalizeReviewBody(typeof input.body === 'string' ? input.body : null);
   const score = parseScore(input.score);
   // What submitReview would refuse anyway is refused before the check: that is a model call.
   if (!context.eligibility.ok) return { ok: false, error: context.eligibility.reason };
-  if (!(score >= 1 && score <= 10) || (body && body.trim().length > REVIEW_BODY_MAX)) return { ok: false, error: 'invalid' };
+  if (!(score >= 1 && score <= 10) || (body && body.length > REVIEW_BODY_MAX)) return { ok: false, error: 'invalid' };
   return submitReview(getPool(), {
     bookingId: context.bookingId,
     via,
@@ -148,9 +150,18 @@ export async function answerHostReply(bookingId: string, body: string): Promise<
   if (!session) return { ok: false, message: 'Your session ended. Sign in again.' };
   const context = await getReviewContext(getPool(), bookingId, new Date());
   if (!context?.review || context.guestUserId !== session.user.id) return fail('not_found');
-  const text = typeof body === 'string' ? body : '';
-  if (text.trim().length > REPLY_BODY_MAX) return { ok: false, message: ANSWER_ERRORS.invalid };
-  const reviewId = context.review.id;
+  // What postReviewReply would refuse anyway is refused before the check: that is a model call.
+  // The guest's view of the thread is enough: a host reply they can't see isn't one to answer.
+  const { review } = context;
+  if (review.status !== 'published' && review.status !== 'pending') return { ok: false, message: ANSWER_ERRORS.review_deleted };
+  const turn = nextReplyRole(review.replies.map((r) => r.role));
+  if (turn === null) return { ok: false, message: ANSWER_ERRORS.thread_closed };
+  if (turn !== 'guest') return { ok: false, message: ANSWER_ERRORS.not_your_turn };
+  // Normalised once, as stored: the check's fragments must be found in the stored text to mask.
+  const text = normalizeReviewBody(typeof body === 'string' ? body : '');
+  if (!text || text.length > REPLY_BODY_MAX) return { ok: false, message: ANSWER_ERRORS.invalid };
+  if (!checkRateLimit(`review-answer:${session.user.id}`, 10, 10 * 60 * 1000).allowed) return fail('rate_limited');
+  const reviewId = review.id;
   // Checked before the transaction: the model call shouldn't hold a connection open.
   const check = await checkText(text);
   const result = await withTransaction((tx) =>

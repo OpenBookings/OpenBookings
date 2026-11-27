@@ -8,6 +8,7 @@ import {
   deleteHostReply,
   editHostReply,
   insertPrivateReviewReply,
+  normalizeReviewBody,
   postReviewReply,
   setReplySkipped,
 } from "@openbookings/db/reviews";
@@ -35,12 +36,15 @@ const fail = (error: Parameters<typeof messageFor>[0]): ReplyActionResult => ({ 
 
 /**
  * The moderation check of a public reply: clean publishes, flagged or
- * unchecked is held for a person. Null for a text the db layer refuses as too
- * long anyway, so it never costs a model call. Run before the transaction: the
- * model call shouldn't hold a connection open.
+ * unchecked is held for a person. The text is normalised once, as the db
+ * layer stores it, so the check's fragments are found in the stored text and
+ * mask. Null for a text the db layer refuses (empty or too long) anyway, so it
+ * never costs a model call. Run before the transaction: the model call
+ * shouldn't hold a connection open.
  */
-async function checkReply(body: string): Promise<TextCheck | null> {
-  return body.trim().length > REPLY_BODY_MAX ? null : checkText(body);
+async function checkReply(raw: string): Promise<{ body: string; check: TextCheck } | null> {
+  const body = normalizeReviewBody(raw);
+  return body && body.length <= REPLY_BODY_MAX ? { body, check: await checkText(body) } : null;
 }
 
 function rateLimited(userId: string): boolean {
@@ -81,10 +85,10 @@ export async function replyToReview(
     return { ok: true, status: "sent" };
   }
 
-  const check = await checkReply(body);
-  if (!check) return fail("invalid");
+  const checked = await checkReply(body);
+  if (!checked) return fail("invalid");
   const result = await withTransaction((tx) =>
-    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, check, now }),
+    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body: checked.body, check: checked.check, now }),
   );
   if (!result.ok) return fail(result.error);
   if (result.status === "published") {
@@ -102,11 +106,10 @@ export async function editReviewReply(replyId: string, body: string): Promise<Re
   const actor = await reviewActor(await getServerSession(), { replyId });
   if (!actor) return fail("not_found");
   if (rateLimited(actor.userId)) return fail("rate_limited");
-  const text = typeof body === "string" ? body : "";
-  const check = await checkReply(text);
-  if (!check) return fail("invalid");
+  const checked = await checkReply(typeof body === "string" ? body : "");
+  if (!checked) return fail("invalid");
   const result = await withTransaction((tx) =>
-    editHostReply(tx, { replyId, authorUserId: actor.userId, body: text, check, now: new Date() }),
+    editHostReply(tx, { replyId, authorUserId: actor.userId, body: checked.body, check: checked.check, now: new Date() }),
   );
   if (!result.ok) return fail(result.error);
   await refreshPropertyPage(result.propertyId);

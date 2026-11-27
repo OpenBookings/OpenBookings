@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { maskFragments } from "@openbookings/pricing";
+import { normalizeReviewBody } from "@openbookings/db/reviews";
 import { mockModules } from "@/lib/mock-modules";
 
 // The actions' collaborators are mocked: this test is about which outcome
@@ -14,6 +16,13 @@ const submitted: { check: unknown }[] = [];
 const replied: { check: unknown; body: string }[] = [];
 const postedMail: { pending: boolean }[] = [];
 let eligibility: { ok: true } | { ok: false; reason: string } = { ok: true };
+// The review's public thread as the guest sees it, and which rate limits refuse.
+let thread: { role: "host" | "guest" }[] = [{ role: "host" }];
+let reviewStatus = "published";
+const limited = new Set<string>();
+const limitKeys: { key: string; max: number; windowMs: number }[] = [];
+// When set, the check answers with the fragments this picks out of the text it was given.
+let fragmentsOf: ((text: string) => string[]) | null = null;
 
 function clean() {
   return { verdict: "clean", rules: [], fragments: [], source: "mistral" };
@@ -34,8 +43,9 @@ await mockModules(import.meta.dir, {
       propertyId: "p",
       propertySlug: "hotel",
       eligibility,
-      review: { id: "review-1" },
+      review: { id: "review-1", status: reviewStatus, replies: thread },
     }),
+    normalizeReviewBody,
     REVIEW_BODY_MAX: 2000,
     postReviewReply: async (_tx: unknown, i: { check: { verdict: string }; body: string }) => {
       replied.push(i);
@@ -59,11 +69,17 @@ await mockModules(import.meta.dir, {
   }),
   "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => session }),
   "@/lib/property-reviews": () => ({ purgePropertyReviews: async () => {} }),
-  "@/lib/rateLimit": () => ({ checkRateLimit: () => ({ allowed: true }), getClientIP: () => "ip" }),
+  "@/lib/rateLimit": () => ({
+    checkRateLimit: (key: string, max: number, windowMs: number) => {
+      limitKeys.push({ key, max, windowMs });
+      return { allowed: ![...limited].some((prefix) => key.startsWith(prefix)) };
+    },
+    getClientIP: () => "ip",
+  }),
   "@openbookings/moderation": () => ({
     checkText: async (text: string | null) => {
       checked.push(text);
-      return check;
+      return fragmentsOf && text ? { ...check, verdict: "flagged", rules: ["links_contact"], fragments: fragmentsOf(text) } : check;
     },
   }),
 }, ["@/lib/auth"]);
@@ -82,6 +98,11 @@ beforeEach(() => {
   replied.length = 0;
   postedMail.length = 0;
   eligibility = { ok: true };
+  thread = [{ role: "host" }];
+  reviewStatus = "published";
+  limited.clear();
+  limitKeys.length = 0;
+  fragmentsOf = null;
 });
 
 describe("review outcome events", () => {
@@ -163,5 +184,47 @@ describe("the moderation check", () => {
     expect(await answerHostReply("booking-1", "x".repeat(1001))).toMatchObject({ ok: false });
     expect(checked).toEqual([]);
     expect(submitted).toEqual([]);
+  });
+});
+
+describe("the guest's answer to a reply", () => {
+  it("is refused before the check when it isn't the guest's turn", async () => {
+    thread = [];
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You can answer once the property has replied." });
+    thread = [{ role: "host" }, { role: "guest" }, { role: "host" }];
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You already answered this reply." });
+    reviewStatus = "deleted";
+    thread = [{ role: "host" }];
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "This review was deleted." });
+    expect(checked).toEqual([]);
+    expect(replied).toEqual([]);
+  });
+
+  it("is rate limited per guest before the check", async () => {
+    limited.add("review-answer:");
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "Too many tries. Wait a few minutes and try again." });
+    expect(limitKeys).toEqual([{ key: "review-answer:guest-1", max: 10, windowMs: 10 * 60 * 1000 }]);
+    expect(checked).toEqual([]);
+  });
+});
+
+describe("one normalised text", () => {
+  // The check sees the text exactly as it is stored, so its fragments mask.
+  const contact = (text: string) => [text.slice(text.indexOf("0612"))];
+
+  it("a review's fragment next to a trailing line break still masks", async () => {
+    fragmentsOf = contact;
+    await submitReviewAsGuest("booking-1", { score: 8, body: "  Lovely. Call 0612345678\r\nAnna\r\n" });
+    expect(checked).toEqual(["Lovely. Call 0612345678\nAnna"]);
+    const stored = submitted[0] as unknown as { body: string; check: { fragments: string[] } };
+    expect(maskFragments(normalizeReviewBody(stored.body)!, stored.check.fragments)).toBe("Lovely. Call [removed]");
+  });
+
+  it("an answer's fragment next to a trailing line break still masks", async () => {
+    fragmentsOf = contact;
+    await answerHostReply("booking-1", "Call 0612345678\r\nAnna\r\n");
+    expect(checked).toEqual(["Call 0612345678\nAnna"]);
+    const stored = replied[0] as unknown as { body: string; check: { fragments: string[] } };
+    expect(maskFragments(normalizeReviewBody(stored.body)!, stored.check.fragments)).toBe("Call [removed]");
   });
 });

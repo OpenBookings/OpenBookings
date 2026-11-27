@@ -76,6 +76,7 @@ export default async function ReviewByLinkPage({ params }: { params: Promise<{ t
   }
 
   // A removed review that may be written once more falls through to the form.
+  // Unreachable by link today (submitting deletes the tokens; invitations skip reviewed bookings); kept for safety.
   if (context.review && !removed) {
     return (
       <ReviewShell eyebrow={context.propertyName} title="Already reviewed">
