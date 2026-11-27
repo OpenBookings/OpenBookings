@@ -125,6 +125,13 @@ describe("Host Agreement 1.6 states what the code does", () => {
     expect(reviews).toContain(`(${MODERATION_DEADLINE_HOURS}) hours`);
     expect(reviews).toContain(`"${MASKED_TEXT}"`);
     expect(reviews).toContain("provider based in the EU");
+    expect(reviews).toContain("If OpenBookings cannot tell which words broke a rule, the text waits for a person instead of being published automatically");
+  });
+
+  test("6.5 says a rewritten review starts a new thread", () => {
+    expect(reviews).toContain(
+      "The Host's replies to the removed review, and the Guest's answers to them, are deleted when the Guest writes it again, and the Host may reply to the new review",
+    );
   });
 
   test("6.5 names the report route, for reviews and guests' answers; a reported review stays visible while it is assessed", () => {

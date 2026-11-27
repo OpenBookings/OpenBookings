@@ -16,7 +16,8 @@ type Run = (sql: string, values: unknown[]) => Promise<unknown[]>;
  * phone numbers and travel plans, so unlinking the sender alone is not
  * anonymisation. (The host's own replies are left to the retention sweep.)
  * Reviews stay too, since they describe a real stay, but as "Former guest":
- * no name, no country, no link to the account.
+ * no name, no country, no link to the account. Their reports about reviews
+ * stay without the account or its email.
  */
 
 /** A paid stay whose checkout day hasn't passed. Cancelled and unpaid (pending) bookings don't count. */
@@ -51,6 +52,9 @@ export async function anonymizeGuestData(userId: string, run: Run): Promise<void
   );
   await run(`UPDATE message_threads SET status = 'closed', updated_at = now() WHERE guest_id = $1`, [userId]);
   await anonymizeGuestReviews({ query: async (sql, values) => ({ rows: await run(sql, values ?? []) }) }, userId);
+  // Their reports about reviews stay (until the moderation purge) without the
+  // account or the email snapshot it left: no outcome email goes to a deleted account.
+  await run(`UPDATE review_reports SET reporter_user_id = NULL, reporter_email = NULL WHERE reporter_user_id = $1`, [userId]);
 }
 
 /** The guest's calendar day. EU-only, so Amsterdam time stands in for every property. */

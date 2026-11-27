@@ -82,7 +82,8 @@ export default function ReviewRulesPage() {
         <P>
           If nobody has decided within {MODERATION_DEADLINE_HOURS} hours, the text is published automatically, with
           the parts that seem to break a rule replaced by &quot;{MASKED_TEXT}&quot;. A person can still remove it after
-          that.
+          that. If we can&apos;t tell which words broke a rule, it waits for a person instead of being published
+          automatically.
         </P>
       </Section>
 
@@ -104,6 +105,8 @@ export default function ReviewRulesPage() {
         <P>
           If a guest&apos;s review is removed, they can write it once more while reviews for their stay are open, up
           to {REVIEW_WINDOW_DAYS} days after check-out. If that one is removed too, they can&apos;t write another.
+          The property&apos;s replies to the removed review, and the guest&apos;s answers to them, are deleted when
+          the guest writes it again: the property can reply to the new review.
         </P>
       </Section>
 

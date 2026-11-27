@@ -208,6 +208,9 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
   reporterAccount: RegExp;
   reporterEmail: RegExp;
   ipNotSaved: RegExp;
+  hostReports: RegExp;
+  unpinpointed: RegExp;
+  reporterDeleted: RegExp;
   personRemoves: RegExp;
   stale: RegExp;
   sccOutside: RegExp;
@@ -227,7 +230,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`,
     reporterAccount: /If you're signed in, we also keep your account with the report/,
     reporterEmail: /If you ask for updates, we also keep your account's email address/,
-    ipNotSaved: /Whoever sends a report, Cloudflare checks that the form is sent by a person, and that check receives your IP address\. We also use your IP address to limit how many reports can be sent from it\. It isn't saved with the report\./,
+    ipNotSaved: /When you report from the property's page, signed in or not, Cloudflare checks that the form is sent by a person, and that check receives your IP address\. We also use your IP address to limit how many reports can be sent from it\. It isn't saved with the report\./,
+    reporterDeleted: /After you delete your account, your reports stay without your account or email address, and we no longer email you the outcome/,
+    hostReports: /Properties report from their dashboard, which uses neither: their reports are limited per account\./,
+    unpinpointed: /If we can't tell which words broke a rule, it waits for a person instead of being published automatically\./,
     personRemoves: /Only a person can remove a review or an answer/,
     stale: /contain contact details or links are held/,
     sccOutside: /sub-processors are outside the EEA, Standard Contractual Clauses apply/,
@@ -247,7 +253,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `Heeft niemand binnen ${MODERATION_DEADLINE_HOURS} uur besloten`,
     reporterAccount: /Bent u ingelogd, dan bewaren wij ook uw account bij de melding/,
     reporterEmail: /Vraagt u om updates, dan bewaren wij ook het e-mailadres van uw account/,
-    ipNotSaved: /Wie er ook meldt, Cloudflare controleert dat het formulier door een mens wordt verstuurd, en die controle ontvangt uw IP-adres\. Wij gebruiken uw IP-adres ook om te beperken hoeveel meldingen ervandaan kunnen worden verstuurd\. Het wordt niet bij de melding opgeslagen\./,
+    ipNotSaved: /Meldt u vanaf de pagina van de accommodatie, ingelogd of niet, dan controleert Cloudflare dat het formulier door een mens wordt verstuurd, en die controle ontvangt uw IP-adres\. Wij gebruiken uw IP-adres ook om te beperken hoeveel meldingen ervandaan kunnen worden verstuurd\. Het wordt niet bij de melding opgeslagen\./,
+    reporterDeleted: /Na het verwijderen van uw account blijven uw meldingen bewaard zonder uw account of e-mailadres, en mailen wij u de uitkomst niet meer/,
+    hostReports: /Accommodaties melden vanuit hun dashboard, waar geen van beide gebeurt: hun meldingen zijn per account beperkt\./,
+    unpinpointed: /Kunnen wij niet aanwijzen welke woorden een regel overtreden, dan wacht de tekst op een medewerker in plaats van automatisch te worden gepubliceerd\./,
     personRemoves: /Alleen een medewerker kan een beoordeling of een antwoord verwijderen/,
     stale: /met contactgegevens of links houden wij vast/,
     sccOutside: /subverwerkers van Mistral buiten de EER zitten, gelden standaardcontractbepalingen/,
@@ -267,7 +276,10 @@ const MODERATION: Record<(typeof LEGAL_LOCALES)[number], {
     deadline: `Si personne n'a décidé dans les ${MODERATION_DEADLINE_HOURS} heures`,
     reporterAccount: /Si vous êtes connecté, nous conservons aussi votre compte avec le signalement/,
     reporterEmail: /Si vous demandez des nouvelles, nous conservons aussi l'adresse e-mail de votre compte/,
-    ipNotSaved: /Quel que soit l'auteur du signalement, Cloudflare vérifie que le formulaire est envoyé par une personne, et cette vérification reçoit votre adresse IP\. Nous utilisons aussi votre adresse IP pour limiter le nombre de signalements envoyés depuis celle-ci\. Elle n'est pas enregistrée avec le signalement\./,
+    ipNotSaved: /Lorsque vous signalez depuis la page de l'établissement, connecté ou non, Cloudflare vérifie que le formulaire est envoyé par une personne, et cette vérification reçoit votre adresse IP\. Nous utilisons aussi votre adresse IP pour limiter le nombre de signalements envoyés depuis celle-ci\. Elle n'est pas enregistrée avec le signalement\./,
+    reporterDeleted: /Après la suppression de votre compte, vos signalements sont conservés sans votre compte ni votre adresse e-mail, et nous ne vous envoyons plus le résultat/,
+    hostReports: /Les établissements signalent depuis leur tableau de bord, qui n'utilise ni l'une ni l'autre : leurs signalements sont limités par compte\./,
+    unpinpointed: /Si nous ne pouvons pas déterminer quels mots enfreignent une règle, le texte attend une personne au lieu d'être publié automatiquement\./,
     personRemoves: /Seule une personne peut supprimer un avis ou une réponse/,
     stale: /contenant des coordonnées ou des liens sont retenus/,
     sccOutside: /sous-traitants ultérieurs de Mistral se trouvent hors de l'EEE, les clauses contractuelles types s'appliquent/,
@@ -299,6 +311,8 @@ describe("current privacy policy: review moderation", () => {
       expect(reports).toBeDefined();
       expect(reports).toContain(`${months} ${m.afterDecision}`);
       expect(reports).toContain(`${months} ${m.afterMade}`);
+      // anonymizeGuestData unlinks the reporter's account and email.
+      expect(reports).toMatch(m.reporterDeleted);
       const texts = row(`| ${m.textsRow} |`);
       expect(texts).toBeDefined();
       expect(texts).toContain(`${months} ${m.afterDecision}`);
@@ -314,6 +328,7 @@ describe("current privacy policy: review moderation", () => {
       expect(source()).toContain(m.deadline);
       expect(source()).toContain(MASKED_TEXT);
       expect(source()).toMatch(m.personRemoves);
+      expect(source()).toMatch(m.unpinpointed);
       expect(source()).toContain("/legal/review-rules");
     });
 
@@ -321,6 +336,8 @@ describe("current privacy policy: review moderation", () => {
       expect(source()).toMatch(m.reporterAccount);
       expect(source()).toMatch(m.reporterEmail);
       expect(source()).toMatch(m.ipNotSaved);
+      // Hosts report from the dashboard: no Cloudflare check, no IP limit.
+      expect(source()).toMatch(m.hostReports);
     });
 
     test(`${locale}: no longer says only contact details or links hold a review`, () => {

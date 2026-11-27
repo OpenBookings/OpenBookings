@@ -154,6 +154,10 @@ describe("review moderation", () => {
     expect(text).toContain(`If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`);
     expect(text).toContain(`deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
     expect(text).toContain(`A report nobody decided on is deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after it was made`);
+    // What the code does beyond the deadline and the rewrite (publishOverdue, closeOldThread, the host's masked view).
+    expect(text).toContain("If we can't tell which words broke a rule, it waits for a person instead of being published automatically.");
+    expect(text).toContain("Your replies to the removed review, and the guest's answers to them, are deleted when the guest writes it again");
+    expect(text).toContain('Until then you see them with the parts the check flagged replaced by "[removed]"');
   });
 
   test("no page gives the deadline another number of hours", () => {

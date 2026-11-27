@@ -137,12 +137,18 @@ lifecycle, refunds, forced edits, resolving a flagged payment). Neither can chan
 or read password hashes or tokens. Both bypass row-level security: staff see every host's
 bookings.
 
-Migration `0060_admin_production.sql` adds what the staff sign-in and step-up need. Both roles
-may read `"user".role` (that is how the console knows who is staff) and the `admin_credentials`
-and `admin_step_ups` tables, minus the secrets: `ob_admin_read` cannot read
+Migration `0060_admin_production.sql` adds what the staff sign-in and step-up need. Only
+`ob_admin_read` may read `"user".role` (that is how the console knows who is staff: the staff
+lookup always runs on the read connection). Both roles may read the `admin_credentials` and
+`admin_step_ups` tables, minus the secrets: `ob_admin_read` cannot read
 `admin_credentials.totp_secret_enc` or `admin_step_ups.challenge`. `ob_admin_write` can add
 credentials and step-ups and mark them used, and it reads the TOTP secret (stored encrypted
 with `ADMIN_TOTP_KEY`) to check a code.
+
+Migration `0061_review_moderation.sql` lets both roles read reviews, review replies and review
+reports (the moderation queue). `ob_admin_write` may change only what a Keep or Remove decides
+(the decision columns, the status and publication they set) and a report's status, never the
+text itself.
 
 The roles cannot log in. Once `0054` is applied, create one login user for each in the Neon SQL
 editor, as `neondb_owner`. Use SQL, not the Neon console: a role made in the console is added

@@ -95,6 +95,10 @@ describe("current terms of service content", () => {
       expect(rules).toContain(MASKED_TEXT);
       expect(rules).toMatch(/\b(EU|UE)\b/);
       expect(rules).toMatch(/can't approve, hold or remove reviews|kunnen beoordelingen niet goedkeuren, tegenhouden of verwijderen|ne peuvent ni approuver, ni retenir, ni supprimer/);
+      // publishOverdue never publishes a held text whose flagged words couldn't be pinpointed.
+      expect(rules).toMatch(
+        /If we can't tell which words broke a rule, it waits for a person instead of being published automatically\.|Kunnen wij niet aanwijzen welke woorden een regel overtreden, dan wacht de tekst op een medewerker in plaats van automatisch te worden gepubliceerd\.|Si nous ne pouvons pas déterminer quels mots enfreignent une règle, le texte attend une personne au lieu d'être publié automatiquement\./,
+      );
     });
 
     test(`${locale}: no longer says only contact details and links are held`, () => {
@@ -111,6 +115,10 @@ describe("current terms of service content", () => {
       expect(removal).toMatch(/once more|nog één keer|une nouvelle fois/);
       expect(removal).toMatch(/\[(section|artikel|article) 10\.7\]\(#messages-and-content\)/);
       expect(clause(source, "10.7")).toMatch(/\[(section|artikel|article) 10\.12\]\(#messages-and-content\)/);
+      // A rewrite closes the removed review's thread (submitReview's closeOldThread).
+      expect(removal).toMatch(
+        /The property's replies to the removed review, and your answers to them, are deleted when you write it again|De reacties van de accommodatie op de verwijderde beoordeling, en uw antwoorden daarop, worden verwijderd wanneer u ze opnieuw schrijft|Les réponses de l'établissement à l'avis supprimé, et vos réponses à celles-ci, sont supprimées lorsque vous l'écrivez à nouveau/,
+      );
     });
 
     test(`${locale}: removal and deadline masking both get a short email and the details on the review page`, () => {
