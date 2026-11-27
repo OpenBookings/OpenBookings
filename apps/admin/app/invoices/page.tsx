@@ -90,9 +90,15 @@ export default async function InvoicesPage() {
       <section className="space-y-2">
         <h1 className="text-lg font-semibold">Invoice job</h1>
         <p className="text-sm text-muted-foreground">
-          Database {databaseHost(process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL)} · INVOICE_DB_ENV{" "}
-          {process.env.INVOICE_DB_ENV || "test (default here)"}. Order: backfill → draft → issue (also stores) → deliver.
-          Deliver in test mode needs INVOICE_TEST_RECIPIENT.
+          {production ? (
+            "Runs start the Scaleway job (production database, live Stripe). Order: backfill → draft → issue (also stores) → deliver."
+          ) : (
+            <>
+              Database {databaseHost(process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL)} · INVOICE_DB_ENV{" "}
+              {process.env.INVOICE_DB_ENV || "test (default here)"}. Order: backfill → draft → issue (also stores) → deliver.
+              Deliver in test mode needs INVOICE_TEST_RECIPIENT.
+            </>
+          )}
         </p>
         {!ready && <p className="text-sm text-red-600">Migration 0036 is not on this database yet.</p>}
         {production && <LatestRun latest={latest} />}

@@ -5,7 +5,8 @@ import path from "node:path";
 import { dangerousAction } from "./dangerous";
 import type { Confirmation, DangerousResult } from "./dangerous-actions";
 import { adminDbConfig, writePool } from "./db";
-import { isDryRun, jobArgs, RUN_STARTED_ACTION, runSummary, runTarget, type JobInput } from "./invoice-job-args";
+import { productionRunRefusal } from "./invoice-gate";
+import { jobArgs, RUN_STARTED_ACTION, runSummary, runTarget, type JobInput } from "./invoice-job-args";
 import { missingJobSettings, scalewayJobConfig, startJobRun } from "./scaleway-jobs";
 import { stripeKeyAllowed } from "./super-admin";
 import { requireStaff, type Staff } from "./staff";
@@ -41,9 +42,9 @@ export async function runInvoiceJob(_prev: JobRun | null, form: FormData): Promi
   if (!built.ok) return refused(built.error);
 
   if (isProduction()) {
-    if (!isDryRun(built.args)) return refused("This run changes real records or sends email: confirm it with a reason first.");
-    const started = await startInProduction(staff, built.args, "dry run", { dry_run: true });
-    return started;
+    const gate = productionRunRefusal(built.args, "dry");
+    if (gate) return refused(gate);
+    return startInProduction(staff, built.args, "dry run", { dry_run: true });
   }
 
   if (!stripeKeyAllowed().ok) return refused("Stripe is not in test mode here, so the invoice job is disabled.");
@@ -64,7 +65,8 @@ export async function runInvoiceJobConfirmed(form: FormData, confirm: Confirmati
   if (!isProduction()) return { ok: true, value: refused("Confirmed runs start the Scaleway job, which is production only.") };
   const built = build(form);
   if (!built.ok) return { ok: true, value: refused(built.error) };
-  if (isDryRun(built.args)) return { ok: true, value: refused("A dry run needs no confirmation.") };
+  const gate = productionRunRefusal(built.args, "confirmed");
+  if (gate) return { ok: true, value: refused(gate) };
   const settings = jobSettingsRefusal();
   if (settings) return { ok: true, value: settings };
 

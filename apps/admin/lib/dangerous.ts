@@ -75,9 +75,14 @@ export function shortError(error: unknown): string {
   return line.length > 160 ? `${line.slice(0, 157)}...` : line;
 }
 
-/** Why an action's own answer refused (`{ ok: false, error | reason | message }`), or null. */
+/**
+ * Why an action's own answer refused (`{ ok: false, error | reason | message }`,
+ * or `{ kind: "refused", error }` as the invoice run answers), or null.
+ */
 function refusalOf(result: unknown): string | null {
-  if (typeof result !== "object" || result === null || (result as { ok?: unknown }).ok !== false) return null;
+  if (typeof result !== "object" || result === null) return null;
+  const refusedKind = (result as { kind?: unknown }).kind === "refused";
+  if (!refusedKind && (result as { ok?: unknown }).ok !== false) return null;
   const r = result as { error?: unknown; reason?: unknown; message?: unknown };
   const why = [r.error, r.reason, r.message].find((v) => typeof v === "string" && v !== "");
   return typeof why === "string" ? why.slice(0, 160) : "refused";

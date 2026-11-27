@@ -42,6 +42,13 @@ describe("dangerousAction", () => {
     expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log", "INSERT INTO audit_log"]);
   });
 
+  test("a `kind: refused` answer is audited as refused too", async () => {
+    const db = stubDb();
+    const answer = { kind: "refused", error: "Scaleway: insufficient permissions" };
+    expect(await dangerousAction(input, async () => answer, deps(db))).toEqual({ ok: true, value: answer });
+    expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log", "INSERT INTO audit_log"]);
+  });
+
   test("no reason", async () => {
     const db = stubDb();
     expect(await dangerousAction({ ...input, reason: " no " }, async () => 1, deps(db))).toEqual({
