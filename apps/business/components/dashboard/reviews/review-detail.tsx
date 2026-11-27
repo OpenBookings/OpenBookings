@@ -14,7 +14,8 @@ import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteReviewReply, editReviewReply } from "@/lib/reviews/actions";
 import type { HostReportStatus, HostReview } from "@/lib/reviews/shape";
-import { byline, SCORE_CHIP, stayMonthLabel } from "./labels";
+import { hostReplyNotice, type HostReplyNotice } from "@/lib/reviews/reply-notice";
+import { byline, RULES_PAGE, SCORE_CHIP, stayMonthLabel } from "./labels";
 import { counter, ReplyComposer, ReplyField } from "./reply-composer";
 import { ReportDialog } from "./report-dialog";
 
@@ -143,6 +144,12 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
   const report = reportStatus ? REPORT[reportStatus] : null;
   // A guest's live answer on a live review; never the property's own replies.
   const canReport = !isHost && reply.status === "published" && review.status === "published" && reportStatus !== "open";
+  // The property's own reply: held, removed, or published with parts removed.
+  const notice = reply.moderation
+    ? hostReplyNotice({ status: reply.status, moderation: reply.moderation, bookingId: review.bookingId, timeZone: review.timeZone, now: new Date() })
+    : null;
+  // A removed reply can't be edited, and stays in the thread (it keeps its turn).
+  const removed = reply.status === "removed";
   const [text, setText] = React.useState(reply.body);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, startTransition] = React.useTransition();
@@ -173,15 +180,16 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
           </span>{" "}
           · {formatRelativeTime(when)}
           {reply.editedAt ? " · Edited" : ""}
-          {reply.status === "pending" ? " · Being checked" : ""}
+          {reply.status === "pending" && !notice ? " · Being checked" : ""}
         </span>
         {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
+        {notice ? <StatusBadge tone={notice.tone}>{notice.pill}</StatusBadge> : null}
         {canReport ? (
           <Button variant="ghost" size="xs" onClick={() => setReporting(true)}>
             Report…
           </Button>
         ) : null}
-        {isHost && !editing ? (
+        {isHost && !editing && !removed ? (
           <span className="flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setEditing(true)} disabled={busy}>
               Edit
@@ -209,11 +217,55 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
             </span>
           </div>
         </div>
-      ) : (
+      ) : removed ? null : (
         <p className="text-sm leading-relaxed whitespace-pre-line [overflow-wrap:anywhere]">{reply.body}</p>
       )}
+      {notice && !editing ? <ReplyNotice notice={notice} /> : null}
       {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
       {canReport ? <ReportDialog target={{ kind: "answer", id: reply.id }} open={reporting} onOpenChange={setReporting} /> : null}
+    </div>
+  );
+}
+
+/** What moderation did with the property's own reply, under it: compact, the details the texts promise. */
+function ReplyNotice({ notice }: { notice: HostReplyNotice }) {
+  if (notice.state === "held") return <p className="text-xs text-muted-foreground">{notice.line}</p>;
+  return (
+    <div className="flex flex-col gap-1.5 pt-0.5 text-xs text-muted-foreground">
+      <p>{notice.line}</p>
+      <p>
+        {notice.state === "removed" ? "It broke" : "Those parts seemed to break"} {notice.rules.length > 0 ? "these" : "our"}{" "}
+        <a href={RULES_PAGE} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+          review rules
+        </a>
+        {notice.rules.length > 0 ? ":" : "."}
+      </p>
+      {notice.rules.length > 0 ? (
+        <ul className="list-disc space-y-0.5 pl-4">
+          {notice.rules.map((rule) => (
+            <li key={rule.title}>
+              <span className="font-medium text-foreground">{rule.title}</span>: {rule.description}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {notice.note ? (
+        <p className="rounded-md bg-muted/50 px-2.5 py-1.5">
+          <span className="font-medium text-foreground">Note from our team:</span> {notice.note}
+        </p>
+      ) : null}
+      {notice.written !== null ? (
+        <p className="rounded-md bg-muted/50 px-2.5 py-1.5 whitespace-pre-line [overflow-wrap:anywhere]">
+          <span className="font-medium text-foreground">What you wrote:</span> {notice.written}
+        </p>
+      ) : null}
+      <p>
+        Think we got it wrong?{" "}
+        <a href={notice.objection} className="underline underline-offset-2 hover:text-foreground">
+          Tell us why
+        </a>
+        , or reply to our email.
+      </p>
     </div>
   );
 }

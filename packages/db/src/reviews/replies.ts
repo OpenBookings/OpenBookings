@@ -8,9 +8,9 @@
  * or the review's own guest) and run the automated check; this module
  * decides whether it's their turn and stores the outcome.
  */
-import { nextReplyRole, REPLY_BODY_MAX, type ReplyRole, type TextCheck } from "@openbookings/pricing";
+import { nextReplyRole, REPLY_BODY_MAX, type AuthorModeration, type ReplyRole, type TextCheck } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
-import { dismissReportsOfDeleted, storedCheck } from "./moderation";
+import { authorModerationSql, dismissReportsOfDeleted, storedCheck, toAuthorModeration } from "./moderation";
 import { normalizeReviewBody } from "./shared";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,7 +19,7 @@ export type { ReplyRole } from "@openbookings/pricing";
 
 export type ReplyStatus = "pending" | "published" | "hidden" | "removed" | "deleted";
 
-/** A reply as the thread shows it. Deleted replies are never returned. */
+/** A reply as the thread shows it. Deleted replies are never returned; removed ones only to their author. */
 export type ReviewReply = {
   id: string;
   role: ReplyRole;
@@ -29,6 +29,8 @@ export type ReviewReply = {
   publishedAt: string | null;
   editedAt: string | null;
   createdAt: string;
+  /** Only on the viewer's own replies, on their own pages: what moderation did with it. */
+  moderation?: AuthorModeration;
 };
 
 export type ReplyError =
@@ -242,29 +244,35 @@ type ReplyRow = {
   published_at: Date | null;
   edited_at: Date | null;
   created_at: Date;
+  moderation: Parameters<typeof toAuthorModeration>[0] | null;
 };
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 /**
- * The threads of several reviews, oldest reply first. `publicOnly` keeps
- * the published replies; otherwise held ones come along too (never deleted
- * or removed). A reply published by the deadline shows its masked text.
+ * The threads of several reviews, oldest reply first. `publicOnly`: the
+ * published replies, as anyone sees them. `author`: those, plus that
+ * author's own held and removed replies, each of theirs with what happened
+ * to it (`moderation`), as its author sees the thread. Never a deleted
+ * reply. A reply published by the deadline shows its masked text.
  */
 export async function loadReviewReplies(
   db: Queryable,
   reviewIds: string[],
-  opts: { publicOnly: boolean },
+  opts: { publicOnly: true } | { author: ReplyRole },
 ): Promise<Map<string, ReviewReply[]>> {
   const out = new Map<string, ReviewReply[]>();
   const ids = reviewIds.filter((id) => UUID.test(id));
   if (ids.length === 0) return out;
+  const author = "author" in opts ? opts.author : null;
   const { rows } = await db.query(
-    `SELECT id, review_id, author_role, COALESCE(masked_body, body) AS body, status, published_at, edited_at, created_at
-       FROM review_replies
-      WHERE review_id = ANY($1::uuid[]) AND ${opts.publicOnly ? "status = 'published'" : "status IN ('published', 'pending')"}
+    `SELECT id, review_id, author_role, COALESCE(masked_body, body, '') AS body, status, published_at, edited_at, created_at,
+            ${author ? `CASE WHEN rr.author_role = $2 THEN ${authorModerationSql("reply", "rr")} END` : "NULL"} AS moderation
+       FROM review_replies rr
+      WHERE review_id = ANY($1::uuid[])
+        AND (status = 'published'${author ? " OR (author_role = $2 AND status IN ('pending', 'removed'))" : ""})
       ORDER BY created_at, id`,
-    [ids],
+    author ? [ids, author] : [ids],
   );
   for (const r of rows as ReplyRow[]) {
     const list = out.get(r.review_id) ?? [];
@@ -276,6 +284,7 @@ export async function loadReviewReplies(
       publishedAt: iso(r.published_at),
       editedAt: iso(r.edited_at),
       createdAt: iso(r.created_at)!,
+      ...(r.moderation ? { moderation: toAuthorModeration(r.moderation) } : {}),
     });
     out.set(r.review_id, list);
   }

@@ -19,6 +19,7 @@ import {
   maskFragments,
   MODERATION_DEADLINE_HOURS,
   MODERATION_RECORD_RETENTION_MONTHS,
+  type AuthorModeration,
   type ReviewRuleId,
   type TextCheck,
 } from "@openbookings/pricing";
@@ -45,6 +46,49 @@ const heldSinceSql = (kind: ModerationItem["kind"], t: string) =>
  */
 export const moderationVersionSql = (kind: ModerationItem["kind"], t: string) =>
   `(extract(epoch FROM ${heldSinceSql(kind, t)}) * 1000000)::bigint::text`;
+
+// ── What the author sees ─────────────────────────────────────────────────────
+
+/**
+ * An item's moderation as its own author may see it (AuthorModeration in
+ * @openbookings/pricing), as one JSON value: `${t}` is the item's alias.
+ * Only for the author's own pages: it carries the original text.
+ */
+export const authorModerationSql = (kind: ModerationItem["kind"], t: string) => `json_build_object(
+  'written', ${t}.body, 'flagged_reason', ${t}.flagged_reason, 'decision', ${t}.decision,
+  'decision_rules', ${t}.decision_rules, 'decision_note', ${t}.decision_note, 'decided_at', ${t}.decided_at,
+  'published_by_deadline', ${t}.published_by_deadline, 'masked_body', ${t}.masked_body,
+  'held_since', ${heldSinceSql(kind, t)})`;
+
+type AuthorModerationJson = {
+  written: string | null;
+  flagged_reason: string | null;
+  decision: "kept" | "removed" | null;
+  decision_rules: string[] | null;
+  decision_note: string | null;
+  decided_at: string | null;
+  published_by_deadline: boolean;
+  masked_body: string | null;
+  held_since: string;
+};
+
+const knownRules = (ids: readonly string[]): ReviewRuleId[] => [...new Set(ids.map((s) => s.trim()).filter(isReviewRuleId))];
+const isoOf = (v: string | Date) => new Date(v).toISOString();
+
+/** Reads authorModerationSql's value. Rule ids the pricing package doesn't know are dropped. */
+export function toAuthorModeration(j: AuthorModerationJson): AuthorModeration {
+  return {
+    written: j.written,
+    flaggedRules: knownRules((j.flagged_reason ?? "").split(",")),
+    decision: j.decision,
+    decisionRules: knownRules(j.decision_rules ?? []),
+    decisionNote: j.decision_note,
+    decidedAt: j.decided_at ? isoOf(j.decided_at) : null,
+    publishedByDeadline: j.published_by_deadline,
+    maskedBody: j.masked_body,
+    heldSince: isoOf(j.held_since),
+  };
+}
 
 /**
  * Whether an item is still there to moderate: not deleted by its author, and

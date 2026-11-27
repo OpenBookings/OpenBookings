@@ -187,6 +187,15 @@ type Row = {
   }> | null;
 };
 
+/**
+ * Kept, still published, with an open report: a person may decide it once
+ * more. A stray open report on a removed item (or one nobody decided) never
+ * makes it "Kept · reported again".
+ */
+export function isReopened(item: { decision: Row["decision"]; status: string }, reports: ReadonlyArray<{ status: QueueReport["status"] }>): boolean {
+  return item.decision === "kept" && item.status === "published" && reports.some((p) => p.status === "open");
+}
+
 const rulesOf = (ids: readonly string[]) => [...new Set(ids.filter(isReviewRuleId))];
 
 function toRow(r: Row, now: Date): QueueRow {
@@ -235,7 +244,7 @@ function toRow(r: Row, now: Date): QueueRow {
     rewriteUntil: closesAt && !r.rewrite_used && closesAt > now ? closesAt : null,
     rewriteUsed: r.rewrite_used,
     reports,
-    reopened: r.decided_at !== null && reports.some((p) => p.status === "open"),
+    reopened: isReopened(r, reports),
     decision:
       r.decision && r.decided_at
         ? {

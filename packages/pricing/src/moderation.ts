@@ -112,3 +112,58 @@ export function maskFragments(body: string, fragments: string[]): string {
   }
   return out + body.slice(cursor);
 }
+
+// ── What the author is told ──────────────────────────────────────────────────
+
+/**
+ * What the author of a review or reply may see about its moderation, on their
+ * own page (the guest's review page, the host's Reviews page). Times are ISO
+ * strings: the business app hands them to client components.
+ */
+export type AuthorModeration = {
+  /** Their words as written (null when there were none, or after the purge). */
+  written: string | null;
+  /** What the automated check flagged (flagged_reason): known rules only. */
+  flaggedRules: ReviewRuleId[];
+  decision: "kept" | "removed" | null;
+  decisionRules: ReviewRuleId[];
+  decisionNote: string | null;
+  decidedAt: string | null;
+  publishedByDeadline: boolean;
+  /** As the deadline published it, flagged parts replaced; null otherwise (a Keep clears it). */
+  maskedBody: string | null;
+  /** When its words were written: the deadline counts from here. */
+  heldSince: string;
+};
+
+/** What happened to it, for its author. Nothing to say when it is published as written, or kept. */
+export type AuthorNotice =
+  | { state: "held"; deadline: Date }
+  | { state: "removed"; rules: ReviewRuleId[]; note: string | null; decidedAt: Date | null }
+  | { state: "masked"; rules: ReviewRuleId[]; published: string; written: string | null };
+
+/**
+ * Held: waiting for a person, until the deadline. Removed: what the person
+ * decided (rules, note, when). Published with parts removed: nobody decided,
+ * so the rules are the check's, not a decision's.
+ */
+export function authorNotice(
+  status: "pending" | "published" | "hidden" | "removed" | "deleted",
+  m: AuthorModeration,
+): AuthorNotice | null {
+  if (status === "pending") {
+    return { state: "held", deadline: new Date(Date.parse(m.heldSince) + MODERATION_DEADLINE_HOURS * 60 * 60 * 1000) };
+  }
+  if (status === "removed") {
+    return {
+      state: "removed",
+      rules: m.decisionRules,
+      note: m.decisionNote,
+      decidedAt: m.decidedAt ? new Date(m.decidedAt) : null,
+    };
+  }
+  if (status === "published" && m.publishedByDeadline && m.maskedBody !== null && m.decision !== "kept") {
+    return { state: "masked", rules: m.flaggedRules, published: m.maskedBody, written: m.written };
+  }
+  return null;
+}

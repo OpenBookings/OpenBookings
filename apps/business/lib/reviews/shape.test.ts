@@ -12,6 +12,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     bookingId: `b${n}`,
     propertyId: "p1",
     propertyName: "Canal House",
+    timeZone: "Europe/Amsterdam",
     score: 8,
     body: "Nice.",
     authorName: "Anna",

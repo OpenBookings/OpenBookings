@@ -15,6 +15,7 @@ import {
   reviewEligibility,
   stayMonth,
   type BookingStatus,
+  type AuthorModeration,
   type ReviewEligibility,
   type TextCheck,
 } from "@openbookings/pricing";
@@ -27,7 +28,7 @@ export * from "./moderation";
 export * from "./moderation-sweep";
 export * from "./reports";
 import { authorFirstName, normalizeReviewBody } from "./shared";
-import { dismissReportsOfDeleted, storedCheck } from "./moderation";
+import { authorModerationSql, dismissReportsOfDeleted, storedCheck, toAuthorModeration } from "./moderation";
 import { loadReviewReplies, type ReviewReply } from "./replies";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,6 +50,8 @@ export type ReviewContext = {
   authorCountry: string | null;
   roomLabel: string | null;
   checkOutAt: Date;
+  /** The property's IANA time zone: times on the review page are its local times. */
+  timeZone: string;
   eligibility: ReviewEligibility;
   review: GuestReview | null;
 };
@@ -60,7 +63,9 @@ export type GuestReview = {
   body: string | null;
   status: ReviewStatus;
   createdAt: Date;
-  /** The public thread: published replies, plus the guest's own answer while it is held. */
+  /** What moderation did with it, for its author's page. */
+  moderation: AuthorModeration;
+  /** The public thread: published replies, plus the guest's own answer while it is held or once removed (with its `moderation`). */
   replies: ReviewReply[];
 };
 
@@ -84,6 +89,7 @@ type ContextRow = {
   review_status: ReviewStatus | null;
   review_rewrite_used: boolean | null;
   review_created_at: Date | null;
+  review_moderation: Parameters<typeof toAuthorModeration>[0];
 };
 
 const CONTEXT_SQL = `
@@ -96,7 +102,8 @@ const CONTEXT_SQL = `
             FROM reservations r JOIN rooms rm ON rm.id = r.room_id
            WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS room_label,
          rv.id AS review_id, rv.score AS review_score, rv.body AS review_body,
-         rv.status AS review_status, rv.rewrite_used AS review_rewrite_used, rv.created_at AS review_created_at
+         rv.status AS review_status, rv.rewrite_used AS review_rewrite_used, rv.created_at AS review_created_at,
+         ${authorModerationSql("review", "rv")} AS review_moderation
     FROM bookings b
     JOIN properties p ON p.id = b.hotel_id
     LEFT JOIN "user" u ON u.id = b.user_id
@@ -121,6 +128,7 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
     authorCountry: row.guest_country?.trim().toUpperCase() || null,
     roomLabel: row.room_label,
     checkOutAt,
+    timeZone: row.timezone,
     eligibility: reviewEligibility({
       status: row.status,
       noShowReportedAt: row.no_show_reported_at,
@@ -136,6 +144,7 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
           body: row.review_body,
           status: row.review_status!,
           createdAt: row.review_created_at!,
+          moderation: toAuthorModeration(row.review_moderation),
           replies: [],
         }
       : null,
@@ -149,9 +158,8 @@ export async function getReviewContext(db: Queryable, bookingId: string, now: Da
   if (!row) return null;
   const context = toContext(row, now);
   if (context.review && context.review.status !== "deleted") {
-    const thread = (await loadReviewReplies(db, [context.review.id], { publicOnly: false })).get(context.review.id) ?? [];
-    // A host reply held for a check isn't shown to the guest yet; their own held answer is.
-    context.review.replies = thread.filter((r) => r.status === "published" || r.role === "guest");
+    // A host reply held for a check isn't shown to the guest yet; their own held or removed answer is.
+    context.review.replies = (await loadReviewReplies(db, [context.review.id], { author: "guest" })).get(context.review.id) ?? [];
   }
   return context;
 }

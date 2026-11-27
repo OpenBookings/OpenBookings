@@ -31,7 +31,8 @@ export type ReportReviewInput = {
   turnstileToken: unknown;
 };
 
-export type ReportReviewResult = { ok: true } | { ok: false; message: string };
+/** `emailStored`: whether the outcome will be emailed (the success screen says so only then). */
+export type ReportReviewResult = { ok: true; emailStored: boolean } | { ok: false; message: string };
 
 const REPORTS_PER_HOUR = 5;
 const HOUR_MS = 60 * 60 * 1000;
@@ -59,7 +60,11 @@ export async function reportReviewPublic(input: ReportReviewInput): Promise<Repo
 
   const item = parseItem(input.item);
   if (!item) return fail('not_found');
-  const session = await getServerSession().catch(() => null);
+  // A session that can't be read is reported, and the report goes ahead without updates.
+  const session = await getServerSession().catch((error: unknown) => {
+    Sentry.captureException(error, { tags: { area: 'reviews', action: 'report-session' } });
+    return null;
+  });
   const userId = session?.user?.id ?? null;
   const email = input.updates === true && userId ? (session?.user?.email ?? null) : null;
 
@@ -71,7 +76,7 @@ export async function reportReviewPublic(input: ReportReviewInput): Promise<Repo
       note: input.note,
       now: new Date(),
     });
-    return result.ok ? { ok: true } : fail(result.error);
+    return result.ok ? { ok: true, emailStored: email !== null } : fail(result.error);
   } catch (error) {
     Sentry.captureException(error, { tags: { area: 'reviews', action: 'report' } });
     return { ok: false, message: 'Something went wrong. Try again in a moment.' };

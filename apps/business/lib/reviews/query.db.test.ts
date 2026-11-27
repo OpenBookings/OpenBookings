@@ -214,6 +214,55 @@ describeWithDb("loadHostReviews against Postgres", () => {
     expect(listed?.replies.map((r) => r.id)).toEqual([open]);
   });
 
+  test("the host's own replies carry what moderation did; a removed one stays in the thread and keeps its turn", async () => {
+    const removedOn = await addReview("published");
+    const removedReply = (
+      await one(
+        `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, flagged_reason, decision, decision_rules,
+                                     decision_note, decided_at, created_at)
+         VALUES ($1, 'host', $2, 'Call Jan Jansen.', 'removed', 'personal_details', 'removed', '{personal_details,abuse}',
+                 'First names only.', '2031-01-02T10:00:00Z', '2031-01-01T10:00:00Z')
+         RETURNING id`,
+        [removedOn, owner],
+      )
+    ).id;
+    const maskedOn = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, masked_body, status, flagged_reason,
+                                   published_by_deadline, published_at, created_at)
+       VALUES ($1, 'host', $2, 'Thanks, Jan Jansen.', 'Thanks, [removed].', 'published', 'personal_details', true, NOW(), NOW() - interval '4 days'),
+              ($1, 'guest', $3, 'You too.', NULL, 'published', NULL, false, NOW(), NOW())`,
+      [maskedOn, owner, guest],
+    );
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    const removed = list.find((r) => r.id === removedOn);
+    expect(removed).toMatchObject({ timeZone: "Europe/Amsterdam", nextRole: "guest" });
+    expect(removed?.replies).toEqual([
+      expect.objectContaining({
+        id: removedReply,
+        role: "host",
+        status: "removed",
+        moderation: expect.objectContaining({
+          written: "Call Jan Jansen.",
+          decision: "removed",
+          decisionRules: ["personal_details", "abuse"],
+          decisionNote: "First names only.",
+          decidedAt: "2031-01-02T10:00:00.000Z",
+          heldSince: "2031-01-01T10:00:00.000Z",
+        }),
+      }),
+    ]);
+
+    const masked = list.find((r) => r.id === maskedOn);
+    expect(masked?.replies.map((r) => [r.role, r.body, r.moderation?.maskedBody ?? null, r.moderation?.written ?? null])).toEqual([
+      ["host", "Thanks, [removed].", "Thanks, [removed].", "Thanks, Jan Jansen."],
+      // The guest's answer is theirs: no moderation details, never the original.
+      ["guest", "You too.", null, null],
+    ]);
+    expect(masked?.replies[0]?.moderation).toMatchObject({ publishedByDeadline: true, flaggedRules: ["personal_details"] });
+  });
+
   test("countReviewsNeedingReply counts the open ones", async () => {
     await addReview("published");
     await addReview("published");

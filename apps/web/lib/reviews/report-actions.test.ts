@@ -8,6 +8,8 @@ import { mockModules } from '@/lib/mock-modules';
 
 let turnstileOk = true;
 let session: { user: { id: string; email: string } } | null = null;
+let sessionError: Error | null = null;
+const captured: unknown[] = [];
 let ip = '';
 const verified: { token: unknown; ip: string | null; action: string }[] = [];
 const reported: { item: unknown; reporter: unknown; rule: unknown; note: unknown }[] = [];
@@ -17,7 +19,7 @@ await mockModules(
   import.meta.dir,
   {
     'next/headers': () => ({ headers: async () => new Headers({ 'cf-connecting-ip': ip }) }),
-    '@sentry/nextjs': () => ({ captureException: () => {} }),
+    '@sentry/nextjs': () => ({ captureException: (error: unknown) => void captured.push(error) }),
     '@openbookings/db': () => ({ getPool: () => ({}) }),
     '@openbookings/db/reviews': () => ({
       createReviewReport: async (_db: unknown, i: { item: unknown; reporter: unknown; rule: unknown; note: unknown }) => {
@@ -25,7 +27,13 @@ await mockModules(
         return reportResult;
       },
     }),
-    '@/lib/auth': () => ({ auth: { api: {} }, getServerSession: async () => session }),
+    '@/lib/auth': () => ({
+      auth: { api: {} },
+      getServerSession: async () => {
+        if (sessionError) throw sessionError;
+        return session;
+      },
+    }),
     '@/lib/turnstile': () => ({
       TURNSTILE_ACTIONS: { checkout: 'checkout', reviewReport: 'review_report' },
       verifyTurnstile: async (token: unknown, clientIp: string | null, action: string) => {
@@ -51,6 +59,8 @@ const input = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   turnstileOk = true;
   session = null;
+  sessionError = null;
+  captured.length = 0;
   ip = `198.51.100.${Math.floor(Math.random() * 250)}-${crypto.randomUUID()}`;
   verified.length = 0;
   reported.length = 0;
@@ -66,12 +76,12 @@ describe('reportReviewPublic', () => {
   });
 
   it('the sixth public report from one IP within an hour is refused', async () => {
-    for (let n = 0; n < 5; n += 1) expect(await reportReviewPublic(input())).toEqual({ ok: true });
+    for (let n = 0; n < 5; n += 1) expect(await reportReviewPublic(input())).toEqual({ ok: true, emailStored: false });
     expect(await reportReviewPublic(input())).toEqual({ ok: false, message: expect.stringMatching(/last hour/) });
     expect(reported).toHaveLength(5);
     // Another IP is its own bucket.
     ip = `other-${crypto.randomUUID()}`;
-    expect(await reportReviewPublic(input())).toEqual({ ok: true });
+    expect(await reportReviewPublic(input())).toEqual({ ok: true, emailStored: false });
   });
 
   it("a signed-out reporter gets no updates, whatever the form says", async () => {
@@ -81,12 +91,19 @@ describe('reportReviewPublic', () => {
 
   it("a signed-in reporter's updates go to the account's email, and only when ticked", async () => {
     session = { user: { id: 'guest-1', email: 'lisa@example.test' } };
-    await reportReviewPublic(input({ updates: true, email: 'someone-else@example.test' }));
-    await reportReviewPublic(input({ updates: false }));
+    expect(await reportReviewPublic(input({ updates: true, email: 'someone-else@example.test' }))).toEqual({ ok: true, emailStored: true });
+    expect(await reportReviewPublic(input({ updates: false }))).toEqual({ ok: true, emailStored: false });
     expect(reported.map((r) => r.reporter)).toEqual([
       { kind: 'public', userId: 'guest-1', email: 'lisa@example.test' },
       { kind: 'public', userId: 'guest-1', email: null },
     ]);
+  });
+
+  it("a session that can't be read goes to Sentry; the report is made without updates, and says so", async () => {
+    sessionError = new Error('auth store down');
+    expect(await reportReviewPublic(input({ updates: true }))).toEqual({ ok: true, emailStored: false });
+    expect(captured).toEqual([sessionError]);
+    expect(reported[0]?.reporter).toEqual({ kind: 'public', userId: null, email: null });
   });
 
   it("passes the item, rule and note on, and says when it's already reported", async () => {

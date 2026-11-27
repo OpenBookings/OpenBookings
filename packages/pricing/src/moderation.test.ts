@@ -7,6 +7,9 @@ import {
   fragmentRanges,
   isReviewRuleId,
   maskFragments,
+  authorNotice,
+  type AuthorModeration,
+  type ReviewRuleId,
 } from "./moderation";
 
 describe("fragmentRanges", () => {
@@ -98,5 +101,55 @@ describe("review rules", () => {
 
   test("MODERATION_DEADLINE_HOURS is 72", () => {
     expect(MODERATION_DEADLINE_HOURS).toBe(72);
+  });
+});
+
+describe("authorNotice", () => {
+  const base: AuthorModeration = {
+    written: "Lovely stay. Call Jan on 0612345678.",
+    flaggedRules: ["links_contact"],
+    decision: null,
+    decisionRules: [],
+    decisionNote: null,
+    decidedAt: null,
+    publishedByDeadline: false,
+    maskedBody: null,
+    heldSince: "2026-11-20T10:00:00.000Z",
+  };
+
+  test("held: waiting for a person, with the deadline 72 hours after it was written", () => {
+    expect(authorNotice("pending", base)).toEqual({ state: "held", deadline: new Date("2026-11-23T10:00:00.000Z") });
+  });
+
+  test("removed: the rules and note the person gave, and when", () => {
+    const m = { ...base, decision: "removed" as const, decisionRules: ["abuse", "threat"] as ReviewRuleId[], decisionNote: "No insults.", decidedAt: "2026-11-21T09:00:00.000Z" };
+    expect(authorNotice("removed", m)).toEqual({
+      state: "removed",
+      rules: ["abuse", "threat"],
+      note: "No insults.",
+      decidedAt: new Date("2026-11-21T09:00:00.000Z"),
+    });
+  });
+
+  test("removed before moderation recorded decisions: no rules, note or date", () => {
+    expect(authorNotice("removed", base)).toEqual({ state: "removed", rules: [], note: null, decidedAt: null });
+  });
+
+  test("published with parts removed by the deadline: the check's rules, not a decision's", () => {
+    const m = { ...base, publishedByDeadline: true, maskedBody: "Lovely stay. Call Jan on [removed]." };
+    expect(authorNotice("published", m)).toEqual({
+      state: "masked",
+      rules: ["links_contact"],
+      published: "Lovely stay. Call Jan on [removed].",
+      written: "Lovely stay. Call Jan on 0612345678.",
+    });
+  });
+
+  test("published as written, kept, or published by the deadline with nothing to mask: nothing to say", () => {
+    expect(authorNotice("published", base)).toBeNull();
+    expect(authorNotice("published", { ...base, decision: "kept", publishedByDeadline: true, maskedBody: "x [removed]" })).toBeNull();
+    expect(authorNotice("published", { ...base, publishedByDeadline: true })).toBeNull();
+    expect(authorNotice("hidden", base)).toBeNull();
+    expect(authorNotice("deleted", base)).toBeNull();
   });
 });

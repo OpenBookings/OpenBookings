@@ -18,6 +18,8 @@ export type HostReview = {
   bookingId: string;
   propertyId: string;
   propertyName: string;
+  /** The property's IANA time zone: moderation dates are its local dates. */
+  timeZone: string;
   score: number;
   body: string | null;
   authorName: string;
@@ -38,7 +40,7 @@ export type HostReview = {
   replyReports: Record<string, HostReportStatus>;
   /** ISO: published_at, or created_at while it is being checked. */
   postedAt: string;
-  /** Published and held replies, oldest first. */
+  /** Published and held replies, oldest first, and the host's own removed ones (with `moderation`, without their words). */
   replies: ReviewReply[];
   /** ISO time of the latest private reply in Messages, if any. */
   privateReplyAt: string | null;

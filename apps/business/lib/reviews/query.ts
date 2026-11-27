@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { isTestingMode } from "@openbookings/mode";
 import { currentPropertySql, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { nextReplyRole, type ReplyRole } from "@openbookings/pricing";
-import type { ReplyStatus, ReviewReply } from "@openbookings/db/reviews";
+import { authorModerationSql, toAuthorModeration, type ReplyStatus, type ReviewReply } from "@openbookings/db/reviews";
 import { needsReply, type HostReportStatus, type HostReview } from "./shape";
 
 /** The newest reviews a host sees; older ones drop off the page. */
@@ -13,6 +13,7 @@ type Row = {
   booking_id: string;
   property_id: string;
   property_name: string;
+  timezone: string;
   score: number;
   body: string | null;
   author_name: string;
@@ -34,7 +35,11 @@ type Row = {
     published_at: string | null;
     edited_at: string | null;
     created_at: string;
+    /** The host's own replies only. */
+    moderation: Parameters<typeof toAuthorModeration>[0] | null;
   }[];
+  /** Every reply that isn't deleted, removed ones included: whose turn it is counts them all (nextReplyRole). */
+  thread_roles: ReplyRole[] | null;
 };
 
 /**
@@ -57,10 +62,12 @@ const ownReportsSql = `
  * answer its report removed): open first, else the latest outcome. A removed review shows
  * only when the property's report was upheld by its removal, so the host sees
  * the outcome. Hidden and deleted reviews are left out. Text published by the
- * moderation deadline shows masked, as on the property page.
+ * moderation deadline shows masked, as on the property page. The host's own
+ * replies come with what moderation did with them (a removed one too, without
+ * its words): theirs to see, never a guest's.
  */
 const hostReviewsSql = (testing: boolean) => `
-  SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, rv.score, COALESCE(rv.masked_body, rv.body) AS body,
+  SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, p.timezone, rv.score, COALESCE(rv.masked_body, rv.body) AS body,
          rv.author_name, rv.author_country, rv.stay_month::text AS stay_month, rv.room_label,
          rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
@@ -75,12 +82,17 @@ const hostReviewsSql = (testing: boolean) => `
           ) x) AS reply_reports,
          COALESCE((
            SELECT json_agg(json_build_object(
-             'id', rr.id, 'role', rr.author_role, 'body', COALESCE(rr.masked_body, rr.body), 'status', rr.status,
-             'published_at', rr.published_at, 'edited_at', rr.edited_at, 'created_at', rr.created_at
+             'id', rr.id, 'role', rr.author_role,
+             'body', CASE WHEN rr.status = 'removed' THEN '' ELSE COALESCE(rr.masked_body, rr.body) END, 'status', rr.status,
+             'published_at', rr.published_at, 'edited_at', rr.edited_at, 'created_at', rr.created_at,
+             'moderation', CASE WHEN rr.author_role = 'host' THEN ${authorModerationSql("reply", "rr")} END
            ) ORDER BY rr.created_at, rr.id)
            FROM review_replies rr
-           WHERE rr.review_id = rv.id AND rr.status IN ('published', 'pending')
-         ), '[]'::json) AS replies
+           WHERE rr.review_id = rv.id
+             AND (rr.status IN ('published', 'pending') OR (rr.author_role = 'host' AND rr.status = 'removed'))
+         ), '[]'::json) AS replies,
+         (SELECT array_agg(rr.author_role ORDER BY rr.created_at, rr.id)
+            FROM review_replies rr WHERE rr.review_id = rv.id AND rr.status <> 'deleted') AS thread_roles
     FROM reviews rv
     JOIN properties p ON p.id = rv.property_id
    WHERE (rv.status IN ('published', 'pending')
@@ -100,12 +112,14 @@ function toHostReview(row: Row): HostReview {
     publishedAt: iso(r.published_at),
     editedAt: iso(r.edited_at),
     createdAt: iso(r.created_at)!,
+    ...(r.moderation ? { moderation: toAuthorModeration(r.moderation) } : {}),
   }));
   return {
     id: row.id,
     bookingId: row.booking_id,
     propertyId: row.property_id,
     propertyName: row.property_name,
+    timeZone: row.timezone,
     score: Number(row.score),
     body: row.body,
     authorName: row.author_name,
@@ -120,7 +134,7 @@ function toHostReview(row: Row): HostReview {
     replies,
     privateReplyAt: iso(row.private_reply_at),
     skippedAt: iso(row.reply_skipped_at),
-    nextRole: nextReplyRole(replies.map((r) => r.role)),
+    nextRole: nextReplyRole(row.thread_roles ?? []),
   };
 }
 

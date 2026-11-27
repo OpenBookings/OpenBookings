@@ -491,6 +491,71 @@ describeWithDb("review moderation against Postgres", () => {
     ).toEqual({ ok: false, error: "already_reviewed" });
   });
 
+  test("the author's page: held, removed with the decision, published with parts removed", async () => {
+    const held = await review(NAMED);
+    let context = await getReviewContext(db, held.bookingId, later(HOUR));
+    expect(context?.timeZone).toBeString();
+    expect(context?.review?.moderation).toEqual({
+      written: RUDE,
+      flaggedRules: ["personal_details"],
+      decision: null,
+      decisionRules: [],
+      decisionNote: null,
+      decidedAt: null,
+      publishedByDeadline: false,
+      maskedBody: null,
+      heldSince: WRITTEN.toISOString(),
+    });
+
+    await publishOverdue(db, later(72 * HOUR));
+    context = await getReviewContext(db, held.bookingId, later(73 * HOUR));
+    expect(context?.review).toMatchObject({ status: "published", body: RUDE });
+    expect(context?.review?.moderation).toMatchObject({
+      publishedByDeadline: true,
+      maskedBody: "[removed] at the desk was rude to us.",
+      flaggedRules: ["personal_details"],
+    });
+
+    await decide(held.item, "removed", later(80 * HOUR), ["personal_details", "abuse"]);
+    context = await getReviewContext(db, held.bookingId, later(81 * HOUR));
+    expect(context?.review?.status).toBe("removed");
+    expect(context?.review?.moderation).toMatchObject({
+      decision: "removed",
+      decisionRules: ["personal_details", "abuse"],
+      decisionNote: "Names a member of staff.",
+      decidedAt: later(80 * HOUR).toISOString(),
+    });
+  });
+
+  test("the guest's thread: their own held and removed answers, with what happened; never the host's held or removed reply", async () => {
+    const published = await review(CLEAN, "Lovely.");
+    const hostReply = await postReviewReply(db, {
+      reviewId: published.reviewId, role: "host", authorUserId: hostId, body: "Thank you.", check: CLEAN, now: later(HOUR),
+    });
+    if (!hostReply.ok) throw new Error("reply failed");
+    const answer = await postReviewReply(db, {
+      reviewId: published.reviewId, role: "guest", authorUserId: published.guestId, body: RUDE, check: NAMED, now: later(2 * HOUR),
+    });
+    if (!answer.ok) throw new Error("answer failed");
+
+    let thread = (await getReviewContext(db, published.bookingId, later(3 * HOUR)))?.review?.replies ?? [];
+    expect(thread.map((r) => [r.role, r.status, r.moderation?.heldSince ?? null])).toEqual([
+      ["host", "published", null],
+      ["guest", "pending", later(2 * HOUR).toISOString()],
+    ]);
+
+    await decide({ kind: "reply", id: answer.replyId }, "removed", later(4 * HOUR), ["abuse"]);
+    thread = (await getReviewContext(db, published.bookingId, later(5 * HOUR)))?.review?.replies ?? [];
+    expect(thread[1]).toMatchObject({ role: "guest", status: "removed", moderation: { decision: "removed", decisionRules: ["abuse"] } });
+    // The public never sees it.
+    expect((await loadReviewReplies(db, [published.reviewId], { publicOnly: true })).get(published.reviewId)?.map((r) => r.role)).toEqual(["host"]);
+
+    // The host's own removed reply isn't the guest's to see.
+    await decide({ kind: "reply", id: hostReply.replyId }, "removed", later(6 * HOUR), ["abuse"]);
+    thread = (await getReviewContext(db, published.bookingId, later(7 * HOUR)))?.review?.replies ?? [];
+    expect(thread.map((r) => r.role)).toEqual(["guest"]);
+  });
+
   test("a deleted review drops out: decideItem returns not_found and its open reports are dismissed", async () => {
     const held = await review(UNCHECKED);
     const open = await report(held.reviewId);
@@ -766,7 +831,7 @@ describeWithDb("review moderation against Postgres", () => {
     const open = await report(published.reviewId);
     await as("ob_admin_read", async () => {
       expect((await loadPropertyReviews(db, ids.propertyId, later(HOUR))).reviews.map((r) => r.id)).toEqual([published.reviewId]);
-      expect((await loadReviewReplies(db, [published.reviewId], { publicOnly: false })).size).toBe(0);
+      expect((await loadReviewReplies(db, [published.reviewId], { author: "guest" })).size).toBe(0);
       expect(await uncheckedItems(db, 10)).toEqual([{ kind: "review", id: held.reviewId, body: "Fine." }]);
       expect((await db.query(`SELECT id, status, rule, note FROM review_reports WHERE id = $1`, [open])).rows).toHaveLength(1);
     });

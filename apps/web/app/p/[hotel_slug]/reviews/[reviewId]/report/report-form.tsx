@@ -38,21 +38,22 @@ export function ReportForm({
   const [note, setNote] = useState('');
   const [updates, setUpdates] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  /** Sent; `emailed`: the action stored the account email for the outcome. */
+  const [done, setDone] = useState<{ emailed: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const {
     token,
     failed: turnstileFailed,
     containerRef: turnstileRef,
     reset: resetTurnstile,
-  } = useTurnstileToken({ enabled: !done, action: TURNSTILE_ACTIONS.reviewReport });
+  } = useTurnstileToken({ enabled: done === null, action: TURNSTILE_ACTIONS.reviewReport });
 
   if (done) {
     return (
       <div className="flex flex-col gap-3 text-[15px]">
         <p className="font-medium">Thanks. A person will check this review against our review rules.</p>
         <p className="text-white/65">
-          {updates && email ? `We'll email the outcome to ${email}.` : 'It stays on the page while we check it.'}
+          {done.emailed && email ? `We'll email the outcome to ${email}.` : 'It stays on the page while we check it.'}
         </p>
         <Link href={backHref} className="text-sm text-white/80 underline underline-offset-4 hover:text-white">
           {backLabel}
@@ -67,7 +68,7 @@ export function ReportForm({
     startTransition(async () => {
       setError(null);
       const result = await reportReviewPublic({ item, rule, note, updates: email !== null && updates, turnstileToken: token });
-      if (result.ok) setDone(true);
+      if (result.ok) setDone({ emailed: result.emailStored });
       else {
         setError(result.message);
         // The token was spent at Cloudflare either way.

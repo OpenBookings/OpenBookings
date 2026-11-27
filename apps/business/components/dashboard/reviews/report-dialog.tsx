@@ -20,9 +20,9 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { reportGuestAnswer, reportReview } from "@/lib/reviews/actions";
+import { RULES_PAGE } from "./labels";
 
 const NOTE_MAX = 1000;
-const RULES_PAGE = `${process.env.NEXT_PUBLIC_WEB_URL ?? "https://openbookings.co"}/legal/review-rules`;
 
 /**
  * Report a review, or a guest's answer, against one rule, with an optional
