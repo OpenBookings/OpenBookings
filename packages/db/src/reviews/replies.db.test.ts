@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 import { Client } from "pg";
+import type { TextCheck } from "@openbookings/pricing";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedGuest, seedProperty } from "../testing/db-harness";
 import {
   anonymizeGuestReviews,
@@ -15,6 +16,8 @@ import {
   type ReplyRole,
 } from "./index";
 
+const CLEAN: TextCheck = { verdict: "clean", rules: [], fragments: [], source: "regex" };
+const FLAGGED: TextCheck = { verdict: "flagged", rules: ["links_contact"], fragments: [], source: "regex" };
 const DAY = 86_400_000;
 const CHECK_IN = "2031-11-10";
 const CHECK_OUT_AT = Date.parse("2031-11-12T10:00:00Z");
@@ -38,7 +41,7 @@ describeWithDb("review replies against Postgres", () => {
       role,
       authorUserId: role === "host" ? hostId : guestId,
       body: role === "host" ? "Thank you for staying." : "Glad to.",
-      flaggedReason: null,
+      check: CLEAN,
       now: new Date(NOW.getTime() + ++tick * 60_000),
       ...extra,
     });
@@ -68,7 +71,7 @@ describeWithDb("review replies against Postgres", () => {
       via: "session",
       score: 6,
       body: "Small room.",
-      flaggedReason: null,
+      check: CLEAN,
       now: at(2 * DAY),
     });
     if (!submitted.ok) throw new Error(`seed review failed: ${submitted.error}`);
@@ -105,7 +108,7 @@ describeWithDb("review replies against Postgres", () => {
   });
 
   test("a flagged reply is held, not refused", async () => {
-    expect(await reply("host", { flaggedReason: "url" })).toMatchObject({ ok: true, status: "pending" });
+    expect(await reply("host", { check: FLAGGED })).toMatchObject({ ok: true, status: "pending" });
     expect(await publicReplies()).toEqual([]);
   });
 
@@ -122,7 +125,7 @@ describeWithDb("review replies against Postgres", () => {
     if (!posted.ok) throw new Error("post failed");
     const later = new Date(NOW.getTime() + DAY);
     expect(
-      await editHostReply(db, { replyId: posted.replyId, authorUserId: hostId, body: "Call +31 6 1234 5678", flaggedReason: "phone_number", now: later }),
+      await editHostReply(db, { replyId: posted.replyId, authorUserId: hostId, body: "Call +31 6 1234 5678", check: FLAGGED, now: later }),
     ).toEqual({ ok: true, status: "pending", propertyId });
     const row = await one<{ status: string; edited_at: Date; body: string }>(
       `SELECT status, edited_at, body FROM review_replies WHERE id = $1`,
@@ -138,7 +141,7 @@ describeWithDb("review replies against Postgres", () => {
     const answered = await reply("guest");
     if (!answered.ok) throw new Error("answer failed");
     expect(
-      await editHostReply(db, { replyId: answered.replyId, authorUserId: hostId, body: "Changed", flaggedReason: null, now: NOW }),
+      await editHostReply(db, { replyId: answered.replyId, authorUserId: hostId, body: "Changed", check: CLEAN, now: NOW }),
     ).toEqual({ ok: false, error: "not_found" });
   });
 
@@ -164,7 +167,7 @@ describeWithDb("review replies against Postgres", () => {
 
   test("the guest sees published replies and their own held answer", async () => {
     await reply("host");
-    await reply("guest", { flaggedReason: "url" });
+    await reply("guest", { check: FLAGGED });
     const context = await getReviewContext(db, bookingId, NOW);
     expect(context?.review?.replies.map((r) => [r.role, r.status])).toEqual([
       ["host", "published"],

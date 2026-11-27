@@ -16,13 +16,16 @@ import {
   stayMonth,
   type BookingStatus,
   type ReviewEligibility,
+  type TextCheck,
 } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
 
 export * from "./shared";
 export * from "./invitations";
 export * from "./replies";
+export * from "./moderation";
 import { authorFirstName, normalizeReviewBody } from "./shared";
+import { dismissReportsOfDeleted, storedCheck } from "./moderation";
 import { loadReviewReplies, type ReviewReply } from "./replies";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -77,6 +80,7 @@ type ContextRow = {
   review_score: number | null;
   review_body: string | null;
   review_status: ReviewStatus | null;
+  review_rewrite_used: boolean | null;
   review_created_at: Date | null;
 };
 
@@ -90,7 +94,7 @@ const CONTEXT_SQL = `
             FROM reservations r JOIN rooms rm ON rm.id = r.room_id
            WHERE r.booking_id = b.id AND r.cancelled_at IS NULL) AS room_label,
          rv.id AS review_id, rv.score AS review_score, rv.body AS review_body,
-         rv.status AS review_status, rv.created_at AS review_created_at
+         rv.status AS review_status, rv.rewrite_used AS review_rewrite_used, rv.created_at AS review_created_at
     FROM bookings b
     JOIN properties p ON p.id = b.hotel_id
     LEFT JOIN "user" u ON u.id = b.user_id
@@ -119,7 +123,8 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
       status: row.status,
       noShowReportedAt: row.no_show_reported_at,
       checkOutAt,
-      hasReview: row.review_id !== null,
+      // A removed review may be written once more (the same row): it doesn't count until then.
+      hasReview: row.review_id !== null && !(row.review_status === "removed" && !row.review_rewrite_used),
       now,
     }),
     review: row.review_id
@@ -156,8 +161,8 @@ export type SubmitReviewInput = {
   via: "session" | "token";
   score: number;
   body: string | null;
-  /** From the automated check. Set = held as 'pending' for a person; null = published now. */
-  flaggedReason: string | null;
+  /** The automated check's outcome: clean publishes now, anything else is held for a person. */
+  check: TextCheck;
   now: Date;
 };
 
@@ -168,8 +173,13 @@ export type SubmitReviewResult =
 
 /**
  * Stores a review for the booking's guest. The caller has already proved the
- * booking (session ownership or token). Published straight away unless the
- * automated check flagged it: hosts never approve or hold reviews.
+ * booking (session ownership or token). Published straight away when the
+ * automated check is clean, else held for a moderator: hosts never approve or
+ * hold reviews.
+ *
+ * A review a moderator removed may be written once more: the same row is
+ * rewritten (new score, text and check; the old decision cleared;
+ * rewrite_used set), never a second row.
  */
 export async function submitReview(db: Queryable, i: SubmitReviewInput): Promise<SubmitReviewResult> {
   if (!Number.isInteger(i.score) || i.score < 1 || i.score > 10) return { ok: false, error: "invalid" };
@@ -180,34 +190,65 @@ export async function submitReview(db: Queryable, i: SubmitReviewInput): Promise
   if (!context) return { ok: false, error: "not_found" };
   if (!context.eligibility.ok) return { ok: false, error: context.eligibility.reason };
 
-  const status = i.flaggedReason ? "pending" : "published";
+  const check = storedCheck(i.check, i.now);
+  const { status } = check;
   const inserted = (
-    await db.query(
-      `INSERT INTO reviews
-         (booking_id, property_id, guest_user_id, score, body, author_name, author_country,
-          stay_month, room_label, status, flagged_reason, submitted_via, published_at, created_at, updated_at)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13, $14, $14)
-       ON CONFLICT (booking_id) DO NOTHING
-       RETURNING id`,
-      [
-        context.bookingId,
-        context.propertyId,
-        context.guestUserId,
-        i.score,
-        body,
-        context.authorName,
-        context.authorCountry,
-        context.stayMonth,
-        context.roomLabel,
-        status,
-        i.flaggedReason,
-        i.via,
-        status === "published" ? i.now : null,
-        i.now,
-      ],
-    )
+    context.review
+      ? // The one rewrite after a removal (eligibility allowed it). The clock
+        // for the deadline starts again: created_at is the new submission.
+        await db.query(
+          `UPDATE reviews
+              SET score = $2, body = $3, status = $4, flagged_reason = $5, flagged_fragments = $6::jsonb,
+                  check_source = $7, checked_at = $8, submitted_via = $9, published_at = $10,
+                  masked_body = NULL, published_by_deadline = false, decision = NULL, decision_rules = NULL,
+                  decision_note = NULL, decided_by = NULL, decided_at = NULL, rewrite_used = true,
+                  created_at = $11, updated_at = $11
+            WHERE id = $1::uuid AND status = 'removed' AND NOT rewrite_used
+            RETURNING id`,
+          [
+            context.review.id,
+            i.score,
+            body,
+            status,
+            check.flaggedReason,
+            check.fragments,
+            check.source,
+            check.checkedAt,
+            i.via,
+            status === "published" ? i.now : null,
+            i.now,
+          ],
+        )
+      : await db.query(
+          `INSERT INTO reviews
+             (booking_id, property_id, guest_user_id, score, body, author_name, author_country,
+              stay_month, room_label, status, flagged_reason, flagged_fragments, check_source, checked_at,
+              submitted_via, published_at, created_at, updated_at)
+           VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12::jsonb, $13, $14, $15, $16, $17, $17)
+           ON CONFLICT (booking_id) DO NOTHING
+           RETURNING id`,
+          [
+            context.bookingId,
+            context.propertyId,
+            context.guestUserId,
+            i.score,
+            body,
+            context.authorName,
+            context.authorCountry,
+            context.stayMonth,
+            context.roomLabel,
+            status,
+            check.flaggedReason,
+            check.fragments,
+            check.source,
+            check.checkedAt,
+            i.via,
+            status === "published" ? i.now : null,
+            i.now,
+          ],
+        )
   ).rows[0] as { id: string } | undefined;
-  // Lost a race with a second submit: the first one stands.
+  // Lost a race with a second submit (or rewrite): the first one stands.
   if (!inserted) return { ok: false, error: "already_reviewed" };
   // Spent: every emailed link for this booking is now useless, so drop them.
   await db.query(`DELETE FROM review_tokens WHERE booking_id = $1::uuid`, [context.bookingId]);
@@ -217,21 +258,27 @@ export async function submitReview(db: Queryable, i: SubmitReviewInput): Promise
 /**
  * The author deletes their review. The row stays without its content, so the
  * booking can't be reviewed again: that would be an edit after a host reply.
+ * It leaves the moderation queue: open reports on it and its replies close as
+ * dismissed.
  */
 export async function deleteGuestReview(
   db: Queryable,
   i: { bookingId: string; guestUserId: string; now: Date },
 ): Promise<boolean> {
   if (!UUID.test(i.bookingId)) return false;
-  const { rows } = await db.query(
-    `UPDATE reviews
-        SET status = 'deleted', score = NULL, body = NULL, flagged_reason = NULL,
-            deleted_at = $3, updated_at = $3
-      WHERE booking_id = $1::uuid AND guest_user_id = $2 AND status <> 'deleted'
-      RETURNING id`,
-    [i.bookingId, i.guestUserId, i.now],
-  );
-  return rows.length > 0;
+  const row = (
+    await db.query(
+      `UPDATE reviews
+          SET status = 'deleted', score = NULL, body = NULL, flagged_reason = NULL,
+              masked_body = NULL, flagged_fragments = '[]', deleted_at = $3, updated_at = $3
+        WHERE booking_id = $1::uuid AND guest_user_id = $2 AND status <> 'deleted'
+        RETURNING id`,
+      [i.bookingId, i.guestUserId, i.now],
+    )
+  ).rows[0] as { id: string } | undefined;
+  if (!row) return false;
+  await dismissReportsOfDeleted(db, { reviewId: row.id, replyId: null, now: i.now });
+  return true;
 }
 
 /**
@@ -310,7 +357,9 @@ export async function loadPropertyReviews(
   since.setUTCMonth(since.getUTCMonth() - AVERAGE_WINDOW_MONTHS);
   const [{ rows: list }, { rows: recent }, { rows: totals }] = await Promise.all([
     db.query(
-      `SELECT id, score, body, author_name, author_country, stay_month::text AS stay_month, room_label, published_at
+      // The masked text when it published by the deadline: never the original.
+      `SELECT id, score, COALESCE(masked_body, body) AS body, author_name, author_country,
+              stay_month::text AS stay_month, room_label, published_at
          FROM reviews
         WHERE property_id = $1::uuid AND status = 'published'
         ORDER BY (body IS NULL), published_at DESC

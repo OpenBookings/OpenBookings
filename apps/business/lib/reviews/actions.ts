@@ -13,6 +13,7 @@ import {
 } from "@openbookings/db/reviews";
 import { sendReviewReplied } from "@openbookings/mailing/review-send";
 import { deliverMessageToRecipient, detectCircumvention, screenReview } from "@openbookings/messaging";
+import type { TextCheck } from "@openbookings/pricing";
 import { getServerSession } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { messageFor, reviewActor } from "./actor";
@@ -30,6 +31,15 @@ const REVIEWS = "/dashboard/bookings/reviews";
 const MESSAGES = "/dashboard/bookings/messages";
 
 const fail = (error: Parameters<typeof messageFor>[0]): ReplyActionResult => ({ ok: false, message: messageFor(error) });
+
+/**
+ * Today's automated check as a TextCheck: the regex screen, its contact
+ * details and links all under links_contact. Task 4 swaps in the full check.
+ */
+function regexCheck(body: string): TextCheck {
+  const reason = screenReview(body);
+  return { verdict: reason ? "flagged" : "clean", rules: reason ? ["links_contact"] : [], fragments: [], source: "regex" };
+}
 
 function rateLimited(userId: string): boolean {
   return !checkRateLimit(`review-reply:${userId}`, 20, 10 * 60 * 1000).allowed;
@@ -70,7 +80,7 @@ export async function replyToReview(
   }
 
   const result = await withTransaction((tx) =>
-    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, flaggedReason: screenReview(body), now }),
+    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, check: regexCheck(body), now }),
   );
   if (!result.ok) return fail(result.error);
   if (result.status === "published") {
@@ -90,7 +100,7 @@ export async function editReviewReply(replyId: string, body: string): Promise<Re
   if (rateLimited(actor.userId)) return fail("rate_limited");
   const text = typeof body === "string" ? body : "";
   const result = await withTransaction((tx) =>
-    editHostReply(tx, { replyId, authorUserId: actor.userId, body: text, flaggedReason: screenReview(text), now: new Date() }),
+    editHostReply(tx, { replyId, authorUserId: actor.userId, body: text, check: regexCheck(text), now: new Date() }),
   );
   if (!result.ok) return fail(result.error);
   await refreshPropertyPage(result.propertyId);

@@ -39,16 +39,17 @@ type Row = {
  * Published reviews and reviews being checked, at the current hotel (`$1` the
  * member, `$2` the hotel, bound by getPropertyScopedDb), each with its public thread (published and
  * held replies) and the time of the latest private reply. Hidden, removed
- * and deleted reviews are left out.
+ * and deleted reviews are left out. Text published by the moderation
+ * deadline shows masked, as on the property page.
  */
 const hostReviewsSql = (testing: boolean) => `
-  SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, rv.score, rv.body,
+  SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, rv.score, COALESCE(rv.masked_body, rv.body) AS body,
          rv.author_name, rv.author_country, rv.stay_month::text AS stay_month, rv.room_label,
          rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
          COALESCE((
            SELECT json_agg(json_build_object(
-             'id', rr.id, 'role', rr.author_role, 'body', rr.body, 'status', rr.status,
+             'id', rr.id, 'role', rr.author_role, 'body', COALESCE(rr.masked_body, rr.body), 'status', rr.status,
              'published_at', rr.published_at, 'edited_at', rr.edited_at, 'created_at', rr.created_at
            ) ORDER BY rr.created_at, rr.id)
            FROM review_replies rr

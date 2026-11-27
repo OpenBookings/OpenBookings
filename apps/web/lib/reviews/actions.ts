@@ -20,6 +20,7 @@ import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { screenReview } from '@openbookings/messaging';
+import type { TextCheck } from '@openbookings/pricing';
 
 /**
  * The review form's actions. Two ways to prove the booking, one rule for
@@ -57,6 +58,15 @@ function parseScore(score: unknown): number {
   return Number.isInteger(n) ? n : NaN;
 }
 
+/**
+ * Today's automated check as a TextCheck: the regex screen, its contact
+ * details and links all under links_contact. Task 4 swaps in the full check.
+ */
+function regexCheck(body: string | null): TextCheck {
+  const reason = screenReview(body);
+  return { verdict: reason ? 'flagged' : 'clean', rules: reason ? ['links_contact'] : [], fragments: [], source: 'regex' };
+}
+
 async function store(bookingId: string, via: 'session' | 'token', input: { score: unknown; body: unknown }): Promise<SubmitReviewResult> {
   const body = typeof input.body === 'string' ? input.body : null;
   return submitReview(getPool(), {
@@ -64,7 +74,7 @@ async function store(bookingId: string, via: 'session' | 'token', input: { score
     via,
     score: parseScore(input.score),
     body,
-    flaggedReason: screenReview(body),
+    check: regexCheck(body),
     now: new Date(),
   });
 }
@@ -148,7 +158,7 @@ export async function answerHostReply(bookingId: string, body: string): Promise<
       role: 'guest',
       authorUserId: session.user.id,
       body: text,
-      flaggedReason: screenReview(text),
+      check: regexCheck(text),
       now: new Date(),
     }),
   );

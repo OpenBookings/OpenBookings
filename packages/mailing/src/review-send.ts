@@ -137,7 +137,7 @@ export async function sendReviewReplied(
       await c.db.query(
         `SELECT u.email, u.first_name AS guest_first_name, rv.guest_user_id, p.name AS property_name, rv.booking_id,
                 (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out,
-                (SELECT rr.body FROM review_replies rr
+                (SELECT COALESCE(rr.masked_body, rr.body) FROM review_replies rr
                   WHERE rr.review_id = rv.id AND rr.author_role = 'host' AND rr.status = 'published'
                   ORDER BY rr.created_at DESC LIMIT 1) AS reply_body
            FROM reviews rv
