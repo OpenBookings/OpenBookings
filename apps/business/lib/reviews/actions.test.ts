@@ -18,6 +18,8 @@ const checked: string[] = [];
 const posted: { body: string; check: Check }[] = [];
 const edited: { body: string; check: Check }[] = [];
 const repliedMail: string[] = [];
+type Report = { item: unknown; reporter: unknown; rule: unknown; note: unknown; now?: Date };
+const reports: Report[] = [];
 
 const statusOf = (c: Check) => (c.verdict === "clean" ? "published" : "pending");
 
@@ -40,6 +42,10 @@ await mockModules(
         return { ok: true, status: statusOf(i.check), propertyId: "p" };
       },
       setReplySkipped: async () => ({ ok: true }),
+      createReviewReport: async (_db: unknown, i: Report) => {
+        reports.push(i);
+        return { ok: true, reportId: "report-1" };
+      },
       normalizeReviewBody,
     }),
     "@openbookings/mailing/review-send": () => ({
@@ -59,13 +65,15 @@ await mockModules(
     "@/lib/rateLimit": () => ({ checkRateLimit: () => ({ allowed: true }) }),
     "./actor": () => ({
       messageFor: (error: string) => `failed: ${error}`,
-      reviewActor: async () => ({ userId: "host-1", propertyId: "p", reviewId: "review-1" }),
+      // A review of a property this member can't see looks like no review at all.
+      reviewActor: async (_session: unknown, target: { reviewId?: string }) =>
+        target.reviewId === "review-other" ? null : { userId: "host-1", propertyId: "p", reviewId: target.reviewId ?? "review-1" },
     }),
   },
   ["@/lib/auth"],
 );
 
-const { editReviewReply, replyToReview } = await import("./actions");
+const { editReviewReply, replyToReview, reportReview } = await import("./actions");
 
 beforeEach(() => {
   check = clean();
@@ -73,6 +81,7 @@ beforeEach(() => {
   posted.length = 0;
   edited.length = 0;
   repliedMail.length = 0;
+  reports.length = 0;
 });
 
 describe("the moderation check on host replies", () => {
@@ -131,5 +140,20 @@ describe("one normalised text", () => {
     await editReviewReply("reply-1", "  Call 0612345678\r\nKees\r\n");
     expect(checked).toEqual(["Call 0612345678\nKees"]);
     expect(maskFragments(normalizeReviewBody(edited[0]!.body)!, edited[0]!.check.fragments)).toBe("Call [removed]");
+  });
+});
+
+describe("reporting a review", () => {
+  it("reports the review as the member, for the review the actor check found", async () => {
+    expect(await reportReview("review-1", { rule: "abuse", note: "Insults our staff." })).toEqual({ ok: true });
+    expect(reports).toEqual([
+      { item: { kind: "review", id: "review-1" }, reporter: { kind: "host", userId: "host-1" }, rule: "abuse", note: "Insults our staff.", now: expect.any(Date) },
+    ]);
+  });
+
+  it("a host cannot report another property's review", async () => {
+    const result = await reportReview("review-other", { rule: "abuse", note: "" });
+    expect(result).toMatchObject({ ok: false });
+    expect(reports).toEqual([]);
   });
 });

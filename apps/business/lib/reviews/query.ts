@@ -3,7 +3,7 @@ import { isTestingMode } from "@openbookings/mode";
 import { currentPropertySql, getPropertyScopedDb, type SessionLike } from "@openbookings/authz";
 import { nextReplyRole, type ReplyRole } from "@openbookings/pricing";
 import type { ReplyStatus, ReviewReply } from "@openbookings/db/reviews";
-import { needsReply, type HostReview } from "./shape";
+import { needsReply, type HostReportStatus, type HostReview } from "./shape";
 
 /** The newest reviews a host sees; older ones drop off the page. */
 const LIMIT = 500;
@@ -19,8 +19,9 @@ type Row = {
   author_country: string | null;
   stay_month: string;
   room_label: string | null;
-  status: "published" | "pending";
+  status: "published" | "pending" | "removed";
   flagged_reason: string | null;
+  report_status: HostReportStatus | null;
   posted_at: Date;
   private_reply_at: Date | null;
   reply_skipped_at: Date | null;
@@ -36,17 +37,32 @@ type Row = {
 };
 
 /**
+ * The property's own reports on a review that still count: open ones, and
+ * the ones the review's current decision closed (a guest's rewrite after a
+ * removal clears the decision, and with it the old outcome). A host reports
+ * as its organization (createReviewReport), so a colleague's report shows too.
+ */
+const ownReportsSql = `
+  FROM review_reports rp
+ WHERE rp.review_id = rv.id AND rp.reply_id IS NULL AND rp.reporter_kind = 'host'
+   AND rp.reporter_org_id IS NOT DISTINCT FROM p.organization_id
+   AND (rp.status = 'open' OR rp.decided_at = rv.decided_at)`;
+
+/**
  * Published reviews and reviews being checked, at the current hotel (`$1` the
  * member, `$2` the hotel, bound by getPropertyScopedDb), each with its public thread (published and
- * held replies) and the time of the latest private reply. Hidden, removed
- * and deleted reviews are left out. Text published by the moderation
- * deadline shows masked, as on the property page.
+ * held replies), the time of the latest private reply, and the property's
+ * report on it: open first, else the latest outcome. A removed review shows
+ * only when the property's report was upheld by its removal, so the host sees
+ * the outcome. Hidden and deleted reviews are left out. Text published by the
+ * moderation deadline shows masked, as on the property page.
  */
 const hostReviewsSql = (testing: boolean) => `
   SELECT rv.id, rv.booking_id, rv.property_id, p.name AS property_name, rv.score, COALESCE(rv.masked_body, rv.body) AS body,
          rv.author_name, rv.author_country, rv.stay_month::text AS stay_month, rv.room_label,
          rv.status, rv.flagged_reason, rv.reply_skipped_at, COALESCE(rv.published_at, rv.created_at) AS posted_at,
          (SELECT max(m.created_at) FROM messages m WHERE m.review_id = rv.id) AS private_reply_at,
+         (SELECT rp.status ${ownReportsSql} ORDER BY (rp.status = 'open') DESC, rp.created_at DESC LIMIT 1) AS report_status,
          COALESCE((
            SELECT json_agg(json_build_object(
              'id', rr.id, 'role', rr.author_role, 'body', COALESCE(rr.masked_body, rr.body), 'status', rr.status,
@@ -57,7 +73,8 @@ const hostReviewsSql = (testing: boolean) => `
          ), '[]'::json) AS replies
     FROM reviews rv
     JOIN properties p ON p.id = rv.property_id
-   WHERE rv.status IN ('published', 'pending')
+   WHERE (rv.status IN ('published', 'pending')
+          OR (rv.status = 'removed' AND EXISTS (SELECT 1 ${ownReportsSql} AND rp.status = 'upheld')))
      AND ${currentPropertySql(testing)}
    ORDER BY COALESCE(rv.published_at, rv.created_at) DESC
    LIMIT ${LIMIT}`;
@@ -87,6 +104,7 @@ function toHostReview(row: Row): HostReview {
     roomLabel: row.room_label,
     status: row.status,
     flaggedReason: row.flagged_reason,
+    report: row.report_status,
     postedAt: iso(row.posted_at)!,
     replies,
     privateReplyAt: iso(row.private_reply_at),

@@ -12,6 +12,8 @@ function Trailing({ review }: { review: HostReview }) {
       <StatusBadge tone="attention">Being checked</StatusBadge>
     );
   }
+  if (review.status === "removed") return <StatusBadge tone="stopped">Removed</StatusBadge>;
+  if (review.report === "open") return <StatusBadge tone="attention">Reported</StatusBadge>;
   if (needsReply(review)) {
     return <span className="size-2 shrink-0 rounded-full bg-state-attention" aria-label="Waiting for a reply" />;
   }

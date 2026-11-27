@@ -1,5 +1,8 @@
 /**
- * Cloudflare Turnstile verification for the checkout Session route.
+ * Cloudflare Turnstile verification, for every surface that runs the widget:
+ * the checkout Session route and the public review report form. Each surface
+ * mints its tokens with its own action (TURNSTILE_ACTIONS), and a token is
+ * only accepted for the action it was minted for.
  *
  * Canonical siteverify, per developers.cloudflare.com/turnstile/spin: the
  * browser never talks to Cloudflare's verify endpoint — it sends its token to
@@ -11,8 +14,8 @@
  *   success   — the challenge was solved and the token has not been redeemed
  *               before. Tokens are single-use, so a replayed one fails here.
  *   action    — matches the surface the widget was embedded on, so a token
- *               minted by some other Turnstile widget on our sitekey cannot be
- *               spent against checkout.
+ *               minted on one surface (the report form) cannot be spent
+ *               against another (checkout).
  *   hostname  — the frontend host that produced the token is one we approved.
  *               One widget is registered for both local and production
  *               domains, so without this check a token solved on localhost
@@ -21,8 +24,9 @@
  * Turnstile has no reCAPTCHA-style score: the answer is a boolean.
  */
 
-/** The surface this token must have been minted for. */
-export const TURNSTILE_ACTION = 'checkout';
+import type { TurnstileAction } from './turnstile-actions';
+
+export { TURNSTILE_ACTIONS, type TurnstileAction } from './turnstile-actions';
 
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
@@ -50,31 +54,41 @@ type SiteverifyResponse = {
  * fail every request rather than be captured once at import and silently
  * define the behaviour of a misconfigured deploy.
  */
-function expectedHostnames(): Set<string> {
+function expectedHostnames(value = process.env.TURNSTILE_HOSTNAMES): Set<string> {
   return new Set(
-    (process.env.TURNSTILE_HOSTNAMES ?? '')
+    (value ?? '')
       .split(',')
       .map((hostname) => hostname.trim())
       .filter(Boolean)
   );
 }
 
+/** Seams for the tests; production reads the environment and calls Cloudflare. */
+export type TurnstileDeps = {
+  secret?: string;
+  hostnames?: string;
+  fetchFn?: typeof fetch;
+};
+
 /**
- * True when `token` is a valid, unredeemed Turnstile token for this action and
+ * True when `token` is a valid, unredeemed Turnstile token for `action` and
  * an approved hostname.
  *
  * Fails closed on everything: a missing secret, an unconfigured allowlist, a
  * network failure, a non-2xx from Cloudflare, or a malformed body all return
- * false. An outage at Cloudflare therefore blocks checkout rather than opening
- * it — the safer direction for an endpoint that creates Stripe Sessions, and
- * the caller reports it to the guest as a retryable failure.
+ * false. An outage at Cloudflare therefore blocks the request rather than
+ * opening it: checkout reports it to the guest as a retryable failure, the
+ * report form asks them to try again.
  */
-export async function verifyTurnstileToken(
+export async function verifyTurnstile(
   token: unknown,
-  clientIp: string | null
+  clientIp: string | null,
+  action: TurnstileAction,
+  deps: TurnstileDeps = {}
 ): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET;
-  const hostnames = expectedHostnames();
+  const secret = 'secret' in deps ? deps.secret : process.env.TURNSTILE_SECRET;
+  const hostnames = expectedHostnames('hostnames' in deps ? deps.hostnames : process.env.TURNSTILE_HOSTNAMES);
+  const fetchFn = deps.fetchFn ?? fetch;
 
   if (
     typeof token !== 'string' ||
@@ -96,7 +110,7 @@ export async function verifyTurnstileToken(
 
   let result: SiteverifyResponse;
   try {
-    const response = await fetch(SITEVERIFY_URL, {
+    const response = await fetchFn(SITEVERIFY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
@@ -109,8 +123,8 @@ export async function verifyTurnstileToken(
   }
 
   return (
-    result.success === true &&
-    result.action === TURNSTILE_ACTION &&
+    result?.success === true &&
+    result.action === action &&
     typeof result.hostname === 'string' &&
     hostnames.has(result.hostname)
   );

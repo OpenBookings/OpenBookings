@@ -58,9 +58,9 @@ I = invoice job, R = root scripts.
 
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | W | for checkout | Cloudflare Turnstile site key. Build-time. |
-| `TURNSTILE_SECRET` | W | for checkout | Turnstile secret key. Checkout refuses every token without it. |
-| `TURNSTILE_HOSTNAMES` | W | for checkout | Comma-separated hostnames whose tokens are accepted. Never `localhost` in production. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | W | for checkout and review reports | Cloudflare Turnstile site key. Build-time. |
+| `TURNSTILE_SECRET` | W | for checkout and review reports | Turnstile secret key. Checkout and the public review report form refuse every token without it. |
+| `TURNSTILE_HOSTNAMES` | W | for checkout and review reports | Comma-separated hostnames whose tokens are accepted. Never `localhost` in production. |
 
 ## Email
 

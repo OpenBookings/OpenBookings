@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/nextjs";
 import { purge, propertyReviewsKey } from "@openbookings/cache";
 import { getPool, withTransaction } from "@openbookings/db";
 import {
+  createReviewReport,
   deleteHostReply,
   editHostReply,
   insertPrivateReviewReply,
@@ -135,4 +136,36 @@ export async function skipReviewReply(reviewId: string, skipped: boolean): Promi
   if (!result.ok) return fail(result.error);
   revalidatePath(REVIEWS);
   return { ok: true, status: "published" };
+}
+
+export type ReportActionResult = { ok: true } | { ok: false; message: string };
+
+const REPORT_MESSAGES = {
+  not_found: "This review can't be reported. It may be held for a check, taken down, or deleted by the guest.",
+  already_open: "You've already reported this review. We'll email you the outcome.",
+  invalid: "Choose the rule it breaks, and keep your note under 1,000 characters.",
+  rate_limited: "You're going a bit fast. Wait a few minutes and try again.",
+} as const;
+
+/**
+ * Report a published review of the current hotel against one rule. Only a
+ * member who can see the property's bookings (./actor, as for replies), and
+ * one open report per organization per review (createReviewReport). The
+ * review stays on the page until a person at OpenBookings decides; the
+ * outcome is emailed to the member and shows on the Reviews page.
+ */
+export async function reportReview(reviewId: string, input: { rule: string; note: string }): Promise<ReportActionResult> {
+  const actor = await reviewActor(await getServerSession(), { reviewId });
+  if (!actor) return { ok: false, message: REPORT_MESSAGES.not_found };
+  if (!checkRateLimit(`review-report:${actor.userId}`, 20, 60 * 60 * 1000).allowed) return { ok: false, message: REPORT_MESSAGES.rate_limited };
+  const result = await createReviewReport(getPool(), {
+    item: { kind: "review", id: actor.reviewId },
+    reporter: { kind: "host", userId: actor.userId },
+    rule: input?.rule,
+    note: input?.note,
+    now: new Date(),
+  });
+  if (!result.ok) return { ok: false, message: REPORT_MESSAGES[result.error] };
+  revalidatePath(REVIEWS);
+  return { ok: true };
 }

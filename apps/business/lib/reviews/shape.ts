@@ -25,8 +25,11 @@ export type HostReview = {
   /** `YYYY-MM-01` */
   stayMonth: string;
   roomLabel: string | null;
-  status: "published" | "pending";
+  /** Removed only when the property reported it and the report was upheld. */
+  status: "published" | "pending" | "removed";
   flaggedReason: string | null;
+  /** The property's own report on it: open, or the outcome of the current decision. */
+  report: HostReportStatus | null;
   /** ISO: published_at, or created_at while it is being checked. */
   postedAt: string;
   /** Published and held replies, oldest first. */
@@ -38,6 +41,9 @@ export type HostReview = {
   /** Whose turn it is in the public thread; null when it is closed. */
   nextRole: ReplyRole | null;
 };
+
+/** A property's report on a review: being checked, upheld (removed) or not upheld (kept). */
+export type HostReportStatus = "open" | "upheld" | "dismissed";
 
 export type ReviewTab = "reply" | "all" | "checking";
 export type HostReviewSort = "newest" | "oldest" | "highest" | "lowest";
@@ -56,7 +62,8 @@ export function needsReply(r: HostReview): boolean {
 
 export function inTab(r: HostReview, tab: ReviewTab): boolean {
   if (tab === "reply") return needsReply(r);
-  if (tab === "all") return r.status === "published";
+  // A review removed on the property's report stays in All, with the outcome.
+  if (tab === "all") return r.status === "published" || r.status === "removed";
   return r.status === "pending";
 }
 

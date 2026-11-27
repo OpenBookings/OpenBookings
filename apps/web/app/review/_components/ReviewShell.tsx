@@ -4,8 +4,8 @@ import { getBackdrop } from '@openbookings/images/server';
 import { GlassBackdrop } from '@/components/GlassBackdrop';
 import { Nav } from '@/components/nav';
 
-/** The review pages: the booking page's glass, one card in the middle. */
-export async function ReviewShell({ eyebrow, title, children }: { eyebrow?: string; title: string; children: React.ReactNode }) {
+/** The review pages (and the report form): the booking page's glass, one card in the middle. */
+export async function ReviewShell({ eyebrow, title, children }: { eyebrow?: React.ReactNode; title: string; children: React.ReactNode }) {
   const { backdrop } = await cookies().then((c) => getBackdrop(c.get(BACKDROP_COOKIE)?.value));
   return (
     <div className="relative min-h-dvh font-sans text-white">

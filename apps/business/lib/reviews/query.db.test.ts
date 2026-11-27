@@ -140,6 +140,53 @@ describeWithDb("loadHostReviews against Postgres", () => {
     expect(await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)))).toEqual([]);
   });
 
+  test("the property's own report shows: being checked, upheld (the removed review stays listed) or not upheld", async () => {
+    const orgId = `test-org-${crypto.randomUUID()}`;
+    await db.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Org', $1, NOW())`, [orgId]);
+    await db.query(`UPDATE properties SET organization_id = $1 WHERE id = $2`, [orgId, propertyId]);
+    await db.query(
+      `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt") VALUES (gen_random_uuid()::text, $1, $2, 'owner', NOW())`,
+      [orgId, owner],
+    );
+    const hostReport = (reviewId: string, status: string, decidedAt: string | null, org: string | null = orgId) =>
+      db.query(
+        `INSERT INTO review_reports (review_id, reporter_kind, reporter_user_id, reporter_org_id, rule, status, decided_at, created_at)
+         VALUES ($1, 'host', $2, $3, 'abuse', $4, $5::timestamptz, NOW() - interval '1 day')`,
+        [reviewId, owner, org, status, decidedAt],
+      );
+    const decide = (reviewId: string, status: string, decision: string, at: string) =>
+      db.query(`UPDATE reviews SET status = $2, decision = $3, decided_by = 'staff', decided_at = $4::timestamptz WHERE id = $1`, [
+        reviewId,
+        status,
+        decision,
+        at,
+      ]);
+
+    const open = await addReview("published");
+    await hostReport(open, "open", null);
+    const upheld = await addReview("published");
+    await decide(upheld, "removed", "removed", "2031-01-02T10:00:00Z");
+    await hostReport(upheld, "upheld", "2031-01-02T10:00:00Z");
+    const kept = await addReview("published");
+    await decide(kept, "published", "kept", "2031-01-02T10:00:00Z");
+    await hostReport(kept, "dismissed", "2031-01-02T10:00:00Z");
+    // Removed without the property's report (another organization's, or the public's): not listed.
+    const removedByOthers = await addReview("published");
+    await decide(removedByOthers, "removed", "removed", "2031-01-02T10:00:00Z");
+    await hostReport(removedByOthers, "upheld", "2031-01-02T10:00:00Z", null);
+    // An old outcome a later decision (a rewrite cleared it) no longer counts.
+    const rewritten = await addReview("pending");
+    await hostReport(rewritten, "upheld", "2031-01-01T10:00:00Z");
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    const byId = (id: string) => list.find((r) => r.id === id);
+    expect(byId(open)).toMatchObject({ status: "published", report: "open" });
+    expect(byId(upheld)).toMatchObject({ status: "removed", report: "upheld" });
+    expect(byId(kept)).toMatchObject({ status: "published", report: "dismissed" });
+    expect(byId(removedByOthers)).toBeUndefined();
+    expect(byId(rewritten)).toMatchObject({ status: "pending", report: null });
+  });
+
   test("countReviewsNeedingReply counts the open ones", async () => {
     await addReview("published");
     await addReview("published");

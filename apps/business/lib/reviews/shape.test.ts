@@ -20,6 +20,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     roomLabel: "Double",
     status: "published",
     flaggedReason: null,
+    report: null,
     postedAt: "2031-11-15T10:00:00.000Z",
     replies: [],
     privateReplyAt: null,
@@ -93,6 +94,18 @@ describe("summarize", () => {
   });
   test("reviews being checked don't count", () => {
     expect(summarize([review({ status: "pending" })], "all", NOW)).toMatchObject({ recentCount: 0, waiting: 0 });
+  });
+  test("a review removed on the property's report doesn't count, and isn't waiting", () => {
+    expect(summarize([review({ status: "removed", report: "upheld" })], "all", NOW)).toMatchObject({ recentCount: 0, waiting: 0 });
+  });
+});
+
+describe("a review removed on the property's report", () => {
+  test("is in All, with nothing to reply to", () => {
+    const removed = review({ status: "removed", report: "upheld" });
+    expect(filterHostReviews([removed], { tab: "all", propertyId: "all", band: "all", sort: "newest" })).toEqual([removed]);
+    expect(filterHostReviews([removed], { tab: "reply", propertyId: "all", band: "all", sort: "newest" })).toEqual([]);
+    expect(filterHostReviews([removed], { tab: "checking", propertyId: "all", band: "all", sort: "newest" })).toEqual([]);
   });
 });
 

@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TURNSTILE_ACTION } from './turnstile';
+import type { TurnstileAction } from './turnstile-actions';
 
 /**
- * Mints a Turnstile token for the checkout surface.
+ * Mints a Turnstile token for one surface (`action`): checkout, or the
+ * review report form.
  *
  * Explicit render rather than the `class="cf-turnstile"` auto-render, because
  * this page outlives its submissions. A token is redeemed exactly once at
@@ -92,6 +93,8 @@ function loadTurnstile(): Promise<TurnstileApi> {
 }
 
 export type TurnstileOptions = {
+  /** The surface the server verifies the token for (verifyTurnstile). */
+  action: TurnstileAction;
   /**
    * Whether to render the widget at all.
    *
@@ -114,7 +117,7 @@ export type TurnstileState = {
   reset: () => void;
 };
 
-export function useTurnstileToken({ enabled }: TurnstileOptions): TurnstileState {
+export function useTurnstileToken({ enabled, action }: TurnstileOptions): TurnstileState {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -135,7 +138,7 @@ export function useTurnstileToken({ enabled }: TurnstileOptions): TurnstileState
           sitekey: SITE_KEY,
           // Must match the action the route checks, or siteverify's response
           // is rejected server-side even though the challenge was solved.
-          action: TURNSTILE_ACTION,
+          action,
           theme: 'dark',
           // Render nothing unless a human actually has to do something.
           //
@@ -180,7 +183,7 @@ export function useTurnstileToken({ enabled }: TurnstileOptions): TurnstileState
       widgetIdRef.current = null;
       if (id) window.turnstile?.remove(id);
     };
-  }, [enabled]);
+  }, [enabled, action]);
 
   const reset = useCallback(() => {
     setToken(null);

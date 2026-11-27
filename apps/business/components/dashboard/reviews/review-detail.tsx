@@ -5,29 +5,44 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { TriangleAlertIcon, X } from "lucide-react";
 import { reviewBand } from "@openbookings/pricing";
-import { bookingReference } from "@openbookings/db/booking-reference";
 import type { ReviewReply } from "@openbookings/db/reviews";
 import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { AttentionAlert } from "@/components/dashboard/attention-alert";
-import { useOptionalSupport } from "@/components/support/support-provider";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteReviewReply, editReviewReply } from "@/lib/reviews/actions";
-import type { HostReview } from "@/lib/reviews/shape";
+import type { HostReportStatus, HostReview } from "@/lib/reviews/shape";
 import { byline, SCORE_CHIP, stayMonthLabel } from "./labels";
 import { counter, ReplyComposer, ReplyField } from "./reply-composer";
+import { ReportDialog } from "./report-dialog";
+
+/** The property's report on a review, as the pill and the line under the text say it. */
+const REPORT: Record<HostReportStatus, { pill: string; tone: StatusTone; line: string }> = {
+  open: {
+    pill: "Reported · being checked",
+    tone: "attention",
+    line: "Still visible on your page while we check it. You'll hear the outcome by email.",
+  },
+  upheld: {
+    pill: "Report upheld: removed",
+    tone: "stopped",
+    line: "We removed it for breaking our review rules. It's no longer on your page.",
+  },
+  dismissed: {
+    pill: "Report not upheld",
+    tone: "neutral",
+    line: "We checked it against our review rules and kept it. You can report it again if something new comes up.",
+  },
+};
 
 export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?: () => void }) {
-  const support = useOptionalSupport();
+  const [reporting, setReporting] = React.useState(false);
   const lastId = review.replies.at(-1)?.id ?? null;
-
-  const report = () =>
-    support?.openIntake({
-      category: "bookings",
-      linked: { type: "booking", id: review.bookingId, label: `Booking ${bookingReference(review.bookingId)}`, detail: `Review by ${review.authorName}` },
-      locked: true,
-    });
+  const report = review.report ? REPORT[review.report] : null;
+  // Only a published review can be reported, and not while the property's report on it is open.
+  const canReport = review.status === "published" && review.report !== "open";
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto rounded-xl border">
@@ -43,6 +58,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
           </div>
           <div className="text-xs text-muted-foreground">{review.propertyName}</div>
         </div>
+        {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
         {onClose ? (
           <Button variant="ghost" size="icon" className="-mt-1 -mr-2" onClick={onClose} aria-label="Close review">
             <X />
@@ -62,20 +78,23 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>Posted {formatRelativeTime(review.postedAt)}</span>
           <span>Verified stay</span>
-          {support ? (
+          {canReport ? (
             <Button
               type="button"
               variant="link"
-              onClick={report}
+              onClick={() => setReporting(true)}
               className="h-auto p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              Report
+              Report…
             </Button>
           ) : null}
         </div>
+        {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
       </div>
+      {canReport ? <ReportDialog reviewId={review.id} open={reporting} onOpenChange={setReporting} /> : null}
 
-      <div className="flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5">
+      {/* A review removed on the property's report has no thread left to answer. */}
+      <div className={cn("flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5", review.status === "removed" && "hidden")}>
         {review.status === "pending" ? (
           <AttentionAlert role="status">
             <TriangleAlertIcon />

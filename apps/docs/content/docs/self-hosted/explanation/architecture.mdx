@@ -60,7 +60,7 @@ The packages hold the rules that must not differ between apps:
 | Postgres 17 + PostGIS (Neon in production) | Everything | Yes, from `testing/` |
 | Stripe Connect | Payments, payouts, commission | Only to take a payment |
 | Lettermint | Email | No, use `EMAIL_TRANSPORT=console` |
-| Cloudflare Turnstile | Bot protection on checkout | Only to take a payment |
+| Cloudflare Turnstile | Bot protection on checkout and the public review report form | To take a payment, and for the public to report a review |
 | Cloudflare R2 | Photos and invoice files | Only to upload photos |
 | Upstash Redis | Page cache | No |
 | MapTiler | Maps | No (maps stay empty) |
