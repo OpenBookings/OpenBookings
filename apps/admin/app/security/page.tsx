@@ -44,7 +44,7 @@ export default async function SecurityPage() {
         </Table>
       )}
 
-      <EnrolPanel firstCredential={credentials.length === 0} />
+      <EnrolPanel firstCredential={credentials.length === 0} userId={staff.userId} />
     </div>
   );
 }

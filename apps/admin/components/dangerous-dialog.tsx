@@ -46,12 +46,19 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** Runs the action. A message to show when it was refused, or null when it is done (the dialog closes). */
   onConfirm: (reason: string, stepUpToken: string) => Promise<string | null>;
+  /**
+   * Only the passkey or code step, no reason (onConfirm gets ""): for an
+   * action that spends its step-up itself and writes no audit row, like
+   * adding a credential on /security.
+   */
+  stepUpOnly?: boolean;
 };
 
 /**
  * Every dangerous action goes through this: what will happen, "Are you
  * sure?" with a reason, then a passkey or a 6-digit code. The step-up is
- * begun only on that last step.
+ * begun only on that last step (with `stepUpOnly`, the only one), when the
+ * staff member continues to it.
  */
 export function DangerousDialog(props: Props) {
   return (
@@ -64,10 +71,13 @@ export function DangerousDialog(props: Props) {
   );
 }
 
-function Steps({ action, targetId, summary, onOpenChange, onConfirm }: Props) {
+function Steps({ action, targetId, summary, onOpenChange, onConfirm, stepUpOnly = false }: Props) {
   const key = `${action}:${targetId}`;
   const label = DANGEROUS_ACTIONS[action].label;
-  const [step, setStep] = useState<"summary" | "reason" | "step-up">("summary");
+  const first = stepUpOnly ? "step-up" : "summary";
+  const [step, setStep] = useState<"summary" | "reason" | "step-up">(first);
+  /** Whether a step-up was asked for yet (the button then says "Try again"). */
+  const [started, setStarted] = useState(false);
   const [reason, setReason] = useState("");
   const [code, setCode] = useState("");
   const [challenge, setChallenge] = useState<Challenge | null>(null);
@@ -115,6 +125,7 @@ function Steps({ action, targetId, summary, onOpenChange, onConfirm }: Props) {
     work(async () => {
       setMessage(null);
       setStep("step-up");
+      setStarted(true);
       await ensureChallenge();
     });
 
@@ -133,7 +144,7 @@ function Steps({ action, targetId, summary, onOpenChange, onConfirm }: Props) {
         await ensureChallenge();
       } else if (result.reason === "expired") {
         setMessage({ text: "This confirmation expired. Start again." });
-        setStep("summary");
+        setStep(first);
       } else {
         setMessage({ text: result.message });
       }
@@ -284,7 +295,7 @@ function Steps({ action, targetId, summary, onOpenChange, onConfirm }: Props) {
             </DialogClose>
             {!challenge && !busy ? (
               <Button type="button" onClick={toStepUp}>
-                Try again
+                {started ? "Try again" : "Continue"}
               </Button>
             ) : null}
           </DialogFooter>
