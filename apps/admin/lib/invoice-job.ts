@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { adminDbConfig } from "./db";
 import { jobArgs } from "./invoice-job-args";
-import { isStripeTestMode } from "./super-admin";
+import { stripeKeyAllowed } from "./super-admin";
 import { requireStaff } from "./staff";
 
 export type JobRun =
@@ -24,7 +24,7 @@ const MAX_OUTPUT = 200_000;
  */
 export async function runInvoiceJob(_prev: JobRun | null, form: FormData): Promise<JobRun> {
   await requireStaff();
-  if (!isStripeTestMode()) return { kind: "refused", error: "Stripe is not in test mode here, so the invoice job is disabled." };
+  if (!stripeKeyAllowed().ok) return { kind: "refused", error: "Stripe is not in test mode here, so the invoice job is disabled." };
   // The job needs DATABASE_URL's full access, which the admin roles are there to avoid.
   if (adminDbConfig().kind === "roles") {
     return { kind: "refused", error: "The invoice job runs on DATABASE_URL, so it is off while ADMIN_DATABASE_URL_READ is set." };

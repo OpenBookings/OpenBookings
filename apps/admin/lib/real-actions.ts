@@ -23,7 +23,7 @@ import { dangerousAction } from "./dangerous";
 import type { Confirmation, DangerousAction, DangerousResult } from "./dangerous-actions";
 import { readLifecycleDb, readPool, writeLifecycleDb, writePool } from "./db";
 import { UUID_RE } from "./search";
-import { isStripeTestMode } from "./super-admin";
+import { stripeKeyAllowed } from "./super-admin";
 import { requireStaff } from "./staff";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -63,7 +63,6 @@ const mailDeps = () => ({
 
 const notFound = { ok: false, error: "not_found" } satisfies LifecycleResult;
 const notTestMode = { ok: false, error: "stripe_not_test_mode" } as unknown as LifecycleResult;
-const NOT_TEST_MODE = "Stripe is not in test mode here, so real booking actions are off.";
 
 async function run(
   bookingId: string,
@@ -71,7 +70,7 @@ async function run(
   act: (actor: Actor) => Promise<LifecycleResult>,
 ): Promise<LifecycleResult> {
   await requireStaff();
-  if (!isStripeTestMode()) return notTestMode;
+  if (!stripeKeyAllowed().ok) return notTestMode;
   const actor = await actorFor(writePool(), bookingId, as);
   if (!actor) return notFound;
   const result = await act(actor);
@@ -87,7 +86,8 @@ async function runConfirmed(
   detail: Record<string, unknown>,
   act: () => Promise<LifecycleResult>,
 ): Promise<DangerousResult<LifecycleResult>> {
-  if (!isStripeTestMode()) return { ok: false, message: NOT_TEST_MODE };
+  const gate = stripeKeyAllowed();
+  if (!gate.ok) return { ok: false, message: gate.error };
   return dangerousAction(
     {
       action,
@@ -124,7 +124,7 @@ export async function adminPreviewRefund(
   lastNightStayed?: string,
 ) {
   await requireStaff();
-  if (!isStripeTestMode() || badIds(bookingId, reservationIds)) return null;
+  if (!stripeKeyAllowed().ok || badIds(bookingId, reservationIds)) return null;
   if (lastNightStayed !== undefined && (typeof lastNightStayed !== "string" || !DATE_RE.test(lastNightStayed))) return null;
   const event: RefundEvent =
     lastNightStayed !== undefined

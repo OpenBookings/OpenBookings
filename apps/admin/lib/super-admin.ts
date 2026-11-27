@@ -14,7 +14,17 @@ export function databaseHost(url: string | undefined): string {
   }
 }
 
-/** Real actions touch Stripe, so they run only against a test-mode key. */
-export function isStripeTestMode(env: Record<string, string | undefined> = process.env): boolean {
-  return typeof env.STRIPE_SECRET_KEY === "string" && env.STRIPE_SECRET_KEY.startsWith("sk_test_");
+export const NOT_TEST_MODE = "Stripe is not in test mode here, so real booking actions are off.";
+
+/**
+ * Production runs with the live Stripe key. Anywhere else a live key is
+ * refused: only sk_test_ / rk_test_ keys may move (test) money.
+ */
+export function stripeKeyAllowed(
+  env: Record<string, string | undefined> = process.env,
+): { ok: true } | { ok: false; error: string } {
+  if (env.NODE_ENV === "production") return { ok: true };
+  const key = env.STRIPE_SECRET_KEY;
+  if (typeof key === "string" && (key.startsWith("sk_test_") || key.startsWith("rk_test_"))) return { ok: true };
+  return { ok: false, error: NOT_TEST_MODE };
 }
