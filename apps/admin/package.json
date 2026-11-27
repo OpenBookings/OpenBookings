@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3005 -H 127.0.0.1",
-    "build": "echo 'apps/admin is dev-only and is never built' && exit 0",
-    "start": "next start -p 3005 -H 127.0.0.1",
+    "build": "next build",
+    "start": "next start -p ${PORT:-8080} -H 0.0.0.0",
     "lint": "eslint",
     "test": "bun test --timeout 30000",
     "typecheck": "next typegen && tsc --noEmit"

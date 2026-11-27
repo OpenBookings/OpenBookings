@@ -33,6 +33,10 @@ on:
         description: Build the docs image
         type: boolean
         default: true
+      admin:
+        description: Build the admin image
+        type: boolean
+        default: true
       support:
         description: Build the support-bot image
         type: boolean
@@ -301,6 +305,7 @@ jobs:
       web: ${{ steps.pick.outputs.web }}
       business: ${{ steps.pick.outputs.business }}
       docs: ${{ steps.pick.outputs.docs }}
+      admin: ${{ steps.pick.outputs.admin }}
       support: ${{ steps.pick.outputs.support }}
       invoice-job: ${{ steps.pick.outputs.invoice-job }}
       migrate: ${{ steps.pick.outputs.migrate }}
@@ -346,6 +351,14 @@ jobs:
               - 'package.json'
               - 'bun.lock'
               - 'turbo.json'
+            admin:
+              - 'apps/admin/**'
+              - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'turbo.json'
             support:
               - 'apps/support-bot/**'
               - '.github/workflows/ci.yml'
@@ -379,12 +392,14 @@ jobs:
           F_WEB: ${{ steps.filter.outputs.web }}
           F_BUSINESS: ${{ steps.filter.outputs.business }}
           F_DOCS: ${{ steps.filter.outputs.docs }}
+          F_ADMIN: ${{ steps.filter.outputs.admin }}
           F_SUPPORT: ${{ steps.filter.outputs.support }}
           F_INVOICE_JOB: ${{ steps.filter.outputs.invoice-job }}
           F_DB: ${{ steps.filter.outputs.db }}
           I_WEB: ${{ inputs.web }}
           I_BUSINESS: ${{ inputs.business }}
           I_DOCS: ${{ inputs.docs }}
+          I_ADMIN: ${{ inputs.admin }}
           I_SUPPORT: ${{ inputs.support }}
           I_INVOICE_JOB: ${{ inputs.invoice_job }}
           I_MIGRATE: ${{ inputs.migrate }}
@@ -397,10 +412,10 @@ jobs:
               echo "::error::release and migrate only run on main, not ${REF}. Untick them, or run the workflow on main."
               exit 1
             fi
-            web=$I_WEB business=$I_BUSINESS docs=$I_DOCS support=$I_SUPPORT invoice_job=$I_INVOICE_JOB
+            web=$I_WEB business=$I_BUSINESS docs=$I_DOCS admin=$I_ADMIN support=$I_SUPPORT invoice_job=$I_INVOICE_JOB
             migrate=$I_MIGRATE publish=$I_RELEASE
           else
-            web=$F_WEB business=$F_BUSINESS docs=$F_DOCS support=$F_SUPPORT invoice_job=$F_INVOICE_JOB
+            web=$F_WEB business=$F_BUSINESS docs=$F_DOCS admin=$F_ADMIN support=$F_SUPPORT invoice_job=$F_INVOICE_JOB
             if [ "$EVENT" = "push" ]; then
               migrate=$F_DB publish=true
             else
@@ -412,6 +427,7 @@ jobs:
             echo "web=$web"
             echo "business=$business"
             echo "docs=$docs"
+            echo "admin=$admin"
             echo "support=$support"
             echo "invoice-job=$invoice_job"
             echo "migrate=$migrate"
@@ -581,6 +597,40 @@ jobs:
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:${{ github.sha }}
             ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-docs:main
 
+  build-admin:
+    needs: detect
+    if: needs.detect.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: needs.detect.outputs.publish == 'true'
+        with:
+          registry: ${{ env.SCW_REGISTRY }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./apps/admin/Dockerfile
+          push: ${{ needs.detect.outputs.publish == 'true' }}
+          # Layer cache: the dependency install is reused whenever bun.lock and
+          # the package manifests did not change. Only main writes it (PR caches
+          # are scoped to the PR and would just crowd the 10 GB limit); PRs read
+          # main's.
+          cache-from: type=gha,scope=admin
+          cache-to: ${{ needs.detect.outputs.publish == 'true' && 'type=gha,scope=admin,mode=max' || '' }}
+          # The SHA tag is immutable and is what `release` and `rollback`
+          # point at. `main` moves, and exists only so a human can say
+          # "the current release" -- never `latest`, which invites a
+          # platform to pull something nobody chose.
+          tags: |
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-admin:${{ github.sha }}
+            ${{ env.SCW_REGISTRY }}/${{ env.SCW_NAMESPACE }}/openbookings-admin:main
+
   build-support:
     needs: detect
     if: needs.detect.outputs.support == 'true'
@@ -655,7 +705,7 @@ jobs:
 
   release:
     name: Release
-    needs: [detect, checks, test, build-web, build-business, build-docs, build-support, build-invoice-job]
+    needs: [detect, checks, test, build-web, build-business, build-docs, build-admin, build-support, build-invoice-job]
     # Tests do not run on a push: they passed on the PR (see `checks` and
     # `test`). On a manual run they do if ticked, and a failure stops the
     # release like a failed build does.
@@ -745,9 +795,11 @@ jobs:
           WEB_BUILT: ${{ needs.detect.outputs.web }}
           BUSINESS_BUILT: ${{ needs.detect.outputs.business }}
           DOCS_BUILT: ${{ needs.detect.outputs.docs }}
+          ADMIN_BUILT: ${{ needs.detect.outputs.admin }}
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
+          ADMIN_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_ADMIN }}
         run: |
           set -euo pipefail
 
@@ -774,8 +826,9 @@ jobs:
           roll_if_built web      "$WEB_BUILT"      "$WEB_CONTAINER_ID"
           roll_if_built business "$BUSINESS_BUILT" "$BUSINESS_CONTAINER_ID"
           roll_if_built docs     "$DOCS_BUILT"     "$DOCS_CONTAINER_ID"
+          roll_if_built admin    "$ADMIN_BUILT"    "$ADMIN_CONTAINER_ID"
 
-          if [ "$WEB_BUILT" = "true" ] || [ "$BUSINESS_BUILT" = "true" ] || [ "$DOCS_BUILT" = "true" ]; then
+          if [ "$WEB_BUILT" = "true" ] || [ "$BUSINESS_BUILT" = "true" ] || [ "$DOCS_BUILT" = "true" ] || [ "$ADMIN_BUILT" = "true" ]; then
             echo "Released ${GITHUB_SHA}"
           else
             echo "Nothing to release: no app image was rebuilt for ${GITHUB_SHA}"
@@ -793,6 +846,14 @@ jobs:
         env:
           OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
         run: .github/scripts/check-release.sh openbookings.co "$GITHUB_SHA"
+
+      # The admin console sits behind Cloudflare Access, so there is no
+      # check-release.sh probe for it: a request from here would only meet
+      # Access's login. Log what was rolled so the run shows which revision the
+      # container was pointed at.
+      - name: Log the admin revision
+        if: needs.detect.outputs.publish == 'true' && needs.detect.outputs.admin == 'true'
+        run: echo "Rolled the admin console to ${GITHUB_SHA} (openbookings-admin:${GITHUB_SHA}); not probed, it is behind Cloudflare Access."
 
       # ---- Registry ----------------------------------------------------------
       #
@@ -817,6 +878,7 @@ jobs:
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
+          ADMIN_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_ADMIN }}
         run: |
           set -uo pipefail
 
@@ -824,6 +886,7 @@ jobs:
           .github/scripts/prune-registry.sh openbookings-web      "$WEB_CONTAINER_ID"      || failed=1
           .github/scripts/prune-registry.sh openbookings-business "$BUSINESS_CONTAINER_ID" || failed=1
           .github/scripts/prune-registry.sh openbookings-docs     "$DOCS_CONTAINER_ID"     || failed=1
+          .github/scripts/prune-registry.sh openbookings-admin    "$ADMIN_CONTAINER_ID"    || failed=1
           .github/scripts/prune-registry.sh openbookings-support                           || failed=1
           .github/scripts/prune-registry.sh openbookings-invoice-job                       || failed=1
           exit "$failed"

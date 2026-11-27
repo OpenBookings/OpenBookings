@@ -23,7 +23,7 @@ A [Turborepo](https://turborepo.com) monorepo, run with [Bun](https://bun.sh).
 | `apps/web` | The guest site: search, property pages, checkout, guest account | 3002 |
 | `apps/business` | The host dashboard: property, rooms, rates, reservations, payouts | 3001 |
 | `apps/docs` | The documentation site ([Fumadocs](https://fumadocs.dev)) | 3004 |
-| `apps/admin` | An internal admin console, for local use only and never deployed | 3005 |
+| `apps/admin` | The internal admin console (staff only, behind Cloudflare Access in production) | 3005 |
 | `apps/support-bot` | The support assistant behind the Chatwoot inboxes | 3003 |
 | `apps/invoice-job` | The monthly commission-invoice job (a Bun CLI) | — |
 | `packages/*` | Shared code: `db`, `auth`, `authz`, `billing`, `pricing`, `stripe`, `mailing`, `messaging`, … | — |

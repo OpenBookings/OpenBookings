@@ -113,12 +113,19 @@ I = invoice job, R = root scripts.
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
 | `TESTING` | W, B, R | no | `true`, with an `sk_test_` key, turns on testing mode: demo hotels and test-only behaviour. Refused with a live key. |
-| `ADMIN_SUPER_MODE` | A | no | `1` enables super-admin actions, only with `NODE_ENV=development`. |
+| `ADMIN_SUPER_MODE` | A | no | Development only: `1`, with `NODE_ENV=development`, lets you in without Cloudflare Access and enables the super-admin actions. Ignored in production, where every request needs a valid Access token. |
+| `ADMIN_DEV_EMAIL` | A | no | Development only (with `ADMIN_SUPER_MODE`): the email the console treats as the signed-in staff member. Default `dev@localhost`. No staff lookup happens in this mode. |
+| `CF_ACCESS_TEAM_DOMAIN` | A | in production | Your Cloudflare Zero Trust team domain, e.g. `yourteam.cloudflareaccess.com`. The console fetches Access's signing keys from it. Unset in production (with `CF_ACCESS_AUD`): every request gets `503 Admin is not configured`. |
+| `CF_ACCESS_AUD` | A | in production | The Access application's AUD tag. A request whose Access token is missing, invalid or for another application gets `403`. |
+| `TUNNEL_TOKEN` | A | in production | The Cloudflare Tunnel's token. When set, the image starts `cloudflared` next to the server; unset, only the server starts (local `docker run`). |
 | `ADMIN_DATABASE_URL_READ` | A | no | A login user acting as `ob_admin_read` (SELECT only). Every admin page reads through it. Unset (with `_WRITE` unset too): `DATABASE_URL`. |
 | `ADMIN_DATABASE_URL_WRITE` | A | no | A login user acting as `ob_admin_write`, for admin actions only. Unset while `_READ` is set: the console is read-only. Set alone: refused. |
 | `ADMIN_TOTP_KEY` | A | for step-up | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts authenticator-app secrets at rest. Changing it makes every enrolled authenticator app unusable. |
 | `ADMIN_BOOTSTRAP_CODE` | A | for a first enrolment | A staff member with no passkey or authenticator app yet enters it on `/security` to add their first one. Unset or blank: nobody can bootstrap. Remove it once staff have enrolled; later ones need a step-up with an existing one. |
-| `ADMIN_RP_ID` | A | in production, for passkeys | The admin console's host name for passkeys, e.g. `admin.openbookings.co`. Unset in production: passkeys are refused (the request's host is never trusted). Unset in development: the request's host. |
+| `ADMIN_RP_ID` | A | in production (passkeys) | The admin console's host name for passkeys, e.g. `admin.openbookings.co`. Unset in production: passkeys are refused (the request's host is never trusted). Unset in development: the request's host. |
+| `SCW_JOBS_REGION` | A | in production, for invoice runs | The Scaleway region of the invoice job, e.g. `nl-ams`. |
+| `SCW_INVOICE_JOB_DEFINITION_ID` | A | in production, for invoice runs | The id of the invoice job's Scaleway Serverless Job definition. Production invoice runs start it; the job definition carries its own `DATABASE_URL`, `INVOICE_DB_ENV` and Stripe key, which are never set on the admin container. |
+| `SCW_JOBS_SECRET_KEY` | A | in production, for invoice runs | A Scaleway API secret key allowed to start and read jobs in that project. Any of the three missing: invoice runs are refused, naming what is missing. |
 
 ### Admin console database roles
 
@@ -126,8 +133,15 @@ To look at production from the admin console without the apps' full-access `DATA
 give it the two roles migration `0054_admin_roles.sql` creates. `ob_admin_read` may only read
 what the pages show; `ob_admin_write` may only make the changes the admin actions make (booking
 lifecycle, refunds, forced edits, resolving a flagged payment). Neither can change the schema
-or read password hashes, tokens or 2FA secrets. Both bypass row-level security: staff see every
-host's bookings.
+or read password hashes or tokens. Both bypass row-level security: staff see every host's
+bookings.
+
+Migration `0060_admin_production.sql` adds what the staff sign-in and step-up need. Both roles
+may read `"user".role` (that is how the console knows who is staff) and the `admin_credentials`
+and `admin_step_ups` tables, minus the secrets: `ob_admin_read` cannot read
+`admin_credentials.totp_secret_enc` or `admin_step_ups.challenge`. `ob_admin_write` can add
+credentials and step-ups and mark them used, and it reads the TOTP secret (stored encrypted
+with `ADMIN_TOTP_KEY`) to check a code.
 
 The roles cannot log in. Once `0054` is applied, create one login user for each in the Neon SQL
 editor, as `neondb_owner`. Use SQL, not the Neon console: a role made in the console is added
@@ -147,11 +161,12 @@ ALTER ROLE admin_writer SET role = 'ob_admin_write';
 look empty.
 
 Put the connection strings (same host and database as `DATABASE_URL`, `?sslmode=require`) in
-`apps/admin/.env.local` as `ADMIN_DATABASE_URL_READ` and `ADMIN_DATABASE_URL_WRITE`, and remove
+`apps/admin/.env.local` (or the container's environment in production) as `ADMIN_DATABASE_URL_READ` and `ADMIN_DATABASE_URL_WRITE`, and remove
 the production `DATABASE_URL` from it. The red banner shows where each connection goes. To check
 a login, connect with it and run `SELECT current_user;` (expect `ob_admin_read`) and
 `INSERT INTO audit_log (action) VALUES ('probe');` (expect `permission denied`). The invoice job
-needs full access, so the console refuses to run it while these are set. To revoke access, `DROP
+needs full access, so in development the console refuses to run it while these are set; in
+production it starts the Scaleway job instead (`SCW_*` above). To revoke access, `DROP
 ROLE admin_reader;` (or `admin_writer`).
 
 ## Support bot
