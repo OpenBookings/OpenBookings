@@ -2,26 +2,56 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { mockModules } from "@/lib/mock-modules";
 
 // The actions' collaborators are mocked: this test is about which outcome
-// events are captured, and with which (non-identifying) properties.
+// events are captured, with which (non-identifying) properties, and that every
+// text goes through the moderation check on its way to the db layer.
 const captured: unknown[][] = [];
 let session: { user: { id: string } } | null = null;
 let storeResult: unknown = { ok: true, status: "published", context: { propertySlug: "hotel" } };
+// What the moderation check answers, and what reached the db layer.
+let check: { verdict: string; rules: string[]; fragments: string[]; source: string } = clean();
+const checked: (string | null)[] = [];
+const submitted: { check: unknown }[] = [];
+const replied: { check: unknown; body: string }[] = [];
+const postedMail: { pending: boolean }[] = [];
+let eligibility: { ok: true } | { ok: false; reason: string } = { ok: true };
+
+function clean() {
+  return { verdict: "clean", rules: [], fragments: [], source: "mistral" };
+}
 
 await mockModules(import.meta.dir, {
   "next/server": () => ({ after: (task: () => unknown) => void task() }),
   "next/headers": () => ({ headers: async () => new Headers() }),
   "next/cache": () => ({ revalidatePath: () => {} }),
   "@sentry/nextjs": () => ({ captureException: () => {} }),
-  "@openbookings/db": () => ({ getPool: () => ({}), withTransaction: async () => ({}) }),
+  "@openbookings/db": () => ({ getPool: () => ({}), withTransaction: async (fn: (tx: unknown) => unknown) => fn({}) }),
   "@openbookings/db/reviews": () => ({
     bookingForReviewToken: async () => "booking-1",
     deleteGuestReview: async () => true,
-    getReviewContext: async () => ({ guestUserId: "guest-1", propertyId: "p", propertySlug: "hotel" }),
-    postReviewReply: async () => ({ ok: true }),
+    getReviewContext: async () => ({
+      bookingId: "booking-1",
+      guestUserId: "guest-1",
+      propertyId: "p",
+      propertySlug: "hotel",
+      eligibility,
+      review: { id: "review-1" },
+    }),
+    REVIEW_BODY_MAX: 2000,
+    postReviewReply: async (_tx: unknown, i: { check: { verdict: string }; body: string }) => {
+      replied.push(i);
+      return { ok: true, status: i.check.verdict === "clean" ? "published" : "pending" };
+    },
     setReviewEmails: async () => {},
-    submitReview: async () => storeResult,
+    submitReview: async (_db: unknown, i: { check: unknown }) => {
+      submitted.push(i);
+      return storeResult;
+    },
   }),
-  "@openbookings/mailing/review-send": () => ({ sendReviewPosted: async () => {} }),
+  "@openbookings/mailing/review-send": () => ({
+    sendReviewPosted: async (_id: string, o: { pending: boolean }) => {
+      postedMail.push({ pending: o.pending });
+    },
+  }),
   "@openbookings/mailing/tracking": () => ({
     captureOutcome: async (...args: unknown[]) => {
       captured.push(args);
@@ -30,10 +60,15 @@ await mockModules(import.meta.dir, {
   "@/lib/auth": () => ({ auth: { api: {} }, getServerSession: async () => session }),
   "@/lib/property-reviews": () => ({ purgePropertyReviews: async () => {} }),
   "@/lib/rateLimit": () => ({ checkRateLimit: () => ({ allowed: true }), getClientIP: () => "ip" }),
-  "@openbookings/messaging": () => ({ screenReview: () => null }),
+  "@openbookings/moderation": () => ({
+    checkText: async (text: string | null) => {
+      checked.push(text);
+      return check;
+    },
+  }),
 }, ["@/lib/auth"]);
 
-const { submitReviewAsGuest, submitReviewWithToken } = await import("./actions");
+const { answerHostReply, submitReviewAsGuest, submitReviewWithToken } = await import("./actions");
 
 const input = { score: 9, body: "Lovely stay, ask for Jan" };
 
@@ -41,6 +76,12 @@ beforeEach(() => {
   captured.length = 0;
   session = { user: { id: "guest-1" } };
   storeResult = { ok: true, status: "published", context: { propertySlug: "hotel" } };
+  check = clean();
+  checked.length = 0;
+  submitted.length = 0;
+  replied.length = 0;
+  postedMail.length = 0;
+  eligibility = { ok: true };
 });
 
 describe("review outcome events", () => {
@@ -60,5 +101,67 @@ describe("review outcome events", () => {
     await submitReviewAsGuest("booking-1", input);
     await submitReviewWithToken("tok", input);
     expect(captured).toEqual([]);
+  });
+});
+
+describe("the moderation check", () => {
+  // The db layer turns the check into a status (clean publishes, anything else
+  // is held); here the fake does the same, from the check it was handed.
+  function storeFromCheck() {
+    const status = check.verdict === "clean" ? "published" : "pending";
+    storeResult = { ok: true, status, context: { propertySlug: "hotel" } };
+  }
+
+  it("a flagged check stores the review as pending", async () => {
+    check = { verdict: "flagged", rules: ["abuse"], fragments: ["idiot"], source: "mistral" };
+    storeFromCheck();
+    session = null;
+    const result = await submitReviewWithToken("tok", input);
+    expect(checked).toEqual([input.body]);
+    expect(submitted.map((s) => s.check)).toEqual([check]);
+    expect(result).toEqual({ ok: true, status: "pending" });
+    // The "submitted" email says it's being checked.
+    expect(postedMail).toEqual([{ pending: true }]);
+  });
+
+  it("an unchecked check stores it as pending", async () => {
+    check = { verdict: "unchecked", rules: [], fragments: [], source: "regex" };
+    storeFromCheck();
+    const result = await submitReviewAsGuest("booking-1", input);
+    expect(submitted.map((s) => s.check)).toEqual([check]);
+    expect(result).toEqual({ ok: true, status: "pending" });
+  });
+
+  it("a clean check publishes", async () => {
+    storeFromCheck();
+    session = null;
+    const result = await submitReviewWithToken("tok", input);
+    expect(submitted.map((s) => s.check)).toEqual([clean()]);
+    expect(result).toEqual({ ok: true, status: "published" });
+    expect(postedMail).toEqual([{ pending: false }]);
+  });
+
+  it("a review without text is checked as no text", async () => {
+    await submitReviewAsGuest("booking-1", { score: 8, body: undefined as unknown as string });
+    expect(checked).toEqual([null]);
+  });
+
+  it("the guest's answer to a reply is checked the same way", async () => {
+    check = { verdict: "flagged", rules: ["links_contact"], fragments: ["www.example.nl"], source: "mistral" };
+    const result = await answerHostReply("booking-1", "see www.example.nl");
+    expect(checked).toEqual(["see www.example.nl"]);
+    expect(replied.map((r) => r.check)).toEqual([check]);
+    expect(result).toEqual({ ok: true, status: "pending" });
+  });
+
+  it("a review that can't be stored isn't sent to the check", async () => {
+    eligibility = { ok: false, reason: "window_closed" };
+    expect(await submitReviewAsGuest("booking-1", input)).toMatchObject({ ok: false });
+    eligibility = { ok: true };
+    expect(await submitReviewAsGuest("booking-1", { score: 11, body: "fine" })).toMatchObject({ ok: false });
+    expect(await submitReviewAsGuest("booking-1", { score: 9, body: "x".repeat(2001) })).toMatchObject({ ok: false });
+    expect(await answerHostReply("booking-1", "x".repeat(1001))).toMatchObject({ ok: false });
+    expect(checked).toEqual([]);
+    expect(submitted).toEqual([]);
   });
 });

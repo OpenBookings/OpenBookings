@@ -12,8 +12,9 @@ import {
   setReplySkipped,
 } from "@openbookings/db/reviews";
 import { sendReviewReplied } from "@openbookings/mailing/review-send";
-import { deliverMessageToRecipient, detectCircumvention, screenReview } from "@openbookings/messaging";
-import type { TextCheck } from "@openbookings/pricing";
+import { deliverMessageToRecipient, detectCircumvention } from "@openbookings/messaging";
+import { checkText } from "@openbookings/moderation";
+import { REPLY_BODY_MAX, type TextCheck } from "@openbookings/pricing";
 import { getServerSession } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { messageFor, reviewActor } from "./actor";
@@ -33,12 +34,13 @@ const MESSAGES = "/dashboard/bookings/messages";
 const fail = (error: Parameters<typeof messageFor>[0]): ReplyActionResult => ({ ok: false, message: messageFor(error) });
 
 /**
- * Today's automated check as a TextCheck: the regex screen, its contact
- * details and links all under links_contact. Task 4 swaps in the full check.
+ * The moderation check of a public reply: clean publishes, flagged or
+ * unchecked is held for a person. Null for a text the db layer refuses as too
+ * long anyway, so it never costs a model call. Run before the transaction: the
+ * model call shouldn't hold a connection open.
  */
-function regexCheck(body: string): TextCheck {
-  const reason = screenReview(body);
-  return { verdict: reason ? "flagged" : "clean", rules: reason ? ["links_contact"] : [], fragments: [], source: "regex" };
+async function checkReply(body: string): Promise<TextCheck | null> {
+  return body.trim().length > REPLY_BODY_MAX ? null : checkText(body);
 }
 
 function rateLimited(userId: string): boolean {
@@ -79,8 +81,10 @@ export async function replyToReview(
     return { ok: true, status: "sent" };
   }
 
+  const check = await checkReply(body);
+  if (!check) return fail("invalid");
   const result = await withTransaction((tx) =>
-    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, check: regexCheck(body), now }),
+    postReviewReply(tx, { reviewId, role: "host", authorUserId: actor.userId, body, check, now }),
   );
   if (!result.ok) return fail(result.error);
   if (result.status === "published") {
@@ -99,8 +103,10 @@ export async function editReviewReply(replyId: string, body: string): Promise<Re
   if (!actor) return fail("not_found");
   if (rateLimited(actor.userId)) return fail("rate_limited");
   const text = typeof body === "string" ? body : "";
+  const check = await checkReply(text);
+  if (!check) return fail("invalid");
   const result = await withTransaction((tx) =>
-    editHostReply(tx, { replyId, authorUserId: actor.userId, body: text, check: regexCheck(text), now: new Date() }),
+    editHostReply(tx, { replyId, authorUserId: actor.userId, body: text, check, now: new Date() }),
   );
   if (!result.ok) return fail(result.error);
   await refreshPropertyPage(result.propertyId);

@@ -30,7 +30,7 @@ export function ReviewForm({ proof, propertyName }: { proof: ReviewFormProof; pr
         <p className="text-white/65">
           {result.status === 'published'
             ? `It's on the ${propertyName} page now. You can delete it from your account at any time.`
-            : 'It contains something our checks hold back, such as a link or contact details. A person looks at it before it is shown.'}
+            : "A person looks at it before it is shown. Our automatic check holds a review back when it may break our review rules, or when the check can't run."}
         </p>
         <Link href={`/bookings/${proof.bookingId}/review`} className="text-sm text-white/80 underline underline-offset-4 hover:text-white">
           See your review
