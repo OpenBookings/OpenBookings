@@ -38,7 +38,8 @@ describe("dangerousAction", () => {
       ok: true,
       value: { ok: false, error: "not_allowed" },
     });
-    expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log"]);
+    // The audit row, then the .refused row for the action's own refusal.
+    expect(db.sql).toEqual(["UPDATE admin_step_ups SET", "INSERT INTO audit_log", "INSERT INTO audit_log"]);
   });
 
   test("no reason", async () => {

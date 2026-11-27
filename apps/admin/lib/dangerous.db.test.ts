@@ -233,6 +233,26 @@ describeWithDb("dangerous actions", () => {
     expect(await auditRows()).toEqual([]);
   });
 
+  test("records a .refused row when the action answers with a refusal", async () => {
+    const token = await stepUp();
+    const result = await runDangerous(
+      input({ stepUpToken: token }),
+      async () => ({ ok: false as const, error: "not_allowed" }),
+      deps(),
+    );
+    expect(result).toEqual({ ok: false, error: "not_allowed" });
+    expect((await auditRows()).map((r) => [r.action, r.detail.refusal ?? null, r.detail.target_id])).toEqual([
+      ["admin.booking.cancel_rooms", null, TARGET],
+      ["admin.booking.cancel_rooms.refused", "not_allowed", TARGET],
+    ]);
+  });
+
+  test("records no outcome row when the action succeeds", async () => {
+    const token = await stepUp();
+    expect(await runDangerous(input({ stepUpToken: token }), async () => ({ ok: true }), deps())).toEqual({ ok: true });
+    expect((await auditRows()).map((r) => r.action)).toEqual(["admin.booking.cancel_rooms"]);
+  });
+
   test("records a .failed row when the action throws", async () => {
     const token = await stepUp();
     const error = await refusal(() =>

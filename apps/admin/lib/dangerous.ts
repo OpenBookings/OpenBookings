@@ -15,9 +15,11 @@ export { DANGEROUS_ACTIONS, type DangerousAction, type DangerousResult } from ".
  *   4. an audit_log row 'admin.<action>' written first: if that write fails,
  *      the action does not run.
  *
- * Then it runs. If it throws, a second row 'admin.<action>.failed' records
- * that, and the error goes on. Refusals before the action run (no reason, a
- * step-up refused) write nothing.
+ * Then it runs, and how it ended is recorded when it did not succeed: a
+ * second row 'admin.<action>.failed' when it throws (the error goes on), or
+ * 'admin.<action>.refused' when it answers with a refusal value
+ * (`{ ok: false, error }`, e.g. a lifecycle "not_allowed"). Refusals before
+ * the action runs (no reason, a step-up refused) write nothing.
  *
  * The audit row is committed on its own before the action starts, so the
  * record stays even when the action's own transaction rolls back.
@@ -72,6 +74,14 @@ export function shortError(error: unknown): string {
   return line.length > 160 ? `${line.slice(0, 157)}...` : line;
 }
 
+/** Why an action's own answer refused (`{ ok: false, error | reason | message }`), or null. */
+function refusalOf(result: unknown): string | null {
+  if (typeof result !== "object" || result === null || (result as { ok?: unknown }).ok !== false) return null;
+  const r = result as { error?: unknown; reason?: unknown; message?: unknown };
+  const why = [r.error, r.reason, r.message].find((v) => typeof v === "string" && v !== "");
+  return typeof why === "string" ? why.slice(0, 160) : "refused";
+}
+
 export async function runDangerous<T>(
   i: DangerousInput,
   act: (staff: Staff) => Promise<T>,
@@ -99,8 +109,9 @@ export async function runDangerous<T>(
   };
   await audit(db, `admin.${i.action}`, staff, reason, detail);
 
+  let result: T;
   try {
-    return await act(staff);
+    result = await act(staff);
   } catch (error) {
     try {
       await audit(db, `admin.${i.action}.failed`, staff, reason, { ...detail, error: shortError(error) });
@@ -109,6 +120,16 @@ export async function runDangerous<T>(
     }
     throw error;
   }
+
+  const refusal = refusalOf(result);
+  if (refusal !== null) {
+    try {
+      await audit(db, `admin.${i.action}.refused`, staff, reason, { ...detail, refusal });
+    } catch (auditError) {
+      console.error(`[admin] could not record that ${i.action} was refused`, auditError);
+    }
+  }
+  return result;
 }
 
 /**
