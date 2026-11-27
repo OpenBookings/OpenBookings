@@ -1,4 +1,4 @@
-import { circumventionMatches, detectCircumvention } from "./circumvention";
+import { circumventionMatches, contactHandles, detectCircumvention } from "./circumvention";
 
 /**
  * The automated check before a review is published. Anything it flags is
@@ -38,13 +38,20 @@ function linkAt(body: string, start: number): string {
 }
 
 /**
- * What screenReview flags, as moderation sees it: contact details and links
- * both break `links_contact`, and `fragments` are the exact pieces of text that
- * matched, ready to be masked.
+ * The regex half of review moderation: real contact details (phone numbers,
+ * email addresses, links and handles) break `links_contact`, and `fragments`
+ * are the exact pieces of text that matched, ready to be masked. Stricter than
+ * screenReview: a bare app name ("the wifi signal", "we snapped photos") is
+ * not a contact detail in a review. Message screening is unchanged.
  */
 export function screenReviewFragments(body: string | null): { rules: "links_contact"[]; fragments: string[] } {
   if (!body) return { rules: [], fragments: [] };
-  const fragments = new Set<string>(circumventionMatches(body).map((m) => m.text));
+  const fragments = new Set<string>(
+    circumventionMatches(body)
+      .filter((m) => m.reason !== "messenger_handle")
+      .map((m) => m.text),
+  );
+  for (const handle of contactHandles(body)) fragments.add(handle);
   let linkEnd = 0;
   for (const m of body.matchAll(URL_RE_ALL)) {
     if (m.index < linkEnd) continue; // the bare domain inside a link already taken

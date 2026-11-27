@@ -59,6 +59,36 @@ export function circumventionMatches(body: string): { reason: CircumventionReaso
   ];
 }
 
+/**
+ * An @handle that isn't the middle of an email address. Bounded, and the
+ * lookbehind is one character, so it can't backtrack.
+ */
+const AT_HANDLE_RE = /(?<![\w.%+-])@[A-Za-z0-9_][A-Za-z0-9_.]{1,29}/g;
+
+/** A messenger name followed by a handle-like token: "insta: hotel_guest99". */
+const APP_HANDLE_RE = new RegExp(`(?:${MESSENGER_RE.source})[\\s:]{1,3}@?([A-Za-z0-9_.]{3,30})`, "gi");
+
+function trimDots(s: string): string {
+  let end = s.length;
+  while (end > 0 && s[end - 1] === ".") end--;
+  return s.slice(0, end);
+}
+
+/**
+ * Handles someone can actually be reached on: an @handle, or a token after a
+ * messenger name that has a digit or underscore in it (so "on telegram
+ * yesterday" is not one). A bare messenger name is not a handle. Every result
+ * is an exact substring of the body.
+ */
+export function contactHandles(body: string): string[] {
+  const handles = [...body.matchAll(AT_HANDLE_RE)].map((m) => trimDots(m[0]));
+  for (const m of body.matchAll(APP_HANDLE_RE)) {
+    const token = trimDots(m[2]);
+    if (/[\d_]/.test(token) && !handles.some((h) => h.slice(1) === token)) handles.push(token);
+  }
+  return handles.filter((h) => h.replace(/^@/, "").length >= 2);
+}
+
 /** Returns a comma-separated flagged_reason, or null if the body looks clean. */
 export function detectCircumvention(body: string): string | null {
   const reasons = new Set(circumventionMatches(body).map((m) => m.reason));

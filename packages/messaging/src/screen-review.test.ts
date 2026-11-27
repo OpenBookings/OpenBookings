@@ -29,12 +29,34 @@ describe("screenReviewFragments", () => {
     });
   });
 
-  test("returns the email address, messenger name and bare domain", () => {
+  test("returns the email address and links, not the bare app name", () => {
     const r = screenReviewFragments("Mail anna@example.com or whatsapp me, or see www.example.nl and hotelname.com today");
     expect(r.rules).toEqual(["links_contact"]);
-    expect(r.fragments).toEqual(
-      expect.arrayContaining(["anna@example.com", "whatsapp", "www.example.nl", "hotelname.com"]),
-    );
+    expect(r.fragments.sort()).toEqual(["anna@example.com", "hotelname.com", "www.example.nl"]);
+  });
+
+  test("everyday words that name an app are not contact details", () => {
+    const empty = { rules: [], fragments: [] };
+    expect(screenReviewFragments("the wifi signal was weak")).toEqual(empty);
+    expect(screenReviewFragments("we snapped photos")).toEqual(empty);
+    expect(screenReviewFragments("Staff told us to snap a photo, found them on telegram too.")).toEqual(empty);
+    expect(screenReviewFragments("I am on instagram yesterday and today")).toEqual(empty);
+  });
+
+  test("a handle or a number with an app name is flagged by the handle or number", () => {
+    expect(screenReviewFragments("add me on telegram @hotelguest99")).toEqual({
+      rules: ["links_contact"],
+      fragments: ["@hotelguest99"],
+    });
+    expect(screenReviewFragments("call +31 6 12345678")).toEqual({
+      rules: ["links_contact"],
+      fragments: ["+31 6 12345678"],
+    });
+    expect(screenReviewFragments("follow us on insta: hotel_guest99.")).toEqual({
+      rules: ["links_contact"],
+      fragments: ["hotel_guest99"],
+    });
+    expect(screenReviewFragments("Find me @anna.b. Great stay!").fragments).toEqual(["@anna.b"]);
   });
 
   test("returns nothing for an ordinary review or no text", () => {

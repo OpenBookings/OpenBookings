@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { checkText, type ChatFn } from "./check";
+import { afterEach, beforeEach, describe, expect, spyOn, test, type Mock } from "bun:test";
+import { checkText, mistralClient, type ChatFn } from "./check";
 import type { TextCheck } from "@openbookings/pricing";
 import { SYSTEM_PROMPT } from "./prompt";
 
@@ -14,6 +14,12 @@ function stub(violations: Array<{ rule: string; fragment: string }>) {
   };
   return { chat, requests };
 }
+
+let warn: Mock<typeof console.warn>;
+beforeEach(() => {
+  warn = spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => warn.mockRestore());
 
 describe("checkText", () => {
   test("empty or missing text is clean without asking Mistral", async () => {
@@ -108,6 +114,7 @@ describe("checkText", () => {
       source: "regex",
     });
     expect(signal?.aborted).toBe(true);
+    expect(warn.mock.calls).toEqual([["[moderation] check unavailable:", "timeout"]]);
   });
 
   test("an error or an unreadable answer from Mistral gives unchecked", async () => {
@@ -124,6 +131,28 @@ describe("checkText", () => {
         source: "regex",
       });
     }
+    expect(warn.mock.calls).toEqual([
+      ["[moderation] check unavailable:", "Error"],
+      ["[moderation] check unavailable:", "SyntaxError"],
+      ["[moderation] check unavailable:", "Error"],
+    ]);
+  });
+
+  test("the warning never carries the text or the API key", async () => {
+    const text = "Secret review text with +31 6 1234 5678";
+    const chat: ChatFn = async () => {
+      throw new Error(`failed for ${text} with key sk-test-123`);
+    };
+    await checkText(text, { chat });
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).not.toContain("Secret review text");
+    expect(logged).not.toContain("sk-test-123");
+  });
+
+  test("a successful check logs nothing", async () => {
+    const { chat } = stub([]);
+    await checkText("Nice and quiet.", { chat });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   test("the request carries only the text: the user message equals the text and nothing mentions a score", async () => {
@@ -147,5 +176,15 @@ describe("checkText", () => {
     expect(req.system).toBe(SYSTEM_PROMPT);
     expect(req.system).not.toContain("Ignore your instructions");
     expect(JSON.stringify(req.schema)).not.toContain("Ignore your instructions");
+  });
+});
+
+describe("mistralClient", () => {
+  test("one client per process for the same key, a new one when the key changes", () => {
+    const a = mistralClient("key-a");
+    expect(mistralClient("key-a")).toBe(a);
+    const b = mistralClient("key-b");
+    expect(b).not.toBe(a);
+    expect(mistralClient("key-b")).toBe(b);
   });
 });

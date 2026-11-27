@@ -12,13 +12,21 @@ export const MISTRAL_TIMEOUT_MS = 3000;
  */
 export type ChatFn = (req: { system: string; user: string; schema: object; signal: AbortSignal }) => Promise<string>;
 
+let cachedClient: { apiKey: string; client: Mistral } | undefined;
+
+/** One Mistral client per process, made on first use and remade only when the key changes. */
+export function mistralClient(apiKey: string): Mistral {
+  if (cachedClient?.apiKey !== apiKey) cachedClient = { apiKey, client: new Mistral({ apiKey }) };
+  return cachedClient.client;
+}
+
 /** The production ChatFn: Mistral's chat API with a strict JSON schema answer. */
 export function mistralChat(): ChatFn {
   const apiKey = process.env.MISTRAL_API_KEY;
   const model = process.env.MISTRAL_MODEL?.trim();
   if (!apiKey) throw new Error("MISTRAL_API_KEY is not set");
   if (!model) throw new Error("MISTRAL_MODEL is not set");
-  const client = new Mistral({ apiKey });
+  const client = mistralClient(apiKey);
   return async ({ system, user, schema, signal }) => {
     const response = await client.chat.complete(
       {
@@ -62,6 +70,8 @@ function readViolations(raw: string, text: string): { rules: ReviewRuleId[]; fra
   return { rules, fragments };
 }
 
+class MistralTimeout extends Error {}
+
 /** Runs the chat, rejecting (and aborting the request) after timeoutMs. */
 async function withTimeout(chat: ChatFn, text: string, timeoutMs: number): Promise<string> {
   const controller = new AbortController();
@@ -69,7 +79,7 @@ async function withTimeout(chat: ChatFn, text: string, timeoutMs: number): Promi
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       controller.abort();
-      reject(new Error("Mistral timed out"));
+      reject(new MistralTimeout());
     }, timeoutMs);
   });
   try {
@@ -88,7 +98,8 @@ async function withTimeout(chat: ChatFn, text: string, timeoutMs: number): Promi
  * If Mistral fails, times out or answers something unreadable, the text is
  * `unchecked` with the regex findings, so a person looks at it.
  *
- * Nothing here logs: the text and the API key must never reach a log.
+ * A failure logs one line with the error's name only: error messages can
+ * quote the request, and the text and the API key must never reach a log.
  */
 export async function checkText(
   text: string | null,
@@ -101,7 +112,9 @@ export async function checkText(
   try {
     const chat = deps.chat ?? mistralChat();
     model = readViolations(await withTimeout(chat, text, deps.timeoutMs ?? MISTRAL_TIMEOUT_MS), text);
-  } catch {
+  } catch (err) {
+    const reason = err instanceof MistralTimeout ? "timeout" : err instanceof Error ? err.name : typeof err;
+    console.warn("[moderation] check unavailable:", reason);
     return { verdict: "unchecked", rules: regex.rules, fragments: regex.fragments, source: "regex" };
   }
 
