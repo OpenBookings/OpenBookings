@@ -192,14 +192,14 @@ type AuthorRow = {
 
 const AUTHOR_SQL = {
   review: `SELECT u.email, rv.guest_user_id AS author_user_id, false AS author_is_host, p.name AS property_name, rv.booking_id,
-                  COALESCE(rv.body, rv.masked_body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+                  COALESCE(rv.masked_body, rv.body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
              FROM reviews rv
              JOIN properties p ON p.id = rv.property_id
              LEFT JOIN "user" u ON u.id = rv.guest_user_id
              LEFT JOIN guest_profile gp ON gp.user_id = rv.guest_user_id
             WHERE rv.id = $1::uuid`,
   reply: `SELECT u.email, rr.author_user_id, (rr.author_role = 'host') AS author_is_host, p.name AS property_name, rv.booking_id,
-                 COALESCE(rr.body, rr.masked_body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
+                 COALESCE(rr.masked_body, rr.body) AS text, (gp.review_emails_opt_out_at IS NOT NULL) AS opted_out
             FROM review_replies rr
             JOIN reviews rv ON rv.id = rr.review_id
             JOIN properties p ON p.id = rv.property_id
@@ -207,6 +207,16 @@ const AUTHOR_SQL = {
             LEFT JOIN guest_profile gp ON gp.user_id = rr.author_user_id
            WHERE rr.id = $1::uuid`,
 } as const;
+
+/** Whether the guest may write the removed review once more. A failed lookup is "no" and never stops the email. */
+async function rewriteOpen(c: ReturnType<typeof resolve>, bookingId: string, report?: (error: unknown) => void): Promise<boolean> {
+  try {
+    return (await getReviewContext(c.db, bookingId, c.now()))?.eligibility.ok === true;
+  } catch (error) {
+    report?.(error);
+    return false;
+  }
+}
 
 /**
  * Tells the author of a review or reply what a moderator decided.
@@ -241,7 +251,7 @@ export async function sendModerationDecision(
             excerpt: excerptOf(row.text),
             rules: i.rules,
             note: i.note?.trim() || null,
-            canRewrite: item.kind === "review" && (await getReviewContext(c.db, row.booking_id, c.now()))?.eligibility.ok === true,
+            canRewrite: item.kind === "review" && (await rewriteOpen(c, row.booking_id, i.report)),
             manageUrl,
           });
     await c.transport({ from: sender("roy"), to: row.email, ...message });
@@ -253,7 +263,7 @@ export async function sendModerationDecision(
 /**
  * Tells each reporter what became of their report: upheld (the item was
  * removed) or not. A host reporter is the reporting member's own address; a
- * public reporter needs to have left one. Service messages, sent whatever the
+ * public reporter only at the email they left on the form. Service messages, sent whatever the
  * review-email opt-out says. Never throws: one failed address doesn't stop the
  * others, and `deps.report` hears about each.
  */
@@ -267,7 +277,7 @@ export async function sendReportOutcomes(
     const c = resolve(deps);
     const rows = (
       await c.db.query(
-        `SELECT rp.reporter_kind, rp.reporter_email, u.email AS user_email, p.name AS property_name
+        `SELECT rp.reporter_kind, rp.reporter_email, u.email AS user_email, p.name AS property_name, (rp.reply_id IS NOT NULL) AS is_reply
            FROM review_reports rp
            JOIN reviews rv ON rv.id = rp.review_id
            JOIN properties p ON p.id = rv.property_id
@@ -275,12 +285,12 @@ export async function sendReportOutcomes(
           WHERE rp.id = ANY($1::uuid[])`,
         [reportIds],
       )
-    ).rows as { reporter_kind: "host" | "public"; reporter_email: string | null; user_email: string | null; property_name: string }[];
+    ).rows as { reporter_kind: "host" | "public"; reporter_email: string | null; user_email: string | null; property_name: string; is_reply: boolean }[];
     for (const r of rows) {
       try {
-        const to = r.reporter_kind === "host" ? r.user_email : r.reporter_email || r.user_email;
+        const to = r.reporter_kind === "host" ? r.user_email : r.reporter_email;
         if (!to) continue;
-        const message = reportOutcome({ upheld, propertyName: r.property_name });
+        const message = reportOutcome({ upheld, propertyName: r.property_name, itemKind: r.is_reply ? "reply" : "review" });
         await c.transport({ from: sender("roy"), to, ...message });
       } catch (error) {
         deps.report?.(error);

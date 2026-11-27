@@ -207,15 +207,16 @@ export function moderationKept(i: { itemKind: ItemKind; propertyName: string; ma
 }
 
 /** To whoever reported a review or reply: what the person who decided did. */
-export function reportOutcome(i: { upheld: boolean; propertyName: string }): ActionMail {
+export function reportOutcome(i: { upheld: boolean; propertyName: string; itemKind?: ItemKind }): ActionMail {
+  const noun = NOUN[i.itemKind ?? "review"];
   return composeActionMail({
     subject: `Your report about ${i.propertyName}`,
     preheader: i.upheld ? "We removed it." : "We looked, and it stays.",
     eyebrow: "Review",
     headline: i.upheld ? "We removed<br />what you reported." : "We looked at<br />your report.",
     body: i.upheld
-      ? `Thanks for your report about a review at ${STRONG(i.propertyName)}. A person looked at it and removed it because it broke our review rules.`
-      : `Thanks for your report about a review at ${STRONG(i.propertyName)}. A person looked at it and decided it follows our review rules, so it stays.`,
+      ? `Thanks for your report about a ${noun} at ${STRONG(i.propertyName)}. A person looked at it and removed it because it broke our review rules.`
+      : `Thanks for your report about a ${noun} at ${STRONG(i.propertyName)}. A person looked at it and decided it follows our review rules, so it stays.`,
     ctaUrl: "mailto:support@openbookings.co",
     ctaLabel: "Reply to us",
     footnote: `If you disagree, reply to this email and tell us why. ${SUPPORT}`,

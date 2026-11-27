@@ -279,6 +279,53 @@ describe("sendModerationDecision", () => {
   });
 });
 
+describe("moderation decision fixes", () => {
+  const author = {
+    email: "anna@example.com", author_user_id: "g1", author_is_host: false, property_name: "Canal House",
+    booking_id: "22222222-2222-4222-8222-222222222222", text: "Call me on [removed]", opted_out: false,
+  };
+  test("the excerpt comes from the masked text first, never the original", async () => {
+    const queries: string[] = [];
+    const sent: { html: string }[] = [];
+    const deps = {
+      db: { query: async (sql: string) => { queries.push(sql); return { rows: [author] }; } },
+      transport: async (m: { html: string }) => { sent.push(m); },
+      urls,
+    };
+    await sendModerationDecision({ kind: "reply", id: REVIEW }, "removed", { rules: ["links_contact"], note: null }, deps);
+    await sendModerationDecision({ kind: "review", id: REVIEW }, "removed", { rules: ["links_contact"], note: null }, deps);
+    expect(queries.filter((q) => q.includes("COALESCE(r"))).toHaveLength(2);
+    for (const q of queries.filter((q) => q.includes("COALESCE(r"))) expect(q).toMatch(/COALESCE\(r[rv]\.masked_body, r[rv]\.body\)/);
+    expect(sent[0]!.html).toContain("Call me on [removed]");
+  });
+
+  test("a failing rewrite lookup still sends the removal, without the rewrite offer", async () => {
+    const reported: unknown[] = [];
+    const sent: { html: string }[] = [];
+    const deps = {
+      db: { query: async (sql: string) => { if (sql.includes("FROM bookings b")) throw new Error("db down"); return { rows: [author] }; } },
+      transport: async (m: { html: string }) => { sent.push(m); },
+      urls,
+    };
+    await sendModerationDecision({ kind: "review", id: REVIEW }, "removed", { rules: ["abuse"], note: null, report: (e) => reported.push(e) }, deps);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.html).not.toContain("write your review once more");
+    expect(reported).toHaveLength(1);
+  });
+
+  test("a public reporter is emailed only at the address on the form; a reply report says reply", async () => {
+    const sent: { to: string; html: string }[] = [];
+    const rows = [
+      { reporter_kind: "public", reporter_email: null, user_email: "account@example.com", property_name: "Canal House", is_reply: false },
+      { reporter_kind: "public", reporter_email: "pat@example.com", user_email: "account@example.com", property_name: "Canal House", is_reply: true },
+    ];
+    const deps = { db: { query: async () => ({ rows }) }, transport: async (m: { to: string; html: string }) => { sent.push(m); }, urls };
+    await sendReportOutcomes([REVIEW, REVIEW], true, deps);
+    expect(sent.map((m) => m.to)).toEqual(["pat@example.com"]);
+    expect(sent[0]!.html).toContain("about a reply at");
+  });
+});
+
 describe("excerptOf", () => {
   test("is one line of at most 120 characters", () => {
     expect(excerptOf("a\n\n b")).toBe("a b");
