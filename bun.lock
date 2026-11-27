@@ -447,6 +447,21 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/moderation": {
+      "name": "@openbookings/moderation",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mistralai/mistralai": "^3.5.0",
+        "@openbookings/messaging": "workspace:*",
+        "@openbookings/pricing": "workspace:*",
+      },
+      "devDependencies": {
+        "@openbookings/config": "workspace:*",
+        "@types/bun": "^1.4.5",
+        "@types/node": "^22.20.1",
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/pricing": {
       "name": "@openbookings/pricing",
       "version": "0.0.0",
@@ -916,6 +931,8 @@
     "@openbookings/messaging": ["@openbookings/messaging@workspace:packages/messaging"],
 
     "@openbookings/mode": ["@openbookings/mode@workspace:packages/mode"],
+
+    "@openbookings/moderation": ["@openbookings/moderation@workspace:packages/moderation"],
 
     "@openbookings/pricing": ["@openbookings/pricing@workspace:packages/pricing"],
 

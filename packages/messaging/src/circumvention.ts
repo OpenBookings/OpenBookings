@@ -12,9 +12,19 @@
  */
 const PHONE_CANDIDATE_RE = /\+?\d[\d\s().-]{6,}/g;
 
-function hasPhoneNumber(body: string): boolean {
+const PHONE_TRAILING = new Set([" ", "\t", "\n", "\r", "(", ")", ".", "-"]);
+
+/** Candidates with at least 7 digits, without the separators they end on. */
+function phoneNumbers(body: string): string[] {
   const candidates = body.match(PHONE_CANDIDATE_RE) ?? [];
-  return candidates.some((c) => c.replace(/\D/g, "").length >= 7);
+  return candidates
+    .filter((c) => c.replace(/\D/g, "").length >= 7)
+    .map((c) => {
+      // A loop rather than a regex: `[\s().-]+$` backtracks quadratically on a long run.
+      let end = c.length;
+      while (end > 0 && PHONE_TRAILING.has(c[end - 1])) end--;
+      return c.slice(0, end);
+    });
 }
 
 /**
@@ -30,11 +40,27 @@ const EMAIL_RE =
 const MESSENGER_RE =
   /\b(whatsapp|wa\.me|t\.me|telegram|instagram|\binsta\b|snapchat|\bsnap\b|wechat|\bkik\b|signal|facebook\.com\/messages|m\.me)\b/i;
 
+export type CircumventionReason = "phone_number" | "email_address" | "messenger_handle";
+
+/** The same patterns as above, global, so every match can be read back. */
+const EMAIL_RE_ALL = new RegExp(EMAIL_RE.source, "g");
+const MESSENGER_RE_ALL = new RegExp(MESSENGER_RE.source, "gi");
+
+/**
+ * Each piece of text the check flags, with its reason, in detection order
+ * (phone numbers, then email addresses, then messenger names). Every `text` is
+ * an exact substring of the body.
+ */
+export function circumventionMatches(body: string): { reason: CircumventionReason; text: string }[] {
+  return [
+    ...phoneNumbers(body).map((text) => ({ reason: "phone_number" as const, text })),
+    ...[...body.matchAll(EMAIL_RE_ALL)].map((m) => ({ reason: "email_address" as const, text: m[0] })),
+    ...[...body.matchAll(MESSENGER_RE_ALL)].map((m) => ({ reason: "messenger_handle" as const, text: m[0] })),
+  ];
+}
+
 /** Returns a comma-separated flagged_reason, or null if the body looks clean. */
 export function detectCircumvention(body: string): string | null {
-  const reasons: string[] = [];
-  if (hasPhoneNumber(body)) reasons.push("phone_number");
-  if (EMAIL_RE.test(body)) reasons.push("email_address");
-  if (MESSENGER_RE.test(body)) reasons.push("messenger_handle");
-  return reasons.length > 0 ? reasons.join(",") : null;
+  const reasons = new Set(circumventionMatches(body).map((m) => m.reason));
+  return reasons.size > 0 ? [...reasons].join(",") : null;
 }
