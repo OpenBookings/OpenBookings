@@ -38,7 +38,7 @@ through the same shared packages, so the rules live in one place.
 - **`apps/invoice-job`**: a command-line job that drafts, issues, stores and sends monthly
   commission invoices.
 - **`apps/docs`**: this site.
-- **`apps/admin`**: an internal console that only runs on a developer's machine.
+- **`apps/admin`**: the staff console. It runs behind Cloudflare Access (a private container reached through a Cloudflare Tunnel) and locally on a developer's machine. See [Run the admin console](/docs/self-hosted/how-to/run-the-admin-console).
 
 ## Shared packages
 
@@ -60,11 +60,12 @@ The packages hold the rules that must not differ between apps:
 | Postgres 17 + PostGIS (Neon in production) | Everything | Yes, from `testing/` |
 | Stripe Connect | Payments, payouts, commission | Only to take a payment |
 | Lettermint | Email | No, use `EMAIL_TRANSPORT=console` |
-| Cloudflare Turnstile | Bot protection on checkout | Only to take a payment |
+| Cloudflare Turnstile | Bot protection on checkout and the public review report form | To take a payment, and for the public to report a review |
 | Cloudflare R2 | Photos and invoice files | Only to upload photos |
 | Upstash Redis | Page cache | No |
 | MapTiler | Maps | No (maps stay empty) |
-| Chatwoot + Mistral | Support chat | Only for the support bot |
+| Chatwoot | Support chat | Only for the support bot |
+| Mistral | The support bot, and checking review and reply texts (guest site and host dashboard) | No: without it the support bot is off, and new review and reply texts are held as not checked; if nobody decides within 72 hours they publish with only the automatic contact-detail finds masked |
 | Sentry, PostHog | Errors, analytics | No |
 
 ## Where to read next

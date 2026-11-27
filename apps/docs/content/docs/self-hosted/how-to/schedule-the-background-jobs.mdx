@@ -1,6 +1,6 @@
 ---
 title: Schedule the background jobs
-description: Set up the HTTP jobs that reconcile payments, send review invitations and enforce data retention.
+description: Set up the HTTP jobs that reconcile payments, send review invitations, moderate reviews and enforce data retention.
 ---
 
 A few jobs run on a schedule. Each one is an HTTP `POST` endpoint on one of the apps,
@@ -13,6 +13,7 @@ request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actio
 | --- | --- | --- | --- |
 | Reconcile payments | `POST {web}/api/cron/reconcile-payments` | every 15 minutes | Settles checkouts the Stripe webhook missed |
 | Review invitations | `POST {web}/api/cron/review-invitations` | hourly | Warns the host at check-out, invites the guest about 24 hours later |
+| Review moderation | `POST {web}/api/cron/review-moderation` | every 15 minutes | Re-checks reviews the automatic check missed, publishes held ones after 72 hours with flagged parts masked, and deletes moderation records 12 months after the decision |
 | Message retention | `POST {business}/api/cron/messaging-retention` | daily, 03:00 | Redacts the text of messages older than `MESSAGE_RETENTION_DAYS` |
 | PII retention | `POST {business}/api/cron/pii-retention` | daily, 03:30 | Redacts guest notes and cancellation reasons on stays that ended more than `PII_RETENTION_MONTHS` ago (default 18) |
 | Consent retention | `POST {business}/api/cron/consent-retention` | daily, 04:00 | Deletes cookie-consent records older than 5 years, as the Privacy Policy promises |
@@ -32,6 +33,7 @@ request will do: Cloud Scheduler, a Kubernetes CronJob with `curl`, GitHub Actio
    ```text
    */15 * * * *  curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://book.example.com/api/cron/reconcile-payments
    0 * * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://book.example.com/api/cron/review-invitations
+   */15 * * * *  curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://book.example.com/api/cron/review-moderation
    0 3 * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/messaging-retention
    30 3 * * *    curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/pii-retention
    0 4 * * *     curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://business.example.com/api/cron/consent-retention

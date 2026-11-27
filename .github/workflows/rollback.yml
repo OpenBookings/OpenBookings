@@ -31,6 +31,7 @@ on:
           - web
           - business
           - docs
+          - admin
       sha:
         description: Commit SHA to roll back to (must already have been built and pushed)
         required: true
@@ -81,7 +82,7 @@ jobs:
           fi
 
           case "$APP" in
-            web|business|docs) ;;
+            web|business|docs|admin) ;;
             *) echo "::error::unknown app '${APP}'"; exit 1 ;;
           esac
 
@@ -127,6 +128,7 @@ jobs:
           WEB_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_WEB }}
           BUSINESS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_BUSINESS }}
           DOCS_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_DOCS }}
+          ADMIN_CONTAINER_ID: ${{ vars.SCW_CONTAINER_ID_ADMIN }}
           APP: ${{ inputs.app }}
           OB_PROBE_TOKEN: ${{ secrets.OB_PROBE_TOKEN }}
           SHA: ${{ inputs.sha }}
@@ -137,6 +139,7 @@ jobs:
             web)      container_id="$WEB_CONTAINER_ID" ;;
             business) container_id="$BUSINESS_CONTAINER_ID" ;;
             docs)     container_id="$DOCS_CONTAINER_ID" ;;
+            admin)    container_id="$ADMIN_CONTAINER_ID" ;;
           esac
 
           if [ -z "$container_id" ]; then

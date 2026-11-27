@@ -14,6 +14,8 @@ import { join, relative } from "node:path";
 import {
   EARLY_DEPARTURE_KEPT_NIGHTS,
   FREE_CANCELLATION_HOURS,
+  MODERATION_DEADLINE_HOURS,
+  MODERATION_RECORD_RETENTION_MONTHS,
   NON_REFUNDABLE_MIN_DISCOUNT_PERCENT,
   formatCancellationWindow,
   nonRefundableQualifies,
@@ -136,6 +138,39 @@ describe("early departure", () => {
   test("no page keeps another number of nights", () => {
     const stated = sweep(/(?:unused nights, the next|leaves? early[^.\n]*?the next) (\d+)\b/gi);
     const wrong = stated.filter((s) => Number(s.groups[0]) !== EARLY_DEPARTURE_KEPT_NIGHTS);
+    expect(wrong.map((s) => s.where)).toEqual([]);
+  });
+});
+
+describe("review moderation", () => {
+  test("the background jobs page states the deadline and the retention the code applies", () => {
+    const text = page("self-hosted/how-to/schedule-the-background-jobs.mdx");
+    expect(text).toContain(`publishes held ones after ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(text).toContain(`deletes moderation records ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
+  });
+
+  test("the reviews page states the deadline and how long moderation records are kept", () => {
+    const text = page("business/reviews/index.mdx");
+    expect(text).toContain(`If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(text).toContain(`deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
+    expect(text).toContain(`A report nobody decided on is deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after it was made`);
+    // What the code does beyond the deadline and the rewrite (publishOverdue, closeOldThread, the host's masked view).
+    expect(text).toContain("If we can't tell which words broke a rule, it waits for a person instead of being published automatically.");
+    expect(text).toContain("Your replies to the removed review, and the guest's answers to them, are deleted when the guest writes it again");
+    expect(text).toContain('Until then you see them with the parts the check flagged replaced by "[removed]"');
+  });
+
+  test("no page gives the deadline another number of hours", () => {
+    // "publishes held ones after 72 hours", "If nobody has decided within 72 hours".
+    const stated = sweep(/\b(?:held|holds?|decided|publish(?:es|ed)?)\b[^.|\n]*?\b(\d+)\s?(?:h|hours?)\b/gi);
+    expect(stated.length).toBeGreaterThan(1);
+    const wrong = stated.filter((s) => Number(s.groups[0]) !== MODERATION_DEADLINE_HOURS);
+    expect(wrong.map((s) => s.where)).toEqual([]);
+  });
+
+  test("no page keeps moderation records for another number of months", () => {
+    const stated = sweep(/(?:moderation records|reports?)[^.|\n]*?\b(\d+) months\b/gi);
+    const wrong = stated.filter((s) => Number(s.groups[0]) !== MODERATION_RECORD_RETENTION_MONTHS);
     expect(wrong.map((s) => s.where)).toEqual([]);
   });
 });

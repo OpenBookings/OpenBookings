@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewReply } from "@openbookings/db/reviews";
-import { filterHostReviews, needsReply, summarize, type HostReview } from "./shape";
+import { filterHostReviews, hasHostReply, heldTextForHost, needsReply, summarize, type HostReview } from "./shape";
 
 const NOW = new Date("2031-11-20T12:00:00Z");
 
@@ -12,6 +12,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     bookingId: `b${n}`,
     propertyId: "p1",
     propertyName: "Canal House",
+    timeZone: "Europe/Amsterdam",
     score: 8,
     body: "Nice.",
     authorName: "Anna",
@@ -20,11 +21,14 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     roomLabel: "Double",
     status: "published",
     flaggedReason: null,
+    report: null,
+    replyReports: {},
     postedAt: "2031-11-15T10:00:00.000Z",
     replies: [],
     privateReplyAt: null,
     skippedAt: null,
     nextRole: "host",
+    threadLength: extra.replies?.length ?? 0,
     ...extra,
   };
 }
@@ -67,6 +71,21 @@ describe("needsReply", () => {
   test("not while the review is being checked", () => {
     expect(needsReply(review({ status: "pending" }))).toBe(false);
   });
+  test("not when the guest's answer was removed: there is nothing the host can see to reply to", () => {
+    // host, guest (removed): the host's turn on the server, but the host sees only its own reply.
+    expect(needsReply(review({ replies: [reply("host")], nextRole: "host", threadLength: 2 }))).toBe(false);
+  });
+  test("not when its own reply was removed: the turn is the guest's", () => {
+    expect(needsReply(review({ replies: [{ ...reply("host"), status: "removed" }], nextRole: "guest" }))).toBe(false);
+  });
+});
+
+describe("hasHostReply", () => {
+  test("a public reply counts; a removed one doesn't", () => {
+    expect(hasHostReply(review({ replies: [reply("host")] }))).toBe(true);
+    expect(hasHostReply(review({ replies: [{ ...reply("host"), status: "removed" }] }))).toBe(false);
+    expect(hasHostReply(review({ replies: [reply("guest")] }))).toBe(false);
+  });
 });
 
 describe("summarize", () => {
@@ -94,6 +113,18 @@ describe("summarize", () => {
   test("reviews being checked don't count", () => {
     expect(summarize([review({ status: "pending" })], "all", NOW)).toMatchObject({ recentCount: 0, waiting: 0 });
   });
+  test("a review removed on the property's report doesn't count, and isn't waiting", () => {
+    expect(summarize([review({ status: "removed", report: "upheld" })], "all", NOW)).toMatchObject({ recentCount: 0, waiting: 0 });
+  });
+});
+
+describe("a review removed on the property's report", () => {
+  test("is in All, with nothing to reply to", () => {
+    const removed = review({ status: "removed", report: "upheld" });
+    expect(filterHostReviews([removed], { tab: "all", propertyId: "all", band: "all", sort: "newest" })).toEqual([removed]);
+    expect(filterHostReviews([removed], { tab: "reply", propertyId: "all", band: "all", sort: "newest" })).toEqual([]);
+    expect(filterHostReviews([removed], { tab: "checking", propertyId: "all", band: "all", sort: "newest" })).toEqual([]);
+  });
 });
 
 describe("filterHostReviews", () => {
@@ -108,5 +139,23 @@ describe("filterHostReviews", () => {
     expect(sorted.map((r) => r.score)).toEqual([5, 7, 9]);
     const okay = filterHostReviews(list, { tab: "all", propertyId: "all", band: "okay", sort: "newest" });
     expect(okay.map((r) => r.score)).toEqual([5]);
+  });
+});
+
+describe("heldTextForHost", () => {
+  test("the flagged parts are masked, every occurrence", () => {
+    expect(
+      heldTextForHost({ body: "Jan Jansen was rude. Ask Jan Jansen.", flaggedReason: "personal_details", fragments: ["Jan Jansen"] }),
+    ).toBe("[removed] was rude. Ask [removed].");
+  });
+
+  test("a rule whose words couldn't be pinpointed withholds the whole text", () => {
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: ["the porter is awful"] })).toBe("[removed]");
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: [] })).toBe("[removed]");
+    expect(heldTextForHost({ body: "The porter was awful.", flaggedReason: "abuse", fragments: null })).toBe("[removed]");
+  });
+
+  test("held for no rule (the check couldn't run and found nothing): as written", () => {
+    expect(heldTextForHost({ body: "Quiet room.", flaggedReason: null, fragments: [] })).toBe("Quiet room.");
   });
 });

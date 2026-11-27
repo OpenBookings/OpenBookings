@@ -16,3 +16,6 @@ export function byline(r: Pick<HostReview, "authorName" | "authorCountry">): str
 /** A review's own score: neutral, colour is for state only. */
 export const SCORE_CHIP =
   "inline-flex shrink-0 items-center justify-center rounded-md border bg-muted/40 font-semibold tabular-nums";
+
+/** The public review rules, on the guest site. */
+export const RULES_PAGE = `${process.env.NEXT_PUBLIC_WEB_URL ?? "https://openbookings.co"}/legal/review-rules`;

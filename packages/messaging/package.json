@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./redaction": "./src/redaction.ts",
-    "./cron-auth": "./src/cron-auth.ts"
+    "./cron-auth": "./src/cron-auth.ts",
+    "./screen-review": "./src/screen-review.ts"
   },
   "scripts": {
     "test": "bun test",

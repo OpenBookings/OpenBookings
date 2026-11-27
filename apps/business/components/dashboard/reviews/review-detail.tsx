@@ -5,29 +5,45 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { TriangleAlertIcon, X } from "lucide-react";
 import { reviewBand } from "@openbookings/pricing";
-import { bookingReference } from "@openbookings/db/booking-reference";
 import type { ReviewReply } from "@openbookings/db/reviews";
 import { AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { AttentionAlert } from "@/components/dashboard/attention-alert";
-import { useOptionalSupport } from "@/components/support/support-provider";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteReviewReply, editReviewReply } from "@/lib/reviews/actions";
-import type { HostReview } from "@/lib/reviews/shape";
-import { byline, SCORE_CHIP, stayMonthLabel } from "./labels";
+import type { HostReportStatus, HostReview } from "@/lib/reviews/shape";
+import { hostReplyNotice, type HostReplyNotice } from "@/lib/reviews/reply-notice";
+import { byline, RULES_PAGE, SCORE_CHIP, stayMonthLabel } from "./labels";
 import { counter, ReplyComposer, ReplyField } from "./reply-composer";
+import { ReportDialog } from "./report-dialog";
+
+/** The property's report on a review, as the pill and the line under the text say it. */
+const REPORT: Record<HostReportStatus, { pill: string; tone: StatusTone; line: string }> = {
+  open: {
+    pill: "Reported · being checked",
+    tone: "attention",
+    line: "Still visible on your page while we check it. You'll hear the outcome by email.",
+  },
+  upheld: {
+    pill: "Report upheld: removed",
+    tone: "stopped",
+    line: "We removed it for breaking our review rules. It's no longer on your page.",
+  },
+  dismissed: {
+    pill: "Report not upheld",
+    tone: "neutral",
+    line: "We checked it against our review rules and kept it. You can report it again if something new comes up.",
+  },
+};
 
 export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?: () => void }) {
-  const support = useOptionalSupport();
+  const [reporting, setReporting] = React.useState(false);
   const lastId = review.replies.at(-1)?.id ?? null;
-
-  const report = () =>
-    support?.openIntake({
-      category: "bookings",
-      linked: { type: "booking", id: review.bookingId, label: `Booking ${bookingReference(review.bookingId)}`, detail: `Review by ${review.authorName}` },
-      locked: true,
-    });
+  const report = review.report ? REPORT[review.report] : null;
+  // Only a published review can be reported, and not while the property's report on it is open.
+  const canReport = review.status === "published" && review.report !== "open";
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto rounded-xl border">
@@ -43,6 +59,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
           </div>
           <div className="text-xs text-muted-foreground">{review.propertyName}</div>
         </div>
+        {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
         {onClose ? (
           <Button variant="ghost" size="icon" className="-mt-1 -mr-2" onClick={onClose} aria-label="Close review">
             <X />
@@ -62,25 +79,29 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>Posted {formatRelativeTime(review.postedAt)}</span>
           <span>Verified stay</span>
-          {support ? (
+          {canReport ? (
             <Button
               type="button"
               variant="link"
-              onClick={report}
+              onClick={() => setReporting(true)}
               className="h-auto p-0 text-xs font-normal text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              Report
+              Report…
             </Button>
           ) : null}
         </div>
+        {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
       </div>
+      {canReport ? <ReportDialog target={{ kind: "review", id: review.id }} open={reporting} onOpenChange={setReporting} /> : null}
 
-      <div className="flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5">
+      {/* A review removed on the property's report has no thread left to answer. */}
+      <div className={cn("flex flex-col gap-3.5 border-t px-4 py-4 sm:px-5", review.status === "removed" && "hidden")}>
         {review.status === "pending" ? (
           <AttentionAlert role="status">
             <TriangleAlertIcon />
             <AlertDescription className="text-foreground">
-              Our automated check held this review for a person. It isn&apos;t public yet.
+              Being checked by OpenBookings. Our automated check held this review for a person; it isn&apos;t public
+              yet, and the parts it flagged show as [removed].
             </AlertDescription>
           </AttentionAlert>
         ) : null}
@@ -88,6 +109,12 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
         {review.replies.map((reply) => (
           <ThreadReply key={reply.id} review={review} reply={reply} isLast={reply.id === lastId} />
         ))}
+
+        {Object.entries(review.replyReports).some(([id, status]) => status === "upheld" && !review.replies.some((r) => r.id === id)) ? (
+          <p className="text-xs text-muted-foreground">
+            {review.authorName}&apos;s answer you reported was removed for breaking our review rules.
+          </p>
+        ) : null}
 
         {review.privateReplyAt ? (
           <p className="text-xs text-muted-foreground">
@@ -102,7 +129,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
 
         {review.nextRole === null ? (
           <p className="text-xs text-muted-foreground">This thread is closed. Carry on in Messages.</p>
-        ) : review.nextRole === "host" && review.replies.length === 2 ? (
+        ) : review.nextRole === "host" && review.threadLength === 2 ? (
           <p className="text-xs text-muted-foreground">This is the last reply in the thread. After it, carry on in Messages.</p>
         ) : null}
       </div>
@@ -113,6 +140,17 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
 function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: ReviewReply; isLast: boolean }) {
   const isHost = reply.role === "host";
   const [editing, setEditing] = React.useState(false);
+  const [reporting, setReporting] = React.useState(false);
+  const reportStatus = review.replyReports[reply.id] ?? null;
+  const report = reportStatus ? REPORT[reportStatus] : null;
+  // A guest's live answer on a live review; never the property's own replies.
+  const canReport = !isHost && reply.status === "published" && review.status === "published" && reportStatus !== "open";
+  // The property's own reply: held, removed, or published with parts removed.
+  const notice = reply.moderation
+    ? hostReplyNotice({ status: reply.status, moderation: reply.moderation, bookingId: review.bookingId, timeZone: review.timeZone, now: new Date() })
+    : null;
+  // A removed reply can't be edited, and stays in the thread (it keeps its turn).
+  const removed = reply.status === "removed";
   const [text, setText] = React.useState(reply.body);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, startTransition] = React.useTransition();
@@ -143,9 +181,16 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
           </span>{" "}
           · {formatRelativeTime(when)}
           {reply.editedAt ? " · Edited" : ""}
-          {reply.status === "pending" ? " · Being checked" : ""}
+          {reply.status === "pending" && !notice ? " · Being checked by OpenBookings" : ""}
         </span>
-        {isHost && !editing ? (
+        {report ? <StatusBadge tone={report.tone}>{report.pill}</StatusBadge> : null}
+        {notice ? <StatusBadge tone={notice.tone}>{notice.pill}</StatusBadge> : null}
+        {canReport ? (
+          <Button variant="ghost" size="xs" onClick={() => setReporting(true)}>
+            Report…
+          </Button>
+        ) : null}
+        {isHost && !editing && !removed ? (
           <span className="flex gap-1">
             <Button variant="ghost" size="xs" onClick={() => setEditing(true)} disabled={busy}>
               Edit
@@ -173,9 +218,60 @@ function ThreadReply({ review, reply, isLast }: { review: HostReview; reply: Rev
             </span>
           </div>
         </div>
-      ) : (
+      ) : removed ? null : (
         <p className="text-sm leading-relaxed whitespace-pre-line [overflow-wrap:anywhere]">{reply.body}</p>
       )}
+      {notice && !editing ? <ReplyNotice notice={notice} /> : null}
+      {report ? <p className="text-xs text-muted-foreground">{report.line}</p> : null}
+      {canReport ? <ReportDialog target={{ kind: "answer", id: reply.id }} open={reporting} onOpenChange={setReporting} /> : null}
+    </div>
+  );
+}
+
+/** What moderation did with the property's own reply, under it: compact, the details the texts promise. */
+function ReplyNotice({ notice }: { notice: HostReplyNotice }) {
+  if (notice.state === "held") return <p className="text-xs text-muted-foreground">{notice.line}</p>;
+  return (
+    <div className="flex flex-col gap-1.5 pt-0.5 text-xs text-muted-foreground">
+      <p>{notice.line}</p>
+      <p>
+        {notice.lead}{" "}
+        <a href={RULES_PAGE} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+          review rules
+        </a>
+        {notice.rules.length > 0 ? ":" : "."}
+      </p>
+      {notice.rules.length > 0 ? (
+        <ul className="list-disc space-y-0.5 pl-4">
+          {notice.rules.map((rule) => (
+            <li key={rule.title}>
+              <span className="font-medium text-foreground">{rule.title}</span>: {rule.description}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {notice.note ? (
+        <p className="rounded-md bg-muted/50 px-2.5 py-1.5">
+          <span className="font-medium text-foreground">Note from our team:</span> {notice.note}
+        </p>
+      ) : null}
+      {notice.written && notice.state === "removed" ? (
+        <details className="rounded-md bg-muted/50 px-2.5 py-1.5">
+          <summary className="cursor-pointer font-medium text-foreground">What you wrote (not public)</summary>
+          <p className={cn("mt-1 whitespace-pre-line [overflow-wrap:anywhere]", notice.written.purged && "italic")}>{notice.written.text}</p>
+        </details>
+      ) : notice.written ? (
+        <p className="rounded-md bg-muted/50 px-2.5 py-1.5 whitespace-pre-line [overflow-wrap:anywhere]">
+          <span className="font-medium text-foreground">What you wrote:</span> {notice.written.text}
+        </p>
+      ) : null}
+      <p>
+        Think we got it wrong?{" "}
+        <a href={notice.objection} className="underline underline-offset-2 hover:text-foreground">
+          Tell us why
+        </a>
+        , or reply to our email.
+      </p>
     </div>
   );
 }

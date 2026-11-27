@@ -9,9 +9,9 @@ import { absoluteUrl, propertyPath } from "@/lib/seo/site";
 export const dynamic = "force-dynamic";
 
 /**
- * Only pages that may appear in search: the homepage, every live listing and
- * the reviewed legal texts. Search, account, checkout and booking pages are
- * `noindex` and stay out.
+ * Only pages that may appear in search: the homepage, every live listing, the
+ * reviewed legal texts and the review rules. Search, account, checkout and
+ * booking pages are `noindex` and stay out.
  *
  * Demo hotels are left out even in testing mode, which must never be indexed
  * anyway. If the query fails this answers 500 rather than a sitemap without
@@ -50,5 +50,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   });
 
-  return [{ url: absoluteUrl("/") }, ...properties, ...legal];
+  // One English page, not a versioned legal text (see app/legal/review-rules).
+  const reviewRules: MetadataRoute.Sitemap = [{ url: absoluteUrl("/legal/review-rules") }];
+
+  return [{ url: absoluteUrl("/") }, ...properties, ...legal, ...reviewRules];
 }

@@ -117,6 +117,30 @@ describeWithDb("loadHostReviews against Postgres", () => {
     expect(b?.privateReplyAt).not.toBeNull();
   });
 
+  test("a guest's held review or answer shows with what the check flagged masked, never as written", async () => {
+    const held = await addReview("pending", 3, "Jan Jansen at the desk was rude.");
+    await db.query(`UPDATE reviews SET flagged_reason = 'personal_details', flagged_fragments = '["Jan Jansen"]' WHERE id = $1`, [held]);
+    const vague = await addReview("pending", 4, "The porter was awful.");
+    await db.query(`UPDATE reviews SET flagged_reason = 'abuse', flagged_fragments = '["the porter is awful"]' WHERE id = $1`, [vague]);
+    const published = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, flagged_reason, flagged_fragments, published_at, created_at)
+       VALUES ($1, 'host', $2, 'Sorry, call Piet Bakker.', 'pending', 'personal_details', '["Piet Bakker"]', NULL, NOW() - interval '2 minutes'),
+              ($1, 'guest', $3, 'Mail me at anna@example.com.', 'pending', 'links_contact', '["anna@example.com"]', NULL, NOW() - interval '1 minute')`,
+      [published, owner, guest],
+    );
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(list.find((r) => r.id === held)?.body).toBe("[removed] at the desk was rude.");
+    expect(list.find((r) => r.id === vague)?.body).toBe("[removed]");
+    // The host's own held reply is theirs to read; the guest's held answer is masked.
+    expect(list.find((r) => r.id === published)?.replies.map((r) => [r.role, r.body])).toEqual([
+      ["host", "Sorry, call Piet Bakker."],
+      ["guest", "Mail me at [removed]."],
+    ]);
+    expect(JSON.stringify(list)).not.toMatch(/Jan Jansen|porter was awful|anna@example\.com/);
+  });
+
   test("a stranger sees nothing", async () => {
     await addReview("published");
     expect(await loadHostReviews(session(stranger), propertyId, propertyDb(session(stranger)))).toEqual([]);
@@ -138,6 +162,143 @@ describeWithDb("loadHostReviews against Postgres", () => {
     await addReview("deleted");
     await addReview("hidden");
     expect(await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)))).toEqual([]);
+  });
+
+  test("the property's own report shows: being checked, upheld (the removed review stays listed) or not upheld", async () => {
+    const orgId = `test-org-${crypto.randomUUID()}`;
+    await db.query(`INSERT INTO "organization" (id, name, slug, "createdAt") VALUES ($1, 'Org', $1, NOW())`, [orgId]);
+    await db.query(`UPDATE properties SET organization_id = $1 WHERE id = $2`, [orgId, propertyId]);
+    await db.query(
+      `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt") VALUES (gen_random_uuid()::text, $1, $2, 'owner', NOW())`,
+      [orgId, owner],
+    );
+    const hostReport = (reviewId: string, status: string, decidedAt: string | null, org: string | null = orgId) =>
+      db.query(
+        `INSERT INTO review_reports (review_id, reporter_kind, reporter_user_id, reporter_org_id, rule, status, decided_at, created_at)
+         VALUES ($1, 'host', $2, $3, 'abuse', $4, $5::timestamptz, NOW() - interval '1 day')`,
+        [reviewId, owner, org, status, decidedAt],
+      );
+    const decide = (reviewId: string, status: string, decision: string, at: string) =>
+      db.query(`UPDATE reviews SET status = $2, decision = $3, decided_by = 'staff', decided_at = $4::timestamptz WHERE id = $1`, [
+        reviewId,
+        status,
+        decision,
+        at,
+      ]);
+
+    const open = await addReview("published");
+    await hostReport(open, "open", null);
+    const upheld = await addReview("published");
+    await decide(upheld, "removed", "removed", "2031-01-02T10:00:00Z");
+    await hostReport(upheld, "upheld", "2031-01-02T10:00:00Z");
+    const kept = await addReview("published");
+    await decide(kept, "published", "kept", "2031-01-02T10:00:00Z");
+    await hostReport(kept, "dismissed", "2031-01-02T10:00:00Z");
+    // Removed without the property's report (another organization's, or the public's): not listed.
+    const removedByOthers = await addReview("published");
+    await decide(removedByOthers, "removed", "removed", "2031-01-02T10:00:00Z");
+    await hostReport(removedByOthers, "upheld", "2031-01-02T10:00:00Z", null);
+    // An old outcome a later decision (a rewrite cleared it) no longer counts.
+    const rewritten = await addReview("pending");
+    await hostReport(rewritten, "upheld", "2031-01-01T10:00:00Z");
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    const byId = (id: string) => list.find((r) => r.id === id);
+    expect(byId(open)).toMatchObject({ status: "published", report: "open" });
+    expect(byId(upheld)).toMatchObject({ status: "removed", report: "upheld" });
+    expect(byId(kept)).toMatchObject({ status: "published", report: "dismissed" });
+    expect(byId(removedByOthers)).toBeUndefined();
+    expect(byId(rewritten)).toMatchObject({ status: "pending", report: null });
+  });
+
+  test("the property's reports on guests' answers show by reply, a removed one's outcome included", async () => {
+    const reviewId = await addReview("published");
+    const answer = async (status: string, decidedAt: string | null) =>
+      (
+        await one(
+          `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, published_at, decision, decided_at)
+           VALUES ($1, 'guest', $2, 'Not true.', $3, NOW(), CASE WHEN $4::timestamptz IS NULL THEN NULL WHEN $3 = 'removed' THEN 'removed' ELSE 'kept' END, $4::timestamptz)
+           RETURNING id`,
+          [reviewId, guest, status, decidedAt],
+        )
+      ).id;
+    const report = (replyId: string, status: string, decidedAt: string | null) =>
+      db.query(
+        `INSERT INTO review_reports (review_id, reply_id, reporter_kind, reporter_user_id, rule, status, decided_at)
+         VALUES ($1, $2, 'host', $3, 'abuse', $4, $5::timestamptz)`,
+        [reviewId, replyId, owner, status, decidedAt],
+      );
+    const open = await answer("published", null);
+    await report(open, "open", null);
+    const removed = await answer("removed", "2031-01-02T10:00:00Z");
+    await report(removed, "upheld", "2031-01-02T10:00:00Z");
+
+    const [listed] = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(listed?.replyReports).toEqual({ [open]: "open", [removed]: "upheld" });
+    expect(listed?.replies.map((r) => r.id)).toEqual([open]);
+  });
+
+  test("the host's own replies carry what moderation did; a removed one stays in the thread and keeps its turn", async () => {
+    const removedOn = await addReview("published");
+    const removedReply = (
+      await one(
+        `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, flagged_reason, decision, decision_rules,
+                                     decision_note, decided_at, created_at)
+         VALUES ($1, 'host', $2, 'Call Jan Jansen.', 'removed', 'personal_details', 'removed', '{personal_details,abuse}',
+                 'First names only.', '2031-01-02T10:00:00Z', '2031-01-01T10:00:00Z')
+         RETURNING id`,
+        [removedOn, owner],
+      )
+    ).id;
+    const maskedOn = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, masked_body, status, flagged_reason,
+                                   published_by_deadline, published_at, created_at)
+       VALUES ($1, 'host', $2, 'Thanks, Jan Jansen.', 'Thanks, [removed].', 'published', 'personal_details', true, NOW(), NOW() - interval '4 days'),
+              ($1, 'guest', $3, 'You too.', NULL, 'published', NULL, false, NOW(), NOW())`,
+      [maskedOn, owner, guest],
+    );
+
+    const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    const removed = list.find((r) => r.id === removedOn);
+    expect(removed).toMatchObject({ timeZone: "Europe/Amsterdam", nextRole: "guest", threadLength: 1 });
+    expect(removed?.replies).toEqual([
+      expect.objectContaining({
+        id: removedReply,
+        role: "host",
+        status: "removed",
+        moderation: expect.objectContaining({
+          written: "Call Jan Jansen.",
+          decision: "removed",
+          decisionRules: ["personal_details", "abuse"],
+          decisionNote: "First names only.",
+          decidedAt: "2031-01-02T10:00:00.000Z",
+          heldSince: "2031-01-01T10:00:00.000Z",
+        }),
+      }),
+    ]);
+
+    const masked = list.find((r) => r.id === maskedOn);
+    expect(masked?.replies.map((r) => [r.role, r.body, r.moderation?.maskedBody ?? null, r.moderation?.written ?? null])).toEqual([
+      ["host", "Thanks, [removed].", "Thanks, [removed].", "Thanks, Jan Jansen."],
+      // The guest's answer is theirs: no moderation details, never the original.
+      ["guest", "You too.", null, null],
+    ]);
+    expect(masked?.replies[0]?.moderation).toMatchObject({ publishedByDeadline: true, flaggedRules: ["personal_details"] });
+  });
+
+  test("a removed guest answer counts for the turn but isn't one the host owes a reply to", async () => {
+    const reviewId = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, published_at, decision, decided_at, created_at)
+       VALUES ($1, 'host', $2, 'Thanks', 'published', NOW(), NULL, NULL, NOW() - interval '2 hours'),
+              ($1, 'guest', $3, 'Rude words.', 'removed', NULL, 'removed', NOW(), NOW() - interval '1 hour')`,
+      [reviewId, owner, guest],
+    );
+    const [listed] = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(listed).toMatchObject({ nextRole: "host", threadLength: 2 });
+    expect(listed?.replies.map((r) => r.role)).toEqual(["host"]);
+    expect(await countReviewsNeedingReply(session(owner), propertyId, propertyDb(session(owner)))).toBe(0);
   });
 
   test("countReviewsNeedingReply counts the open ones", async () => {

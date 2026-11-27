@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "pg";
+import type { TextCheck } from "@openbookings/pricing";
 import { applyPendingMigrations, connectionString, describeWithDb, seedBooking, seedProperty } from "../testing/db-harness";
 import {
   anonymizeGuestReviews,
@@ -14,6 +15,8 @@ import {
   type ReviewMail,
 } from "./index";
 
+const CLEAN: TextCheck = { verdict: "clean", rules: [], fragments: [], source: "regex" };
+const FLAGGED: TextCheck = { verdict: "flagged", rules: ["links_contact"], fragments: [], source: "regex" };
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 // Check-in 10 Nov 2031, two nights; the property checks out at 11:00 Amsterdam (10:00 UTC).
@@ -50,7 +53,7 @@ describeWithDb("guest reviews against Postgres", () => {
   });
 
   const submit = (now: Date, extra: Partial<Parameters<typeof submitReview>[1]> = {}) =>
-    submitReview(db, { bookingId, via: "session", score: 9, body: "Lovely stay.", flaggedReason: null, now, ...extra });
+    submitReview(db, { bookingId, via: "session", score: 9, body: "Lovely stay.", check: CLEAN, now, ...extra });
 
   test("a stay opens for review 24 hours after check-out, without being marked as checked in", async () => {
     expect(await submit(at(DAY - 1))).toEqual({ ok: false, error: "too_early" });
@@ -86,7 +89,7 @@ describeWithDb("guest reviews against Postgres", () => {
   });
 
   test("a flagged review waits for a person instead of publishing", async () => {
-    const result = await submit(at(2 * DAY), { flaggedReason: "url" });
+    const result = await submit(at(2 * DAY), { check: FLAGGED });
     expect(result).toMatchObject({ ok: true, status: "pending" });
     expect(await one(`SELECT status, published_at FROM reviews WHERE booking_id = $1`, [bookingId])).toEqual({
       status: "pending",
@@ -137,7 +140,7 @@ describeWithDb("guest reviews against Postgres", () => {
     for (const score of [10, 9]) {
       const { bookingId: other } = await seedBooking(db, ids, { checkIn: CHECK_IN, nights: 2 });
       await db.query(`UPDATE bookings SET status = 'checked_in' WHERE id = $1`, [other]);
-      await submitReview(db, { bookingId: other, via: "session", score, body: null, flaggedReason: null, now: at(2 * DAY) });
+      await submitReview(db, { bookingId: other, via: "session", score, body: null, check: CLEAN, now: at(2 * DAY) });
     }
     page = await loadPropertyReviews(db, ids.propertyId, at(3 * DAY));
     expect(page.recentCount).toBe(3);

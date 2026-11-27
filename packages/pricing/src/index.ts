@@ -12,3 +12,4 @@ export * from "./guests";
 export * from "./reviews";
 export * from "./vat-rates";
 export * from "./vat-split";
+export * from "./moderation";

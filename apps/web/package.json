@@ -25,6 +25,7 @@
     "@openbookings/mailing": "workspace:*",
     "@openbookings/maps": "workspace:*",
     "@openbookings/messaging": "workspace:*",
+    "@openbookings/moderation": "workspace:*",
     "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@sentry/nextjs": "^11.16.0",

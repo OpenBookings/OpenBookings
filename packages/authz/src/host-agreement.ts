@@ -18,7 +18,7 @@
  * without pulling the database client into the bundle.
  */
 export const HOST_AGREEMENT_TITLE = "Host Agreement";
-export const HOST_AGREEMENT_VERSION = "1.5";
+export const HOST_AGREEMENT_VERSION = "1.6";
 export const HOST_AGREEMENT_DOC_ID = `host-agreement@${HOST_AGREEMENT_VERSION}`;
 
 /** The current version, on the business app. Sign-in required. */

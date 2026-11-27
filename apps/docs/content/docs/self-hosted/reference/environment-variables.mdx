@@ -15,7 +15,7 @@ I = invoice job, R = root scripts.
 
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | all | yes | Postgres 17 + PostGIS connection string. On Neon, the pooled (`-pooler`) host. |
+| `DATABASE_URL` | W, B, S, I, R; A in development only | yes (not for the admin console in production, which uses `ADMIN_DATABASE_URL_READ` / `_WRITE`) | Postgres 17 + PostGIS connection string. On Neon, the pooled (`-pooler`) host. |
 | `DATABASE_URL_DIRECT` | B, A, R | for migrations and scripts | A direct (non-pooled) connection, for long transactions and drizzle-kit. |
 | `ENV_TYPE` | R | no | `dev` makes `packages/db` use `DEV_DATABASE_URL` instead of `DATABASE_URL`. |
 | `DEV_DATABASE_URL` | R | with `ENV_TYPE=dev` | The development database. |
@@ -58,17 +58,17 @@ I = invoice job, R = root scripts.
 
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | W | for checkout | Cloudflare Turnstile site key. Build-time. |
-| `TURNSTILE_SECRET` | W | for checkout | Turnstile secret key. Checkout refuses every token without it. |
-| `TURNSTILE_HOSTNAMES` | W | for checkout | Comma-separated hostnames whose tokens are accepted. Never `localhost` in production. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | W | for checkout and review reports | Cloudflare Turnstile site key. Build-time. |
+| `TURNSTILE_SECRET` | W | for checkout and review reports | Turnstile secret key. Checkout and the public review report form refuse every token without it. |
+| `TURNSTILE_HOSTNAMES` | W | for checkout and review reports | Comma-separated hostnames whose tokens are accepted. Never `localhost` in production. |
 
 ## Email
 
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
-| `EMAIL_TRANSPORT` | W, B, S, I | no | `console` prints emails to the terminal instead of sending them. Refused when `NODE_ENV=production`. |
-| `LETTERMINT_PROJECT_TOKEN` | W, B, S, I | to send email | Lettermint project token. |
-| `EMAIL_DOMAIN` | W, B, S, I | no | The domain every email is sent from, default `openbookings.co`. Each kind of email keeps its own name and mailbox on it: `magic@` for sign-in links, `security@`, `bookings@`, `roy@`, `billing@`, `support@`, and `noreply@` for internal reports. The domain must be verified in Lettermint. Replies arrive at these mailboxes, so the domain needs to receive mail too. |
+| `EMAIL_TRANSPORT` | W, B, A, S, I | no | `console` prints emails to the terminal instead of sending them. Refused when `NODE_ENV=production`. |
+| `LETTERMINT_PROJECT_TOKEN` | W, B, A, S, I | to send email | Lettermint project token. The admin console needs it to email the guest and host when staff cancel or refund a booking; without it the action succeeds and no email goes out. |
+| `EMAIL_DOMAIN` | W, B, A, S, I | no | The domain every email is sent from, default `openbookings.co`. Each kind of email keeps its own name and mailbox on it: `magic@` for sign-in links, `security@`, `bookings@`, `roy@`, `billing@`, `support@`, and `noreply@` for internal reports. The domain must be verified in Lettermint. Replies arrive at these mailboxes, so the domain needs to receive mail too. |
 | `EMAIL_TRACKING_ENABLED` | W, B, S, I | no | `true` turns on open and click tracking in the emails the platform sends, reported to PostHog. Default off. Also needs the two variables below, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_WEB_URL` and `NEXT_PUBLIC_BUSINESS_URL`. Never active with `EMAIL_TRANSPORT=console`. To turn tracking off, set it to `false` and keep `EMAIL_TRACKING_SECRET`. |
 | `EMAIL_TRACKING_SECRET` | W, B, S, I | with tracking | Base64 of 32 random bytes (`openssl rand -base64 32`). Use the same value in every app: the guest site opens the tokens the others seal. Never remove or rotate it while sent emails may still be clicked: the links in them only reach their page with the secret they were sealed with, otherwise they land on the home page. This holds after tracking is turned off too. |
 | `EMAIL_TRACKING_CONSENT_VERSION` | W, B, S, I | with tracking | A whole number, such as `2`. Anything else keeps tracking off. Only recipients whose analytics consent was given at this cookie version or later are tracked. Set it to the raised `NEXT_PUBLIC_COOKIE_VERSION`. No email is tracked without the recipient's analytics consent, team invitations included. |
@@ -80,8 +80,8 @@ I = invoice job, R = root scripts.
 | `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | B, I | for uploads | An S3-compatible store (Cloudflare R2). |
 | `R2_BUCKET_NAME` | B | for uploads | The public bucket for property and room photos. |
 | `MEDIA_BASE_URL` | B | for uploads | The public URL that bucket is served from. |
-| `R2_INVOICES_BUCKET_NAME` | B, A, I | for invoices | The private bucket for invoice PDFs and CSVs. |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B | no | Upstash Redis cache. The cache is off when unset. |
+| `R2_INVOICES_BUCKET_NAME` | B, I | for invoices | The private bucket for invoice PDFs and CSVs. |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | W, B, A | no | Upstash Redis cache. The cache is off when unset. The admin console only drops a property's cached reviews after a moderation decision; without them a removed review can stay on the property page for up to a day. |
 | `CACHE_TTL_PROPERTY_PAGE_S`, `CACHE_TTL_PROPERTY_PAGE_MISS_S`, `CACHE_TTL_PROPERTY_REVIEWS_S`, `CACHE_MAX_AGE_PROPERTY_PAGE_S`, `CACHE_MAX_AGE_PROPERTY_REVIEWS_S` | W | no | Cache lifetimes, in seconds. |
 | `REVALIDATE_SECRET` | W, B | no | Shared secret the host dashboard uses to refresh a public property page. |
 | `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_PURGE_TOKEN` | B | no | Purge Cloudflare's cache for a property page after an edit. |
@@ -95,6 +95,7 @@ I = invoice job, R = root scripts.
 | `REALTIME_TOKEN_SECRET` / `REALTIME_SERVICE_SECRET` | W, B | with realtime | Secrets shared with the realtime worker. |
 | `MESSAGE_RETENTION_DAYS` | W, B | no | How long message text is kept before it's redacted. |
 | `CRON_SECRET` | W, B | for jobs | Bearer token for `/api/cron/*`. See [Schedule the background jobs](/self-hosted/how-to/schedule-the-background-jobs). |
+| `MISTRAL_API_KEY` / `MISTRAL_MODEL` | W, B, S | no | The language model. In W and B it checks review and reply texts before they publish. Without a key they can't be checked automatically: each one waits up to 72 hours, then publishes with only the automatic contact-detail finds masked. The support bot answers with it. |
 | `PII_RETENTION_MONTHS` | B | no | Months after a stay before guest notes are redacted. Default `18`. |
 
 ## Billing and invoices
@@ -113,9 +114,19 @@ I = invoice job, R = root scripts.
 | Variable | Apps | Required | Description |
 | --- | --- | --- | --- |
 | `TESTING` | W, B, R | no | `true`, with an `sk_test_` key, turns on testing mode: demo hotels and test-only behaviour. Refused with a live key. |
-| `ADMIN_SUPER_MODE` | A | no | `1` enables super-admin actions, only with `NODE_ENV=development`. |
+| `ADMIN_SUPER_MODE` | A | no | Development only: `1`, with `NODE_ENV=development`, lets you in without Cloudflare Access and enables the super-admin actions. Ignored in production, where every request needs a valid Access token. |
+| `ADMIN_DEV_EMAIL` | A | no | Development only (with `ADMIN_SUPER_MODE`): the email the console treats as the signed-in staff member. Default `dev@localhost`. No staff lookup happens in this mode. |
+| `CF_ACCESS_TEAM_DOMAIN` | A | in production | Your Cloudflare Zero Trust team domain, e.g. `yourteam.cloudflareaccess.com`. The console fetches Access's signing keys from it. Unset in production (with `CF_ACCESS_AUD`): every request gets `503 Admin is not configured`. |
+| `CF_ACCESS_AUD` | A | in production | The Access application's AUD tag. A request whose Access token is missing, invalid or for another application gets `403`. |
+| `TUNNEL_TOKEN` | A | in production | The Cloudflare Tunnel's token. When set, the image starts `cloudflared` next to the server; unset, only the server starts (local `docker run`). |
 | `ADMIN_DATABASE_URL_READ` | A | no | A login user acting as `ob_admin_read` (SELECT only). Every admin page reads through it. Unset (with `_WRITE` unset too): `DATABASE_URL`. |
 | `ADMIN_DATABASE_URL_WRITE` | A | no | A login user acting as `ob_admin_write`, for admin actions only. Unset while `_READ` is set: the console is read-only. Set alone: refused. |
+| `ADMIN_TOTP_KEY` | A | for step-up | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts authenticator-app secrets at rest. Changing it makes every enrolled authenticator app unusable. |
+| `ADMIN_BOOTSTRAP_CODE` | A | for a first enrolment | A staff member with no passkey or authenticator app yet enters it on `/security` to add their first one. Unset or blank: nobody can bootstrap. Remove it once staff have enrolled; later ones need a step-up with an existing one. |
+| `ADMIN_RP_ID` | A | in production (passkeys) | The admin console's host name for passkeys, e.g. `admin.openbookings.co`. Unset in production: passkeys are refused (the request's host is never trusted). Unset in development: the request's host. |
+| `SCW_JOBS_REGION` | A | in production, for invoice runs | The Scaleway region of the invoice job, e.g. `nl-ams`. |
+| `SCW_INVOICE_JOB_DEFINITION_ID` | A | in production, for invoice runs | The id of the invoice job's Scaleway Serverless Job definition. Production invoice runs start it; the job definition carries its own `DATABASE_URL`, `INVOICE_DB_ENV` and Stripe key, which are never set on the admin container. |
+| `SCW_JOBS_SECRET_KEY` | A | in production, for invoice runs | A Scaleway API secret key allowed to start and read jobs in that project. Any of the three missing: invoice runs are refused, naming what is missing. |
 
 ### Admin console database roles
 
@@ -123,8 +134,21 @@ To look at production from the admin console without the apps' full-access `DATA
 give it the two roles migration `0054_admin_roles.sql` creates. `ob_admin_read` may only read
 what the pages show; `ob_admin_write` may only make the changes the admin actions make (booking
 lifecycle, refunds, forced edits, resolving a flagged payment). Neither can change the schema
-or read password hashes, tokens or 2FA secrets. Both bypass row-level security: staff see every
-host's bookings.
+or read password hashes or tokens. Both bypass row-level security: staff see every host's
+bookings.
+
+Migration `0060_admin_production.sql` adds what the staff sign-in and step-up need. Only
+`ob_admin_read` may read `"user".role` (that is how the console knows who is staff: the staff
+lookup always runs on the read connection). Both roles may read the `admin_credentials` and
+`admin_step_ups` tables, minus the secrets: `ob_admin_read` cannot read
+`admin_credentials.totp_secret_enc` or `admin_step_ups.challenge`. `ob_admin_write` can add
+credentials and step-ups and mark them used, and it reads the TOTP secret (stored encrypted
+with `ADMIN_TOTP_KEY`) to check a code.
+
+Migration `0061_review_moderation.sql` lets both roles read reviews, review replies and review
+reports (the moderation queue). `ob_admin_write` may change only what a Keep or Remove decides
+(the decision columns, the status and publication they set) and a report's status, never the
+text itself.
 
 The roles cannot log in. Once `0054` is applied, create one login user for each in the Neon SQL
 editor, as `neondb_owner`. Use SQL, not the Neon console: a role made in the console is added
@@ -144,18 +168,18 @@ ALTER ROLE admin_writer SET role = 'ob_admin_write';
 look empty.
 
 Put the connection strings (same host and database as `DATABASE_URL`, `?sslmode=require`) in
-`apps/admin/.env.local` as `ADMIN_DATABASE_URL_READ` and `ADMIN_DATABASE_URL_WRITE`, and remove
+`apps/admin/.env.local` (or the container's environment in production) as `ADMIN_DATABASE_URL_READ` and `ADMIN_DATABASE_URL_WRITE`, and remove
 the production `DATABASE_URL` from it. The red banner shows where each connection goes. To check
 a login, connect with it and run `SELECT current_user;` (expect `ob_admin_read`) and
 `INSERT INTO audit_log (action) VALUES ('probe');` (expect `permission denied`). The invoice job
-needs full access, so the console refuses to run it while these are set. To revoke access, `DROP
+needs full access, so in development the console refuses to run it while these are set; in
+production it starts the Scaleway job instead (`SCW_*` above). To revoke access, `DROP
 ROLE admin_reader;` (or `admin_writer`).
 
 ## Support bot
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `MISTRAL_API_KEY` / `MISTRAL_MODEL` | yes | The language model. |
 | `CHATWOOT_BASE_URL` / `CHATWOOT_ACCOUNT_ID` | yes | The Chatwoot instance and account. |
 | `CHATWOOT_BOT_ACCESS_TOKEN` / `CHATWOOT_BOT_WEBHOOK_SECRET` | yes | The agent bot's token and webhook secret. |
 | `CHATWOOT_VERIFIED_INBOX_IDS` | no | Inboxes with mandatory identity validation. There the signed contact identifier must be the guest's user id, and the bot lists bookings by that account's own email (never the contact's). |
@@ -165,6 +189,9 @@ ROLE admin_reader;` (or `admin_writer`).
 | `SUPPORT_CHAT_ENABLED` / `SUPPORT_ASSISTANT_ENABLED` | no | Host support chat and its assistant (also read by the host dashboard). |
 | `CHATWOOT_BUSINESS_INBOX_ID` / `CHATWOOT_ACCOUNT_WEBHOOK_SECRET` / `BUSINESS_APP_URL` | with host support | The host-support inbox. With email tracking, `BUSINESS_APP_URL` must equal `NEXT_PUBLIC_BUSINESS_URL`, or the links in support replies are not tracked. |
 | `REFUND_ESCALATION_THRESHOLD_EUR` | no | Refunds above this amount go to a human. |
+
+The bot's language model is `MISTRAL_API_KEY` / `MISTRAL_MODEL`, under
+[Messaging and jobs](#messaging-and-jobs).
 
 The host dashboard's chat widget also reads `NEXT_PUBLIC_CHATWOOT_BASE_URL`,
 `CHATWOOT_BUSINESS_INBOX_IDENTIFIER` and `CHATWOOT_BUSINESS_INBOX_HMAC_TOKEN`.

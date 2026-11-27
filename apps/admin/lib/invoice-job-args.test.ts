@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { jobArgs, previousMonth } from "./invoice-job-args";
+import { isDryRun, jobArgs, previousMonth, runSummary, runTarget } from "./invoice-job-args";
 
 describe("jobArgs", () => {
   test("backfill uses --from and keeps the dry run", () => {
@@ -54,5 +54,30 @@ describe("previousMonth", () => {
     expect(previousMonth(new Date("2026-01-15T12:00:00Z"))).toBe("2025-12");
     // 23:30 UTC on 31 October is already 1 November in Amsterdam.
     expect(previousMonth(new Date("2026-10-31T23:30:00Z"))).toBe("2026-10");
+  });
+});
+
+describe("what a run asks to confirm", () => {
+  test("only backfill and draft can be dry runs; every other step is real", () => {
+    const args = (step: string, dryRun: boolean) => {
+      const built = jobArgs({ step, month: "2026-10", entity: "", dryRun });
+      return built.ok ? built.args : [];
+    };
+    expect(isDryRun(args("draft", true))).toBe(true);
+    expect(isDryRun(args("backfill", true))).toBe(true);
+    expect(isDryRun(args("draft", false))).toBe(false);
+    expect(isDryRun(args("deliver", true))).toBe(false);
+    expect(isDryRun(args("issue", true))).toBe(false);
+  });
+
+  test("the target names the step, month and organization", () => {
+    expect(runTarget({ step: "deliver", month: "2026-11", entity: "" })).toBe("deliver:2026-11");
+    expect(runTarget({ step: "issue", month: "2026-11", entity: " org_1 " })).toBe("issue:2026-11:org_1");
+  });
+
+  test("the summary says what happens, to whom and for which month", () => {
+    expect(runSummary({ step: "deliver", month: "2026-11", entity: "" })).toContain("Send the November 2026 commission invoices to every host");
+    expect(runSummary({ step: "issue", month: "2026-01", entity: "org_1" })).toContain("January 2026");
+    expect(runSummary({ step: "issue", month: "2026-01", entity: "org_1" })).toContain("organization org_1");
   });
 });

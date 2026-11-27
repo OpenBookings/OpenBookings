@@ -28,6 +28,7 @@
     "@openbookings/mailing": "workspace:*",
     "@openbookings/maps": "workspace:*",
     "@openbookings/messaging": "workspace:*",
+    "@openbookings/moderation": "workspace:*",
     "@openbookings/pricing": "workspace:*",
     "@openbookings/stripe": "workspace:*",
     "@openbookings/support": "workspace:*",

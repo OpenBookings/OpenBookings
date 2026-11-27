@@ -1,0 +1,133 @@
+---
+title: Run the admin console
+description: Put the admin console behind Cloudflare Access in production, make a staff member, and recover from a lost second factor.
+---
+
+The admin console (`apps/admin`) is for staff only. In production it is a private container with
+no public address. A Cloudflare Tunnel, started inside the container, is the only way in, and
+Cloudflare Access decides who may use the tunnel. The console checks Access's signed token on
+every request, so a request that bypasses Access is refused.
+
+Signing in is Access and nothing else. Dangerous actions (refunds, forced edits, invoice runs
+that send email, and so on) additionally ask for a reason and a **step-up**: a passkey or a
+6-digit authenticator-app code, valid for 5 minutes and for that one action only.
+
+## 1. Create the Access application
+
+In Cloudflare Zero Trust:
+
+1. **Access, Applications, Add an application, Self-hosted.** Hostname `admin.openbookings.co`.
+2. Add one policy that allows exactly one email address (add more staff later, one at a time).
+3. Set the session duration to 12 hours.
+4. Copy the application's **Audience (AUD) tag** into `CF_ACCESS_AUD`, and your team domain
+   (`<team>.cloudflareaccess.com`) into `CF_ACCESS_TEAM_DOMAIN`.
+
+Without both values the console answers every request with `503 Admin is not configured`. With
+them, a request without a valid Access token for this application gets `403`.
+
+## 2. Create the tunnel
+
+1. **Networks, Tunnels, Create a tunnel** (Cloudflared). Copy its token into `TUNNEL_TOKEN`.
+2. Add a public hostname: `admin.openbookings.co`, service `http://localhost:8080`.
+
+The image starts `cloudflared tunnel --no-autoupdate run` in the background when `TUNNEL_TOKEN`
+is set, then the server on port 8080 (`PORT` overrides it, and the tunnel's service URL must
+match). The `cloudflared` release in the image is pinned in `apps/admin/Dockerfile` with its
+SHA-256 checked.
+
+## 3. Deploy the container
+
+Build and release it like the other apps ([Build the production images](/docs/self-hosted/how-to/build-the-production-images)):
+CI builds `openbookings-admin` and rolls the Scaleway container named by the repository variable
+`SCW_CONTAINER_ID_ADMIN`. Create the container and set that variable before you expect rolls: until
+it exists, a release that built the admin image logs a warning and skips the admin roll (the other
+apps still fail the release on a missing id).
+
+Create the Scaleway Serverless Container **private** (it needs no public endpoint: the tunnel
+dials out) with a minimum scale of 1, so the tunnel stays up. Set:
+
+| Variable | Value |
+| --- | --- |
+| `NODE_ENV` | `production` (the image sets it) |
+| `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | From step 1 |
+| `TUNNEL_TOKEN` | From step 2 |
+| `ADMIN_DATABASE_URL_READ`, `ADMIN_DATABASE_URL_WRITE` | The two least-privilege logins ([Admin console database roles](/docs/self-hosted/reference/environment-variables#admin-console-database-roles)). Never the full-access `DATABASE_URL`. |
+| `ADMIN_RP_ID` | `admin.openbookings.co`. Required: passkeys are refused without it. |
+| `ADMIN_TOTP_KEY` | `openssl rand -base64 32` |
+| `ADMIN_BOOTSTRAP_CODE` | A long random code, only while enrolling (step 5) |
+| `LETTERMINT_PROJECT_TOKEN` | Required for the emails a cancel or refund sends to the guest and host, and the ones a review moderation decision sends to the author and the reporters. Without it the action still succeeds and nobody is emailed. |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | The guest site's values. Keep and Remove on `/reviews` drop the property's cached reviews, so the page shows the decision within five minutes. Unset, the cached copy lasts up to a day. |
+| `EMAIL_DOMAIN` | Optional; default `openbookings.co` |
+| `STRIPE_SECRET_KEY` | The live key; production allows it |
+| `INVOICE_DB_ENV` | `production` |
+| `SCW_JOBS_REGION`, `SCW_INVOICE_JOB_DEFINITION_ID`, `SCW_JOBS_SECRET_KEY` | To start the invoice job |
+
+The links in those emails use `NEXT_PUBLIC_WEB_URL` and `NEXT_PUBLIC_BUSINESS_URL`, which are fixed when the image is built (CI passes them as build arguments, like the other apps), not set on the container. Email open and click tracking is not used by the admin console: leave `EMAIL_TRACKING_*` unset.
+
+Do not set `ADMIN_SUPER_MODE` or `ADMIN_DEV_EMAIL`: they are development-only, and
+`ADMIN_SUPER_MODE` is ignored in production.
+
+Apply migration `0060_admin_production.sql` first. It lets the two admin roles read `"user".role`
+and creates the credential and step-up tables ([what each role may read](/docs/self-hosted/reference/environment-variables#admin-console-database-roles)).
+
+### The invoice job's own environment
+
+The admin container never holds the full-access database URL. Invoice runs in production start
+the invoice job as a Scaleway Serverless Job, and **the job definition carries its own
+environment** (`DATABASE_URL`, `INVOICE_DB_ENV`, the Stripe key, and the rest of
+`apps/invoice-job`'s settings), set in Scaleway. Changing the job's settings means editing the
+job definition, not the admin container. A dry run starts straight from the invoice page; a run
+that sends email or changes records asks for a reason and a step-up first.
+
+## 4. Make someone staff
+
+Staff means a user whose `role` is `admin` and whose email is the one Access verified (compared
+without regard to case). They must already have a `"user"` row (sign in once to the guest site or
+host dashboard with that email). Then, as the database owner:
+
+```sql
+UPDATE "user" SET role = 'admin' WHERE lower(email) = lower('you@example.com');
+```
+
+Someone who passes Access but is not staff gets a 404 page on every route. To remove access, set the role
+back (`'user'`) and remove them from the Access policy.
+
+## 5. First enrolment
+
+Every dangerous action needs a passkey or authenticator app, so enrol one before you need it:
+
+1. Open `https://admin.openbookings.co/security` and add a passkey or an authenticator app. With
+   nothing enrolled yet, it asks for the `ADMIN_BOOTSTRAP_CODE` value. A wrong code is refused, and
+   with the variable unset nobody can enrol a first factor.
+2. Add a second factor (a passkey on another device, or the authenticator app as well). Further
+   enrolments need a step-up with one you already have, not the bootstrap code.
+3. **Remove `ADMIN_BOOTSTRAP_CODE`** from the container and roll it. Each staff member's first
+   enrolment needs it, so keep it only while enrolling people.
+
+The `/audit` page lists every dangerous action, refused attempt and failure, with who and why.
+
+## Lost every factor
+
+If a staff member has lost all their passkeys and authenticator apps, the way back is the
+database, not the console. As the database owner:
+
+```sql
+DELETE FROM admin_credentials WHERE user_id = '<their user id>';
+```
+
+Set `ADMIN_BOOTSTRAP_CODE` again, roll the container, enrol (step 5), and remove the code again.
+Find the id with `SELECT id FROM "user" WHERE lower(email) = lower('you@example.com');`.
+
+## Throttling
+
+A staff member gets 5 wrong step-up answers per 15 minutes, and at most 5 unanswered step-ups at
+a time. Past that, further attempts are refused until the window passes. The refusals appear on
+`/audit`.
+
+## Check it
+
+- `curl -i https://admin.openbookings.co/` with no Access login redirects to Cloudflare's login
+  rather than reaching the console.
+- The container's own response without Access configured is `503 Admin is not configured`.
+- CI does not probe the admin console after a release: it sits behind Access. The release job logs
+  the rolled image revision instead; compare it with the commit you expect.

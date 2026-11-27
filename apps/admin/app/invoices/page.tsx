@@ -1,8 +1,10 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
-import { previousMonth } from "@/lib/invoice-job-args";
-import { databaseHost, requireSuperAdmin } from "@/lib/super-admin";
+import { previousMonth, RUN_STARTED_ACTION } from "@/lib/invoice-job-args";
+import { getJobRun, scalewayJobConfig, type JobRunState } from "@/lib/scaleway-jobs";
+import { databaseHost } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 import { RunForm } from "./run-form";
 
 type RunRow = { step: string; period: string; status: string; dry_run: boolean; started: string; seconds: number | null };
@@ -11,11 +13,60 @@ type InvoiceRow = { number: string | null; period: string; status: string; doc_t
 const euro = (cents: string) =>
   formatCents(Number(cents), { whole: "always-decimals" });
 
-/** Runs the monthly invoice job by hand, against this app's database and Stripe test key. Dev only. */
+type Latest = { runId: string; startedBy: string | null; at: string; run: JobRunState | null; error: string | null };
+
+/** The run the newest 'started' audit row names, and Scaleway's word on it now (one fetch per page load). */
+async function latestScalewayRun(db: ReturnType<typeof readPool>): Promise<Latest | null> {
+  const { rows } = await db.query(
+    `SELECT detail, to_char(created_at AT TIME ZONE 'Europe/Amsterdam', 'DD Mon HH24:MI') AS at
+       FROM audit_log WHERE action = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [RUN_STARTED_ACTION],
+  );
+  const row = rows[0] as { detail: { run_id?: string; actor_email?: string }; at: string } | undefined;
+  const runId = row?.detail?.run_id;
+  if (!row || typeof runId !== "string") return null;
+  const base = { runId, startedBy: row.detail.actor_email ?? null, at: row.at };
+  const cfg = scalewayJobConfig();
+  if (!cfg) return { ...base, run: null, error: "Scaleway settings are missing, so the state can't be read." };
+  try {
+    return { ...base, run: await getJobRun(cfg, runId), error: null };
+  } catch (error) {
+    return { ...base, run: null, error: error instanceof Error ? error.message : "Could not read the run." };
+  }
+}
+
+function LatestRun({ latest }: { latest: Latest | null }) {
+  if (!latest) return <p className="text-sm text-muted-foreground">No job run started from here yet.</p>;
+  const { run } = latest;
+  return (
+    <p className="text-sm">
+      Latest job run <span className="font-mono text-xs">{latest.runId}</span>, started {latest.at}
+      {latest.startedBy ? ` by ${latest.startedBy}` : ""}:{" "}
+      {run ? (
+        <>
+          <span className="font-medium">{run.state}</span>
+          {run.exitCode !== undefined ? ` (exit ${run.exitCode})` : ""}
+          {run.finishedAt ? `, finished ${run.finishedAt}` : ""}
+        </>
+      ) : (
+        <span className="text-red-600">{latest.error}</span>
+      )}
+    </p>
+  );
+}
+
+/**
+ * Runs the monthly invoice job by hand. In production that starts the
+ * Scaleway job and this page follows the latest run; in development it runs
+ * the job here against the dev database and a Stripe test key.
+ */
 export default async function InvoicesPage() {
-  requireSuperAdmin();
+  await requireStaff();
   const db = readPool();
   const ready = (await db.query(`SELECT to_regclass('public.invoice_runs') IS NOT NULL AS ok`)).rows[0]?.ok === true;
+
+  const production = process.env.NODE_ENV === "production";
+  const latest = production ? await latestScalewayRun(db) : null;
 
   const [runs, invoices] = ready
     ? await Promise.all([
@@ -39,12 +90,19 @@ export default async function InvoicesPage() {
       <section className="space-y-2">
         <h1 className="text-lg font-semibold">Invoice job</h1>
         <p className="text-sm text-muted-foreground">
-          Database {databaseHost(process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL)} · INVOICE_DB_ENV{" "}
-          {process.env.INVOICE_DB_ENV || "test (default here)"}. Order: backfill → draft → issue (also stores) → deliver.
-          Deliver in test mode needs INVOICE_TEST_RECIPIENT.
+          {production ? (
+            "Runs start the Scaleway job (production database, live Stripe). Order: backfill → draft → issue (also stores) → deliver."
+          ) : (
+            <>
+              Database {databaseHost(process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL)} · INVOICE_DB_ENV{" "}
+              {process.env.INVOICE_DB_ENV || "test (default here)"}. Order: backfill → draft → issue (also stores) → deliver.
+              Deliver in test mode needs INVOICE_TEST_RECIPIENT.
+            </>
+          )}
         </p>
         {!ready && <p className="text-sm text-red-600">Migration 0036 is not on this database yet.</p>}
-        <RunForm defaultMonth={previousMonth()} />
+        {production && <LatestRun latest={latest} />}
+        <RunForm defaultMonth={previousMonth()} production={production} />
       </section>
 
       <section className="space-y-2">

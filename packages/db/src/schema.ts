@@ -1272,6 +1272,24 @@ export const reviews = pgTable(
     /** The host marked it as needing no reply (0039). Cleared on undo. */
     replySkippedAt: timestamp("reply_skipped_at", { withTimezone: true }),
     replySkippedBy: text("reply_skipped_by"),
+    /** The flagged pieces of text (0061), masked if it publishes by the deadline. */
+    flaggedFragments: jsonb("flagged_fragments").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** The text as published by the deadline; public reads show it instead of body. */
+    maskedBody: text("masked_body"),
+    /** 'regex' | 'mistral' | 'unchecked', enforced by a DB check. */
+    checkSource: text("check_source"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    /** A moderator's 'kept' | 'removed', enforced by a DB check. */
+    decision: text("decision"),
+    decisionRules: text("decision_rules").array(),
+    decisionNote: text("decision_note"),
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    publishedByDeadline: boolean("published_by_deadline").notNull().default(false),
+    /** When the 12-month purge deleted the original text (0061): null for a score-only review. */
+    textPurgedAt: timestamp("text_purged_at", { withTimezone: true }),
+    /** The one rewrite after a removal has been used (0061). */
+    rewriteUsed: boolean("rewrite_used").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1327,18 +1345,76 @@ export const reviewReplies = pgTable(
     authorUserId: text("author_user_id"),
     /** Up to 1,000 characters. NULL only on a deleted reply. */
     body: text("body"),
-    /** 'pending' | 'published' | 'hidden' | 'deleted', enforced by a DB check. */
+    /** 'pending' | 'published' | 'hidden' | 'removed' | 'deleted', enforced by a DB check. */
     status: text("status").notNull(),
     flaggedReason: text("flagged_reason"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** The flagged pieces of text (0061), masked if it publishes by the deadline. */
+    flaggedFragments: jsonb("flagged_fragments").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** The text as published by the deadline; public reads show it instead of body. */
+    maskedBody: text("masked_body"),
+    /** 'regex' | 'mistral' | 'unchecked', enforced by a DB check. */
+    checkSource: text("check_source"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    /** A moderator's 'kept' | 'removed', enforced by a DB check. */
+    decision: text("decision"),
+    decisionRules: text("decision_rules").array(),
+    decisionNote: text("decision_note"),
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    publishedByDeadline: boolean("published_by_deadline").notNull().default(false),
+    /** When the 12-month purge deleted the original text (0061). */
+    textPurgedAt: timestamp("text_purged_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("idx_review_replies_review").on(table.reviewId, table.createdAt),
-    check("review_replies_body_unless_deleted", sql`${table.status} = 'deleted' OR ${table.body} IS NOT NULL`),
+    index("idx_review_replies_pending").on(table.createdAt).where(sql`${table.status} = 'pending'`),
+    check("review_replies_body_unless_deleted", sql`${table.status} IN ('deleted', 'removed') OR ${table.body} IS NOT NULL`),
+  ],
+);
+
+/**
+ * Reports of a published review or reply (0061), by a host or the public,
+ * against one rule. One open report per reporter per item. Deleted 12 months
+ * after the decision.
+ *
+ * Mirrors packages/db/drizzle/0061_review_moderation.sql; keep the two in sync.
+ */
+export const reviewReports = pgTable(
+  "review_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    replyId: uuid("reply_id").references(() => reviewReplies.id, { onDelete: "cascade" }),
+    /** 'host' | 'public', enforced by a DB check. */
+    reporterKind: text("reporter_kind").notNull(),
+    reporterUserId: text("reporter_user_id"),
+    reporterOrgId: text("reporter_org_id"),
+    reporterEmail: text("reporter_email"),
+    /** One of REVIEW_RULE_IDS (@openbookings/pricing), enforced by a DB check. */
+    rule: text("rule").notNull(),
+    note: text("note"),
+    /** 'open' | 'upheld' | 'dismissed', enforced by a DB check. */
+    status: text("status").notNull().default("open"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_review_reports_open_per_reporter")
+      .on(
+        table.reviewId,
+        sql`coalesce(${table.replyId}::text, '')`,
+        sql`coalesce(${table.reporterOrgId}, ${table.reporterEmail}, ${table.reporterUserId})`,
+      )
+      .where(sql`${table.status} = 'open'`),
+    index("idx_review_reports_open").on(table.status).where(sql`${table.status} = 'open'`),
+    index("idx_review_reports_review").on(table.reviewId),
   ],
 );
 

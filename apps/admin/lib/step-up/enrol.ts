@@ -1,0 +1,303 @@
+import { timingSafeEqual } from "node:crypto";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  type PublicKeyCredentialCreationOptionsJSON,
+  type RegistrationResponseJSON,
+} from "@simplewebauthn/server";
+import * as OTPAuth from "otpauth";
+import type { Queryable, Staff } from "../staff";
+import {
+  hasCredentials,
+  insertPasskeyCredential,
+  insertTotpCredential,
+  passkeyIds,
+  type AdminCredential,
+} from "./credentials";
+import { StepUpConfigError } from "./config";
+import { decryptSecret, encryptSecret } from "./crypto";
+
+/**
+ * Enrolling a passkey or an authenticator app for step-up.
+ *
+ * Who may enrol: a staff member with no credentials yet presents
+ * ADMIN_BOOTSTRAP_CODE; one who has credentials presents a fresh step-up for
+ * "security.enrol" instead, so a stolen Access session cannot add its own
+ * second factor. The check runs when the enrolment starts. Starting leaves a
+ * pending challenge in admin_step_ups, bound to the staff member, valid for
+ * five minutes and used once; finishing needs that challenge, so it carries
+ * the check over. The pending row's verified_kind records which check let it
+ * in ("bootstrap" or "step-up"): one let in by the bootstrap code cannot
+ * finish once the staff member has a credential after all.
+ */
+
+export const ENROL_ACTION = "security.enrol";
+const PENDING_PASSKEY = "security.enrol-passkey";
+const PENDING_TOTP = "security.enrol-totp";
+/** Enrolment's own rows in admin_step_ups: never a step-up (see ./step-up.ts). */
+export const PENDING_ENROL_ACTIONS: readonly string[] = [PENDING_PASSKEY, PENDING_TOTP];
+const PENDING_TTL_MS = 5 * 60_000;
+
+const RP_NAME = "OpenBookings admin";
+const TOTP_ISSUER = "OpenBookings admin";
+
+export type EnrolRefusal = "bootstrap" | "step-up" | "expired" | "wrong-code" | "not-verified" | "duplicate";
+
+const REFUSAL_MESSAGE: Record<EnrolRefusal, string> = {
+  bootstrap: "The bootstrap code is not right",
+  "step-up": "Confirm with an existing passkey or authenticator app first",
+  expired: "This enrolment expired. Start again",
+  "wrong-code": "That code is not right",
+  "not-verified": "The passkey could not be verified",
+  duplicate: "This passkey is already registered",
+};
+
+/** An expected refusal: the action shows its message instead of failing. */
+export class EnrolRefused extends Error {
+  constructor(
+    readonly reason: EnrolRefusal,
+    message: string = REFUSAL_MESSAGE[reason],
+  ) {
+    super(message);
+    this.name = "EnrolRefused";
+  }
+}
+
+/**
+ * Checks and spends a step-up token for "security.enrol" on the staff
+ * member's own credentials (enrolStepUp in ./step-up.ts). Throws (an
+ * EnrolRefused) when it is not valid.
+ */
+export type RequireStepUp = (staff: Staff, token: string) => Promise<void>;
+
+export type EnrolProof = { bootstrap?: string; stepUpToken?: string };
+
+export type EnrolDeps = {
+  db: Queryable;
+  /** ADMIN_BOOTSTRAP_CODE. Unset or blank: bootstrap is impossible. */
+  bootstrapCode: string | undefined;
+  /** ADMIN_TOTP_KEY. */
+  totpKey: string;
+  requireStepUp: RequireStepUp;
+  now: () => Date;
+};
+
+export type RelyingParty = { rpID: string; origin: string };
+
+/** Constant-time; an unset or blank expected code never matches. */
+export function bootstrapMatches(given: string | undefined, expected: string | undefined): boolean {
+  const code = expected?.trim();
+  if (!code || typeof given !== "string") return false;
+  const a = Buffer.from(given.trim(), "utf8");
+  const b = Buffer.from(code, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * The WebAuthn relying party. Production: ADMIN_RP_ID over https, never the
+ * request's host. Development: ADMIN_RP_ID, else the request's host name, at
+ * the dev server's own origin.
+ */
+export function relyingParty(env: Record<string, string | undefined>, host: string | null): RelyingParty {
+  const configured = env.ADMIN_RP_ID?.trim();
+  if (env.NODE_ENV === "production") {
+    if (!configured) throw new StepUpConfigError("ADMIN_RP_ID is not set: passkeys need the admin console's host name");
+    return { rpID: configured, origin: `https://${configured}` };
+  }
+  const rpID = configured || (host ?? "").replace(/:\d+$/, "");
+  if (!rpID) throw new StepUpConfigError("ADMIN_RP_ID is not set and the request has no host");
+  return { rpID, origin: host ? `http://${host}` : `https://${rpID}` };
+}
+
+/** Which check let an enrolment start. */
+type EnrolGate = "bootstrap" | "step-up";
+
+async function checkEnrolGate(deps: EnrolDeps, staff: Staff, proof: EnrolProof): Promise<EnrolGate> {
+  if (!(await hasCredentials(deps.db, staff.userId))) {
+    if (!bootstrapMatches(proof.bootstrap, deps.bootstrapCode)) throw new EnrolRefused("bootstrap");
+    return "bootstrap";
+  }
+  if (!proof.stepUpToken) throw new EnrolRefused("step-up");
+  await deps.requireStepUp(staff, proof.stepUpToken);
+  return "step-up";
+}
+
+async function addPending(deps: EnrolDeps, staff: Staff, action: string, gate: EnrolGate, challenge: string) {
+  await deps.db.query(
+    `INSERT INTO admin_step_ups (user_id, action, target_id, challenge, verified_kind, expires_at)
+     VALUES ($1, $2, $1, $3, $4, $5)`,
+    [staff.userId, action, challenge, gate, new Date(deps.now().getTime() + PENDING_TTL_MS)],
+  );
+}
+
+/**
+ * Marks one pending challenge used. Refuses ("expired") one that was spent,
+ * expired or never issued to this staff member; refuses ("step-up") one the
+ * bootstrap code let in when the staff member has a credential by now.
+ */
+async function spendPending(
+  deps: EnrolDeps,
+  staff: Staff,
+  action: string,
+  match: { id?: string; challenge?: string },
+): Promise<void> {
+  const { rows } = await deps.db.query(
+    `UPDATE admin_step_ups SET used_at = $3
+      WHERE user_id = $1 AND action = $2 AND used_at IS NULL AND expires_at > $3
+        AND verified_kind IN ('bootstrap', 'step-up')
+        AND ($4::uuid IS NULL OR id = $4::uuid) AND ($5::text IS NULL OR challenge = $5)
+      RETURNING verified_kind`,
+    [staff.userId, action, deps.now(), match.id ?? null, match.challenge ?? null],
+  );
+  if (rows.length !== 1) throw new EnrolRefused("expired");
+  if (rows[0]!.verified_kind === "bootstrap" && (await hasCredentials(deps.db, staff.userId))) {
+    throw new EnrolRefused("step-up");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Authenticator app (TOTP)
+// ---------------------------------------------------------------------------
+
+const totpFor = (label: string, secret: OTPAuth.Secret) =>
+  new OTPAuth.TOTP({ issuer: TOTP_ISSUER, label, algorithm: "SHA1", digits: 6, period: 30, secret });
+
+/**
+ * The time step (30 s) a 6-digit code belongs to, accepting the steps either
+ * side of `now`; null when it is not a current code. Spaces are ignored.
+ */
+export function totpStep(base32: string, code: string, now: Date): number | null {
+  const token = code.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(token)) return null;
+  const totp = totpFor("", OTPAuth.Secret.fromBase32(base32));
+  const delta = totp.validate({ token, timestamp: now.getTime(), window: 1 });
+  return delta === null ? null : totp.counter({ timestamp: now.getTime() }) + delta;
+}
+
+/** A new secret for the authenticator app: the otpauth:// URI (for the QR code) and the secret to type in. */
+export async function startTotpEnrolment(
+  deps: EnrolDeps,
+  staff: Staff,
+  proof: EnrolProof,
+): Promise<{ uri: string; secretPreview: string }> {
+  const gate = await checkEnrolGate(deps, staff, proof);
+  const secret = new OTPAuth.Secret({ size: 20 });
+  await addPending(deps, staff, PENDING_TOTP, gate, encryptSecret(secret.base32, deps.totpKey));
+  return { uri: totpFor(staff.email, secret).toString(), secretPreview: secret.base32.replace(/(.{4})(?=.)/g, "$1 ") };
+}
+
+/** Stores the authenticator app once it shows a current code for the pending secret. */
+export async function completeTotpEnrolment(deps: EnrolDeps, staff: Staff, code: string): Promise<AdminCredential> {
+  const { rows } = await deps.db.query(
+    `SELECT id, challenge FROM admin_step_ups
+      WHERE user_id = $1 AND action = $2 AND used_at IS NULL AND expires_at > $3
+        AND verified_kind IN ('bootstrap', 'step-up')
+      ORDER BY created_at DESC LIMIT 1`,
+    [staff.userId, PENDING_TOTP, deps.now()],
+  );
+  const pending = rows[0];
+  if (!pending) throw new EnrolRefused("expired");
+
+  const base32 = decryptSecret(String(pending.challenge), deps.totpKey);
+  const step = totpStep(base32, code, deps.now());
+  if (step === null) throw new EnrolRefused("wrong-code");
+
+  await spendPending(deps, staff, PENDING_TOTP, { id: String(pending.id) });
+  // The code just shown is spent: it cannot also confirm a step-up.
+  return insertTotpCredential(deps.db, {
+    userId: staff.userId,
+    secretEnc: encryptSecret(base32, deps.totpKey),
+    label: "Authenticator app",
+    counter: step,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Passkey (WebAuthn)
+// ---------------------------------------------------------------------------
+
+export type VerifyRegistration = (o: {
+  response: RegistrationResponseJSON;
+  expectedChallenge: string;
+  expectedOrigin: string;
+  expectedRPID: string;
+  requireUserVerification: boolean;
+}) => Promise<
+  | { verified: false }
+  | {
+      verified: true;
+      registrationInfo: { credential: { id: string; publicKey: Uint8Array; counter: number; transports?: string[] } };
+    }
+>;
+
+/** Registration options for the browser; the challenge stays on the server. */
+export async function startPasskeyEnrolment(
+  deps: EnrolDeps,
+  staff: Staff,
+  proof: EnrolProof,
+  rp: RelyingParty,
+): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  const gate = await checkEnrolGate(deps, staff, proof);
+  const options = await generateRegistrationOptions({
+    rpName: RP_NAME,
+    rpID: rp.rpID,
+    userName: staff.email,
+    userID: new TextEncoder().encode(staff.userId),
+    attestationType: "none",
+    excludeCredentials: (await passkeyIds(deps.db, staff.userId)).map((c) => ({
+      id: c.id,
+      transports: c.transports,
+    })),
+    authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+  });
+  await addPending(deps, staff, PENDING_PASSKEY, gate, options.challenge);
+  return options;
+}
+
+/** The challenge the browser signed, read from its client data; null when unreadable. */
+function signedChallenge(response: RegistrationResponseJSON): string | null {
+  try {
+    const data = JSON.parse(Buffer.from(response.response.clientDataJSON, "base64url").toString("utf8")) as {
+      challenge?: unknown;
+    };
+    return typeof data.challenge === "string" && data.challenge !== "" ? data.challenge : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stores the passkey once the browser's registration verifies against a challenge we issued to this staff member. */
+export async function completePasskeyEnrolment(
+  deps: EnrolDeps,
+  staff: Staff,
+  response: RegistrationResponseJSON,
+  rp: RelyingParty,
+  verify: VerifyRegistration = verifyRegistrationResponse,
+): Promise<AdminCredential> {
+  const challenge = signedChallenge(response);
+  // Spent before verifying: one try per challenge.
+  if (!challenge) throw new EnrolRefused("expired");
+  await spendPending(deps, staff, PENDING_PASSKEY, { challenge });
+  const result = await verify({
+    response,
+    expectedChallenge: challenge,
+    expectedOrigin: rp.origin,
+    expectedRPID: rp.rpID,
+    requireUserVerification: true,
+  }).catch(() => ({ verified: false as const }));
+  if (!result.verified) throw new EnrolRefused("not-verified");
+
+  const { credential } = result.registrationInfo;
+  return insertPasskeyCredential(deps.db, {
+    userId: staff.userId,
+    credentialId: credential.id,
+    publicKey: credential.publicKey,
+    counter: credential.counter,
+    transports: credential.transports ?? [],
+    label: "Passkey",
+  }).catch((error: unknown) => {
+    // credential_id is unique: this authenticator is registered already, maybe to someone else.
+    if ((error as { code?: unknown }).code === "23505") throw new EnrolRefused("duplicate");
+    throw error;
+  });
+}

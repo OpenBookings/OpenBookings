@@ -1,3 +1,4 @@
+import { MASKED_TEXT, MODERATION_DEADLINE_HOURS } from "@openbookings/pricing";
 import { composeActionMail, type ActionMail } from "./action-mail";
 import { formatStayDate } from "./format";
 import { escapeHtml } from "./template";
@@ -70,14 +71,24 @@ export function guestReviewReminder(i: ReviewInvitationInput): ActionMail {
  * Sent to the account's own address after a review is posted, so a review
  * written through a forwarded email gets noticed by the real guest.
  */
-export function guestReviewPosted(i: { propertyName: string; pending: boolean; manageUrl: string }): ActionMail {
+export function guestReviewPosted(i: {
+  propertyName: string;
+  pending: boolean;
+  /** Held: whether the deadline publishes it masked (deadlineMaySql); false, it waits for a person. */
+  publishesAtDeadline?: boolean;
+  manageUrl: string;
+}): ActionMail {
   return composeActionMail({
     subject: `Your review of ${i.propertyName}`,
-    preheader: i.pending ? "We'll check it before it's shown." : "Thanks for helping the next guests.",
+    preheader: i.pending ? "A person looks at it first." : "Thanks for helping the next guests.",
     eyebrow: "Review",
     headline: i.pending ? "Thanks. We'll<br />take a look first." : "Thanks for<br />your review.",
     body: i.pending
-      ? `Your review of ${STRONG(i.propertyName)} contains something our checks hold back, such as a link or contact details. A person looks at it before it's shown.`
+      ? `Our automatic check held back your review of ${STRONG(i.propertyName)}: it may break our review rules, or the check couldn't run. ${
+          i.publishesAtDeadline === false
+            ? "A person will check it before it's shown."
+            : `A person looks at it. If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours, it's shown with the parts that may break a rule replaced by "${MASKED_TEXT}".`
+        }`
       : `Your review of ${STRONG(i.propertyName)} is posted. You can see it, and delete it, in your account.`,
     ctaUrl: i.manageUrl,
     ctaLabel: "See your review",
@@ -139,5 +150,74 @@ export function hostUnconfirmedStays(i: {
     ctaUrl: i.reservationsUrl,
     ctaLabel: "Open reservations",
     footnote: `Guests who did stay need nothing from you. ${SUPPORT}`,
+  });
+}
+
+// ── Moderation (statement of reasons and report outcomes) ────────────────────
+
+const NOUN = { review: "review", reply: "reply" } as const;
+type ItemKind = keyof typeof NOUN;
+
+type NoticeInput = {
+  itemKind: ItemKind;
+  /** Who gets it: a guest links to their review page, a host to the business Reviews page. */
+  audience: "guest" | "host";
+  propertyName: string;
+  pageUrl: string;
+};
+
+const noticeCta = (i: NoticeInput) => (i.audience === "host" ? "Open reviews" : i.itemKind === "review" ? "See your review" : "See your answer");
+
+/**
+ * To the author of a review or reply a moderator removed. Short on purpose:
+ * that it was removed and where. The rules, the note and the way to object are
+ * shown on the page the link opens.
+ */
+export function moderationRemovedNotice(i: NoticeInput): ActionMail {
+  const noun = NOUN[i.itemKind];
+  return composeActionMail({
+    subject: `Your ${noun} of ${i.propertyName} was removed`,
+    preheader: "Details are on your review page.",
+    eyebrow: "Review",
+    headline: `Your ${noun} was<br />removed.`,
+    body: `A person at OpenBookings removed your ${noun} of ${STRONG(i.propertyName)} because it broke the review rules. The details are on the page below.`,
+    ctaUrl: i.pageUrl,
+    ctaLabel: noticeCta(i),
+    footnote: SUPPORT,
+  });
+}
+
+/**
+ * To the author of a review or reply the 72-hour deadline published with some
+ * parts removed automatically. Same shape as the removal notice.
+ */
+export function moderationMaskedNotice(i: NoticeInput): ActionMail {
+  const noun = NOUN[i.itemKind];
+  return composeActionMail({
+    subject: `Your ${noun} of ${i.propertyName} is live with some parts removed`,
+    preheader: "Details are on your review page.",
+    eyebrow: "Review",
+    headline: `Your ${noun} is live,<br />with some parts removed.`,
+    body: `Your ${noun} of ${STRONG(i.propertyName)} is published. We removed some parts of it automatically because they broke the review rules. The details are on the page below.`,
+    ctaUrl: i.pageUrl,
+    ctaLabel: noticeCta(i),
+    footnote: SUPPORT,
+  });
+}
+
+/** To whoever reported a review or reply: what the person who decided did. */
+export function reportOutcome(i: { upheld: boolean; propertyName: string; itemKind?: ItemKind }): ActionMail {
+  const noun = NOUN[i.itemKind ?? "review"];
+  return composeActionMail({
+    subject: `Your report about ${i.propertyName}`,
+    preheader: i.upheld ? "We removed it." : "We looked, and it stays.",
+    eyebrow: "Review",
+    headline: i.upheld ? "We removed<br />what you reported." : "We looked at<br />your report.",
+    body: i.upheld
+      ? `Thanks for your report about a ${noun} at ${STRONG(i.propertyName)}. A person looked at it and removed it because it broke our review rules.`
+      : `Thanks for your report about a ${noun} at ${STRONG(i.propertyName)}. A person looked at it and decided it follows our review rules, so it stays.`,
+    ctaUrl: "mailto:support@openbookings.co",
+    ctaLabel: "Reply to us",
+    footnote: `If you disagree, reply to this email and tell us why. ${SUPPORT}`,
   });
 }

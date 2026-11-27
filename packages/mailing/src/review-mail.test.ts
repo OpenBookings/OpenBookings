@@ -1,5 +1,15 @@
+import { MODERATION_DEADLINE_HOURS, REVIEW_RULES } from "@openbookings/pricing";
 import { describe, expect, test } from "bun:test";
-import { formatStayMonth, guestReviewInvitation, guestReviewPosted, guestReviewReplied, hostUnconfirmedStays } from "./review-mail";
+import {
+  formatStayMonth,
+  guestReviewInvitation,
+  guestReviewPosted,
+  guestReviewReplied,
+  hostUnconfirmedStays,
+  moderationMaskedNotice,
+  moderationRemovedNotice,
+  reportOutcome,
+} from "./review-mail";
 
 const invitation = {
   guestFirstName: "Anna",
@@ -30,6 +40,12 @@ describe("review mails", () => {
   test("the posted mail says when a review waits for a person", () => {
     const pending = guestReviewPosted({ propertyName: "Hotel", pending: true, manageUrl: "https://x/y" });
     expect(pending.html).toContain("A person looks at it");
+    expect(pending.html).toContain(`within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(pending.html).not.toContain("such as a link or contact details");
+    const waits = guestReviewPosted({ propertyName: "Hotel", pending: true, publishesAtDeadline: false, manageUrl: "https://x/y" });
+    expect(waits.html).toMatch(/A person will check it before it(&#39;|&#x27;|')s shown\./);
+    expect(waits.html).not.toContain(`within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(waits.html).not.toContain("[removed]");
     const posted = guestReviewPosted({ propertyName: "Hotel", pending: false, manageUrl: "https://x/y" });
     expect(posted.html).toContain("is posted");
   });
@@ -76,5 +92,44 @@ describe("review mails", () => {
 
   test("formatStayMonth", () => {
     expect(formatStayMonth("2031-01-31")).toBe("January 2031");
+  });
+});
+
+describe("moderation mails", () => {
+  const notice = {
+    itemKind: "review" as const,
+    audience: "guest" as const,
+    propertyName: "Hotel <Test>",
+    pageUrl: "https://openbookings.co/bookings/b1/review",
+  };
+
+  test("the removal notice is short: it says removed, names the property, links the page", () => {
+    const mail = moderationRemovedNotice(notice);
+    expect(mail.subject).toBe("Your review of Hotel <Test> was removed");
+    expect(mail.html).toContain("Hotel &lt;Test&gt;");
+    expect(mail.html).toContain("https://openbookings.co/bookings/b1/review");
+    expect(mail.html).not.toContain("Note from the moderator");
+    expect(mail.html).not.toContain("border-left");
+    for (const rule of Object.values(REVIEW_RULES)) expect(mail.html).not.toContain(rule.title);
+  });
+
+  test("the masked notice says it is live with some parts removed", () => {
+    const mail = moderationMaskedNotice(notice);
+    expect(mail.subject).toBe("Your review of Hotel <Test> is live with some parts removed");
+    expect(mail.html).toContain("https://openbookings.co/bookings/b1/review");
+  });
+
+  test("a reply is called a reply, and a host gets the reviews button", () => {
+    const reply = { ...notice, itemKind: "reply" as const, audience: "host" as const, pageUrl: "https://business.openbookings.co/dashboard/bookings/reviews" };
+    expect(moderationRemovedNotice(reply).subject).toBe("Your reply of Hotel <Test> was removed");
+    expect(moderationMaskedNotice(reply).subject).toBe("Your reply of Hotel <Test> is live with some parts removed");
+    expect(moderationRemovedNotice(reply).html).toContain("Open reviews");
+  });
+
+  test("the outcome email says upheld or not", () => {
+    expect(reportOutcome({ upheld: true, propertyName: "Hotel" }).html).toContain("removed it because it broke our review rules");
+    const no = reportOutcome({ upheld: false, propertyName: "Hotel" }).html;
+    expect(no).toContain("so it stays");
+    expect(no).not.toContain("removed it because");
   });
 });

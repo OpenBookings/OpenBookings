@@ -11,7 +11,7 @@ import { loadAdminBooking } from "@/lib/booking";
 import { readPool } from "@/lib/db";
 import { buildTimeline } from "@/lib/timeline";
 import { allowedFor } from "@/lib/real-actions";
-import { requireSuperAdmin } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 
 const eur = (cents: number) => formatCents(cents, { whole: "always-decimals" });
 
@@ -34,7 +34,7 @@ function Section({ id, title, children }: { id?: string; title: string; children
 }
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  requireSuperAdmin();
+  await requireStaff();
   const { id } = await params;
   const data = await loadAdminBooking(readPool(), id);
   if (!data) notFound();
@@ -61,6 +61,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     })),
   );
   const pending = sum(refunds.filter((r) => r.status !== "succeeded"));
+  // What Retry refunds sends again (retryRefunds: OpenBookings' own, pending or failed).
+  const retryable = refunds.filter((r) => !isOutside(r) && (r.status === "pending" || r.status === "failed"));
   const failedCharges = sum(transactions.filter((t) => t.type === "charge" && t.status !== "succeeded"));
 
   return (
@@ -282,6 +284,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           bookingId={booking.id}
           rooms={rooms.map((r) => ({ id: r.id, name: r.room_name, cancelled: r.cancelled_at != null }))}
           initial={initial}
+          guestName={guest?.name || guest?.email || "the guest"}
+          heldCents={paid - refunded - refundedOutside}
+          openRefunds={{ count: retryable.length, cents: sum(retryable) }}
         />
         <ForcedPanel
           bookingId={booking.id}

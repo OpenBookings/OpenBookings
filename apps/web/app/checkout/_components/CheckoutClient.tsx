@@ -18,7 +18,8 @@ import {
 } from '../_lib/errors';
 import { payReassurance } from '../_lib/reassurance';
 import { useHoldCountdown } from '../_lib/useHoldCountdown';
-import { useTurnstileToken } from '../_lib/useTurnstileToken';
+import { TURNSTILE_ACTIONS } from '@/lib/turnstile-actions';
+import { useTurnstileToken } from '@/lib/use-turnstile-token';
 import { Backdrop } from './Backdrop';
 import { CheckoutPhoneBar, PAYMENT_COLUMN_ID } from './CheckoutStickyBar';
 import { CheckoutGate, type GateViewer } from './CheckoutGate';
@@ -294,6 +295,7 @@ function CheckoutSession({
     containerRef: turnstileRef,
     reset: resetTurnstile,
   } = useTurnstileToken({
+    action: TURNSTILE_ACTIONS.checkout,
     // Nothing to verify until we know who the guest is. A token lasts a few
     // minutes and is spent once, so minting one while the sign-in form is
     // still on screen just burns it — and a social sign-in reloads the page

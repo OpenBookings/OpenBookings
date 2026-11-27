@@ -1,0 +1,299 @@
+{/*
+  TRANSLATION — nl (formal register: u / uw)
+
+  Translated from en.mdx at version 2026-11-27. NOT yet legally reviewed:
+  leave this locale marked `status: "draft"` in lib/legal/documents.ts until a
+  qualified reviewer has signed it off. Draft locales are served with a visible
+  banner and noindex, so an unreviewed policy can never be mistaken for the
+  authoritative one.
+
+  Do not change any `id` on a <Section>. Those anchors are cited externally and
+  must stay identical across all languages.
+*/}
+
+export const title = "Privacybeleid";
+
+<Lead>
+
+Geschreven om gelezen te worden, niet om ontcijferd te worden. Wat wij verzamelen, waarom, en wat wij ermee doen.
+
+Dit beleid is bedoeld voor gasten: mensen die [openbookings.co](https://openbookings.co) gebruiken om een verblijf te zoeken en te boeken. Het platform wordt geleverd door OpenBookings B.V., gevestigd in Nederland.
+
+Beheert u een accommodatie op OpenBookings? Voor het zakelijke portaal geldt uw Hostovereenkomst, niet dit beleid.
+
+</Lead>
+
+<Section id="who-we-are" number="1" title="Wie wij zijn">
+
+OpenBookings B.V. is de verwerkingsverantwoordelijke voor alles wat in dit beleid wordt beschreven. Wij zijn een Nederlands bedrijf, dus de AVG is van toepassing.
+
+Vragen? Mail ons op [privacy@openbookings.co](mailto:privacy@openbookings.co). Wij reageren binnen 5 werkdagen.
+
+</Section>
+
+<Section id="what-we-collect" number="2" title="Wat wij verzamelen en waarom">
+
+Wij verzamelen alleen gegevens die wij echt nodig hebben. Hieronder staat de volledige lijst.
+
+<CardGroup>
+
+<DataCard title="2.1 Accountgegevens">
+
+Uw e-mailadres en naam. Als u inlogt met Google of Apple, ontvangen wij ook de naam en profielfoto die die aanbieder met ons deelt.
+
+Als u ze invult bij uw persoonlijke gegevens: uw telefoonnummer, uw adres en uw land. De accommodatie waar u heeft geboekt kan uw telefoonnummer en adres zien, zodat zij u kan bereiken over uw verblijf; elke keer dat iemand daar ze opent, leggen wij vast wie en wanneer. Uw land wordt getoond bij een beoordeling die u schrijft.
+
+Om uw account te beveiligen: uw passkeys (de naam die u elke passkey gaf, het apparaattype en wanneer u hem toevoegde) en uw inlogsessies (wanneer u inlogde, het IP-adres en de browser waarvandaan).
+
+De kamers die u leuk vindt, zodat u ze terug kunt vinden.
+
+<Meta why="U heeft een account nodig om het platform te gebruiken, en om het te beveiligen." basis="Uitvoering van een overeenkomst." />
+
+</DataCard>
+
+<DataCard title="2.2 Boekingsgegevens">
+
+Naam van de gast, contactgegevens en boekingsgegevens: verblijfsdata, accommodatie, aantal gasten, betalingsreferentie en status.
+
+Kaartgegevens bereiken onze servers nooit. Stripe verwerkt die; wij ontvangen alleen de betalingsreferentie.
+
+Wij gebruiken uw boeking ook, zonder uw naam of contactgegevens, om de accommodatie statistieken te geven over haar eigen boekingen, zoals omzet, bezettingsgraad en waar haar gasten vandaan komen. Groepen kleiner dan vijf gasten worden nooit getoond. Gegevens over wie u bent (uw land en de grootte van uw gezelschap) worden hiervoor 24 maanden na uw boeking gebruikt.
+
+De accommodatie waar u boekt ontvangt uw boekingsgegevens en gebruikt ze als afzonderlijke verwerkingsverantwoordelijke, onder haar eigen privacybeleid.
+
+<Meta why="Om uw boeking te verwerken, alles af te handelen wat daarbij komt kijken en de accommodatie statistieken te geven over haar boekingen." basis="Uitvoering van een overeenkomst; wettelijke verplichting voor financiële administratie; gerechtvaardigd belang bij het geven van inzicht aan accommodaties in hun eigen boekingen." />
+
+</DataCard>
+
+<DataCard title="2.3 Analysegegevens">
+
+Paginaweergaven, navigatiepaden, globaal apparaattype, browser en land.
+
+Via PostHog. Wij geven uw naam, volledige IP-adres of betalingsgegevens nooit door aan analyse-events.
+
+Als u bent ingelogd en analytische cookies heeft geaccepteerd, worden events gekoppeld aan uw account, zodat wij het gebruik over sessies en apparaten heen kunnen begrijpen. De koppeling is het interne ID van uw account — een willekeurige identificator, niet uw naam of e-mailadres.
+
+Als u analyse heeft geaccepteerd, zien wij ook of u de e-mails die wij u sturen heeft geopend en op welke links daarin u heeft geklikt, gekoppeld aan hetzelfde account-ID.
+
+<Meta why="Om het gebruik te begrijpen en problemen op te lossen." basis="Toestemming, via de cookiebanner. Geen acceptatie, niets gevolgd." />
+
+<Callout title="Sessie-opnames">
+
+Wij leggen interacties op het scherm vast om bruikbaarheidsproblemen in het boekingsproces op te sporen.
+
+<DashList items={[
+  "Alle tekst wordt gemaskeerd. Wij zien nooit wat u in formulieren typt.",
+  "Opnames worden automatisch na 30 dagen verwijderd.",
+  "Werkt alleen als u analytische cookies accepteert.",
+]} />
+
+</Callout>
+
+</DataCard>
+
+<DataCard title="2.4 Foutgegevens">
+
+Wanneer er iets misgaat, ontvangt Sentry de fout, een stacktrace, de pagina waarop u zich bevond en uw browsertype. Sentry ontvangt ook de laadtijden van de pagina's die u opent, zodat wij kunnen zien wanneer de site traag is. Geen formulierinhoud, geen betalingsgegevens.
+
+<Meta why="Om bugs te vinden en op te lossen." basis="Gerechtvaardigd belang bij een werkend platform." />
+
+</DataCard>
+
+<DataCard title="2.5 Transactionele e-mails">
+
+Uw e-mailadres en de gegevens die nodig zijn voor het bericht: boekingsbevestigingen, incheckgegevens, bonnen en inloglinks.
+
+<Meta basis="Uitvoering van een overeenkomst." />
+
+_Geen marketingmails. Elke e-mail wordt veroorzaakt door iets dat u heeft gedaan, of door een verblijf dat u heeft geboekt (zie 2.7)._
+
+</DataCard>
+
+<DataCard title="2.6 Berichten">
+
+De berichten die u en een accommodatie elkaar via OpenBookings sturen, met het tijdstip waarop ze zijn verzonden en gelezen. Berichten worden automatisch gecontroleerd op oplichting, phishing en verzoeken om buiten OpenBookings te betalen, zoals onze Algemene Voorwaarden uitleggen.
+
+<Meta why="Zodat u en de accommodatie uw verblijf kunnen regelen." basis="Uitvoering van een overeenkomst; gerechtvaardigd belang bij uw bescherming tegen fraude." />
+
+</DataCard>
+
+<DataCard title="2.7 Beoordelingen">
+
+Na een verblijf e-mailen wij u een uitnodiging om het te beoordelen, en zes dagen later één herinnering als u dat nog niet heeft gedaan. U kunt deze e-mails uitzetten met de link in elke e-mail.
+
+Als u een beoordeling schrijft, bewaren wij uw cijfer, uw tekst en een eventueel antwoord dat u plaatst onder de reactie van de accommodatie. Uw beoordeling is openbaar op de pagina van de accommodatie, met uw voornaam, uw land, de maand van uw verblijf en de kamer waarin u verbleef.
+
+Voordat uw beoordeling, of uw antwoord op de reactie van de accommodatie, wordt gepubliceerd, controleren wij de tekst op onze [beoordelingsregels](/legal/review-rules): eerst automatisch op contactgegevens en links, daarna met Mistral (zie [sectie 5](#sharing)), dat alleen de tekst krijgt, nooit uw cijfer, uw naam, de accommodatie of de boeking. De reacties van de accommodatie controleren wij op dezelfde manier. Lijkt de tekst een regel te overtreden, of kan de controle niet worden uitgevoerd, dan houden wij de tekst vast tot een medewerker van ons team ze heeft gecontroleerd. Heeft niemand binnen 72 uur besloten, dan wordt de tekst gepubliceerd met de delen die een regel lijken te overtreden vervangen door "[removed]". Kunnen wij niet aanwijzen welke woorden een regel overtreden, dan wacht de tekst op een medewerker in plaats van automatisch te worden gepubliceerd. Verwijdert een medewerker uw beoordeling of antwoord, of wordt de tekst gepubliceerd met vervangen delen, dan sturen wij u een korte e-mail, en de pagina van uw beoordeling toont wat er is gebeurd, waarom, en hoe u bezwaar kunt maken. De tekst zoals u die schreef bewaren wij een beperkte tijd, zodat wij een bezwaar kunnen behandelen (zie [sectie 4](#retention)).
+
+<Meta why="Zodat toekomstige gasten over echte verblijven kunnen lezen, en beoordelingen zich aan onze regels houden." basis="Gerechtvaardigd belang bij eerlijke informatie over accommodaties, voor de uitnodigingsmails en voor het controleren van beoordelingen op onze regels; uw keuze om te publiceren, voor de beoordeling zelf." />
+
+</DataCard>
+
+<DataCard title="2.8 Supportgesprekken">
+
+Als u ons supportteam mailt, bewaren wij het gesprek en uw e-mailadres. Antwoorden kunnen worden opgesteld met hulp van onze AI-assistent, en u kunt op elk moment om een medewerker vragen. Zodra de assistent heeft geverifieerd dat de e-mail van u komt, kan hij uw boekingen opzoeken om te helpen bij het antwoord.
+
+<Meta why="Om uw vraag te beantwoorden." basis="Uitvoering van een overeenkomst." />
+
+</DataCard>
+
+<DataCard title="2.9 Meldingen over beoordelingen">
+
+Iedereen kan een gepubliceerde beoordeling, reactie of antwoord melden dat onze beoordelingsregels lijkt te overtreden. Als u een melding doet, bewaren wij welke beoordeling of reactie u meldde, de regel die u koos, de toelichting die u eventueel toevoegde, of de melding van een accommodatie of van iemand anders kwam, en wanneer u ze verstuurde.
+
+Bent u ingelogd, dan bewaren wij ook uw account bij de melding. Vraagt u om updates, dan bewaren wij ook het e-mailadres van uw account, zodat wij u de uitkomst kunnen mailen. Bent u niet ingelogd, dan weten wij niet wie u bent.
+
+Meldt u vanaf de pagina van de accommodatie, ingelogd of niet, dan controleert Cloudflare dat het formulier door een mens wordt verstuurd, en die controle ontvangt uw IP-adres. Wij gebruiken uw IP-adres ook om te beperken hoeveel meldingen ervandaan kunnen worden verstuurd. Het wordt niet bij de melding opgeslagen. Accommodaties melden vanuit hun dashboard, waar geen van beide gebeurt: hun meldingen zijn per account beperkt.
+
+<Meta why="Om gemelde beoordelingen te controleren op onze regels, en u de uitkomst te laten weten als u daarom vroeg." basis="Gerechtvaardigd belang bij beoordelingen die zich aan onze regels houden; uw verzoek, voor de e-mail met de uitkomst." />
+
+</DataCard>
+
+</CardGroup>
+
+</Section>
+
+<Section id="cookies" number="3" title="Cookies">
+
+Bij uw eerste bezoek ziet u een cookiebanner. Uw keuzes zijn eenvoudig:
+
+<ChoiceList>
+  <Choice label="Accepteren">PostHog start en verzamelt gebruiksgegevens en sessie-opnames.</Choice>
+  <Choice label="Weigeren">Er wordt niets analytisch geplaatst. PostHog draait helemaal niet.</Choice>
+</ChoiceList>
+
+<Note>Bezoekers uit de EU/EER zien deze banner totdat zij een keuze maken. Van gedachten veranderd? Open Help en kies Cookie Settings om opnieuw te kiezen.</Note>
+
+**Wat wij daadwerkelijk plaatsen:**
+
+| Type | Naam | Wat het doet | Vervalt | Toestemming nodig? |
+| --- | --- | --- | --- | --- |
+| Noodzakelijk | `session token` | Houdt u ingelogd | Sessie / instelbaar | Nee |
+| Noodzakelijk | `cf_clearance` | Botbescherming van Cloudflare | 30 minuten | Nee |
+| Noodzakelijk | `ob_cookie_consent` | Onthoudt uw toestemmingskeuze (lokale opslag, onze eigen banner). De keuze wordt ook als bewijs vastgelegd op onze servers, zonder uw IP-adres, en gekoppeld aan uw account als u bent ingelogd | 90 dagen | Nee |
+| Noodzakelijk | `ob_consent_outbox`, `ob_consent_linked` | Stuurt die registratie naar onze servers en onthoudt dat deze aan uw account is gekoppeld (lokale opslag) | Tot aflevering / tot u de sitegegevens wist | Nee |
+| Analytisch | `ph_*` | PostHog-analyse en sessie-opnames | 1 jaar | Ja, EU/EER |
+
+<Note>Geen advertentiecookies. Geen socialmediacookies.</Note>
+
+**E-mails.** Als u analyse heeft geaccepteerd, bevatten de boekingsbevestigingen, beoordelingsmails en supportantwoorden die wij u sturen een klein onzichtbaar plaatje dat ons laat weten wanneer de e-mail wordt geopend, en lopen onze links daarin eerst via ons, zodat wij zien waarop u klikt. Zonder uw toestemming versturen wij deze e-mails zonder dat plaatje en met gewone links.
+
+</Section>
+
+<Section id="retention" number="4" title="Hoe lang wij dingen bewaren">
+
+Wij bewaren gegevens niet langer dan nodig is.
+
+| Gegevens | Bewaartermijn | Waarom |
+| --- | --- | --- |
+| Accountgegevens | Tot u uw account verwijdert | Zodat u uw account kunt blijven gebruiken |
+| Berichten | 365 dagen na het laatste bericht in het gesprek, daarna wordt de tekst verwijderd | Vragen over een verblijf afhandelen |
+| Notities bij een boeking en annuleringsredenen | 18 maanden na vertrek | Vragen over een verblijf afhandelen |
+| Beoordelingen | Tot u de beoordeling of uw account verwijdert. Na verwijdering van uw account blijft de beoordeling staan zonder uw naam of land | Eerlijke informatie voor toekomstige gasten |
+| Meldingen over beoordelingen | 12 maanden na het besluit; een melding waarover niemand besliste, 12 maanden nadat ze is gedaan. Na het verwijderen van uw account blijven uw meldingen bewaard zonder uw account of e-mailadres, en mailen wij u de uitkomst niet meer | Bezwaren en herhaalde meldingen afhandelen |
+| Oorspronkelijke tekst van een verwijderde beoordeling of een verwijderd antwoord, of van een tekst die met vervangen delen is gepubliceerd | 12 maanden na het besluit. Besliste niemand over een tekst die met vervangen delen is gepubliceerd, dan bewaren wij vanaf 12 maanden na publicatie alleen de gepubliceerde versie | Bezwaren tegen een besluit afhandelen |
+| Boekingsgegevens | 7 jaar vanaf boekingsdatum | Nederlandse fiscale en administratieve bewaarplicht |
+| Analysegegevens | 13 maanden (doorlopend) | Trendanalyse jaar op jaar |
+| Sessie-opnames | 30 dagen | Uitsluitend bruikbaarheidsanalyse |
+| Foutrapporten | 90 dagen | Foutopsporing |
+| E-maillogs | 90 dagen | Foutopsporing bij bezorgproblemen |
+| Toestemmingsregistraties | 5 jaar | Bewijs van de cookiekeuze die u heeft gemaakt |
+
+<Note>Nadat deze termijnen zijn verstreken (voor accountgegevens: wanneer u uw account verwijdert), worden gegevens verwijderd of geanonimiseerd. Geanonimiseerde gegevens kunnen bewaard blijven voor statistieken.</Note>
+
+</Section>
+
+<Section id="sharing" number="5" title="Met wie wij uw gegevens delen">
+
+Wij verkopen uw gegevens niet. Wij delen ze alleen met de leveranciers die wij nodig hebben om het platform te laten draaien:
+
+| Leverancier | Wat zij ontvangen | Waarvoor | Waar |
+| --- | --- | --- | --- |
+| **Neon** | Account- en boekingsgegevens | Databasehosting | EU (Frankfurt) |
+| **Scaleway** | Gegevens die de applicatie tijdens gebruik verwerkt | Applicatiehosting | EU (Amsterdam) |
+| **Algolia** | Zoekopdrachten, IP-adres | Bestemmingszoekfunctie | EU |
+| **MapTiler** | IP-adres, het kaartgebied dat u bekijkt | Kaarttegels | EU (Frankrijk en Ierland) |
+| **Lettermint** | E-mailadres, boekingsgegevens | Versturen van transactionele e-mails | EU |
+| **Upstash** | Gepubliceerde beoordelingen (voornaam, land, tekst); supportgesprekstaken terwijl ze wachten op verwerking | Caching en takenwachtrij | EU |
+| **Chatwoot** | Supportgesprekken, e-mailadres | Support-inbox (software die wij zelf draaien) | EU |
+| **Mistral** | Supportgesprekken, boekingsgegevens die de assistent opzoekt; de tekst van beoordelingen, reacties en antwoorden (zonder cijfer, naam, accommodatie of boeking) | AI-supportassistent; beoordelingen en reacties controleren op onze beoordelingsregels | EER |
+| **PostHog** | Gebruiksevents, sessie-opnames, account-ID bij inloggen (geen naam of e-mailadres) | Productanalyse, alleen met uw toestemming | EU |
+| **Sentry** | Foutrapporten, stacktraces, browsertype, laadtijden van pagina's | Fout- en prestatieregistratie | EU (Duitsland) |
+| **Cloudflare** | IP-adres, verzoekmetadata; berichten tussen u en een accommodatie, onderweg naar de ontvanger | CDN, DDoS- en botbescherming; berichten direct afleveren | EU/VS (SCC's) |
+| **Stripe** | Naam, e-mailadres, boekingsbedrag | Betalingsverwerking | VS/EU (SCC's) |
+
+<Note>Voor Cloudflare en Stripe, waar gegevens de EU kunnen verlaten, gebruiken wij standaardcontractbepalingen die zijn goedgekeurd door de Europese Commissie.</Note>
+
+<Note>Mistral werkt voor ons als verwerker, onder zijn verwerkersovereenkomst (Data Processing Addendum), en gebruikt wat wij sturen niet om zijn modellen te trainen. Mistral verwerkt de gegevens in de Europese Economische Ruimte, bewaart ze zolang ons contract met Mistral loopt en verwijdert ze binnen 30 dagen nadat het is beëindigd. Waar subverwerkers van Mistral buiten de EER zitten, gelden standaardcontractbepalingen.</Note>
+
+**Inlogaanbieders.** Als u ervoor kiest in te loggen met Google of Apple, handelt dat bedrijf het inloggen af onder zijn eigen privacybeleid en geeft het ons uw e-mailadres en naam door. U kunt altijd inloggen met een e-maillink.
+
+<Note>Wij geven gegevens ook af als een rechter daartoe opdracht geeft.</Note>
+
+</Section>
+
+<Section id="security" number="6" title="Beveiliging">
+
+Dit doen wij om uw gegevens veilig te houden:
+
+- Alles gaat over versleutelde verbindingen (TLS).
+- Geheimen staan in een Secret Manager, niet in code.
+- De infrastructuur wordt in de EU gehost bij Scaleway, met toegangscontrole en auditlogging.
+- Kaartgegevens raken onze servers nooit. Stripe handelt dat volledig af.
+- Sessie-opnames worden gemaskeerd, zodat wij nooit gevoelige invoer vastleggen.
+
+<Note>Geen enkel systeem is volledig waterdicht. Als wij ooit vaststellen dat uw gegevens zijn gecompromitteerd, melden wij dat aan u en aan de bevoegde autoriteit zoals de wet voorschrijft.</Note>
+
+</Section>
+
+<Section id="your-rights" number="7" title="Uw rechten onder de AVG">
+
+Als u zich in de EER bevindt, heeft u afdwingbare rechten met betrekking tot uw gegevens.
+
+| Recht | Wat het voor u betekent |
+| --- | --- |
+| **Inzage** | Een kopie opvragen van alles wat wij over u bewaren. |
+| **Rectificatie** | Ons vragen om onjuiste of onvolledige gegevens te corrigeren. |
+| **Verwijdering** | Ons vragen uw gegevens te wissen. Wij doen dat, binnen de grenzen van wat de wet ons verplicht te bewaren. |
+| **Beperking** | Ons vragen de verwerking te pauzeren terwijl iets wordt uitgezocht. |
+| **Overdraagbaarheid** | Uw gegevens ontvangen in een machineleesbaar formaat. |
+| **Bezwaar** | Bezwaar maken tegen verwerking op basis van gerechtvaardigde belangen. |
+| **Toestemming intrekken** | Uw toestemming voor analyse op elk moment intrekken. Dit heeft geen gevolgen voor wat al is gebeurd. |
+
+<Note>Mail [privacy@openbookings.co](mailto:privacy@openbookings.co) en wij reageren binnen **30 dagen**. Geen kosten, tenzij uw verzoek kennelijk buitensporig is.</Note>
+
+</Section>
+
+<Section id="automated-decisions" number="8" title="Geautomatiseerde besluitvorming">
+
+Wij nemen geen geautomatiseerde besluiten over u met rechtsgevolgen of vergelijkbare aanzienlijke gevolgen. Wij stellen geen profielen op voor advertenties. Er is geen algoritme dat stilletjes over u oordeelt.
+
+Beoordelingen en antwoorden worden automatisch gecontroleerd, zoals [sectie 2.7](#what-we-collect) uitlegt. De controle kan een tekst alleen vasthouden zodat een medewerker ernaar kijkt, of, als niemand op tijd heeft besloten, de tekst publiceren met de delen die een regel lijken te overtreden vervangen. Alleen een medewerker kan een beoordeling of een antwoord verwijderen.
+
+</Section>
+
+<Section id="children" number="9" title="Privacy van kinderen">
+
+OpenBookings is niet bedoeld voor personen onder de 18 jaar. Denkt u dat een kind toch een account heeft aangemaakt? Mail dan [privacy@openbookings.co](mailto:privacy@openbookings.co) en wij verwijderen het.
+
+</Section>
+
+<Section id="changes" number="10" title="Wijzigingen in dit beleid">
+
+Wij werken dit beleid van tijd tot tijd bij. Wanneer er iets wezenlijks verandert:
+
+- De datum "Laatst bijgewerkt" bovenaan verandert.
+- Wij tonen de cookiebanner opnieuw.
+- Als u het platform daarna blijft gebruiken, gaat u akkoord met de wijziging.
+
+</Section>
+
+<Section id="contact" number="11" title="Neem contact op">
+
+<Panel>
+
+Privacyvragen of gegevensverzoeken: [privacy@openbookings.co](mailto:privacy@openbookings.co).
+
+</Panel>
+
+</Section>

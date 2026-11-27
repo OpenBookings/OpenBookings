@@ -15,7 +15,7 @@ import {
   classifyStripeError,
   type CheckoutErrorCode,
 } from '@/app/checkout/_lib/errors';
-import { verifyTurnstileToken } from '@/app/checkout/_lib/turnstile';
+import { TURNSTILE_ACTIONS, verifyTurnstile } from '@/lib/turnstile';
 import { propertyBookable } from '@/lib/booking/readiness-gate';
 import { ensureCheckoutDomain } from '@/lib/payments/checkout-domain';
 import { getClientIP } from '@/lib/rateLimit';
@@ -223,9 +223,10 @@ export async function POST(request: Request) {
     'cf-turnstile-response'?: unknown;
   } | null;
 
-  const verified = await verifyTurnstileToken(
+  const verified = await verifyTurnstile(
     payload?.['cf-turnstile-response'],
-    getClientIP(request)
+    getClientIP(request),
+    TURNSTILE_ACTIONS.checkout
   );
   if (!verified) {
     return failure('verification_failed', 403);

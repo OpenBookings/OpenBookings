@@ -4,13 +4,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCents } from "@openbookings/pricing/money";
 import { readPool } from "@/lib/db";
 import { bookingRef, loadFlaggedPayments, type FlaggedPayment, type FlagKind } from "@/lib/flagged-payments";
-import { requireSuperAdmin } from "@/lib/super-admin";
+import { requireStaff } from "@/lib/staff";
 import { ResolveForm } from "./resolve-form";
 
 const KIND_LABEL: Record<FlagKind, string> = {
   "refund-outside": "Refund outside OpenBookings",
   "dispute-lost": "Lost dispute",
 };
+
+/** The flag as a confirm summary names it. */
+const KIND_NOUN: Record<FlagKind, string> = {
+  "refund-outside": "refund outside OpenBookings",
+  "dispute-lost": "lost dispute",
+};
+
+function describeFlag(f: FlaggedPayment): string {
+  const amount = f.amountCents === null ? "" : ` of ${euro(f.amountCents)}`;
+  const booking = f.bookingId ? ` on ${bookingRef(f.bookingId)}` : " with no booking";
+  return `the ${KIND_NOUN[f.kind]}${amount}${booking} (${f.organizationName ?? "unknown organisation"})`;
+}
 
 const euro = (cents: number | null) =>
   cents === null ? "—" : formatCents(cents, { whole: "always-decimals" });
@@ -49,7 +61,7 @@ const when = (d: Date) =>
  * responsibility).
  */
 export default async function FlaggedPaymentsPage() {
-  requireSuperAdmin();
+  await requireStaff();
   const flags = await loadFlaggedPayments(readPool());
   const open = flags.filter((f) => !f.resolvedAt).length;
 
@@ -122,7 +134,7 @@ export default async function FlaggedPaymentsPage() {
                       {f.resolvedNote && <div className="text-xs text-muted-foreground">{f.resolvedNote}</div>}
                     </div>
                   ) : (
-                    <ResolveForm flagId={f.id} recordCents={f.record?.amountCents ?? null} />
+                    <ResolveForm flagId={f.id} recordCents={f.record?.amountCents ?? null} what={describeFlag(f)} />
                   )}
                 </TableCell>
               </TableRow>

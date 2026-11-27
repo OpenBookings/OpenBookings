@@ -1,6 +1,8 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, Maximize2, X } from "lucide-react";
 import { reviewBand, type ReviewBand } from "@openbookings/pricing";
 import type { PropertyReviews, PublicReview } from "@openbookings/db/reviews";
@@ -125,8 +127,13 @@ export function ReviewsCard({ data, propertyName }: { data: PropertyReviews; pro
   );
 }
 
+/** The report form for a review, or for one reply under it. */
+const reportHref = (slug: string, reviewId: string, replyId?: string) =>
+  `/p/${encodeURIComponent(slug)}/reviews/${encodeURIComponent(reviewId)}/report${replyId ? `?reply=${encodeURIComponent(replyId)}` : ""}`;
+
 function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; propertyName: string; onClose: () => void }) {
   const titleId = useId();
+  const slug = useParams<{ hotel_slug: string }>().hotel_slug;
   const [band, setBand] = useState<ReviewBand | "all">("all");
   const [sort, setSort] = useState<ReviewSort>("newest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -305,18 +312,18 @@ function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; 
                 <p className="text-[15px] text-white/55">{selected.authorName} gave a score without writing a review.</p>
               )}
 
-              {selected.replies.length > 0 ? <ReplyThread review={selected} propertyName={propertyName} /> : null}
+              {selected.replies.length > 0 ? <ReplyThread review={selected} propertyName={propertyName} slug={slug} /> : null}
 
               <div className="mt-auto flex items-center justify-between pt-2">
                 <span className="hidden text-xs text-white/50 md:inline">
                   {position} of {list.length}
                 </span>
-                <a
-                  href={`mailto:support@openbookings.co?subject=${encodeURIComponent(`Report review ${selected.id}`)}`}
+                <Link
+                  href={reportHref(slug, selected.id)}
                   className="text-xs text-white/50 underline-offset-4 hover:text-white/80 hover:underline"
                 >
                   Report this review
-                </a>
+                </Link>
               </div>
             </div>
           ) : null}
@@ -327,17 +334,26 @@ function ReviewsPanel({ data, propertyName, onClose }: { data: PropertyReviews; 
 }
 
 /** Replies under a review: the property's, and the guest's answer, oldest first. */
-function ReplyThread({ review, propertyName }: { review: PublicReview; propertyName: string }) {
+function ReplyThread({ review, propertyName, slug }: { review: PublicReview; propertyName: string; slug: string }) {
   return (
     <div className="flex flex-col gap-4">
       {review.replies.map((r) => (
         <div key={r.id} className={cn("flex flex-col gap-1.5 border-l border-white/15 pl-4", r.role === "guest" && "ml-4")}>
-          <p className="text-xs text-white/50">
-            <span className="font-medium text-white/80">
-              {r.role === "host" ? `Response from ${propertyName}` : `${review.authorName} answered`}
+          <p className="flex flex-wrap items-baseline gap-x-3 text-xs text-white/50">
+            <span>
+              <span className="font-medium text-white/80">
+                {r.role === "host" ? `Response from ${propertyName}` : `${review.authorName} answered`}
+              </span>
+              {r.publishedAt ? ` · ${postedLabel(r.publishedAt)}` : ""}
+              {r.editedAt ? " · Edited" : ""}
             </span>
-            {r.publishedAt ? ` · ${postedLabel(r.publishedAt)}` : ""}
-            {r.editedAt ? " · Edited" : ""}
+            <Link
+              href={reportHref(slug, review.id, r.id)}
+              className="ml-auto underline-offset-4 hover:text-white/80 hover:underline"
+              aria-label={r.role === "host" ? `Report the response from ${propertyName}` : `Report ${review.authorName}'s answer`}
+            >
+              Report
+            </Link>
           </p>
           <p className="text-[15px] leading-relaxed whitespace-pre-line text-white/75">{r.body}</p>
         </div>

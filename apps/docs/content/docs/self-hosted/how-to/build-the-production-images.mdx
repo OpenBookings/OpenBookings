@@ -12,9 +12,10 @@ Each one prunes the monorepo down to that app first, so an image only contains w
 | Host dashboard | `apps/business/Dockerfile` | 8081 |
 | Docs | `apps/docs/Dockerfile` | 8082 |
 | Support bot | `apps/support-bot/Dockerfile` | 8080 |
+| Admin console | `apps/admin/Dockerfile` | 8080 (private; reached through a Cloudflare Tunnel) |
 | Invoice job | `apps/invoice-job/Dockerfile` | — (runs and exits) |
 
-`apps/admin` is local-only and has no image.
+The admin console image also carries `cloudflared` and takes two build arguments, `NEXT_PUBLIC_WEB_URL` and `NEXT_PUBLIC_BUSINESS_URL` (the origins its emails link to). Running it: [Run the admin console](/docs/self-hosted/how-to/run-the-admin-console).
 
 ## Build
 

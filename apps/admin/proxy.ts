@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isSuperAdminEnabled } from "@/lib/super-admin";
+import { decide } from "@/lib/access";
 
 export async function proxy(request: NextRequest) {
-  void request;
-  if (!isSuperAdminEnabled()) {
-    return new NextResponse("Not found", { status: 404 });
+  const decision = await decide(request.headers, process.env);
+  if (decision.kind === "deny") {
+    return new NextResponse(decision.body, { status: decision.status });
   }
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: decision.headers } });
 }
 
 export const config = {

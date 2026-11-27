@@ -8,17 +8,18 @@
  * or the review's own guest) and run the automated check; this module
  * decides whether it's their turn and stores the outcome.
  */
-import { nextReplyRole, REPLY_BODY_MAX, type ReplyRole } from "@openbookings/pricing";
+import { nextReplyRole, REPLY_BODY_MAX, type AuthorModeration, type ReplyRole, type TextCheck } from "@openbookings/pricing";
 import type { Queryable } from "../reservation-policy";
+import { authorModerationSql, dismissReportsOfDeleted, storedCheck, toAuthorModeration } from "./moderation";
 import { normalizeReviewBody } from "./shared";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type { ReplyRole } from "@openbookings/pricing";
 
-export type ReplyStatus = "pending" | "published" | "hidden" | "deleted";
+export type ReplyStatus = "pending" | "published" | "hidden" | "removed" | "deleted";
 
-/** A reply as the thread shows it. Deleted replies are never returned. */
+/** A reply as the thread shows it. Deleted replies are never returned; removed ones only to their author. */
 export type ReviewReply = {
   id: string;
   role: ReplyRole;
@@ -28,6 +29,8 @@ export type ReviewReply = {
   publishedAt: string | null;
   editedAt: string | null;
   createdAt: string;
+  /** Only on the viewer's own replies, on their own pages: what moderation did with it. */
+  moderation?: AuthorModeration;
 };
 
 export type ReplyError =
@@ -53,7 +56,7 @@ function replyBody(body: string): string | null {
  */
 export async function postReviewReply(
   db: Queryable,
-  i: { reviewId: string; role: ReplyRole; authorUserId: string; body: string; flaggedReason: string | null; now: Date },
+  i: { reviewId: string; role: ReplyRole; authorUserId: string; body: string; check: TextCheck; now: Date },
 ): Promise<{ ok: true; replyId: string; status: "published" | "pending"; propertyId: string } | Fail> {
   if (!UUID.test(i.reviewId)) return { ok: false, error: "not_found" };
   const body = replyBody(i.body);
@@ -73,38 +76,60 @@ export async function postReviewReply(
   if (next === null) return { ok: false, error: "thread_closed" };
   if (next !== i.role) return { ok: false, error: "not_your_turn" };
 
-  const status = i.flaggedReason ? "pending" : "published";
+  const check = storedCheck(i.check, i.now);
+  const { status } = check;
   const inserted = (
     await db.query(
       `INSERT INTO review_replies
-         (review_id, author_role, author_user_id, body, status, flagged_reason, published_at, created_at, updated_at)
-       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $8)
+         (review_id, author_role, author_user_id, body, status, flagged_reason, flagged_fragments, check_source, checked_at,
+          published_at, created_at, updated_at)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $11)
        RETURNING id`,
-      [i.reviewId, i.role, i.authorUserId, body, status, i.flaggedReason, status === "published" ? i.now : null, i.now],
+      [
+        i.reviewId,
+        i.role,
+        i.authorUserId,
+        body,
+        status,
+        check.flaggedReason,
+        check.fragments,
+        check.source,
+        check.checkedAt,
+        status === "published" ? i.now : null,
+        i.now,
+      ],
     )
   ).rows[0] as { id: string };
   return { ok: true, replyId: inserted.id, status, propertyId: review.property_id };
 }
 
-/** Changes a host reply's text. It goes through the check again. */
+/**
+ * Changes a host reply's text. It goes through the check again, as a new
+ * text: an earlier decision, mask or deadline publication no longer applies,
+ * and a held edit's 72 hours start at the edit.
+ */
 export async function editHostReply(
   db: Queryable,
-  i: { replyId: string; authorUserId: string; body: string; flaggedReason: string | null; now: Date },
+  i: { replyId: string; authorUserId: string; body: string; check: TextCheck; now: Date },
 ): Promise<{ ok: true; status: "published" | "pending"; propertyId: string } | Fail> {
   if (!UUID.test(i.replyId)) return { ok: false, error: "not_found" };
   const body = replyBody(i.body);
   if (!body) return { ok: false, error: "invalid" };
-  const status = i.flaggedReason ? "pending" : "published";
+  const check = storedCheck(i.check, i.now);
+  const { status } = check;
   const row = (
     await db.query(
       `UPDATE review_replies rr
           SET body = $2, flagged_reason = $3, status = $4, author_user_id = $5, edited_at = $6, updated_at = $6,
-              published_at = CASE WHEN $4 = 'published' THEN COALESCE(rr.published_at, $6) ELSE rr.published_at END
+              published_at = CASE WHEN $4 = 'published' THEN COALESCE(rr.published_at, $6) ELSE rr.published_at END,
+              flagged_fragments = $7::jsonb, check_source = $8, checked_at = $9,
+              masked_body = NULL, published_by_deadline = false, decision = NULL, decision_rules = NULL,
+              decision_note = NULL, decided_by = NULL, decided_at = NULL
          FROM reviews rv
         WHERE rr.id = $1::uuid AND rr.author_role = 'host' AND rr.status IN ('published', 'pending')
           AND rv.id = rr.review_id AND rv.status IN ('published', 'pending')
         RETURNING rv.property_id`,
-      [i.replyId, body, i.flaggedReason, status, i.authorUserId, i.now],
+      [i.replyId, body, check.flaggedReason, status, i.authorUserId, i.now, check.fragments, check.source, check.checkedAt],
     )
   ).rows[0] as { property_id: string } | undefined;
   return row ? { ok: true, status, propertyId: row.property_id } : { ok: false, error: "not_found" };
@@ -112,7 +137,8 @@ export async function editHostReply(
 
 /**
  * Deletes a host reply. Only the latest reply in the thread can go, so a
- * guest's answer never hangs under nothing. The row stays without content.
+ * guest's answer never hangs under nothing. The row stays without content,
+ * and open reports on it close as dismissed.
  */
 export async function deleteHostReply(
   db: Queryable,
@@ -138,10 +164,12 @@ export async function deleteHostReply(
   if (latest.id !== i.replyId) return { ok: false, error: "not_last" };
   await db.query(
     `UPDATE review_replies
-        SET status = 'deleted', body = NULL, flagged_reason = NULL, deleted_at = $2, updated_at = $2
+        SET status = 'deleted', body = NULL, flagged_reason = NULL, masked_body = NULL, flagged_fragments = '[]',
+            deleted_at = $2, updated_at = $2
       WHERE id = $1::uuid`,
     [i.replyId, i.now],
   );
+  await dismissReportsOfDeleted(db, { reviewId: reply.review_id, replyId: i.replyId, now: i.now });
   return { ok: true, propertyId: reply.property_id };
 }
 
@@ -216,28 +244,35 @@ type ReplyRow = {
   published_at: Date | null;
   edited_at: Date | null;
   created_at: Date;
+  moderation: Parameters<typeof toAuthorModeration>[0] | null;
 };
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 /**
- * The threads of several reviews, oldest reply first. `publicOnly` keeps
- * the published replies; otherwise held ones come along too (never deleted).
+ * The threads of several reviews, oldest reply first. `publicOnly`: the
+ * published replies, as anyone sees them. `author`: those, plus that
+ * author's own held and removed replies, each of theirs with what happened
+ * to it (`moderation`), as its author sees the thread. Never a deleted
+ * reply. A reply published by the deadline shows its masked text.
  */
 export async function loadReviewReplies(
   db: Queryable,
   reviewIds: string[],
-  opts: { publicOnly: boolean },
+  opts: { publicOnly: true } | { author: ReplyRole },
 ): Promise<Map<string, ReviewReply[]>> {
   const out = new Map<string, ReviewReply[]>();
   const ids = reviewIds.filter((id) => UUID.test(id));
   if (ids.length === 0) return out;
+  const author = "author" in opts ? opts.author : null;
   const { rows } = await db.query(
-    `SELECT id, review_id, author_role, body, status, published_at, edited_at, created_at
-       FROM review_replies
-      WHERE review_id = ANY($1::uuid[]) AND ${opts.publicOnly ? "status = 'published'" : "status IN ('published', 'pending')"}
+    `SELECT id, review_id, author_role, COALESCE(masked_body, body, '') AS body, status, published_at, edited_at, created_at,
+            ${author ? `CASE WHEN rr.author_role = $2 THEN ${authorModerationSql("reply", "rr")} END` : "NULL"} AS moderation
+       FROM review_replies rr
+      WHERE review_id = ANY($1::uuid[])
+        AND (status = 'published'${author ? " OR (author_role = $2 AND status IN ('pending', 'removed'))" : ""})
       ORDER BY created_at, id`,
-    [ids],
+    author ? [ids, author] : [ids],
   );
   for (const r of rows as ReplyRow[]) {
     const list = out.get(r.review_id) ?? [];
@@ -249,6 +284,7 @@ export async function loadReviewReplies(
       publishedAt: iso(r.published_at),
       editedAt: iso(r.edited_at),
       createdAt: iso(r.created_at)!,
+      ...(r.moderation ? { moderation: toAuthorModeration(r.moderation) } : {}),
     });
     out.set(r.review_id, list);
   }
