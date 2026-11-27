@@ -9,6 +9,7 @@ import {
   calculateRefund,
   localTimeToUtc,
   nonRefundableQualifies,
+  offeredRates,
   POLICY_VERSION,
   snapshotTier,
   type CancellationTier,
@@ -247,8 +248,38 @@ describe("nonRefundableQualifies", () => {
     expect(nonRefundableQualifies(8000, [8500, 10000])).toBe(true);
   });
 
-  test("no refundable rate to sit next to → does not qualify", () => {
-    expect(nonRefundableQualifies(5000, [])).toBe(false);
+  test("with no refundable rate on offer it stands on its own", () => {
+    expect(nonRefundableQualifies(5000, [])).toBe(true);
+  });
+});
+
+describe("offeredRates", () => {
+  const r = (id: string, roomId: string, priceCents: number, isRefundable: boolean, open = true) => ({
+    id,
+    roomId,
+    priceCents,
+    isRefundable,
+    open,
+  });
+  const ids = (rates: ReturnType<typeof r>[]) => offeredRates(rates, (x) => x).map((x) => x.id);
+
+  test("a room with only Non-refundable rates offers them all", () => {
+    expect(ids([r("a", "superior", 10900, false), r("b", "superior", 12500, false)])).toEqual(["a", "b"]);
+  });
+
+  test("next to an open refundable rate, only one at least 10% cheaper is offered", () => {
+    expect(ids([r("flex", "deluxe", 18500, true), r("nr", "deluxe", 13000, false), r("nr-dear", "deluxe", 17000, false)])).toEqual([
+      "flex",
+      "nr",
+    ]);
+  });
+
+  test("a refundable rate closed for the stay does not count", () => {
+    expect(ids([r("flex", "deluxe", 10000, true, false), r("nr", "deluxe", 9900, false)])).toEqual(["flex", "nr"]);
+  });
+
+  test("rooms are judged apart", () => {
+    expect(ids([r("flex", "deluxe", 10000, true), r("nr", "superior", 9900, false)])).toEqual(["flex", "nr"]);
   });
 });
 

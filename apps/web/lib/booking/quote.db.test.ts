@@ -226,13 +226,23 @@ describeWithDb("stay quote against Postgres", () => {
     expect(plans).not.toContain(tooDear);
   });
 
-  test("a Non-refundable rate is left out when the refundable one beside it is restricted", async () => {
+  test("a Non-refundable rate stands on its own when the refundable one beside it is restricted", async () => {
     await db.query(`UPDATE rate_plans SET min_stay = 5 WHERE id = $1`, [ids.ratePlanId]);
-    const nr = await nrPlan(8500);
+    // 9500 is less than 10% under the refundable rate, but that rate can't be booked for this stay.
+    const nr = await nrPlan(9500);
     const plans = (await quote())!.rooms[0].ratePlans;
-    expect(plans.map((p) => p.ratePlanId)).toEqual([ids.ratePlanId]);
-    expect(plans[0].reasons).toEqual(["min_stay"]);
-    expect(await select([double({ ratePlanId: nr })])).toMatchObject({ ok: false, error: "invalid_selection" });
+    const reasons = Object.fromEntries(plans.map((p) => [p.ratePlanId, p.reasons]));
+    expect(reasons).toEqual({ [ids.ratePlanId]: ["min_stay"], [nr]: [] });
+    expect((await select([double({ ratePlanId: nr })])).ok).toBe(true);
+  });
+
+  test("a Non-refundable rate is offered when it is the room's only rate", async () => {
+    await db.query(`UPDATE rate_plans SET is_active = false WHERE id = $1`, [ids.ratePlanId]);
+    const nr = await nrPlan(9500);
+    const room = (await quote())!.rooms[0];
+    expect(room.reasons).toEqual([]);
+    expect(room.ratePlans.map((p) => p.ratePlanId)).toEqual([nr]);
+    expect((await select([double({ ratePlanId: nr })])).ok).toBe(true);
   });
 
   test("rate restrictions come back as reasons, not as missing rates", async () => {

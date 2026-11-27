@@ -226,12 +226,45 @@ export function calculateRefund(s: PolicySnapshot, nights: NightValue[], e: Refu
 }
 
 /**
- * Annex B B.4.2: a Non-refundable rate must be at least 10% cheaper than a
- * refundable rate it sits next to. Totals in cents; integer maths, so 9000 vs
- * 10000 is exact.
+ * Annex B B.4: a Non-refundable rate may be offered on its own (B.4.1). Next to
+ * refundable rates on the same room it must be at least 10% cheaper than one of
+ * them (B.4.2). `refundableTotalsCents` are the refundable rates on offer, for
+ * the same stay; none means there is nothing to compare with. Totals in cents;
+ * integer maths, so 9000 vs 10000 is exact.
  */
 export function nonRefundableQualifies(nonRefundableTotalCents: number, refundableTotalsCents: number[]): boolean {
+  if (refundableTotalsCents.length === 0) return true;
   return refundableTotalsCents.some((r) => nonRefundableTotalCents * 10 <= r * 9);
+}
+
+/** What `offeredRates` needs to know about one rate, for the stay asked. */
+export type OfferedRateView = {
+  roomId: string;
+  isRefundable: boolean;
+  /** Bookable for the stay on its own terms (no rate-plan reasons). */
+  open: boolean;
+  /** The stay's room price, the number the guest would pay. */
+  priceCents: number;
+};
+
+/**
+ * The rates a guest may be offered for one stay: every refundable rate, and
+ * each Non-refundable rate that keeps `nonRefundableQualifies` against the
+ * open refundable rates on its own room. Search and the stay quote both judge
+ * by this, so a search card is never priced from a rate the property page
+ * hides.
+ */
+export function offeredRates<T>(rates: T[], view: (rate: T) => OfferedRateView): T[] {
+  const views = rates.map(view);
+  const refundable = new Map<string, number[]>();
+  for (const v of views) {
+    if (!v.isRefundable || !v.open) continue;
+    refundable.set(v.roomId, [...(refundable.get(v.roomId) ?? []), v.priceCents]);
+  }
+  return rates.filter((_, i) => {
+    const v = views[i];
+    return v.isRefundable || nonRefundableQualifies(v.priceCents, refundable.get(v.roomId) ?? []);
+  });
 }
 
 // ── What can happen to a booking now ──────────────────────────────────────────
