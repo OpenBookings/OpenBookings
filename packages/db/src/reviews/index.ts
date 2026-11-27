@@ -29,7 +29,7 @@ export * from "./moderation-sweep";
 export * from "./reports";
 import { authorFirstName, normalizeReviewBody } from "./shared";
 import { authorModerationSql, dismissReportsOfDeleted, storedCheck, toAuthorModeration } from "./moderation";
-import { loadReviewReplies, type ReviewReply } from "./replies";
+import { loadReviewReplies, type ReplyRole, type ReviewReply } from "./replies";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -67,6 +67,11 @@ export type GuestReview = {
   moderation: AuthorModeration;
   /** The public thread: published replies, plus the guest's own answer while it is held or once removed (with its `moderation`). */
   replies: ReviewReply[];
+  /**
+   * Every reply that isn't deleted, oldest first, the ones the guest can't
+   * see included: whose turn it is counts them all (postReviewReply).
+   */
+  threadRoles: ReplyRole[];
 };
 
 type ContextRow = {
@@ -146,6 +151,7 @@ function toContext(row: ContextRow, now: Date): ReviewContext {
           createdAt: row.review_created_at!,
           moderation: toAuthorModeration(row.review_moderation),
           replies: [],
+          threadRoles: [],
         }
       : null,
   };
@@ -160,6 +166,11 @@ export async function getReviewContext(db: Queryable, bookingId: string, now: Da
   if (context.review && context.review.status !== "deleted") {
     // A host reply held for a check isn't shown to the guest yet; their own held or removed answer is.
     context.review.replies = (await loadReviewReplies(db, [context.review.id], { author: "guest" })).get(context.review.id) ?? [];
+    const { rows } = await db.query(
+      `SELECT author_role FROM review_replies WHERE review_id = $1::uuid AND status <> 'deleted' ORDER BY created_at, id`,
+      [context.review.id],
+    );
+    context.review.threadRoles = (rows as { author_role: ReplyRole }[]).map((r) => r.author_role);
   }
   return context;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewReply } from "@openbookings/db/reviews";
-import { filterHostReviews, needsReply, summarize, type HostReview } from "./shape";
+import { filterHostReviews, hasHostReply, needsReply, summarize, type HostReview } from "./shape";
 
 const NOW = new Date("2031-11-20T12:00:00Z");
 
@@ -28,6 +28,7 @@ function review(extra: Partial<HostReview> = {}): HostReview {
     privateReplyAt: null,
     skippedAt: null,
     nextRole: "host",
+    threadLength: extra.replies?.length ?? 0,
     ...extra,
   };
 }
@@ -69,6 +70,21 @@ describe("needsReply", () => {
   });
   test("not while the review is being checked", () => {
     expect(needsReply(review({ status: "pending" }))).toBe(false);
+  });
+  test("not when the guest's answer was removed: there is nothing the host can see to reply to", () => {
+    // host, guest (removed): the host's turn on the server, but the host sees only its own reply.
+    expect(needsReply(review({ replies: [reply("host")], nextRole: "host", threadLength: 2 }))).toBe(false);
+  });
+  test("not when its own reply was removed: the turn is the guest's", () => {
+    expect(needsReply(review({ replies: [{ ...reply("host"), status: "removed" }], nextRole: "guest" }))).toBe(false);
+  });
+});
+
+describe("hasHostReply", () => {
+  test("a public reply counts; a removed one doesn't", () => {
+    expect(hasHostReply(review({ replies: [reply("host")] }))).toBe(true);
+    expect(hasHostReply(review({ replies: [{ ...reply("host"), status: "removed" }] }))).toBe(false);
+    expect(hasHostReply(review({ replies: [reply("guest")] }))).toBe(false);
   });
 });
 

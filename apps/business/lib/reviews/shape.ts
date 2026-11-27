@@ -46,8 +46,10 @@ export type HostReview = {
   privateReplyAt: string | null;
   /** ISO time the host marked it as needing no reply, if they did. */
   skippedAt: string | null;
-  /** Whose turn it is in the public thread; null when it is closed. */
+  /** Whose turn it is in the public thread (every reply that isn't deleted counts); null when it is closed. */
   nextRole: ReplyRole | null;
+  /** How many replies count for the turn: every one that isn't deleted, the ones the host can't see included. */
+  threadLength: number;
 };
 
 /** A property's report on a review: being checked, upheld (removed) or not upheld (kept). */
@@ -56,12 +58,20 @@ export type HostReportStatus = "open" | "upheld" | "dismissed";
 export type ReviewTab = "reply" | "all" | "checking";
 export type HostReviewSort = "newest" | "oldest" | "highest" | "lowest";
 
+/** The property has a public reply on it that wasn't removed. */
+export function hasHostReply(r: Pick<HostReview, "replies">): boolean {
+  return r.replies.some((x) => x.role === "host" && x.status !== "removed");
+}
+
 /**
- * Published, the host's turn, and not handled since the thread's last
- * reply: a private message or "no reply needed" both count as handled.
+ * Published, the host's turn, something to reply to (the review itself, or a
+ * guest's answer the host can see: a removed one isn't), and not handled since
+ * the thread's last reply: a private message or "no reply needed" both count
+ * as handled.
  */
 export function needsReply(r: HostReview): boolean {
   if (r.status !== "published" || r.nextRole !== "host") return false;
+  if (r.threadLength > 0 && r.replies.at(-1)?.role !== "guest") return false;
   const handled = [r.privateReplyAt, r.skippedAt].filter((t): t is string => t !== null).map(Date.parse);
   if (handled.length === 0) return true;
   const last = r.replies.at(-1)?.createdAt;

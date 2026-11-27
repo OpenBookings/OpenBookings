@@ -135,6 +135,7 @@ function toHostReview(row: Row): HostReview {
     privateReplyAt: iso(row.private_reply_at),
     skippedAt: iso(row.reply_skipped_at),
     nextRole: nextReplyRole(row.thread_roles ?? []),
+    threadLength: row.thread_roles?.length ?? 0,
   };
 }
 

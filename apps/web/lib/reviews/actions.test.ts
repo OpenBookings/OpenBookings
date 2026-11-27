@@ -17,7 +17,7 @@ const replied: { check: unknown; body: string }[] = [];
 const postedMail: { pending: boolean }[] = [];
 let eligibility: { ok: true } | { ok: false; reason: string } = { ok: true };
 // The review's public thread as the guest sees it, and which rate limits refuse.
-let thread: { role: "host" | "guest" }[] = [{ role: "host" }];
+let thread: { role: "host" | "guest"; status?: string }[] = [{ role: "host" }];
 let reviewStatus = "published";
 const limited = new Set<string>();
 const limitKeys: { key: string; max: number; windowMs: number }[] = [];
@@ -43,7 +43,13 @@ await mockModules(import.meta.dir, {
       propertyId: "p",
       propertySlug: "hotel",
       eligibility,
-      review: { id: "review-1", status: reviewStatus, replies: thread },
+      // As getReviewContext: the guest sees published replies and their own; every reply that isn't deleted counts for the turn.
+      review: {
+        id: "review-1",
+        status: reviewStatus,
+        replies: thread.map((r) => ({ status: "published", ...r })).filter((r) => r.role === "guest" || r.status === "published"),
+        threadRoles: thread.map((r) => r.role),
+      },
     }),
     normalizeReviewBody,
     REVIEW_BODY_MAX: 2000,
@@ -193,6 +199,11 @@ describe("the guest's answer to a reply", () => {
     expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You can answer once the property has replied." });
     thread = [{ role: "host" }, { role: "guest" }, { role: "host" }];
     expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You already answered this reply." });
+    // A host reply that was removed, or is held, isn't one to answer.
+    thread = [{ role: "host", status: "removed" }];
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You can answer once the property has replied." });
+    thread = [{ role: "host", status: "pending" }];
+    expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "You can answer once the property has replied." });
     reviewStatus = "deleted";
     thread = [{ role: "host" }];
     expect(await answerHostReply("booking-1", "Thanks!")).toEqual({ ok: false, message: "This review was deleted." });

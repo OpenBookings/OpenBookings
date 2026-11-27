@@ -2,6 +2,7 @@ import {
   authorNotice,
   MASKED_TEXT,
   MODERATION_DEADLINE_HOURS,
+  MODERATION_RECORD_RETENTION_MONTHS,
   REVIEW_RULES,
   type AuthorModeration,
 } from "@openbookings/pricing";
@@ -24,10 +25,16 @@ export type HostReplyNotice =
       pill: "Removed" | "Published with parts removed";
       tone: StatusTone;
       line: string;
+      /** Followed by a link to the review rules, then ":" before `rules`, or "." when there are none. */
+      lead: string;
       rules: { title: string; description: string }[];
       note: string | null;
-      /** Masked only: the reply as the host wrote it (the page shows it as published). */
-      written: string | null;
+      /**
+       * The reply as the host wrote it, not public: under a removed reply (kept
+       * until the purge; after it, a line saying so), or under one published
+       * masked (the page shows it as published).
+       */
+      written: { text: string; purged: boolean } | null;
       /** mailto: support, with a subject naming the booking. */
       objection: string;
     };
@@ -55,9 +62,10 @@ export function hostReplyNotice(i: {
       line:
         deadline > i.now
           ? `Waiting for a person to check it. If nobody has by ${day(i.timeZone).format(deadline)}, ${time(i.timeZone).format(deadline)}, it publishes with the flagged parts replaced by ${MASKED_TEXT}.`
-          : "Waiting for a person to check it. It isn't public yet.",
+          : "Waiting for a person to check it. It isn't shown yet.",
     };
   }
+  const these = notice.rules.length > 0 ? "these" : "our";
   const shared = {
     rules: notice.rules.map((id) => REVIEW_RULES[id]),
     objection: `mailto:support@openbookings.co?subject=${encodeURIComponent(`Reply decision, booking ${bookingReference(i.bookingId)}`)}`,
@@ -68,8 +76,12 @@ export function hostReplyNotice(i: {
       pill: "Removed",
       tone: "stopped",
       line: `Removed by a person at OpenBookings${notice.decidedAt ? ` on ${day(i.timeZone).format(notice.decidedAt)}` : ""}. It's no longer on your page.`,
+      lead: `It broke ${these}`,
       note: notice.note,
-      written: null,
+      written:
+        i.moderation.written !== null
+          ? { text: i.moderation.written, purged: false }
+          : { text: `The text was deleted after ${MODERATION_RECORD_RETENTION_MONTHS} months.`, purged: true },
       ...shared,
     };
   }
@@ -77,9 +89,10 @@ export function hostReplyNotice(i: {
     state: "masked",
     pill: "Published with parts removed",
     tone: "attention",
-    line: `Published automatically after ${MODERATION_DEADLINE_HOURS} hours, because nobody had checked it yet. The parts that seemed to break a rule show as ${MASKED_TEXT}.`,
+    line: `This happened automatically after ${MODERATION_DEADLINE_HOURS} hours because nobody had checked it yet.`,
+    lead: `The parts replaced by ${MASKED_TEXT} seemed to break ${these}`,
     note: null,
-    written: notice.written,
+    written: notice.written === null ? null : { text: notice.written, purged: false },
     ...shared,
   };
 }

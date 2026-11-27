@@ -550,10 +550,11 @@ describeWithDb("review moderation against Postgres", () => {
     // The public never sees it.
     expect((await loadReviewReplies(db, [published.reviewId], { publicOnly: true })).get(published.reviewId)?.map((r) => r.role)).toEqual(["host"]);
 
-    // The host's own removed reply isn't the guest's to see.
+    // The host's own removed reply isn't the guest's to see, but it still counts for the turn.
     await decide({ kind: "reply", id: hostReply.replyId }, "removed", later(6 * HOUR), ["abuse"]);
-    thread = (await getReviewContext(db, published.bookingId, later(7 * HOUR)))?.review?.replies ?? [];
-    expect(thread.map((r) => r.role)).toEqual(["guest"]);
+    const seen = (await getReviewContext(db, published.bookingId, later(7 * HOUR)))?.review;
+    expect(seen?.replies.map((r) => r.role)).toEqual(["guest"]);
+    expect(seen?.threadRoles).toEqual(["host", "guest"]);
   });
 
   test("a deleted review drops out: decideItem returns not_found and its open reports are dismissed", async () => {

@@ -3,7 +3,7 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { formatMessageTimestamp } from "@/lib/format";
-import { needsReply, type HostReview } from "@/lib/reviews/shape";
+import { hasHostReply, needsReply, type HostReview } from "@/lib/reviews/shape";
 import { byline, SCORE_CHIP, stayMonthLabel } from "./labels";
 
 function Trailing({ review }: { review: HostReview }) {
@@ -17,7 +17,7 @@ function Trailing({ review }: { review: HostReview }) {
   if (needsReply(review)) {
     return <span className="size-2 shrink-0 rounded-full bg-state-attention" aria-label="Waiting for a reply" />;
   }
-  const replied = review.replies.some((r) => r.role === "host");
+  const replied = hasHostReply(review);
   const label = replied ? "Replied" : review.privateReplyAt ? "Replied privately" : review.skippedAt ? "No reply" : null;
   if (!label) return null;
   return <span className="shrink-0 text-[11px] whitespace-nowrap text-muted-foreground">{label}</span>;

@@ -128,7 +128,7 @@ export function ReviewDetail({ review, onClose }: { review: HostReview; onClose?
 
         {review.nextRole === null ? (
           <p className="text-xs text-muted-foreground">This thread is closed. Carry on in Messages.</p>
-        ) : review.nextRole === "host" && review.replies.length === 2 ? (
+        ) : review.nextRole === "host" && review.threadLength === 2 ? (
           <p className="text-xs text-muted-foreground">This is the last reply in the thread. After it, carry on in Messages.</p>
         ) : null}
       </div>
@@ -234,7 +234,7 @@ function ReplyNotice({ notice }: { notice: HostReplyNotice }) {
     <div className="flex flex-col gap-1.5 pt-0.5 text-xs text-muted-foreground">
       <p>{notice.line}</p>
       <p>
-        {notice.state === "removed" ? "It broke" : "Those parts seemed to break"} {notice.rules.length > 0 ? "these" : "our"}{" "}
+        {notice.lead}{" "}
         <a href={RULES_PAGE} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
           review rules
         </a>
@@ -254,9 +254,14 @@ function ReplyNotice({ notice }: { notice: HostReplyNotice }) {
           <span className="font-medium text-foreground">Note from our team:</span> {notice.note}
         </p>
       ) : null}
-      {notice.written !== null ? (
+      {notice.written && notice.state === "removed" ? (
+        <details className="rounded-md bg-muted/50 px-2.5 py-1.5">
+          <summary className="cursor-pointer font-medium text-foreground">What you wrote (not public)</summary>
+          <p className={cn("mt-1 whitespace-pre-line [overflow-wrap:anywhere]", notice.written.purged && "italic")}>{notice.written.text}</p>
+        </details>
+      ) : notice.written ? (
         <p className="rounded-md bg-muted/50 px-2.5 py-1.5 whitespace-pre-line [overflow-wrap:anywhere]">
-          <span className="font-medium text-foreground">What you wrote:</span> {notice.written}
+          <span className="font-medium text-foreground">What you wrote:</span> {notice.written.text}
         </p>
       ) : null}
       <p>

@@ -31,7 +31,7 @@ describe("hostReplyNotice", () => {
       line: "Waiting for a person to check it. If nobody has by 23 Nov 2026, 11:00 CET, it publishes with the flagged parts replaced by [removed].",
     });
     expect(notice("pending", base, new Date("2026-11-24T09:00:00Z"))).toMatchObject({
-      line: "Waiting for a person to check it. It isn't public yet.",
+      line: "Waiting for a person to check it. It isn't shown yet.",
     });
   });
 
@@ -42,12 +42,17 @@ describe("hostReplyNotice", () => {
       pill: "Removed",
       tone: "stopped",
       line: "Removed by a person at OpenBookings on 22 Nov 2026. It's no longer on your page.",
+      lead: "It broke these",
       rules: [REVIEW_RULES.personal_details],
       note: "First names only.",
-      written: null,
+      written: { text: "We spoke to Jan Jansen about it.", purged: false },
       objection: OBJECTION,
     });
     expect(notice("removed", { ...removed, decisionNote: null })).toMatchObject({ note: null });
+    // After the purge: a line saying so instead of the words.
+    expect(notice("removed", { ...removed, written: null })).toMatchObject({
+      written: { text: "The text was deleted after 12 months.", purged: true },
+    });
   });
 
   test("published with parts removed: automatic, the check's rules, and what was written", () => {
@@ -55,10 +60,11 @@ describe("hostReplyNotice", () => {
       state: "masked",
       pill: "Published with parts removed",
       tone: "attention",
-      line: "Published automatically after 72 hours, because nobody had checked it yet. The parts that seemed to break a rule show as [removed].",
+      line: "This happened automatically after 72 hours because nobody had checked it yet.",
+      lead: "The parts replaced by [removed] seemed to break these",
       rules: [REVIEW_RULES.personal_details],
       note: null,
-      written: "We spoke to Jan Jansen about it.",
+      written: { text: "We spoke to Jan Jansen about it.", purged: false },
       objection: OBJECTION,
     });
   });

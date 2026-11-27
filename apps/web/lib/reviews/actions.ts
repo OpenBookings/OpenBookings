@@ -23,7 +23,8 @@ import { getServerSession } from '@/lib/auth';
 import { purgePropertyReviews } from '@/lib/property-reviews';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { checkText } from '@openbookings/moderation';
-import { nextReplyRole, REPLY_BODY_MAX } from '@openbookings/pricing';
+import { REPLY_BODY_MAX } from '@openbookings/pricing';
+import { guestAnswerTurn } from '@/lib/reviews/answer-turn';
 
 /**
  * The review form's actions. Two ways to prove the booking, one rule for
@@ -151,12 +152,12 @@ export async function answerHostReply(bookingId: string, body: string): Promise<
   const context = await getReviewContext(getPool(), bookingId, new Date());
   if (!context?.review || context.guestUserId !== session.user.id) return fail('not_found');
   // What postReviewReply would refuse anyway is refused before the check: that is a model call.
-  // The guest's view of the thread is enough: a host reply they can't see isn't one to answer.
+  // The turn counts the whole thread, as the server does; the reply to answer must be one the guest sees.
   const { review } = context;
   if (review.status !== 'published' && review.status !== 'pending') return { ok: false, message: ANSWER_ERRORS.review_deleted };
-  const turn = nextReplyRole(review.replies.map((r) => r.role));
-  if (turn === null) return { ok: false, message: ANSWER_ERRORS.thread_closed };
-  if (turn !== 'guest') return { ok: false, message: ANSWER_ERRORS.not_your_turn };
+  const turn = guestAnswerTurn(review);
+  if (turn === 'closed') return { ok: false, message: ANSWER_ERRORS.thread_closed };
+  if (turn !== 'answer') return { ok: false, message: ANSWER_ERRORS.not_your_turn };
   // Normalised once, as stored: the check's fragments must be found in the stored text to mask.
   const text = normalizeReviewBody(typeof body === 'string' ? body : '');
   if (!text || text.length > REPLY_BODY_MAX) return { ok: false, message: ANSWER_ERRORS.invalid };

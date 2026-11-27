@@ -2,6 +2,7 @@ import {
   authorNotice,
   MASKED_TEXT,
   MODERATION_DEADLINE_HOURS,
+  MODERATION_RECORD_RETENTION_MONTHS,
   REVIEW_RULES,
   type AuthorModeration,
   type ReviewEligibility,
@@ -31,6 +32,8 @@ export type GuestNotice =
       lead: string;
       rules: Rule[];
       note: string | null;
+      /** Their own words, kept (not public) until the purge; after it, a line saying so. */
+      written: { text: string; purged: boolean };
       objection: Objection;
       /** Only for a review: whether it may be written once more. */
       rewrite: { open: true; title: string; detail: string } | { open: false; detail: string } | null;
@@ -100,6 +103,10 @@ export function guestNotice(i: {
         lead: lead(`Your ${noun} broke`),
         rules,
         note: notice.note,
+        written:
+          i.moderation.written !== null
+            ? { text: i.moderation.written, purged: false }
+            : { text: `The text was deleted after ${MODERATION_RECORD_RETENTION_MONTHS} months.`, purged: true },
         objection: objectionFor(i.kind, i.bookingId),
         rewrite: !rewrite
           ? null

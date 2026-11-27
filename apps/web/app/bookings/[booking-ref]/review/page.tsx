@@ -5,7 +5,7 @@ import { getPool } from '@openbookings/db';
 import { getReviewContext } from '@openbookings/db/reviews';
 import { getServerSession } from '@/lib/auth';
 import { AuthFormFields, AuthFormPhaseProvider } from '@/components/auth/AuthFormFields';
-import { nextReplyRole } from '@openbookings/pricing';
+import { guestAnswerTurn } from '@/lib/reviews/answer-turn';
 import { DeleteReviewButton } from '@/app/review/_components/ReviewActions';
 import { ReplyAnswerForm } from '@/app/review/_components/ReplyAnswerForm';
 import { ReviewForm } from '@/app/review/_components/ReviewForm';
@@ -164,7 +164,7 @@ export default async function BookingReviewPage({
                   </div>
                 );
               })}
-              {review.status === 'published' && nextReplyRole(review.replies.map((r) => r.role)) === 'guest' ? (
+              {review.status === 'published' && guestAnswerTurn(review) === 'answer' ? (
                 <ReplyAnswerForm bookingId={bookingId} propertyName={context.propertyName} />
               ) : null}
             </div>

@@ -237,7 +237,7 @@ describeWithDb("loadHostReviews against Postgres", () => {
 
     const list = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
     const removed = list.find((r) => r.id === removedOn);
-    expect(removed).toMatchObject({ timeZone: "Europe/Amsterdam", nextRole: "guest" });
+    expect(removed).toMatchObject({ timeZone: "Europe/Amsterdam", nextRole: "guest", threadLength: 1 });
     expect(removed?.replies).toEqual([
       expect.objectContaining({
         id: removedReply,
@@ -261,6 +261,20 @@ describeWithDb("loadHostReviews against Postgres", () => {
       ["guest", "You too.", null, null],
     ]);
     expect(masked?.replies[0]?.moderation).toMatchObject({ publishedByDeadline: true, flaggedRules: ["personal_details"] });
+  });
+
+  test("a removed guest answer counts for the turn but isn't one the host owes a reply to", async () => {
+    const reviewId = await addReview("published");
+    await db.query(
+      `INSERT INTO review_replies (review_id, author_role, author_user_id, body, status, published_at, decision, decided_at, created_at)
+       VALUES ($1, 'host', $2, 'Thanks', 'published', NOW(), NULL, NULL, NOW() - interval '2 hours'),
+              ($1, 'guest', $3, 'Rude words.', 'removed', NULL, 'removed', NOW(), NOW() - interval '1 hour')`,
+      [reviewId, owner, guest],
+    );
+    const [listed] = await loadHostReviews(session(owner), propertyId, propertyDb(session(owner)));
+    expect(listed).toMatchObject({ nextRole: "host", threadLength: 2 });
+    expect(listed?.replies.map((r) => r.role)).toEqual(["host"]);
+    expect(await countReviewsNeedingReply(session(owner), propertyId, propertyDb(session(owner)))).toBe(0);
   });
 
   test("countReviewsNeedingReply counts the open ones", async () => {

@@ -68,12 +68,19 @@ describe('guestNotice', () => {
       lead: 'Your review broke these',
       rules: [REVIEW_RULES.links_contact, REVIEW_RULES.abuse],
       note: "Your review can mention the staff, but not insult them.",
+      written: { text: 'Lovely stay. Call Jan on 0612345678.', purged: false },
       objection: objection(`Review decision, booking ${bookingReference(BOOKING)}`),
       rewrite: {
         open: true,
         title: 'You can write your review once more',
         detail: "Until 26 Dec 2026. If this one is removed too, the stay can't be reviewed again.",
       },
+    });
+  });
+
+  test('removed, its text purged after 12 months: nothing to show of what they wrote', () => {
+    expect(notice({ status: 'removed', moderation: { ...removed, written: null }, eligibility: OPEN })).toMatchObject({
+      written: { text: 'The text was deleted after 12 months.', purged: true },
     });
   });
 
@@ -113,6 +120,7 @@ describe('guestNotice', () => {
       lead: 'Your answer broke these',
       rules: [REVIEW_RULES.links_contact, REVIEW_RULES.abuse],
       note: "Your review can mention the staff, but not insult them.",
+      written: { text: 'Lovely stay. Call Jan on 0612345678.', purged: false },
       objection: objection(`Answer decision, booking ${bookingReference(BOOKING)}`),
       rewrite: null,
     });
