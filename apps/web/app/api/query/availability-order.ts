@@ -1,16 +1,36 @@
 import { roomReasons, type PropertyAvailability, type RoomAvailability } from "@openbookings/db";
-import type { UnavailableReason } from "@openbookings/pricing";
+import { offeredRates, resolveRoom, type RoomRow, type UnavailableReason } from "@openbookings/pricing";
 
 /** What a search result says about booking the searched stay. */
 export type SearchAvailability = { bookable: boolean; reason: UnavailableReason | null };
 
 /**
- * The rows that may price each hotel's card. At a bookable hotel, a room
- * prices it only when it takes one room's share of the party and its rate
- * (the one the search query picked for it) is open for these dates. An
- * unbookable hotel, shown only in testing mode, is priced from its cheapest
- * room, and so is a bookable one whose open rates all lost to the query's
- * pick: the card still needs a price.
+ * The rate rows a guest could be offered for this stay, judged as the
+ * property page judges them (`offeredRates`, Annex B B.4): a Non-refundable
+ * rate next to an open refundable rate on its room must be at least 10%
+ * cheaper on the stay's room price for one room's share of the party.
+ */
+export function offeredSearchRates<R extends RoomRow>(
+  rows: R[],
+  rooms: { room: RoomAvailability }[],
+  party: { adults: number; children: number; infants?: number },
+  arrivalDate: string,
+): R[] {
+  const byId = new Map(rooms.map(({ room }) => [room.roomId, room]));
+  return offeredRates(rows, (row) => ({
+    roomId: row.room_id,
+    isRefundable: row.is_refundable,
+    open: byId.get(row.room_id)?.ratePlans.some((p) => p.ratePlanId === row.rate_plan_id && p.reasons.length === 0) ?? false,
+    priceCents: resolveRoom(row, { ...party, arrivalDate }).room_price_cents,
+  }));
+}
+
+/**
+ * The rows that may price each hotel's card. At a bookable hotel, a rate
+ * prices it only when its room takes one room's share of the party and the
+ * rate is open for these dates; the card then shows the cheapest of them. An
+ * unbookable hotel, shown only in testing mode, is priced from all its rates:
+ * the card still needs a price.
  */
 export function priceCandidates<R extends { hotel_id: string; room_id: string; rate_plan_id: string }>(
   rows: R[],

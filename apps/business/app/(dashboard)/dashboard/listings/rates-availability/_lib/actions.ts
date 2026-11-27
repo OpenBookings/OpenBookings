@@ -325,9 +325,10 @@ export async function createRatePlan(
     return { ok: false, error: RATES_CONFIRMATION_MESSAGE, code: RATES_CONFIRMATION_REQUIRED };
   }
 
-  // Annex B B.4: a new plan goes on sale at once, so a Non-refundable one
-  // needs a refundable plan on the room that costs at least 10% more.
-  if (!data.isRefundable) {
+  // Annex B B.4: a new plan goes on sale at once. A Non-refundable one must be
+  // at least 10% under a refundable plan on the room, if there is one; a
+  // refundable one must not undercut a Non-refundable plan already selling.
+  {
     const siblings = await query<{ id: string; is_active: boolean; is_refundable: boolean; bar_cents: number }>(
       `SELECT id, is_active, is_refundable, bar_cents::float8 AS bar_cents FROM rate_plans
        WHERE room_id = $1 AND archived_at IS NULL`,
@@ -335,7 +336,7 @@ export async function createRatePlan(
     );
     const refusal = refundableGuardError(
       siblings.map((r) => ({ id: r.id, isActive: r.is_active, isRefundable: r.is_refundable, barCents: r.bar_cents })),
-      { id: "new", isActive: true, isRefundable: false, barCents: data.bar },
+      { id: "new", isActive: true, isRefundable: data.isRefundable, barCents: data.bar },
     );
     if (refusal) return failed(refusal);
   }

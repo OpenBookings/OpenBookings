@@ -1,11 +1,12 @@
 import { nonRefundableQualifies } from "@openbookings/pricing";
 
 /**
- * Annex B B.4: a Non-refundable rate may only sell next to a refundable rate on
- * the same room that costs at least 10% more. Checked on the base rate (BAR)
- * whenever a rate's status or refund type changes. Date overrides can still
- * break it for particular stays, so the guest side checks each stay again and
- * hides a Non-refundable rate that no longer qualifies.
+ * Annex B B.4: a Non-refundable rate may sell on its own (B.4.1), but next to
+ * active refundable rates on the same room it must cost at least 10% less than
+ * one of them (B.4.2). Checked on the base rate (BAR) whenever a rate's status
+ * or refund type changes. Date overrides can still break it for particular
+ * stays, so the guest side checks each stay again and hides a Non-refundable
+ * rate that no longer qualifies.
  */
 
 export interface GuardRate {
@@ -17,9 +18,9 @@ export interface GuardRate {
 }
 
 export const NON_REFUNDABLE_MESSAGE =
-  "A non-refundable rate needs a refundable rate on this room that costs at least 10% more.";
+  "A non-refundable rate must be at least 10% cheaper than a refundable rate on this room.";
 export const DEPENDS_MESSAGE =
-  "This room's non-refundable rate depends on this rate. Change or deactivate that one first.";
+  "This room's non-refundable rate would no longer be at least 10% cheaper than a refundable rate. Lower that rate first, or deactivate it.";
 
 /**
  * `rates` are the room's non-archived rates as they are now (the one being

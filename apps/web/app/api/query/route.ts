@@ -12,7 +12,7 @@ import type { RoomRow } from "@openbookings/pricing";
 import { getPostHogClient } from "@openbookings/analytics/server";
 import { NextRequest, NextResponse } from "next/server";
 import { parseStayInput, todayInZone, type StayInput } from "@/lib/booking/stay-input";
-import { orderByAvailability, priceCandidates } from "./availability-order";
+import { offeredSearchRates, orderByAvailability, priceCandidates } from "./availability-order";
 import { pointBoundErrors } from "./search-bounds";
 import { priceSearchStays } from "./search-pricing";
 import { resolveSearchTarget } from "./search-target";
@@ -152,17 +152,14 @@ candidate_rooms AS (
   JOIN rooms r
     ON r.property_id = p.id
    AND r.is_active
+   AND r.archived_at IS NULL
   CROSS JOIN user_input u
-  JOIN LATERAL (
-    SELECT id, name, bar_cents, currency, is_refundable, min_stay, max_stay
-    FROM rate_plans
-    WHERE room_id = r.id
-      AND is_active
-    -- A search card shows one rate, and a Non-refundable rate may only be
-    -- offered beside a refundable one (Annex B B.4.1), so prefer refundable.
-    ORDER BY is_refundable DESC, created_at DESC
-    LIMIT 1
-  ) rp ON TRUE
+  -- Every rate the property page could offer: which ones are (Annex B B.4)
+  -- and which is cheapest is decided after this query, as on that page.
+  JOIN rate_plans rp
+    ON rp.room_id = r.id
+   AND rp.is_active
+   AND rp.archived_at IS NULL
   WHERE p.is_active
     AND (NOT p.is_demo OR ${testing})
     AND ST_DWithin(
@@ -319,8 +316,9 @@ async function runSearch(input: SearchInput, testing: boolean) {
   // A room qualifies when it takes the largest share of the party; the card
   // is priced for all the rooms searched, each with its own share.
   const party = perRoomParty(input)
+  const offered = offeredSearchRates(roomRows, rooms, party, input.checkIn)
 
-  const results = priceSearchStays(priceCandidates(roomRows, rooms, availability, party), {
+  const results = priceSearchStays(priceCandidates(offered, rooms, availability, party), {
     adults: input.adults,
     children: input.children,
     infants: input.infants,

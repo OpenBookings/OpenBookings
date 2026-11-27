@@ -28,6 +28,11 @@ describe("Host Agreement registry", () => {
 // The facts the agreement states, checked against the code that implements
 // them, so the text cannot quietly drift from the product again.
 describe("Host Agreement registry keeps old versions", () => {
+  test("1.4 stays registered, with the rule that a Non-refundable rate needs a refundable one", () => {
+    expect(getHostAgreementVersion("1.4")).toBeDefined();
+    expect(text("1.4")).toContain("may only be offered for a room type and dates for which the Host also offers");
+  });
+
   test("1.3 stays registered as an archived version", () => {
     const old = getHostAgreementVersion("1.3");
     expect(old).toBeDefined();
@@ -36,8 +41,8 @@ describe("Host Agreement registry keeps old versions", () => {
   });
 });
 
-describe("Host Agreement 1.4 states what the code does", () => {
-  const body = text("1.4");
+describe("Host Agreement 1.5 states what the code does", () => {
+  const body = text("1.5");
 
   test("names the licence the code is under", () => {
     expect(body).toContain("AGPL-3.0-only");
@@ -81,6 +86,12 @@ describe("Host Agreement 1.4 states what the code does", () => {
   test("keeps the no-show rule: nothing refunded, commission stands", () => {
     expect(body).toContain("The Host keeps the full amount paid, and the Commission on the Booking stands");
     expect(body).toContain("no amount is refunded, including Tourist Tax and Non-Delivered Services");
+  });
+
+  test("lets a Non-refundable rate stand alone, 10% under a refundable rate beside it", () => {
+    expect(body).toContain("A Non-refundable Rate Plan may be offered on its own");
+    expect(body).toContain("must be at least 10% lower than the price of at least one such refundable Rate Plan");
+    expect(body).not.toContain("may only be offered for a room type and dates for which the Host also offers");
   });
 
   test("names no retired providers", () => {

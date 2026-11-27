@@ -45,8 +45,9 @@ export function withAllInPrices(
 
 /**
  * Each rate's cancellation tier, and Annex B B.4 applied to what the guest
- * sees: a Non-refundable rate is shown only beside a refundable rate on the
- * same room that costs at least 10% more, and says how much it saves. The
+ * sees: next to refundable rates on the same room, a Non-refundable rate is
+ * shown only when it costs at least 10% less than one of them, and says how
+ * much it saves; with none, it is shown on its own. The
  * host's editor enforces this on the base rate when it is saved; this catches
  * a rate that drifted out of line afterwards.
  *

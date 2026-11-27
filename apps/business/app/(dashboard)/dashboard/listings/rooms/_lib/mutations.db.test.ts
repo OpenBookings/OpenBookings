@@ -426,13 +426,10 @@ describeWithDb("Rooms editor against Postgres", () => {
     ))!.id;
   }
 
-  test("a non-refundable rate can't go on sale without a refundable rate beside it", async () => {
+  test("a non-refundable rate can go on sale as the room's only rate", async () => {
     await db.query(`UPDATE rate_plans SET is_active = false WHERE id = $1`, [pricedRate]);
     const nr = await nonRefundableRate(9000, false);
-    expect(await m.setRateActive(session(owner), nr, true, deps)).toMatchObject({
-      ok: false,
-      code: "non_refundable",
-    });
+    expect((await m.setRateActive(session(owner), nr, true, deps)).ok).toBe(true);
   });
 
   test("10% below the refundable rate goes on sale; 5% below doesn't", async () => {
@@ -444,22 +441,30 @@ describeWithDb("Rooms editor against Postgres", () => {
   });
 
   test("switching a rate to non-refundable in the Sheet checks the rule", async () => {
+    // A refundable rate less than 10% above it stays on the room.
+    await db.query(
+      `INSERT INTO rate_plans (room_id, name, bar_cents, is_refundable, is_active) VALUES ($1, 'Flexible', 12500, true, true)`,
+      [roomId],
+    );
     const state = await m.saveRate(
       session(owner),
       form({ roomId, ratePlanId: pricedRate, name: "Standard", active: "on", refundable: "false" }),
       deps,
     );
     expect(state.success).toBe(false);
-    expect(state.errors?.refundable?.[0]).toContain("at least 10% more");
+    expect(state.errors?.refundable?.[0]).toContain("at least 10% cheaper");
   });
 
-  test("the refundable rate a non-refundable one depends on can't be archived or switched off", async () => {
+  test("the refundable rate beside a non-refundable one can be archived or switched off", async () => {
     await nonRefundableRate(10000, true);
-    expect(await m.archiveRate(session(owner), pricedRate, deps)).toMatchObject({
-      ok: false,
-      code: "non_refundable",
-    });
-    expect(await m.setRateActive(session(owner), pricedRate, false, deps)).toMatchObject({
+    expect((await m.setRateActive(session(owner), pricedRate, false, deps)).ok).toBe(true);
+    expect((await m.archiveRate(session(owner), pricedRate, deps)).ok).toBe(true);
+  });
+
+  test("a refundable rate that would undercut a selling non-refundable one can't go on sale", async () => {
+    await db.query(`UPDATE rate_plans SET is_active = false WHERE id = $1`, [pricedRate]);
+    await nonRefundableRate(11500, true);
+    expect(await m.setRateActive(session(owner), pricedRate, true, deps)).toMatchObject({
       ok: false,
       code: "non_refundable",
     });

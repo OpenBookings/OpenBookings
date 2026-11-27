@@ -96,8 +96,10 @@ describe("withCancellationTerms", () => {
     expect(r.rate_plans.map((p) => p.id)).toEqual(["refundable"]);
   });
 
-  test("a non-refundable rate with no refundable rate beside it is hidden", () => {
+  test("a non-refundable rate with no refundable rate beside it is shown on its own, with no saving", () => {
     const [r] = withCancellationTerms([room({ rate_plans: [plan("saver", 9000, false)] })], "flex");
-    expect(r.rate_plans).toEqual([]);
+    expect(r.rate_plans.map((p) => p.id)).toEqual(["saver"]);
+    expect(r.rate_plans[0].cancellation_tier).toBe("non_refundable");
+    expect(r.rate_plans[0].saving_vs_refundable_cents).toBeUndefined();
   });
 });
