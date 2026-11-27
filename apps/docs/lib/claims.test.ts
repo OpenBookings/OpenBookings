@@ -148,4 +148,24 @@ describe("review moderation", () => {
     expect(text).toContain(`publishes held ones after ${MODERATION_DEADLINE_HOURS} hours`);
     expect(text).toContain(`deletes moderation records ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
   });
+
+  test("the reviews page states the deadline and how long moderation records are kept", () => {
+    const text = page("business/reviews/index.mdx");
+    expect(text).toContain(`If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(text).toContain(`deleted ${MODERATION_RECORD_RETENTION_MONTHS} months after the decision`);
+  });
+
+  test("no page gives the deadline another number of hours", () => {
+    // "publishes held ones after 72 hours", "If nobody has decided within 72 hours".
+    const stated = sweep(/\b(?:held|holds?|decided|publish(?:es|ed)?)\b[^.|\n]*?\b(\d+)\s?(?:h|hours?)\b/gi);
+    expect(stated.length).toBeGreaterThan(1);
+    const wrong = stated.filter((s) => Number(s.groups[0]) !== MODERATION_DEADLINE_HOURS);
+    expect(wrong.map((s) => s.where)).toEqual([]);
+  });
+
+  test("no page keeps moderation records for another number of months", () => {
+    const stated = sweep(/(?:moderation records|reports)[^.|\n]*?\b(\d+) months\b/gi);
+    const wrong = stated.filter((s) => Number(s.groups[0]) !== MODERATION_RECORD_RETENTION_MONTHS);
+    expect(wrong.map((s) => s.where)).toEqual([]);
+  });
 });

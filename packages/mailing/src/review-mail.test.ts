@@ -1,4 +1,4 @@
-import { REVIEW_RULES } from "@openbookings/pricing";
+import { MODERATION_DEADLINE_HOURS, REVIEW_RULES } from "@openbookings/pricing";
 import { describe, expect, test } from "bun:test";
 import {
   formatStayMonth,
@@ -40,6 +40,8 @@ describe("review mails", () => {
   test("the posted mail says when a review waits for a person", () => {
     const pending = guestReviewPosted({ propertyName: "Hotel", pending: true, manageUrl: "https://x/y" });
     expect(pending.html).toContain("A person looks at it");
+    expect(pending.html).toContain(`within ${MODERATION_DEADLINE_HOURS} hours`);
+    expect(pending.html).not.toContain("such as a link or contact details");
     const posted = guestReviewPosted({ propertyName: "Hotel", pending: false, manageUrl: "https://x/y" });
     expect(posted.html).toContain("is posted");
   });

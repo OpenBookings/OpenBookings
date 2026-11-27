@@ -4,6 +4,8 @@ import { join } from "node:path";
 import {
   EARLY_DEPARTURE_KEPT_NIGHTS,
   FREE_CANCELLATION_HOURS,
+  MASKED_TEXT,
+  MODERATION_DEADLINE_HOURS,
   NON_REFUNDABLE_MIN_DISCOUNT_PERCENT,
   formatCancellationWindow,
 } from "@openbookings/pricing";
@@ -35,6 +37,11 @@ describe("Host Agreement registry", () => {
 // The facts the agreement states, checked against the code that implements
 // them, so the text cannot quietly drift from the product again.
 describe("Host Agreement registry keeps old versions", () => {
+  test("1.5 stays registered, with reviews held only for contact details and links", () => {
+    expect(getHostAgreementVersion("1.5")).toBeDefined();
+    expect(text("1.5")).toContain("OpenBookings will assess it within a commercially reasonable time;");
+  });
+
   test("1.4 stays registered, with the rule that a Non-refundable rate needs a refundable one", () => {
     expect(getHostAgreementVersion("1.4")).toBeDefined();
     expect(text("1.4")).toContain("may only be offered for a room type and dates for which the Host also offers");
@@ -48,8 +55,9 @@ describe("Host Agreement registry keeps old versions", () => {
   });
 });
 
-describe("Host Agreement 1.5 states what the code does", () => {
-  const body = text("1.5");
+describe("Host Agreement 1.6 states what the code does", () => {
+  const body = text("1.6");
+  const reviews = body.slice(body.indexOf("### 6.5 Guest Reviews"), body.indexOf("### 6.6"));
 
   test("names the licence the code is under", () => {
     expect(body).toContain("AGPL-3.0-only");
@@ -108,6 +116,28 @@ describe("Host Agreement 1.5 states what the code does", () => {
 
   test("keeps the same early-departure nights as the refund code", () => {
     expect(body).toContain(`the next ${EARLY_DEPARTURE_KEPT_NIGHTS} Unused Nights are not refunded`);
+  });
+
+  test("6.5 links the review rules and describes the check, the deadline and the masking", () => {
+    expect(reviews).toContain("](https://openbookings.co/legal/review-rules)");
+    expect(reviews).toContain(`(${MODERATION_DEADLINE_HOURS}) hours`);
+    expect(reviews).toContain(`"${MASKED_TEXT}"`);
+    expect(reviews).toContain("provider based in the EU");
+  });
+
+  test("6.5 names the report route; a reported review stays visible while it is assessed", () => {
+    expect(reviews).toContain("**Report** on the review in **Reviews**");
+    expect(reviews).toContain("A reported review stays visible while OpenBookings assesses it");
+  });
+
+  test("6.5 keeps the host out of moderation, and nobody edits a review", () => {
+    expect(reviews).toContain("The Host cannot approve, hold, or remove reviews");
+    expect(reviews).toContain("never edits");
+    expect(reviews).toContain("never removes a review for its score");
+  });
+
+  test("names Mistral for the review checks as well as support", () => {
+    expect(body).toContain("Mistral (AI support assistant and review checks)");
   });
 
   test("names no retired providers", () => {

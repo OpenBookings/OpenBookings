@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { REVIEW_OPENS_AFTER_MS, REVIEW_WINDOW_DAYS } from "@openbookings/pricing";
+import {
+  MASKED_TEXT,
+  MODERATION_DEADLINE_HOURS,
+  REVIEW_OPENS_AFTER_MS,
+  REVIEW_WINDOW_DAYS,
+} from "@openbookings/pricing";
 import { getCurrentVersion, getDocument, getVersion, LEGAL_LOCALES } from "./documents";
 
-const CURRENT = "2026-11-20";
+const CURRENT = "2026-11-27";
+const REVIEW_RULES_PATH = "/legal/review-rules";
 const DIR = join(import.meta.dir, "../../content/legal/terms");
 const readVersion = (version: string, locale: string) =>
   readFileSync(join(DIR, version, `${locale}.mdx`), "utf8");
@@ -22,7 +28,9 @@ describe("terms of service registry", () => {
     expect(getCurrentVersion(doc).version).toBe(CURRENT);
   });
 
-  test("the superseded version stays registered for its archive URL", () => {
+  test("the superseded versions stay registered for their archive URLs", () => {
+    expect(getVersion(doc, "2026-11-20")).toBeDefined();
+    expect(readVersion("2026-11-20", "en")).toContain("A review that contains contact details or links is held until our team has checked it.");
     expect(getVersion(doc, "2026-11-16")).toBeDefined();
     expect(readVersion("2026-11-16", "en")).toContain("unless the rate says otherwise");
   });
@@ -56,7 +64,10 @@ describe("current terms of service content", () => {
     });
 
     test(`${locale}: links to the privacy policy in the same language`, () => {
-      const privacyLinks = [...source.matchAll(/\]\((\/legal\/[^)]+)\)/g)].map((m) => m[1]);
+      // The review rules page is one English page, not a versioned legal text.
+      const privacyLinks = [...source.matchAll(/\]\((\/legal\/[^)]+)\)/g)]
+        .map((m) => m[1])
+        .filter((href) => href !== REVIEW_RULES_PATH);
       expect(privacyLinks.length).toBeGreaterThan(0);
       for (const href of privacyLinks) expect(href).toBe(`/legal/${locale}/privacy`);
     });
@@ -75,6 +86,30 @@ describe("current terms of service content", () => {
       const reviews = clause(source, "10.7");
       expect(reviews).toMatch(new RegExp(`\\b${REVIEW_OPENS_AFTER_MS / 3_600_000} (hours|uur|heures) (after|na|après)`));
       expect(reviews).toMatch(new RegExp(`\\b${REVIEW_WINDOW_DAYS} (days|dagen|jours) (after|na|après)`));
+    });
+
+    test(`${locale}: 10.9 links the review rules and describes the check, the deadline and the masking`, () => {
+      const rules = clause(source, "10.9");
+      expect(rules).toContain(`](${REVIEW_RULES_PATH})`);
+      expect(rules).toMatch(new RegExp(`\\b${MODERATION_DEADLINE_HOURS} (hours|uur|heures)\\b`));
+      expect(rules).toContain(MASKED_TEXT);
+      expect(rules).toMatch(/\b(EU|UE)\b/);
+      expect(rules).toMatch(/can't approve, hold or remove reviews|kunnen beoordelingen niet goedkeuren, tegenhouden of verwijderen|ne peuvent ni approuver, ni retenir, ni supprimer/);
+    });
+
+    test(`${locale}: no longer says only contact details and links are held`, () => {
+      expect(source).not.toMatch(
+        /contains contact details or links is held|met contactgegevens of links houden wij vast|contenant des coordonnées ou des liens est retenu/,
+      );
+    });
+
+    test(`${locale}: a person decides, the author can object, and a removed review can be written once more`, () => {
+      const removal = clause(source, "10.12");
+      expect(removal).toMatch(/person|medewerker|personne/);
+      expect(removal).toMatch(/object|bezwaar|contester/);
+      expect(removal).toMatch(/once more|nog één keer|une nouvelle fois/);
+      expect(removal).toMatch(/stays visible|blijft zichtbaar|reste visible/);
+      expect(clause(source, "10.7")).toMatch(/\[(section|artikel|article) 10\.12\]\(#messages-and-content\)/);
     });
 
     test(`${locale}: does not promise account deletion "at any time"`, () => {

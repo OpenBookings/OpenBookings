@@ -1,0 +1,657 @@
+export const title = "Host Agreement";
+
+<Lead>
+
+This is the agreement between OpenBookings B.V. and your business when you list a property on OpenBookings. Here's the short version. The clauses below are what count.
+
+- Guests pay you directly, into your own Stripe account. We never hold your money, and your payouts follow your own Stripe schedule.
+- Our commission is 4.5% of the room price including VAT, taken automatically when the guest pays. Never on tourist tax, or on cots and extra beds paid at your property.
+- When a booking is refunded, we return our commission in proportion to the room price refunded: if the guest gets 80% of the room price back, you get 80% of our commission back. Tourist tax never counts. Refund through OpenBookings: refunds you make yourself in Stripe happen outside OpenBookings and return no commission. A lost dispute returns commission in proportion to the whole payment. Stripe's own fees are between you and Stripe.
+- You get one commission invoice a month, for your records. It is already paid.
+- Cancellations follow Annex B: Flex or Standard for your property, and Non-refundable rates if you offer them, on their own or at least 10% below a refundable rate. We apply them for you.
+- Search ranks by price. Nothing is for sale.
+- Dutch law applies, and the English text is the authoritative one.
+
+</Lead>
+
+<Section id="parties" number="1" title="Parties and Definitions">
+
+### 1.1 Parties
+
+This Host Agreement ("Agreement") is entered into between:
+
+OpenBookings B.V. ("OpenBookings", "we", "us"), a private limited company incorporated under Dutch law, registered with the Dutch Chamber of Commerce (Kamer van Koophandel) under number [KVK], operating the OpenBookings platform at openbookings.co; and
+
+The Accommodation Provider identified during registration ("Host", "you"), being a hotel, vacation accommodation operator, or other lodging provider that has completed the onboarding process and accepted this Agreement.
+
+Together referred to as the "Parties" and individually as a "Party".
+
+### 1.2 Definitions
+
+The following terms have the meanings set out below throughout this Agreement:
+
+| Term | Definition |
+|------|------------|
+| **"Agreement"** | This Host Agreement including all Annexes, as amended from time to time in accordance with Section 11.2. |
+| **"Annex A"** | The Data Sharing Arrangement governing the exchange and processing of personal data between the Parties as independent controllers. |
+| **"Annex B"** | The Cancellation Policy Tiers that apply to Bookings. |
+| **"Annex C"** | The Service Level Agreement and Uptime Commitments (future addendum). |
+| **"Accommodation Price"** | The price of the booked nights as shown to the Guest at booking, including VAT, after any rate adjustments and discounts, plus any extra-guest charges. It excludes Tourist Tax and any Pay-at-Property Extras. |
+| **"Booking"** | A reservation made by a Guest through the Platform and paid in full by the Guest into the Host's Stripe account. |
+| **"Commission"** | The fee payable by the Host to OpenBookings on each Booking, as set out in Section 4.2. |
+| **"Commission Invoice"** | The monthly invoice (or credit note) for Commission described in Section 4.4. |
+| **"Confidential Information"** | Has the meaning given in Section 11.4. |
+| **"Content"** | All text, images, descriptions, rates, availability data, and other information submitted by the Host to the Platform. |
+| **"Force Majeure Event"** | Has the meaning given in Section 11.10. |
+| **"Guest"** | A person who makes or attempts to make a Booking through the Platform. |
+| **"Host"** | The accommodation provider party to this Agreement. |
+| **"Listing"** | A property or room type published on the Platform by the Host. |
+| **"No-Show"** | A Guest who fails to arrive for a Booking without prior cancellation. |
+| **"Pay-at-Property Extras"** | Cots and extra beds that the Guest selects at booking and pays to the Host at the property. |
+| **"Platform"** | The OpenBookings marketplace, including the website at openbookings.co, the business portal at business.openbookings.co, and the related booking infrastructure. |
+| **"Stripe Account"** | The Host's own account with Stripe, connected to the Platform through Stripe Connect, into which Guests pay for Bookings. |
+| **"Tourist Tax"** | Any tourist or accommodation tax that is calculated from the Host's tourist tax rules and added to the price paid by the Guest. |
+
+</Section>
+
+<Section id="platform-access" number="2" title="Platform Access and Listing Obligations">
+
+### 2.1 Grant of Access
+
+Subject to the terms of this Agreement, OpenBookings grants the Host a non-exclusive, non-transferable, revocable right to access and use the Platform for the purpose of listing and marketing accommodation to Guests.
+
+### 2.2 Onboarding & Registration
+
+Access to the Platform is conditional on the Host completing the OpenBookings onboarding process, which includes:
+
+- Providing accurate legal identity, property and billing information (including VAT number and KvK registration where applicable). OpenBookings checks VAT numbers against the EU VIES system;
+- Connecting a Stripe Account in good standing and completing Stripe's verification;
+- Accepting this Agreement, including the Data Sharing Arrangement (Annex A);
+- Confirming, through an owner or administrator of the Host's organisation, that the Host's rates include VAT and any mandatory fees, as described in Section 4.6.
+
+The Host selects its Cancellation Policy Tier (Annex B) in the property settings of the business portal. Until the Host selects one, the Standard Tier applies.
+
+A Listing cannot be published, and Bookings cannot be made, until the onboarding and billing details are complete. OpenBookings reserves the right to decline or revoke Platform access at its discretion, including where information provided is found to be inaccurate or incomplete.
+
+### 2.3 Listing Requirements
+
+The Host agrees to maintain Listings that:
+
+- Accurately describe the accommodation, including room types, amenities, photographs, and any material limitations;
+- Reflect current and accurate availability at all times;
+- Display rates compliant with Section 4 (Payments, Commission & Taxes);
+- Comply with all applicable laws, including local licensing and hospitality regulations.
+
+### 2.4 Pricing Fairness
+
+OpenBookings charges significantly lower commission rates than traditional OTA platforms. We encourage Hosts to reflect this saving in the rates they offer Guests through the Platform — whether through competitive pricing, inclusive extras, or added value not available elsewhere.
+
+OpenBookings does not impose rate parity obligations. Hosts are free to set their own prices across all channels. However, where Listings are demonstrably and consistently priced higher on OpenBookings than on the Host's own direct channels or other platforms without justification, OpenBookings reserves the right to contact the Host to discuss the issue and, where unresolved, to delist the relevant Listings.
+
+### 2.5 Digital Services Act Compliance
+
+OpenBookings operates as an online intermediary under the EU Digital Services Act (DSA). The Host acknowledges that:
+
+- OpenBookings may receive notices of allegedly illegal or inaccurate content from third parties or authorities;
+- OpenBookings will forward such notices to the Host and the Host must respond within five (5) business days;
+- Failure to respond may result in the temporary removal of the affected Listing, without prejudice to other remedies under Section 8.
+
+### 2.6 Ranking Transparency
+
+In accordance with the EU Platform-to-Business Regulation (EU) 2019/1150 ("P2B Regulation"), OpenBookings discloses the main parameters that determine the ranking of Listings in search results:
+
+- **Eligibility.** A Listing is shown when it is published, lies within 250 km of the place the Guest searched for, and has a room available that suits the Guest's dates and party.
+- **Default order ("Recommended").** Eligible Listings are ordered by the total price of their cheapest suitable room for the Guest's search, lowest first.
+- **Guest-chosen order.** Guests may instead sort results by price from highest to lowest.
+
+No other parameters affect ranking. OpenBookings does not offer paid placement or any other way to buy a higher ranking, and does not receive remuneration from Hosts or third parties in exchange for ranking. If this changes, OpenBookings will amend this Section in accordance with Section 11.2 before the change takes effect.
+
+### 2.7 Account Security
+
+The Host is responsible for maintaining the security of its Platform account. The Host must:
+
+- Keep login credentials confidential and not share account access with unauthorised persons;
+- Implement reasonable access controls for any staff members granted access to the Host's account, using the team roles available in the business portal;
+- Notify OpenBookings immediately at [security@openbookings.co](mailto:security@openbookings.co) upon becoming aware of any actual or suspected unauthorised access to, or compromise of, the Host's account;
+- Cooperate fully with any security investigation initiated by OpenBookings in connection with the Host's account.
+
+OpenBookings is not liable for losses arising from unauthorised account access where the Host has failed to maintain adequate credential security. The Host remains liable for all activity conducted through its account unless it can demonstrate that such activity resulted from a breach attributable to OpenBookings' systems.
+
+### 2.8 Messages
+
+Guests and the Host can exchange messages through the Platform. To protect Guests and the Platform, OpenBookings runs automated checks on messages, for example to detect attempts to take payment or bookings outside the Platform, and may hide part of a message, show a warning, or hold a message for review by a person. The Host must not ask a Guest to pay for a Booking, or to rebook a stay, outside the Platform.
+
+</Section>
+
+<Section id="bookings" number="3" title="Bookings, Cancellations and No-Shows">
+
+### 3.1 Booking Confirmation
+
+A Booking is confirmed when the Guest's payment into the Host's Stripe Account succeeds. OpenBookings notifies the Host of each confirmed Booking by email and shows it in the business portal.
+
+### 3.2 Host Acceptance
+
+By maintaining active Listings with available inventory, the Host grants standing acceptance of Bookings that match the published rates and availability. The Host may not unilaterally cancel a confirmed Booking except in the limited circumstances described in Section 3.4.
+
+### 3.3 Cancellation Policy
+
+Cancellations are governed by Annex B. Each Booking is subject to the Cancellation Policy Tier, and to whether the rate is Non-refundable, as shown to the Guest at the moment of booking. A change to the Host's Tier or rates applies only to Bookings made after the change.
+
+OpenBookings applies the Cancellation Policy on the Host's behalf. When a Guest cancels through the Platform, OpenBookings calculates the refund under Annex B and executes it straight away, without further approval from the Host (see Section 5.1).
+
+### 3.4 Host-Initiated Cancellations
+
+Host-initiated cancellation of a confirmed Booking is a material breach of this Agreement, except where a Force Majeure Event (as defined in Section 11.10) prevents the Host from honouring the Booking. Where the Host cancels a Booking:
+
+- The Guest receives a full refund of the total price paid, from the Host's Stripe Account, regardless of the Cancellation Policy Tier;
+- OpenBookings returns its full Commission on the Booking in accordance with Section 4.3;
+- The cancellation is recorded against the Host's account. Repeated cancellations may lead to enforcement under Section 8.
+
+No separate cancellation fee is charged. Where the Host relies on a Force Majeure Event, the Host must notify OpenBookings in writing as soon as reasonably practicable and provide reasonable supporting evidence. OpenBookings will determine in good faith whether the circumstances qualify.
+
+### 3.5 No-Shows
+
+Where a Guest fails to arrive for a confirmed Booking (a No-Show):
+
+- The Host may mark the Booking as a No-Show in the business portal once its check-in window on the arrival day has closed, and no later than twenty-four (24) hours after the booked check-out time;
+- No amount is refunded to the Guest, including Tourist Tax (Annex B, B.5.1);
+- The Host keeps the full amount paid, and the Commission on the Booking stands;
+- A Booking marked as a No-Show cannot be reviewed by the Guest.
+
+### 3.6 Overbooking & Relocation
+
+The Host bears the full risk of overbooking. Where the Host is unable to accommodate a Guest holding a confirmed Booking:
+
+- The Host must notify the Guest and OpenBookings without delay, and use its best endeavours to source alternative accommodation of equivalent or higher standard, at the Host's own cost and at no additional cost to the Guest;
+- Any relocation, transport, or other costs, and any claims by the Guest, are for the Host's account;
+- If the Booking is not honoured, it is a Host-initiated cancellation under Section 3.4, and the Guest receives a full refund of the total price paid.
+
+OpenBookings has no obligation to arrange or pay for alternative accommodation.
+
+</Section>
+
+<Section id="payments" number="4" title="Payments, Commission and Taxes">
+
+### 4.1 Payments
+
+The Guest pays the Host directly. The accommodation contract is entered into directly between the Guest and the Host, and the Host is the merchant of record for all accommodation services provided. OpenBookings takes Bookings and applies the Host's Cancellation Policy on the Host's behalf, but is not a party to the accommodation contract.
+
+Each Booking is paid in full at the time of booking, through a Stripe direct charge on the Host's Stripe Account. The Host acknowledges that:
+
+- OpenBookings never receives, holds, or controls Guest payments. Funds are paid into the Host's Stripe Account and are subject to the Host's own agreement with Stripe;
+- Payouts from the Host's Stripe Account to the Host's bank account follow the payout schedule the Host sets in its own Stripe Dashboard. OpenBookings does not initiate, delay, or withhold payouts;
+- Stripe charges its payment processing fees, and any dispute fees, directly to the Host under the Host's agreement with Stripe. These fees are not OpenBookings' revenue, and OpenBookings adds no markup to them;
+- The Host must maintain a connected and verified Stripe Account in good standing.
+
+Pay-at-Property Extras are the only part of a stay that is not paid through the Platform. Their price is calculated and shown to the Guest at booking, and the Guest pays it to the Host at the property. The Host must not charge more than the price shown.
+
+OpenBookings charges Guests no booking or service fees.
+
+### 4.2 Commission
+
+The Host pays OpenBookings a Commission on each Booking. The Commission is **4.5% of the Accommodation Price**, unless a different rate for a property has been agreed with OpenBookings in writing.
+
+- The Commission is never charged on Tourist Tax or on Pay-at-Property Extras;
+- The Commission is calculated per Booking and rounded to the nearest cent (half a cent rounds up);
+- The Commission is taken automatically as a Stripe application fee at the moment the Guest pays;
+- The Commission rate and amount are fixed on each Booking when it is made. A change of rate never applies to existing Bookings.
+
+The Commission includes any VAT due on it (see Section 4.4). OpenBookings may change the Commission rate by giving at least thirty (30) days' written notice in accordance with Section 11.2.
+
+### 4.3 Commission on Refunds and Disputes
+
+When a Booking is refunded in whole or in part, OpenBookings returns its Commission in the same proportion as the refunded part of the Accommodation Price bears to the full Accommodation Price. For example, if the Guest gets 80% of the Accommodation Price back, OpenBookings returns 80% of its Commission. Tourist Tax is never part of this proportion: a refund of Tourist Tax alone returns no Commission, and Tourist Tax in a refund does not increase the Commission returned. A full refund of the Accommodation Price returns the full Commission. Refunds the Host makes outside OpenBookings, directly in its own Stripe Dashboard (Section 5.1), return no Commission. A dispute the Host loses (Section 5.3) does not show which part was Accommodation Price and which part was Tourist Tax; for a lost dispute, OpenBookings returns its Commission in the same proportion as the amount lost bears to the full amount the Guest paid, and never more than the full Commission. Stripe does not return its processing fee on a refunded payment; that fee remains with the Host.
+
+### 4.4 Commission Invoices
+
+OpenBookings issues one Commission Invoice per calendar month (Europe/Amsterdam time), covering the Commission on Bookings paid in that month and any Commission returned in that month. The Commission Invoice:
+
+- Is issued after the month closes and by the 15th day of the following month at the latest, and is emailed to the billing email address in the Host's billing details;
+- Is marked as paid, because the Commission was already taken at the moment of payment. Nothing further is payable;
+- Includes 21% Dutch VAT in the Commission for Hosts established in the Netherlands. For Hosts established in another EU member state with a valid VAT number, VAT is reverse charged and the Host accounts for it in its own country;
+- Comes with a specification of each Booking (reference, payment date, stay dates, Accommodation Price, Commission and Stripe payment), without Guest names;
+- Becomes a credit note when the Commission returned in a month exceeds the Commission taken.
+
+No Commission Invoice is issued for a month without Bookings or refunds.
+
+### 4.5 Platform Records
+
+The systems and records of OpenBookings (including the business portal, Commission Invoices, and email confirmations), together with the records of Stripe, shall constitute prima facie evidence of the existence and value of Bookings and the Commission due, unless the Host provides reasonable and credible counter-evidence. The Host must raise any objection to a Commission Invoice within thirty (30) days of receiving it.
+
+### 4.6 Rates and Taxes
+
+The Host is solely responsible for all taxes applicable to its accommodation services, including VAT, tourist taxes, and local levies, and for paying them to the competent authorities.
+
+- **Rates include VAT.** The Host enters every rate including VAT and any mandatory fees, and confirms this on record before rates can be published. OpenBookings does not add VAT to the Host's rates.
+- **Tourist Tax is added on top.** The Host sets up its tourist tax rules in the business portal. OpenBookings calculates the Tourist Tax from those rules, and adds it to the price shown to the Guest as a separate line. The Guest pays it into the Host's Stripe Account together with the Accommodation Price; OpenBookings never holds it. The Host is responsible for keeping its rules correct and for paying the Tourist Tax to the municipality.
+- **DAC7.** OpenBookings is a platform operator under Council Directive (EU) 2021/514 (DAC7). The Host must provide the information OpenBookings needs to meet its reporting obligations, such as its tax identification number and registered address, and OpenBookings reports it to the Dutch Tax Administration as required.
+
+### 4.7 Amounts Owed by the Host
+
+Where the Host owes OpenBookings an amount under this Agreement that was not taken as an application fee, OpenBookings invoices it and the Host pays it within thirty (30) days of the invoice date. OpenBookings does not deduct amounts from Guest payments or from the Host's payouts.
+
+</Section>
+
+<Section id="refunds" number="5" title="Refunds and Disputes">
+
+### 5.1 Refunds
+
+Every refund to a Guest is paid from the Host's Stripe Account to the Guest's original payment method, and is executed by OpenBookings on the Host's behalf through Stripe. OpenBookings never pays a refund from its own funds. A refund can arise in the following ways:
+
+- **Under the Cancellation Policy.** Where Annex B requires a refund (for example a cancellation before the Cancellation Deadline, an early departure, or Tourist Tax for nights not stayed), OpenBookings executes it straight away, without further approval from the Host;
+- **By the Host.** The Host may cancel a Booking (Section 3.4), record an early departure, or give a goodwill refund of any amount up to what is left on the Booking, through the business portal. The Host may always refund more than Annex B requires, never less;
+- **By OpenBookings on defined grounds.** OpenBookings may issue a refund without the Host's approval where: (i) the booked room or a suitable equivalent is not available at check-in; (ii) the property is closed or not operating; (iii) the room or property differs materially from the Listing; or (iv) the Host's conduct breaches a Platform policy that has a defined refund remedy. OpenBookings will review each such claim, tell the Host the ground relied on, and refund only the affected nights where that is sufficient.
+
+The Host should make refunds through the business portal, so that each refund shows which part is Accommodation Price and which part is Tourist Tax. Refunds the Host makes directly in its own Stripe Dashboard happen outside OpenBookings: they return no Commission (Section 4.3), OpenBookings records them, and OpenBookings may ask the Host to explain them. The Host remains responsible for the Tourist Tax on such refunds, including any correction with the municipality. If the balance of the Host's Stripe Account is insufficient for a refund, Stripe's rules for negative balances apply to the Host.
+
+### 5.2 Stripe Fees on Refunds
+
+Stripe does not return the original processing fee on a refunded payment. That fee is borne by the Host.
+
+### 5.3 Disputes and Chargebacks
+
+Because Guest payments are made into the Host's Stripe Account, a dispute or chargeback raised by a Guest's card issuer is raised against the Host's Stripe Account:
+
+- Stripe notifies the Host and shows the dispute in the Host's Stripe Dashboard, with the deadline for a response;
+- The Host is responsible for responding and submitting evidence (for example the Booking confirmation, the Cancellation Policy shown, and messages with the Guest) in its Stripe Dashboard. OpenBookings does not decide disputes and does not respond to them on the Host's behalf;
+- If a dispute is lost, Stripe takes the disputed amount and its dispute fee from the Host's Stripe Account, and OpenBookings returns its Commission on the disputed amount in accordance with Section 4.3. The Host remains responsible for the Tourist Tax on any disputed amount.
+
+On request, OpenBookings will provide the Host with the Booking records it holds that may help the Host respond.
+
+</Section>
+
+<Section id="content" number="6" title="Content Accuracy and Host Responsibilities">
+
+### 6.1 Host Responsibility for Content
+
+The Host is solely responsible for the accuracy, completeness, and legality of all Content submitted to the Platform, including property descriptions, photographs, amenity listings, pricing, availability, tourist tax rules, and any health, safety, or accessibility information relevant to Guests.
+
+### 6.2 No Verification Obligation
+
+OpenBookings does not verify Content prior to publication and assumes no responsibility for inaccurate or misleading Content submitted by the Host. However, OpenBookings maintains notice-and-action procedures in compliance with the Digital Services Act.
+
+### 6.3 Content Dispute Process
+
+Where a Guest or third party raises a substantiated complaint regarding the accuracy of a Listing, OpenBookings will notify the Host in writing. The Host must respond within five (5) business days with either a correction or a written explanation. Failure to respond may result in suspension of the relevant Listing under Section 8.
+
+### 6.4 Host Warranties
+
+The Host warrants that all Content: (i) is accurate and not misleading at the time of submission; (ii) does not infringe the intellectual property rights of any third party; (iii) complies with applicable advertising and consumer protection laws, including those of the Netherlands and the European Union; and (iv) does not contain illegal, defamatory, or offensive material.
+
+### 6.5 Guest Reviews
+
+Guests may review stays booked through the Platform. The Host acknowledges that:
+
+- A review opens twenty-four (24) hours after the booked check-out time and stays open for thirty (30) days. Cancelled Bookings and Bookings marked as a No-Show cannot be reviewed;
+- A review is a score from 1 to 10 and, optionally, a text. It is published on the Listing with the Guest's first name, country, month of stay, and the room stayed in. The Host cannot approve, hold, or remove reviews;
+- Reviews, Host replies and Guest answers must follow the review rules published at [openbookings.co/legal/review-rules](https://openbookings.co/legal/review-rules). When submitted, their text is checked automatically: first for contact details and links, then with the help of a provider based in the EU, which receives the text only, never the score or the author. Text that appears to break a rule, or that could not be checked, is held until a person at OpenBookings decides. If no one has decided within seventy-two (72) hours, it is published with the parts that appear to break a rule replaced by "[removed]", and OpenBookings may still remove it afterwards;
+- OpenBookings decides whether held or reported content is kept as written or removed, and never edits anyone's words. OpenBookings never removes a review for its score, or because it is negative: only for breaking the review rules. The author of removed content is told the rule broken and how to object. A Guest whose review was removed may write it once more while the review is still open;
+- The Host may reply publicly to a review. The Guest may answer that reply once and the Host may respond once more, after which the conversation closes;
+- A Guest may delete their own review at any time. Reviews are published under a licence from the Guest to OpenBookings to display them on the Platform. The Host may not reproduce Guest reviews published on the Platform for any external purpose without OpenBookings' prior written consent;
+- The Host shall not directly or indirectly manipulate or attempt to manipulate Guest reviews, including by offering incentives for positive reviews, posting false reviews, or pressuring Guests. Any breach of this obligation constitutes a termination event under Section 8.3;
+- The Host may report a review that it considers breaches the review rules, using **Report** on the review in **Reviews** in the business dashboard. A reported review stays visible while OpenBookings assesses it. OpenBookings will assess it within a commercially reasonable time and tell the Host the outcome;
+- OpenBookings is a distributor and not a publisher of Guest reviews and shall not be liable for the content of reviews displayed in compliance with applicable law.
+
+### 6.6 Insurance
+
+The Host shall maintain at its own cost throughout the term of this Agreement: (i) public liability insurance in an amount appropriate for the nature and scale of its accommodation operations (and in any event not less than EUR 1,000,000 per occurrence); and (ii) any other insurance required by applicable law or regulation. The Host shall provide OpenBookings with evidence of such insurance upon request.
+
+### 6.7 Compliance with Applicable Law
+
+The Host is responsible for ensuring that the accommodation offered complies with all applicable local, national, and EU regulations, including licensing, fire safety, accessibility, and data protection requirements. The Host shall not sell or offer for sale through the Platform any package within the meaning of Directive (EU) 2015/2302 on package travel and linked travel arrangements (the "Package Travel Directive") without OpenBookings' prior written approval.
+
+</Section>
+
+<Section id="intellectual-property" number="7" title="Intellectual Property and Brand Usage">
+
+### 7.1 OpenBookings IP
+
+All intellectual property rights in the Platform's design, trademarks, and brand assets, including the OpenBookings name and logo, are owned by OpenBookings B.V. Nothing in this Agreement transfers any IP rights to the Host.
+
+### 7.2 Open-Source Codebase
+
+The OpenBookings software is made available under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). The open-source licensing of the codebase is entirely separate from and does not affect the commercial terms of this Agreement. The Host does not acquire any rights under the AGPL-3.0 through entering into this Agreement, and the AGPL-3.0 does not grant any right to use the OpenBookings trademarks.
+
+### 7.3 Nominative Use
+
+The Host is permitted to refer to OpenBookings by name in a factually accurate manner, for example: "Book via OpenBookings" or "Available on OpenBookings". Such nominative use is permitted without prior written consent.
+
+### 7.4 Prohibited Brand Usage
+
+Without OpenBookings' prior written consent, the Host must not: (i) use the OpenBookings logo, wordmark, or visual brand assets in any marketing material; (ii) use the OpenBookings name in a manner that implies endorsement, partnership, or affiliation beyond the standard marketplace relationship; or (iii) register any domain name, social media handle, or business name that includes "OpenBookings" or any confusingly similar term.
+
+### 7.5 Content Licence
+
+By submitting Content to the Platform, the Host grants OpenBookings a worldwide, royalty-free, non-exclusive licence to use, reproduce, display, and distribute the Content for the purposes of: (i) operating and promoting the Platform; (ii) distributing Listings to third-party channels, including metasearch engines and affiliate partners; and (iii) marketing and promotional activities related to the Platform.
+
+This licence survives termination of the Agreement in respect of Content already distributed to third-party channels, until such Content is removed from those channels in the ordinary course.
+
+</Section>
+
+<Section id="termination" number="8" title="Suspension, Delisting and Termination">
+
+### 8.1 Staged Enforcement
+
+OpenBookings operates a staged enforcement model for Host compliance failures. Unless the circumstances warrant immediate action under Section 8.3, enforcement escalates as follows:
+
+| Stage | Label | Action & Trigger |
+|-------|-------|-----------------|
+| 1 | Notify | Written notice identifying the compliance failure and requiring remediation within a specified period (minimum 5 business days unless urgent). |
+| 2 | Delist | Removal from search results and new Booking acceptance. Existing confirmed Bookings remain active. Applies after failed Stage 1 remediation. |
+| 3 | Suspend | Full suspension of account and all Listings. Existing Bookings are handled with OpenBookings support to protect Guests. |
+| 4 | Terminate | Termination of this Agreement in accordance with Section 8.4. |
+
+In accordance with the P2B Regulation, OpenBookings gives the Host a statement of reasons for any restriction, suspension, or termination, and the Host may contest it through the escalation process in Section 10.2.
+
+### 8.2 Termination by Notice
+
+Either Party may terminate this Agreement by providing thirty (30) days' written notice to the other Party. OpenBookings will provide notice via the registered email address associated with the Host's account. The Host must send any notice of termination to [legal@openbookings.co](mailto:legal@openbookings.co) (or such other address as OpenBookings notifies to the Host from time to time). Termination does not affect the rights and obligations of the Parties in respect of confirmed Bookings with a checkout date falling within or after the notice period.
+
+### 8.3 Immediate Termination
+
+OpenBookings may terminate this Agreement with immediate effect, without prior notice, in the event of:
+
+- Fraud, dishonesty, or material misrepresentation by the Host;
+- A material breach of this Agreement that is not capable of remedy, or that the Host fails to remedy within five (5) business days of notice;
+- The Host's engagement in illegal activity in connection with the Platform;
+- Manipulation or attempted manipulation of Guest reviews;
+- A GDPR or data protection violation that poses a risk to Guest data;
+- Insolvency, bankruptcy, or equivalent proceedings affecting the Host.
+
+### 8.3A Investigation Rights
+
+Where OpenBookings has reasonable grounds to suspect fraud, money laundering, illegal activity, or a material breach of this Agreement, OpenBookings may, without prior notice and pending the outcome of an investigation:
+
+- Suspend the Host's account and all Listings;
+- Cancel Bookings where necessary to protect Guests, with a full refund to the Guest from the Host's Stripe Account;
+- Request the Host to provide information and documentation relevant to the investigation within a specified timeframe.
+
+OpenBookings will conduct any investigation promptly and in good faith. If the investigation concludes that no breach occurred, the Host's account will be reinstated. If the investigation confirms a breach, OpenBookings may proceed to termination under Section 8.3. The exercise of rights under this Section does not constitute a breach of this Agreement by OpenBookings.
+
+### 8.4 Effect of Termination
+
+Upon termination of this Agreement:
+
+- All Listings will be delisted immediately and no new Bookings can be made;
+- The Host must honour all confirmed Bookings with a checkout date after the termination date, unless OpenBookings agrees otherwise in writing or the Host is subject to insolvency proceedings. Sections 3, 4 and 5 remain operative to the extent necessary to govern such Bookings, including refunds under Annex B;
+- OpenBookings will issue a final Commission Invoice for the last month in which Commission was taken or returned;
+- Any accrued but unpaid amounts and outstanding refund obligations survive termination;
+- Sections 4, 5, 6, 7, 9, 10, 11.4 and 11.5 survive termination.
+
+### 8.5 Assignment & Change of Ownership
+
+Neither Party may assign, transfer, or novate any of its rights or obligations under this Agreement without the prior written consent of the other Party, not to be unreasonably withheld.
+
+Where the Host's accommodation (meaning the property) undergoes a change of legal ownership or operator, the Host must notify OpenBookings in writing no less than fourteen (14) days prior to the effective date of such change. The new owner or operator may, with OpenBookings' consent, assume this Agreement. The outgoing Host remains liable for all obligations, claims, and liabilities accrued prior to the change. Guest reviews associated with the Listing may, at OpenBookings' discretion, be transferred to the new operator.
+
+Any purported assignment in breach of this Section is void.
+
+</Section>
+
+<Section id="liability" number="9" title="Liability and Indemnification">
+
+### 9.1 Exclusion of Consequential Damages
+
+Neither Party shall be liable to the other for any indirect, incidental, special, exemplary, or consequential damages arising out of or in connection with this Agreement, including loss of revenue, loss of profit, loss of data, or loss of business opportunity, even if advised of the possibility of such damages.
+
+### 9.2 Cap on OpenBookings' Liability
+
+To the maximum extent permitted by applicable law, OpenBookings' aggregate liability to the Host in connection with this Agreement, howsoever arising, is limited to the total Commission earned from that Host in the twelve (12) months preceding the event giving rise to the claim.
+
+### 9.3 Host Indemnification
+
+The Host agrees to indemnify, defend, and hold harmless OpenBookings, its directors, employees, contractors, and agents from and against any and all claims, damages, losses, liabilities, costs, and expenses (including reasonable legal fees) arising out of or related to:
+
+- The Host's Content, including any inaccuracy, illegality, or infringement of third-party rights;
+- The Host's breach of any warranty, representation, or obligation under this Agreement;
+- Any claim by a Guest arising from the Host's accommodation services, including personal injury, property damage, misrepresentation, or overbooking;
+- Any claim arising from or related to the Package Travel Directive where the Host has offered packages without OpenBookings' prior written approval;
+- The Host's violation of any applicable law or regulation, including tax obligations;
+- A GDPR or data protection violation caused by the Host;
+- Manipulation of Guest reviews by the Host.
+
+### 9.4 Exceptions
+
+The exclusions and limitations in this Section 9 do not apply to: (i) liability arising from gross negligence or wilful misconduct; (ii) death or personal injury caused by negligence; or (iii) any liability that cannot be excluded or limited under applicable Dutch or EU law.
+
+</Section>
+
+<Section id="disputes" number="10" title="Governing Law and Dispute Resolution">
+
+### 10.1 Governing Law
+
+This Agreement is governed by and shall be construed in accordance with the laws of the Kingdom of the Netherlands, without regard to its conflict of law principles.
+
+### 10.2 Escalation Process
+
+In the event of a dispute arising out of or in connection with this Agreement, the Parties agree to the following escalation process before commencing court proceedings:
+
+- **Written Notice:** The disputing Party provides written notice identifying the dispute in sufficient detail. The other Party must acknowledge receipt within five (5) business days.
+- **Good Faith Negotiation:** The Parties must engage in good faith negotiation for thirty (30) days from the written notice (or such longer period as agreed in writing).
+- **Mediation:** If unresolved, either Party may refer the dispute to mediation under the rules of the Mediators Federation Netherlands (MfN — Mediatorsfederatie Nederland), conducted in English in Amsterdam. Costs are split equally.
+- **Court Proceedings:** If mediation fails or is refused, the Parties submit to the exclusive jurisdiction of the competent courts in Amsterdam.
+
+### 10.3 Carve-Outs
+
+The escalation process in Section 10.2 does not apply to, and either Party may seek immediate court relief in respect of: (i) fraud or fraudulent misrepresentation; (ii) a material breach causing or threatening irreparable harm; (iii) a GDPR or data protection infringement; (iv) infringement of intellectual property rights; or (v) any situation where a Party seeks injunctive or urgent interim relief.
+
+### 10.4 Language
+
+This Agreement is executed in English, which is the sole authoritative version. Machine-translated versions may be made available for convenience only and will prominently state that the English version is authoritative. In the event of any conflict between a translation and the English version, the English version prevails.
+
+</Section>
+
+<Section id="general" number="11" title="General Provisions">
+
+### 11.1 Entire Agreement
+
+This Agreement (including all Annexes) constitutes the entire agreement between the Parties with respect to its subject matter and supersedes all prior agreements, arrangements, representations, and understandings relating to such subject matter, including the Partner Agreement v1.2. Neither Party has relied on any representation, warranty, or undertaking not expressly set out in this Agreement.
+
+### 11.2 Amendments
+
+OpenBookings may amend this Agreement by providing written notice to the Host with a minimum notice period of fifteen (15) days before the proposed changes take effect, in compliance with the P2B Regulation. A change to the Commission rate requires at least thirty (30) days' notice (Section 4.2).
+
+Notice of amendments will be provided by email to the Host's registered address. If the Host does not accept the proposed amendments, it may terminate this Agreement by written notice before the effective date of the changes. The amended Agreement is published in the business portal, and the Host may be asked to accept it there. Continued use of the Platform after the effective date constitutes acceptance.
+
+OpenBookings may make changes without the foregoing notice period where: (i) required to do so by a legal or regulatory obligation; or (ii) the change is purely administrative and does not adversely affect the Host.
+
+### 11.3 Audit Rights
+
+OpenBookings reserves the right, on reasonable written notice and no more than once per calendar year (unless a material breach is reasonably suspected), to audit or instruct a third party to audit the Host's records to the extent reasonably necessary to: (i) verify Commission accuracy; (ii) assess compliance with this Agreement; or (iii) fulfil any legal or reporting obligation of OpenBookings.
+
+The Host shall cooperate fully with any such audit and provide access to relevant records, premises, and personnel. OpenBookings shall bear the cost of any audit unless it reveals a material breach by the Host, in which case the Host shall bear reasonable audit costs. The auditor shall be bound by confidentiality obligations no less protective than those in Section 11.4.
+
+### 11.4 Confidentiality
+
+"Confidential Information" means any non-public information disclosed by one Party (the "Disclosing Party") to the other (the "Receiving Party") in connection with this Agreement, including but not limited to booking volumes, financial data, technical systems, pricing strategies, and personal data of Guests or Hosts. The standard Commission rate and the text of this Agreement are not Confidential Information.
+
+Each Party agrees to: (i) keep all Confidential Information strictly confidential; (ii) use Confidential Information solely for the purposes of performing its obligations under this Agreement; (iii) disclose Confidential Information only to those of its personnel and advisors who have a need to know and are bound by obligations of confidentiality no less protective than this Section; and (iv) upon termination of this Agreement or at the Disclosing Party's written request, promptly return or destroy all Confidential Information, except where retention is required by law.
+
+Confidential Information does not include information that: (i) is or becomes publicly known without breach of this Agreement; (ii) was lawfully known to the Receiving Party prior to disclosure; (iii) is received from a third party without restriction; or (iv) is required to be disclosed by law, court order, or competent authority (provided the Receiving Party gives prompt prior notice to the Disclosing Party where legally permitted).
+
+### 11.5 Anti-Bribery, Sanctions & Financial Crime
+
+Each Party warrants that it will, and will procure that its directors, employees, agents, and representatives will, in connection with this Agreement:
+
+- Comply with all applicable anti-bribery and anti-corruption laws, including the Dutch Criminal Code (Wetboek van Strafrecht), the UK Bribery Act 2010, the U.S. Foreign Corrupt Practices Act, and any other applicable laws;
+- Comply with applicable anti-money laundering requirements, including the Dutch Anti-Money Laundering and Counter-Terrorist Financing Act (Wwft);
+- Not engage in any activity that constitutes money laundering, terrorist financing, or the facilitation of tax evasion;
+- Comply with all applicable sanctions requirements, including those established by the United Nations, the European Union, the Dutch government, and any other authority with jurisdiction over the Parties;
+- Not deal with any person or entity that is listed on any applicable sanctions list or is ordinarily resident in or organised under the laws of a sanctioned jurisdiction.
+
+Each Party shall immediately notify the other upon becoming aware of any actual or suspected breach of this Section. OpenBookings may immediately terminate this Agreement upon a confirmed or reasonably suspected breach of this Section by the Host.
+
+### 11.6 Electronic Acceptance
+
+The Host accepts this Agreement electronically through the OpenBookings business portal. Electronic acceptance constitutes a legally binding signature pursuant to Article 6:227a of the Dutch Civil Code (Burgerlijk Wetboek). The version of this Agreement accepted, the timestamp, the Host account identifier, the name and role of the person accepting, and the IP address recorded in the OpenBookings platform at the time of acceptance constitute prima facie evidence of the Host's acceptance of the terms of this Agreement. The accepted version remains available to the Host in the business portal.
+
+### 11.7 Notices
+
+Any notice required or permitted under this Agreement shall be given in writing. Notices from OpenBookings to the Host shall be sent to the registered email address associated with the Host's account. Notices from the Host to OpenBookings shall be sent by email to [legal@openbookings.co](mailto:legal@openbookings.co) (or such other address as OpenBookings notifies from time to time), and shall be deemed received upon confirmed delivery to that address. Either Party may update its designated notice address by written notice to the other Party.
+
+### 11.8 Severability
+
+If any provision of this Agreement is found to be invalid, unlawful, or unenforceable, it shall be deemed modified to the minimum extent necessary to make it valid and enforceable. If such modification is not possible, the relevant provision shall be deemed deleted. Such modification or deletion shall not affect the validity and enforceability of the remaining provisions.
+
+### 11.9 Waiver
+
+No failure or delay by either Party in exercising any right under this Agreement shall operate as a waiver of that right. No single or partial exercise of any right shall preclude any other or further exercise of that right or the exercise of any other right.
+
+### 11.10 Force Majeure
+
+Neither Party shall be liable to the other for any delay or failure to perform its obligations under this Agreement to the extent that such delay or failure is caused by a **"Force Majeure Event"**, meaning an event or circumstance beyond the affected Party's reasonable control that could not have been foreseen or avoided by the exercise of reasonable care, including but not limited to: natural disasters (earthquake, flood, storm, fire); pandemics or epidemic disease declared by a competent public authority; government-imposed travel restrictions or border closures; acts of war, armed conflict, or terrorism; civil unrest or strikes affecting the affected Party's operations; or failure of third-party infrastructure or internet services beyond the affected Party's control (including outages by Stripe, hosting, or other critical service providers).
+
+The affected Party must: (i) notify the other Party in writing as soon as reasonably practicable upon becoming aware of a Force Majeure Event, describing the event and its expected duration; (ii) use reasonable endeavours to mitigate the impact and resume performance as soon as possible; and (iii) provide reasonable evidence of the Force Majeure Event upon request.
+
+Obligations suspended by a Force Majeure Event resume as soon as the event ceases. If a Force Majeure Event continues for more than thirty (30) days, either Party may terminate this Agreement on written notice, without liability, except in respect of payment obligations already accrued. A Force Majeure Event does not excuse payment obligations for services already rendered, and does not change a Guest's entitlements under Annex B.
+
+</Section>
+
+<Panel>
+
+This Agreement is accepted electronically through the OpenBookings business portal, as set out in Section 11.6. By accepting, the person accepting confirms that they have read, understood, and agree to be bound by this Agreement, and that they are authorised to accept it on behalf of the Host.
+
+</Panel>
+
+<Section id="annex-a" title="Annex A: Data Sharing Arrangement">
+
+### A.1 Background & Scope
+
+This Data Sharing Arrangement ("Data Annex") forms part of the Host Agreement between OpenBookings B.V. and the Host and governs the exchange and processing of personal data in connection with the Platform. Each Party processes personal data as an independent Data Controller under the GDPR, Regulation (EU) 2016/679, and this Annex sets out the terms on which they share personal data and the restrictions that apply to each Party's use of that data.
+
+The governing law of this Annex is the law of the Kingdom of the Netherlands, and any disputes arising from this Annex shall be subject to the exclusive jurisdiction of the competent courts in Amsterdam, except where mandatory applicable law requires otherwise.
+
+### A.2 Roles of the Parties
+
+Each Party processes personal data as an independent and autonomous Data Controller in accordance with the GDPR. Neither Party processes personal data on behalf of the other. The Parties have not jointly determined the purposes and means of any processing of personal data in the context of this Agreement.
+
+The following table describes the data categories, the Party acting as independent controller, and the permitted processing purposes:
+
+| Data Category | Independent Controller | Permitted Purpose(s) |
+|--------------|----------------------|---------------------|
+| Guest booking data shared with the Host (name, email address, phone number and address where the Guest provided them, party composition, stay details, messages with the Host, payment reference) | Host | Booking fulfilment, check-in processing, communication about the stay, legally required record-keeping |
+| Guest account, booking, message, and review data held on the Platform | OpenBookings | Operating the Platform, applying Cancellation Policies, support, fraud prevention, legal obligations |
+| Platform usage data (account activity, and analytics where consent was given) | OpenBookings | Platform operation, security, product improvement |
+| Host business data (legal and billing details, KvK and VAT numbers, tax details for DAC7, team members) | OpenBookings | Account administration, Commission Invoices, legal compliance and reporting, identity verification |
+
+### A.3 Guest Data Restrictions
+
+The Host agrees that Guest personal data received through the Platform:
+
+- May only be used for the purpose of fulfilling the relevant Booking, including check-in, stay management, and legally required record-keeping;
+- May not be used for direct marketing or any purpose beyond booking fulfilment without explicit consent from the Guest, which the Host must obtain independently;
+- Must be deleted or anonymised within twelve (12) months of the Booking checkout date, unless a longer retention period is required by applicable law (e.g. Dutch tax or accounting obligations, or a guest register required by local law);
+- Must be processed in accordance with the GDPR and, where applicable, local data protection law.
+
+### A.4 OpenBookings Service Providers
+
+OpenBookings engages third-party service providers to run the Platform, including Stripe (payments), Lettermint (transactional email), Neon (database), Scaleway (hosting), Cloudflare (content delivery, security, and real-time messaging), Sentry (error monitoring), PostHog (analytics, only with consent), Algolia (destination search), MapTiler (maps), Upstash (caching and task queues), Chatwoot (support inbox), and Mistral (AI support assistant and review checks). The current list, with the data each receives and where it is processed, is published in section 5 of the OpenBookings [Privacy Policy](https://openbookings.co/legal/en/privacy#sharing). OpenBookings will notify Hosts of material changes to its service providers with thirty (30) days' notice.
+
+### A.5 Data Breach Notification
+
+Each Party must notify the other without undue delay, and in any case within seventy-two (72) hours of becoming aware, of any personal data breach that is likely to affect Guest data. Each Party remains responsible for notifying the Dutch Data Protection Authority (Autoriteit Persoonsgegevens) and affected individuals where it is required to do so as controller, and the Parties will coordinate such notifications in good faith.
+
+### A.6 Data Subject Rights
+
+Requests from Guests exercising GDPR data subject rights (access, erasure, portability, etc.) received by the Host in relation to Platform Bookings that concern data held by OpenBookings must be forwarded to OpenBookings within five (5) business days. The Parties will co-operate in good faith to respond to such requests within applicable legal timeframes.
+
+### A.7 International Transfers
+
+Each Party shall ensure that personal data is only transferred to or accessed by recipients outside the European Economic Area in compliance with applicable data protection laws, including by implementing the appropriate transfer mechanisms (such as Standard Contractual Clauses as approved by the European Commission) where required.
+
+</Section>
+
+<Section id="annex-b" title="Annex B: Cancellation Policy Tiers">
+
+### B.1 Scope
+
+**B.1.1** The Host selects one Cancellation Policy Tier in this Annex for the property: Flex or Standard (each a "Tier"). Every refundable Rate Plan follows that Tier. A Rate Plan may instead be offered as Non-refundable, subject to B.4. Custom, modified, or additional cancellation terms are not permitted.
+
+**B.1.2** The Tier forms part of the contract between the Host and the Guest. OpenBookings applies the Tier on the Host's behalf, as set out in the Agreement.
+
+**B.1.3** The Host may change the Tier, or whether a Rate Plan is Non-refundable, at any time. A change applies only to Bookings made after it takes effect. Every Booking remains subject to the Tier shown to the Guest at the moment of booking.
+
+**B.1.4** The Host may always refund more than its Tier requires. The Host may never refund less.
+
+### B.2 Definitions
+
+| Term | Meaning |
+|------|---------|
+| Check-in Time | The check-in time stated in the Booking confirmation, in the property's local time. If none is stated, 15:00 property local time on the arrival date. |
+| Cancellation Deadline | The moment until which the Guest may cancel free of charge, as set by the Tier. |
+| Cancellation Time | The moment the Guest cancels through the Platform, as recorded by the Platform. |
+| Accommodation Price | The price of the booked nights, excluding Tourist Tax and Non-Delivered Services. |
+| Tourist Tax | Any tourist or accommodation tax included in the price paid by the Guest. |
+| Non-Delivered Services | Services included in the price that are not provided because the Guest does not stay (for example cleaning or breakfast). |
+| Unused Night | A booked night after the Guest has left the property early. |
+
+### B.3 The Tiers
+
+| Tier | Cancellation Deadline | Cancelled before the deadline | Cancelled after the deadline |
+|------|----------------------|-------------------------------|------------------------------|
+| **Flex** | 24 hours before Check-in Time | Full refund | No refund of the Accommodation Price |
+| **Standard** | 7 days before Check-in Time | Full refund | No refund of the Accommodation Price |
+| **Non-refundable** | None | — | No refund of the Accommodation Price |
+
+### B.4 Conditions for Non-refundable Rate Plans
+
+**B.4.1** A Non-refundable Rate Plan may be offered on its own, or alongside Rate Plans on the Flex or Standard Tier for the same room type.
+
+**B.4.2** Where, for the same room type and stay, the Host also offers a Rate Plan on the Flex or Standard Tier that is available for booking, the price of the Non-refundable Rate Plan for that stay must be at least 10% lower than the price of at least one such refundable Rate Plan.
+
+**B.4.3** Where both are offered, OpenBookings displays the Non-refundable and refundable Rate Plans side by side. In every case, OpenBookings requires the Guest to select the Non-refundable Rate Plan explicitly before paying.
+
+**B.4.4** OpenBookings may hide or suspend a Non-refundable Rate Plan that does not meet B.4.2 until it does.
+
+### B.5 Rules that apply to every Booking
+
+**B.5.1 No-shows.** If the Guest has not checked in and has not cancelled when the check-in window closes, no amount is refunded, including Tourist Tax and Non-Delivered Services.
+
+**B.5.2 Early departure.** If the Guest leaves before the booked check-out date, the next 7 Unused Nights are not refunded. Any further Unused Nights are refunded in full. Unused Nights are counted from the night after the last night the Guest stayed, as recorded by the Host in the business portal.
+
+**B.5.3 Tourist Tax and Non-Delivered Services.** On every Tier, Tourist Tax and Non-Delivered Services for nights the Guest does not stay are refunded in full, including after an early departure. This does not apply to a no-show (B.5.1).
+
+**B.5.4 Cancellation by the Host.** If the Host cancels a Booking, the Guest receives a full refund of the total price paid, regardless of Tier. The consequences for the Host are set out in Section 3.4 of the Agreement.
+
+**B.5.5 Property unable to provide the stay.** If the booked room or a suitable equivalent is not available, the property is closed or not operating, or the room or property differs materially from the listing, the Guest receives a full refund of the total price paid for the affected nights, regardless of Tier. This is in addition to the refund rights of OpenBookings in Section 5.1 of the Agreement.
+
+**B.5.6 Travel restrictions and declared emergencies.** The Guest receives a full refund of the total price paid, regardless of Tier, if for the booked dates:
+
+- **(a)** a government measure prohibits travel to, or a stay at, the place where the property is located, or prohibits entry into that country for residents of the Guest's country of residence; or
+- **(b)** a competent authority has declared a disaster or emergency at that place that makes the stay impossible or unsafe.
+
+The Guest must request this before the Check-in Time and provide reasonable evidence. A person at OpenBookings reviews each request. Personal circumstances, illness, and disruption of the Guest's own transport are not covered by this clause.
+
+**B.5.7 Commission and fees.** On any refund, OpenBookings returns its Commission in proportion to the part of the Accommodation Price (as defined in Section 1.2 of the Agreement) that is refunded, as set out in Section 4.3 of the Agreement. Tourist Tax is never part of that proportion. Refunds made outside OpenBookings return no Commission, and lost disputes follow Section 4.3. Stripe's processing fee on the original payment is borne by the Host and is not returned.
+
+**B.5.8 Execution.** Refunds required by this Annex are executed by OpenBookings on the Host's behalf from the Host's Stripe Account, without further approval from the Host. Amounts are rounded to the cent in the Guest's favour.
+
+**B.5.9 Display.** Before booking and in the Booking confirmation, OpenBookings shows the Guest the Tier and the Cancellation Deadline as an exact date and time in the property's local time. The Host must not communicate cancellation terms to Guests that conflict with this Annex.
+
+### B.6 Worked examples
+
+A 5-night stay at €100 per night, with €3 Tourist Tax per night (total paid €515).
+
+| Situation | Host retains | Guest refund |
+|-----------|--------------|--------------|
+| Flex, cancelled 2 days before | €0 | €515 |
+| Flex, cancelled 10 hours before | €500 | €15 (Tourist Tax) |
+| Standard, cancelled 10 days before | €0 | €515 |
+| Standard, cancelled 3 days before | €500 | €15 (Tourist Tax) |
+| Non-refundable, cancelled anytime | €500 | €15 (Tourist Tax) |
+| Any Tier, no-show | €515 | €0 |
+| Any Tier, travel ban at destination | €0 | €515 |
+
+Early departure, 10-night stay: the Guest leaves after night 2. Nights 3 to 9 (the next 7 Unused Nights) are retained. Night 10 is refunded in full, plus Tourist Tax for nights 3 to 10.
+
+</Section>
+
+<Section id="annex-c" title="Annex C: Service Level Agreement and Uptime Commitments">
+
+*[ Reserved — to be issued as a subscription tier addendum ]*
+
+This Annex is reserved for future use. Service level commitments and uptime compensation terms will be set out in a subscription tier addendum, which will form part of this Agreement upon execution by both Parties.
+
+Until Annex C is executed, OpenBookings makes no express uptime commitments beyond commercially reasonable efforts to maintain Platform availability, and no compensation is payable for Platform downtime. Hosts are hereby notified that Annex C is not in force at the time of accepting this Agreement.
+
+</Section>

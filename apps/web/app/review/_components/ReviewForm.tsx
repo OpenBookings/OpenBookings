@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { MASKED_TEXT, MODERATION_DEADLINE_HOURS } from '@openbookings/pricing';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,7 @@ export function ReviewForm({ proof, propertyName }: { proof: ReviewFormProof; pr
         <p className="text-white/65">
           {result.status === 'published'
             ? `It's on the ${propertyName} page now. You can delete it from your account at any time.`
-            : "A person looks at it before it is shown. Our automatic check holds a review back when it may break our review rules, or when the check can't run."}
+            : `Our automatic check holds a review back when it may break our review rules, or when the check can't run. A person looks at it. If nobody has decided within ${MODERATION_DEADLINE_HOURS} hours, it's shown with the parts that may break a rule replaced by "${MASKED_TEXT}".`}
         </p>
         <Link href={`/bookings/${proof.bookingId}/review`} className="text-sm text-white/80 underline underline-offset-4 hover:text-white">
           See your review
@@ -109,6 +110,11 @@ export function ReviewForm({ proof, propertyName }: { proof: ReviewFormProof; pr
         </Button>
         <p className="text-[13px] text-white/55">
           Shown with your first name and country, and the month you stayed. Reviews can&apos;t be edited once posted, only deleted.
+          Please follow our{' '}
+          <Link href="/legal/review-rules" className="underline underline-offset-4 hover:text-white">
+            review rules
+          </Link>
+          .
         </p>
       </div>
     </form>

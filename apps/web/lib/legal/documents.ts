@@ -240,8 +240,27 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "terms",
     fallbackLocale: "en",
-    currentVersion: "2026-11-20",
+    currentVersion: "2026-11-27",
     versions: [
+      {
+        version: "2026-11-27",
+        effectiveFrom: "2026-11-27",
+        lastUpdated: "2026-11-27",
+        locales: {
+          en: {
+            status: "translated",
+            load: () => import("@/content/legal/terms/2026-11-27/en.mdx"),
+          },
+          nl: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-11-27/nl.mdx"),
+          },
+          fr: {
+            status: "draft",
+            load: () => import("@/content/legal/terms/2026-11-27/fr.mdx"),
+          },
+        },
+      },
       {
         version: "2026-11-20",
         effectiveFrom: "2026-11-20",
