@@ -1,0 +1,59 @@
+---
+title: Disconnecting and reconnecting
+description: What happens to your rates, availability and bookings when you disconnect SiteMinder, and how to connect again.
+---
+
+*Last updated: 25 November 2026*
+
+## Overview
+
+You can disconnect at any time. Rates, availability and restrictions come back to you in OpenBookings, starting from the last values SiteMinder sent, so nothing reopens at an old price.
+
+## How to disconnect
+
+1. Open **About → CM**.
+2. Under **Disconnect SiteMinder**, select **Disconnect**, then confirm.
+3. In SiteMinder, remove OpenBookings as a channel. Otherwise it keeps sending updates that OpenBookings ignores.
+
+Pricing rules apply again. New bookings, changes and cancellations are no longer sent to SiteMinder.
+
+## What you get back
+
+The values are kept for the next 750 days, or longer if SiteMinder sent anything further ahead. Night by night:
+
+- **Availability** is set to what was left to sell when you disconnected. Nights SiteMinder never sent availability for are set to 0.
+- **Prices** become price overrides labelled *Last value from SiteMinder*. Nights without a price from SiteMinder are closed, as they were while connected. Reopen them in the rates grid when you want to sell them.
+- **Stop-sells, closed to arrival, closed to departure and minimum/maximum stay** become your own restrictions. A SiteMinder *through* stay limit becomes a stay limit for arrivals on that night.
+- Your own overrides, restrictions and room closures on those nights are replaced. Before and after those nights they stay as they were.
+- If SiteMinder never sent anything at all, nothing changes: your own values stay.
+- **Extra-adult and extra-child fees** go back to the amounts in **About → Rooms**.
+
+After disconnecting, check the [rates grid](/business/rates-and-availability/reading-the-grid) and adjust anything you want to change.
+
+## Connecting again
+
+Follow [Connecting SiteMinder](/business/channel-managers/connect-siteminder) again. The hotel code stays the same.
+
+- You get the same choice for bookings made or changed while disconnected: send them, or add them by hand.
+- A booking SiteMinder already has is never sent twice as a new booking. If it changed in between, the change is sent.
+- Every room shows *Not linked in SiteMinder yet* until SiteMinder sends it again. Values from the earlier connection are not reused.
+
+<Callout type="info">
+  Run a **full refresh** of OpenBookings in SiteMinder right after reconnecting, so all rooms are back on sale within minutes.
+</Callout>
+
+## Limitations and warnings
+
+- Bookings made while disconnected only reach SiteMinder if you tick **Send** when you connect again.
+
+---
+
+**In this section:**
+- [Channel managers](/business/channel-managers)
+- [Before you connect](/business/channel-managers/before-you-connect)
+- [Connecting SiteMinder](/business/channel-managers/connect-siteminder)
+- [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder)
+- [Working while connected](/business/channel-managers/working-while-connected)
+- [Bookings and delivery status](/business/channel-managers/bookings-and-delivery)
+- [Disconnecting and reconnecting](/business/channel-managers/disconnecting)
+- [Troubleshooting](/business/channel-managers/troubleshooting)

@@ -1,0 +1,69 @@
+---
+title: Troubleshooting
+description: What to check when a room isn't on sale, a price looks wrong or a booking didn't reach SiteMinder.
+---
+
+*Last updated: 25 November 2026*
+
+## Overview
+
+Most problems come from a room or rate plan that isn't linked in SiteMinder, or from a SiteMinder setting that doesn't match how OpenBookings works. Start with the Channel manager page (**About → CM**): it shows the status, how many rooms are linked and when the last update arrived.
+
+## The page stays on Waiting for SiteMinder
+
+SiteMinder hasn't sent anything yet.
+
+1. In SiteMinder, check that the OpenBookings channel is added with the **Hotel code** from the Channel manager page, exactly as shown.
+2. Check that at least one room and rate plan are linked.
+3. Run a full refresh of OpenBookings in SiteMinder.
+
+## A room isn't on sale
+
+The grid marks it *Not linked in SiteMinder yet · not on sale*. A room goes on sale once SiteMinder has sent it both a price and availability.
+
+1. In SiteMinder, check that the room and its rate plans are linked to OpenBookings.
+2. Check that SiteMinder has a price and availability for those nights.
+3. If you made the room or rate plan inactive and active again in OpenBookings, link it again in SiteMinder.
+4. Run a full refresh of OpenBookings in SiteMinder.
+
+If the room is linked but a date can't be booked, check the restrictions for that night. See [A guest can't book a date](/business/somethings-not-right/a-guest-cant-book-a-date).
+
+## A price is different from SiteMinder
+
+1. Check whether the difference is **tourist tax**. OpenBookings adds it on top of SiteMinder's price. Don't include it in SiteMinder.
+2. Check the number of guests. SiteMinder's price is for the guests included in the room. Extra adults and children pay SiteMinder's extra amounts.
+3. Check that the price in SiteMinder **includes VAT**.
+4. Check **Last update from SiteMinder** on the Channel manager page. If it's old, SiteMinder may not have sent the change yet.
+
+## OpenBookings shows one room fewer than SiteMinder
+
+This is expected for a short time after a booking. We keep counting our own booking until SiteMinder sends a newer number, for up to 30 minutes. See [How rooms to sell are counted](/business/channel-managers/working-while-connected#how-rooms-to-sell-are-counted).
+
+## A booking is Not delivered
+
+Add it in SiteMinder or your PMS by hand, as the booking panel says. See [When a booking is not delivered](/business/channel-managers/bookings-and-delivery#when-a-booking-is-not-delivered). If several bookings are **Not delivered** at once, check that the connection is still active in SiteMinder, then contact support.
+
+## A cancelled room didn't come back on my other channels
+
+SiteMinder only puts a room back on sale after a cancellation when **Auto-Replenishment** is on. Turn it on in SiteMinder, and put the room back on sale by hand for cancellations that already happened.
+
+## SiteMinder shows an error for an update
+
+- *Invalid included occupancy*: you're using occupancy-based pricing or Included Occupancy. Use one price per night with extra-adult and extra-child amounts. See [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder#not-supported).
+- An error about a room or rate plan that wasn't found: it isn't active in OpenBookings, or it was removed. Check **About → Rooms**.
+
+## Still stuck
+
+Contact support with the hotel code, the room and the dates involved, and the booking reference if it's about a booking.
+
+---
+
+**In this section:**
+- [Channel managers](/business/channel-managers)
+- [Before you connect](/business/channel-managers/before-you-connect)
+- [Connecting SiteMinder](/business/channel-managers/connect-siteminder)
+- [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder)
+- [Working while connected](/business/channel-managers/working-while-connected)
+- [Bookings and delivery status](/business/channel-managers/bookings-and-delivery)
+- [Disconnecting and reconnecting](/business/channel-managers/disconnecting)
+- [Troubleshooting](/business/channel-managers/troubleshooting)

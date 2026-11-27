@@ -1,0 +1,71 @@
+---
+title: Working while connected
+description: What changes in your dashboard while SiteMinder runs your rates and availability.
+---
+
+*Last updated: 25 November 2026*
+
+## Overview
+
+While SiteMinder is connected, it runs prices, rooms to sell and restrictions for the whole hotel. You change those in SiteMinder. Everything else you keep doing in OpenBookings.
+
+## What you do where
+
+| Task | Where |
+| --- | --- |
+| Change prices, rooms to sell, stop-sells, minimum or maximum stay | SiteMinder |
+| Set extra-adult and extra-child fees | SiteMinder |
+| Run promotions and discounts | SiteMinder (see [Running promotions](#running-promotions)) |
+| Add or edit rooms, rate plans, photos and descriptions | OpenBookings, **About → Rooms** |
+| Set guests included, cots and extra beds | OpenBookings, **About → Rooms** |
+| Set cancellation policies, tourist tax and property details | OpenBookings |
+| Read bookings, message guests, handle cancellations and no-shows | OpenBookings |
+| See payouts and statements | OpenBookings |
+
+## What changes in the dashboard
+
+- **Rates & availability is read-only.** The grid still shows prices, rooms to sell and restrictions, as SiteMinder sent them, marked *Managed by SiteMinder*. If you try to change something, you see *This is managed by SiteMinder. Change it there.*
+- **Pricing rules don't apply.** The Pricing rules page says *Not applied to rates managed by SiteMinder*. Your rules are kept and apply again if you disconnect.
+- **Extra-adult and extra-child fees** in **About → Rooms** show *Set in SiteMinder*.
+- **Rooms SiteMinder hasn't sent anything for** are marked *Not linked in SiteMinder yet · not on sale* on the grid.
+- **Each booking shows its delivery status** in a SiteMinder section of the booking panel. See [Bookings and delivery status](/business/channel-managers/bookings-and-delivery).
+
+## Running promotions
+
+Discounts and special prices are set in SiteMinder. Our pricing rules (length of stay, early booking, last minute and day-of-week adjustments) don't apply to rates SiteMinder manages, so the guest pays the price SiteMinder sent.
+
+To offer a deal only on OpenBookings:
+
+1. In **About → Rooms**, add a separate rate plan to the room, for example *Book direct*.
+2. In SiteMinder, link it to a rate plan of its own.
+3. Set its price in SiteMinder. It goes on sale once SiteMinder has sent a price for it.
+
+## How rooms to sell are counted
+
+SiteMinder's number is what's left to sell, with bookings from all your channels already taken off. OpenBookings makes sure an OpenBookings booking is taken off exactly once:
+
+- Until SiteMinder has confirmed one of our bookings, we take it off SiteMinder's number ourselves.
+- After SiteMinder confirms it, we keep taking it off until SiteMinder sends a newer number, or for up to 30 minutes.
+- A cancelled OpenBookings booking stops counting straight away. If SiteMinder already had it, the room comes back when SiteMinder sends a new number.
+
+This means OpenBookings can show one room fewer than SiteMinder for a short time, but never more rooms than you have.
+
+## Emails you still get
+
+You still get the OpenBookings email for every new booking and cancellation, whether or not SiteMinder has it. If a booking doesn't reach SiteMinder, you get an extra email. See [The email when a booking doesn't arrive](/business/channel-managers/bookings-and-delivery#the-email-when-a-booking-doesnt-arrive).
+
+## Limitations and warnings
+
+- Price changes made in SiteMinder usually show on OpenBookings within a minute. Check **Last update from SiteMinder** on the Channel manager page if they don't.
+
+---
+
+**In this section:**
+- [Channel managers](/business/channel-managers)
+- [Before you connect](/business/channel-managers/before-you-connect)
+- [Connecting SiteMinder](/business/channel-managers/connect-siteminder)
+- [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder)
+- [Working while connected](/business/channel-managers/working-while-connected)
+- [Bookings and delivery status](/business/channel-managers/bookings-and-delivery)
+- [Disconnecting and reconnecting](/business/channel-managers/disconnecting)
+- [Troubleshooting](/business/channel-managers/troubleshooting)

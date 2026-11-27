@@ -62,6 +62,16 @@ const nextConfig: NextConfig = {
 
   allowedDevOrigins: ["127.0.0.1"],
 
+  // Ship the stylesheets inside the HTML as <style> tags instead of <link>s,
+  // so the first paint does not wait on separate CSS requests (Lighthouse's
+  // "render-blocking requests"). Most guests arrive cold from search or a
+  // shared link, and Tailwind keeps the CSS small, so a fresh copy per page
+  // costs less than the extra round trip. Production builds only; the CSP
+  // already allows inline styles.
+  experimental: {
+    inlineCss: true,
+  },
+
   async rewrites() {
     return [
       {

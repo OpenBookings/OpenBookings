@@ -1,0 +1,64 @@
+---
+title: Connecting SiteMinder
+description: Connect SiteMinder to OpenBookings, step by step.
+---
+
+*Last updated: 25 November 2026*
+
+## Overview
+
+You start the connection in OpenBookings and finish it in SiteMinder. Each room goes on sale on OpenBookings as soon as SiteMinder has sent it a price and availability.
+
+Check [Before you connect](/business/channel-managers/before-you-connect) first.
+
+## How to connect
+
+1. Open **About → CM** in the sidebar. This is the Channel manager page. It shows **Not connected**.
+2. Read **What changes once connected**.
+3. If the hotel has upcoming bookings, decide on **Send your N upcoming bookings to SiteMinder**. It is ticked by default. See [Bookings made before you connect](/business/channel-managers/bookings-and-delivery#bookings-made-before-you-connect).
+4. Select **Connect SiteMinder**.
+5. The page now shows **Waiting for SiteMinder** and your **Hotel code**. Select the copy button next to the code.
+6. In SiteMinder, add the OpenBookings channel and enter this hotel code.
+7. In SiteMinder, link each room and rate plan to the one with the same name in OpenBookings.
+8. In SiteMinder, check the settings in [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder).
+9. Back on the Channel manager page, check **Rooms linked**. When the first update arrives, the page changes to **Connected**.
+
+## What the Channel manager page shows
+
+| Status | What it means |
+| --- | --- |
+| **Not connected** | SiteMinder doesn't manage this hotel. You set rates and availability in OpenBookings. |
+| **Waiting for SiteMinder** | You've connected here, but SiteMinder hasn't sent anything yet. Finish the steps in SiteMinder. |
+| **Connected** | SiteMinder runs rates, availability and restrictions for this hotel. |
+
+When connected, the page also shows:
+
+- **Hotel code**: the code SiteMinder knows this hotel by.
+- **Rooms linked**: how many of your rooms have received a price and availability from SiteMinder, for example *3 of 4*.
+- **Last update from SiteMinder**: when the latest update arrived.
+- **Needs attention**: how many bookings didn't reach SiteMinder. Only shown when there are any. See [Bookings and delivery status](/business/channel-managers/bookings-and-delivery).
+
+## The hotel code
+
+The hotel code starts with `OB` followed by 10 letters and numbers. It is unique to this hotel and never changes, also when you disconnect and connect again. Keep it as it is in SiteMinder.
+
+## Limitations and warnings
+
+<Callout type="warn">
+  A room isn't on sale on OpenBookings until SiteMinder has sent it a price and availability. A room you forget to link in SiteMinder stays off sale here.
+</Callout>
+
+- Connecting affects only the hotel you have open. To connect another hotel, switch to it and connect it separately. Each hotel gets its own hotel code.
+- Connecting doesn't change past bookings.
+
+---
+
+**In this section:**
+- [Channel managers](/business/channel-managers)
+- [Before you connect](/business/channel-managers/before-you-connect)
+- [Connecting SiteMinder](/business/channel-managers/connect-siteminder)
+- [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder)
+- [Working while connected](/business/channel-managers/working-while-connected)
+- [Bookings and delivery status](/business/channel-managers/bookings-and-delivery)
+- [Disconnecting and reconnecting](/business/channel-managers/disconnecting)
+- [Troubleshooting](/business/channel-managers/troubleshooting)

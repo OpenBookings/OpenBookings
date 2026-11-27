@@ -1,0 +1,96 @@
+---
+title: Settings in SiteMinder
+description: How to set up prices, guests, restrictions and cancellations in SiteMinder so they work on OpenBookings.
+---
+
+*Last updated: 25 November 2026*
+
+## Overview
+
+Once connected, what you set in SiteMinder is what guests see on OpenBookings. This page explains how each SiteMinder setting is used here, and which ones you need to check.
+
+## Settings to check
+
+| Setting in SiteMinder | Set it to | What goes wrong otherwise |
+| --- | --- | --- |
+| **Prices** | Including VAT, in euros, without tourist tax | Guests pay too little or too much. |
+| **Child ages** | Adults 13 and over, children 2 to 12 | The guests SiteMinder prices for aren't the guests who book. |
+| **Auto-Replenishment** | On | A cancelled OpenBookings booking keeps the room off sale on every channel until you put it back by hand. |
+
+## Prices
+
+SiteMinder sends one price per rate plan per night. That price is:
+
+- **Including VAT**, as guests see it.
+- **In euros**.
+- **For the number of guests included** in the room, as set in **About → Rooms**.
+- **Without tourist tax**. OpenBookings adds tourist tax on top, as for any booking. See [How pricing works](/business/rates-and-availability/how-pricing-works).
+
+Our commission is calculated on this price in the usual way. See [How commission works](/business/getting-paid/how-commission-works).
+
+### Extra guests
+
+SiteMinder can send an **extra-adult** and an **extra-child** amount with each night's price. Guests above the number included in the room pay these. If SiteMinder sends no amount, extra guests don't pay extra.
+
+Who counts as an extra guest doesn't change:
+
+- **Guests included** stays the number you set in **About → Rooms**.
+- Infants under 2 aren't counted as guests.
+- Cots and extra beds stay in OpenBookings and are paid at the hotel.
+
+### Not supported
+
+SiteMinder updates using these features are refused, and you'll see an error in SiteMinder:
+
+- Occupancy-based pricing (a different price for 1, 2 or 3 guests)
+- Included Occupancy
+- Single Guest Discount
+
+Use one price per night with extra-adult and extra-child amounts instead.
+
+## Rooms to sell
+
+SiteMinder sends the number of rooms left to sell, per room type and night. This number already takes into account bookings from all your channels, including OpenBookings once SiteMinder has them.
+
+If SiteMinder sends different numbers for two rate plans of the same room type, the most recent one counts for the whole room type.
+
+## Restrictions
+
+| In SiteMinder | On OpenBookings |
+| --- | --- |
+| Stop sell (close a rate plan) | The rate plan is closed for that night. |
+| Closed to arrival | Guests can't arrive that night. |
+| Closed to departure | Guests can't leave that morning. |
+| Minimum and maximum stay (on arrival) | Checked against the arrival night. |
+| Minimum and maximum stay (through) | Checked against every night of the stay. |
+
+Restrictions apply per rate plan, as in [Setting restrictions](/business/rates-and-availability/setting-restrictions). SiteMinder restrictions OpenBookings doesn't know are ignored, and the rest of the update still applies.
+
+## How far ahead
+
+SiteMinder can send up to 750 days ahead. Nights it hasn't sent a price or availability for are not on sale on OpenBookings.
+
+## Linking rooms and rate plans
+
+SiteMinder asks OpenBookings for your active rooms and rate plans and shows them with the names you use here. Link each one in SiteMinder.
+
+- To add a room or rate plan, create it in **About → Rooms**, then link it in SiteMinder.
+- If you make a room or rate plan inactive here, SiteMinder switches its link off. When you make it active again, link it again in SiteMinder.
+- Renaming a room or rate plan here doesn't break the link.
+
+## Limitations and warnings
+
+- Run a **full refresh** of OpenBookings in SiteMinder after you change links, so every room gets its prices and availability straight away.
+- SiteMinder doesn't check our policies, such as cancellation terms. Those stay on the rate plan in OpenBookings.
+
+---
+
+**In this section:**
+- [Channel managers](/business/channel-managers)
+- [Before you connect](/business/channel-managers/before-you-connect)
+- [Connecting SiteMinder](/business/channel-managers/connect-siteminder)
+- [Settings in SiteMinder](/business/channel-managers/settings-in-siteminder)
+- [Working while connected](/business/channel-managers/working-while-connected)
+- [Bookings and delivery status](/business/channel-managers/bookings-and-delivery)
+- [Disconnecting and reconnecting](/business/channel-managers/disconnecting)
+- [Troubleshooting](/business/channel-managers/troubleshooting)
