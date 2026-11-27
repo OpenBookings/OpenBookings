@@ -1,10 +1,12 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { startTransition, useActionState, useState } from "react";
+import { DangerousDialog } from "@/components/dangerous-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { runInvoiceJob, type JobRun } from "@/lib/invoice-job";
-import { JOB_STEPS } from "@/lib/invoice-job-args";
+import { runInvoiceJob, runInvoiceJobConfirmed, type JobRun } from "@/lib/invoice-job";
+import { isDryRun, JOB_STEPS, jobArgs, runSummary, runTarget } from "@/lib/invoice-job-args";
 
 const selectClass = "h-9 rounded-md border border-input bg-transparent px-3 text-sm";
 
@@ -17,8 +19,36 @@ const outcome = (run: Extract<JobRun, { kind: "done" }>) =>
         ? `Blocked (needs a human) after ${run.seconds}s`
         : `Failed (exit ${run.code}) after ${run.seconds}s`;
 
-export function RunForm({ defaultMonth }: { defaultMonth: string }) {
+/** A run waiting for the confirm dialog: the form as submitted, what it will do, and what the step-up is bound to. */
+type Pending = { data: FormData; summary: string; target: string };
+
+/**
+ * In production a run that is not a dry run asks for a reason and a step-up
+ * first (the server refuses it otherwise); a dry run starts straight away.
+ * Elsewhere every run starts straight away.
+ */
+export function RunForm({ defaultMonth, production }: { defaultMonth: string; production: boolean }) {
+  const router = useRouter();
   const [run, action, pending] = useActionState<JobRun | null, FormData>(runInvoiceJob, null);
+  const [confirming, setConfirming] = useState<Pending | null>(null);
+  const [confirmed, setConfirmed] = useState<JobRun | null>(null);
+  const shown = confirmed ?? run;
+
+  /** The form's values as the server reads them, to decide whether this run needs the dialog. */
+  function needsConfirmation(data: FormData): Pending | null {
+    const input = {
+      step: String(data.get("step") ?? ""),
+      month: String(data.get("month") ?? ""),
+      entity: String(data.get("entity") ?? ""),
+      dryRun: data.get("dryRun") === "on",
+      openMonth: data.get("openMonth") === "on",
+      ignoreUnknownAccounts: data.get("ignoreUnknownAccounts") === "on",
+    };
+    const built = jobArgs(input);
+    // Invalid input goes to the server, which says what is wrong.
+    if (!production || !built.ok || isDryRun(built.args)) return null;
+    return { data, summary: runSummary(input), target: runTarget(input) };
+  }
 
   return (
     <div className="space-y-4">
@@ -27,7 +57,10 @@ export function RunForm({ defaultMonth }: { defaultMonth: string }) {
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
-          startTransition(() => action(data));
+          setConfirmed(null);
+          const needs = needsConfirmation(data);
+          if (needs) setConfirming(needs);
+          else startTransition(() => action(data));
         }}
         className="flex flex-wrap items-end gap-3"
       >
@@ -66,13 +99,39 @@ export function RunForm({ defaultMonth }: { defaultMonth: string }) {
         </Button>
       </form>
 
-      {run?.kind === "refused" && <p className="text-sm text-red-600">{run.error}</p>}
-      {run?.kind === "done" && (
+      {confirming ? (
+        <DangerousDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setConfirming(null);
+          }}
+          action="invoices.run"
+          targetId={confirming.target}
+          summary={confirming.summary}
+          onConfirm={async (reason, stepUpToken) => {
+            const answer = await runInvoiceJobConfirmed(confirming.data, { reason, stepUpToken });
+            if (!answer.ok) return answer.message;
+            if (answer.value.kind === "refused") return answer.value.error;
+            setConfirmed(answer.value);
+            router.refresh();
+            return null;
+          }}
+        />
+      ) : null}
+
+      {shown?.kind === "refused" && <p className="text-sm text-red-600">{shown.error}</p>}
+      {shown?.kind === "started" && (
+        <p className="text-sm font-medium">
+          Started {shown.dryRun ? "a dry run" : "the job"} on Scaleway (run <span className="font-mono">{shown.runId}</span>). Its state
+          is shown above and updates when the page reloads.
+        </p>
+      )}
+      {shown?.kind === "done" && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">{outcome(run)}</p>
-          <p className="text-xs text-muted-foreground font-mono">{run.command}</p>
+          <p className="text-sm font-medium">{outcome(shown)}</p>
+          <p className="text-xs text-muted-foreground font-mono">{shown.command}</p>
           <pre className="max-h-[32rem] overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap">
-            {run.output || "(no output)"}
+            {shown.output || "(no output)"}
           </pre>
         </div>
       )}
