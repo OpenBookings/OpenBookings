@@ -271,6 +271,24 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await decide(held.item, "kept", later(81 * HOUR), [])).toEqual({ ok: false, error: "already_decided" });
   });
 
+  test("keeping a deadline-published item shows the original text", async () => {
+    const held = await review(NAMED);
+    await publishOverdue(db, later(72 * HOUR));
+    expect((await loadPropertyReviews(db, ids.propertyId, later(73 * HOUR))).reviews[0]?.body).toBe(
+      "[removed] at the desk was rude to us.",
+    );
+
+    expect(await decide(held.item, "kept", later(80 * HOUR), [])).toMatchObject({ ok: true });
+    expect(await reviewRow(held.reviewId)).toMatchObject({
+      status: "published",
+      published_at: later(72 * HOUR),
+      published_by_deadline: true,
+      masked_body: null,
+      decision: "kept",
+    });
+    expect((await loadPropertyReviews(db, ids.propertyId, later(81 * HOUR))).reviews[0]?.body).toBe(RUDE);
+  });
+
   test("removing closes open reports as upheld", async () => {
     const published = await review(CLEAN, "Jan Jansen stole my bag.");
     const first = await report(published.reviewId);
@@ -375,7 +393,7 @@ describeWithDb("review moderation against Postgres", () => {
     // A removed review with an upheld report.
     const removed = await review(NAMED);
     const upheld = await report(removed.reviewId);
-    // A review published masked by the deadline, then kept.
+    // A review published masked by the deadline, then kept: shown as written.
     const masked = await review(NAMED);
     // A removed host reply under it.
     const reply = await postReviewReply(db, {
@@ -400,19 +418,14 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await purgeModerationRecords(db, new Date(yearLater.getTime() - 1))).toEqual({ reports: 0, texts: 0 });
     expect(await reviewRow(removed.reviewId)).toMatchObject({ body: RUDE });
 
-    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 1, texts: 3 });
+    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 1, texts: 2 });
     expect(await one(`SELECT count(*)::int AS n FROM review_reports WHERE id = $1`, [upheld])).toEqual({ n: 0 });
     expect(await reportStatus(open)).toEqual({ status: "open", decided: false });
     // Removed: the text goes, the score and the row stay.
     expect(await reviewRow(removed.reviewId)).toMatchObject({ status: "removed", body: null, masked_body: null, flagged_fragments: [] });
     expect(await one(`SELECT score FROM reviews WHERE id = $1`, [removed.reviewId])).toEqual({ score: 4 });
-    // Masked: the masked text becomes the text.
-    expect(await reviewRow(masked.reviewId)).toMatchObject({
-      status: "published",
-      body: "[removed] at the desk was rude to us.",
-      masked_body: null,
-      flagged_fragments: [],
-    });
+    // Kept: a person judged it fine, so there is nothing to purge.
+    expect(await reviewRow(masked.reviewId)).toMatchObject({ status: "published", body: RUDE, masked_body: null });
     // The removed reply keeps its place in the thread, without its text.
     expect(await one(`SELECT status, body, masked_body FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({
       status: "removed",

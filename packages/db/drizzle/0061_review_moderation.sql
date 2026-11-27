@@ -14,6 +14,7 @@
 --   masked_body         the text as published by the deadline, each flagged
 --                       fragment replaced by "[removed]". Public reads show
 --                       coalesce(masked_body, body), never the original.
+--                       A Keep clears it: a person judged the words fine.
 --   check_source        who checked it: 'regex', 'mistral', or 'unchecked'
 --                       (the model failed or timed out; the cron rechecks).
 --   checked_at          when that check ran. NULL while unchecked.
@@ -22,7 +23,8 @@
 --                       compare-and-set guard: a second decision finds it set.
 --   published_by_deadline
 --                       nobody decided within 72 hours, so it published
---                       masked. It stays in the queue until somebody does.
+--                       masked. It stays in the queue until somebody does,
+--                       and stays true after a decision, as history.
 --
 -- reviews.rewrite_used: a guest whose review was removed may write it once
 -- more (the same row, within the 30-day window). A second removal ends it.
@@ -34,8 +36,9 @@
 --
 -- review_reports: a host or a member of the public reports a published review
 -- or reply against one rule. One open report per reporter per item.
--- Reports, and the original text of removed or masked items, are deleted 12
--- months after the decision (purgeModerationRecords).
+-- Closed reports, and the text of removed items, are deleted 12 months after
+-- the decision (purgeModerationRecords). A masked item that is decided is
+-- either removed (its text goes) or kept (published as written).
 --
 -- Grants. ob_admin_read reads the three tables (the queue); ob_admin_write
 -- reads them and changes only what a decision changes. The apps (ob_app) and

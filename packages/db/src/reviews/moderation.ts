@@ -29,8 +29,6 @@ const HOUR = 3_600_000;
 export type ModerationItem = { kind: "review" | "reply"; id: string };
 
 const TABLE = { review: "reviews", reply: "review_replies" } as const;
-/** The body columns' CHECK limits (0038, 0039). */
-const BODY_MAX = { review: 2000, reply: 1000 } as const;
 
 /**
  * Whether an item is still there to moderate: not deleted by its author, and
@@ -74,10 +72,11 @@ export type DecideResult =
   | { ok: false; error: "already_decided" | "not_found" | "rules_required" };
 
 /**
- * Keep or Remove. Remove sets the item 'removed'; Keep publishes it (a
- * deadline-published item stays as published, masked). The item's open
- * reports close as upheld (removed) or dismissed (kept); `reportIds` names
- * them for the outcome emails.
+ * Keep or Remove. Remove sets the item 'removed'. Keep means a person judged
+ * the words fine, so it publishes them as written: a deadline-published item
+ * loses its mask (published_by_deadline stays true, as history). The item's
+ * open reports close as upheld (removed) or dismissed (kept); `reportIds`
+ * names them for the outcome emails.
  */
 export async function decideItem(
   db: Queryable,
@@ -94,7 +93,8 @@ export async function decideItem(
     `UPDATE ${table} t
         SET decision = $2, decision_rules = $3::text[], decision_note = $4, decided_by = $5, decided_at = $6, updated_at = $6,
             status = CASE WHEN $2 = 'removed' THEN 'removed' ELSE 'published' END,
-            published_at = CASE WHEN $2 = 'kept' THEN COALESCE(t.published_at, $6) ELSE t.published_at END
+            published_at = CASE WHEN $2 = 'kept' THEN COALESCE(t.published_at, $6) ELSE t.published_at END,
+            masked_body = CASE WHEN $2 = 'kept' THEN NULL ELSE t.masked_body END
       WHERE t.id = $1::uuid AND t.decided_at IS NULL AND ${liveSql(kind, "t")}
       RETURNING t.id`,
     [id, i.decision, rules, note, i.decidedBy, i.now],
@@ -224,10 +224,10 @@ export async function applyRecheck(db: Queryable, item: ModerationItem, check: T
 
 /**
  * MODERATION_RECORD_RETENTION_MONTHS after a decision: closed reports are
- * deleted; a removed item loses its text (the row stays: a review keeps its
- * score and the booking stays reviewed, a reply keeps its turn in the
- * thread); a masked item's masked text becomes its text. The flagged
- * fragments, which quote the original, go too.
+ * deleted; a removed item loses its text, masked or not, and the flagged
+ * fragments that quote it (the row stays: a review keeps its score and the
+ * booking stays reviewed, a reply keeps its turn in the thread). A kept item
+ * has nothing to purge: Keep already published it as written, unmasked.
  */
 export async function purgeModerationRecords(db: Queryable, now: Date): Promise<{ reports: number; texts: number }> {
   const cutoff = new Date(now);
@@ -235,10 +235,7 @@ export async function purgeModerationRecords(db: Queryable, now: Date): Promise<
 
   const reports = await db.query(`DELETE FROM review_reports WHERE status <> 'open' AND decided_at <= $1 RETURNING id`, [cutoff]);
   let texts = 0;
-  for (const [table, max] of [
-    [TABLE.review, BODY_MAX.review],
-    [TABLE.reply, BODY_MAX.reply],
-  ] as const) {
+  for (const table of Object.values(TABLE)) {
     const removed = await db.query(
       `UPDATE ${table}
           SET body = NULL, masked_body = NULL, flagged_fragments = '[]', updated_at = $2
@@ -247,16 +244,7 @@ export async function purgeModerationRecords(db: Queryable, now: Date): Promise<
         RETURNING id`,
       [cutoff, now],
     );
-    // left(): masking short fragments can lengthen a text past the column's
-    // limit, and one such row must not stop the purge.
-    const masked = await db.query(
-      `UPDATE ${table}
-          SET body = left(masked_body, ${max}), masked_body = NULL, flagged_fragments = '[]', updated_at = $2
-        WHERE masked_body IS NOT NULL AND status <> 'removed' AND decided_at <= $1
-        RETURNING id`,
-      [cutoff, now],
-    );
-    texts += removed.rows.length + masked.rows.length;
+    texts += removed.rows.length;
   }
   return { reports: reports.rows.length, texts };
 }
