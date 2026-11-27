@@ -47,8 +47,9 @@ export async function verifyAccessJwt(
     if (typeof email !== "string" || email === "") return { ok: false, reason: "invalid" };
     return { ok: true, email: email.toLowerCase() };
   } catch (error) {
-    // The jose error code only (never the token), so a misconfigured deployment can be diagnosed.
-    console.warn("[admin access]", (error as { code?: string }).code ?? "unknown");
+    // The jose error code, else the error's name (never the token), so a misconfigured deployment can be diagnosed.
+    const { code, name } = (error ?? {}) as { code?: unknown; name?: unknown };
+    console.warn("[admin access]", typeof code === "string" ? code : typeof name === "string" ? name : "unknown");
     return { ok: false, reason: "invalid" };
   }
 }

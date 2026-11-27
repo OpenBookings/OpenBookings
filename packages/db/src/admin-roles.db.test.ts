@@ -32,6 +32,7 @@ const READ = [
   "user.id: SELECT",
   "user.last_name: SELECT",
   "user.name: SELECT",
+  "user.role: SELECT", // 0060: the staff lookup
 ];
 
 const WRITE = [

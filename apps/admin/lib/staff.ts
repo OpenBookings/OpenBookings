@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { STAFF_EMAIL_HEADER } from "./access";
 import { readPool } from "./db";
@@ -32,10 +33,15 @@ export async function resolveStaff(
   return lookupStaff(db, email);
 }
 
+/** One lookup per render: the layout, the page and its loaders share it. */
+const staffForRequest = cache(async (): Promise<Staff | null> => {
+  const email = (await headers()).get(STAFF_EMAIL_HEADER);
+  return resolveStaff(email, process.env, readPool());
+});
+
 /** Call first in every page and server action. Throws a 404 page for anyone who is not staff. */
 export async function requireStaff(): Promise<Staff> {
-  const email = (await headers()).get(STAFF_EMAIL_HEADER);
-  const staff = await resolveStaff(email, process.env, readPool());
+  const staff = await staffForRequest();
   if (!staff) notFound();
   return staff;
 }

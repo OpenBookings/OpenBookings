@@ -38,6 +38,16 @@ describe("verifyAccessJwt", () => {
     expect(warn.mock.calls[0]).toEqual(["[admin access]", "ERR_JWT_CLAIM_VALIDATION_FAILED"]);
   });
 
+  test("logs the error name when the error has no jose code", async () => {
+    const { privateKey } = await setup();
+    const token = await sign(privateKey);
+    const failingKeys = async () => {
+      throw new TypeError("network down");
+    };
+    expect(await verifyAccessJwt(token, cfg, failingKeys)).toEqual({ ok: false, reason: "invalid" });
+    expect(warn.mock.calls[0]).toEqual(["[admin access]", "TypeError"]);
+  });
+
   test("accepts a token for our audience and issuer", async () => {
     const { privateKey, keys } = await setup();
     const r = await verifyAccessJwt(await sign(privateKey), cfg, keys);
