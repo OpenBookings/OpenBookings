@@ -7,6 +7,7 @@ import { getServerSession } from '@/lib/auth';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { ReviewForm } from '../_components/ReviewForm';
 import { formatStayMonth, ReviewShell } from '../_components/ReviewShell';
+import { removedReview } from '../_lib/removed-review';
 
 // The token is in the URL: keep it out of search engines and other sites' logs.
 export const metadata: Metadata = { title: 'Review your stay', robots: { index: false, follow: false }, referrer: 'no-referrer' };
@@ -65,7 +66,17 @@ export default async function ReviewByLinkPage({ params }: { params: Promise<{ t
     );
   }
 
-  if (context.review) {
+  const removed = removedReview(context);
+  if (removed && !removed.canRewrite) {
+    return (
+      <ReviewShell eyebrow={context.propertyName} title="Can't review this stay">
+        <p className="text-[15px] text-white/75">{removed.message}</p>
+      </ReviewShell>
+    );
+  }
+
+  // A removed review that may be written once more falls through to the form.
+  if (context.review && !removed) {
     return (
       <ReviewShell eyebrow={context.propertyName} title="Already reviewed">
         <p className="text-[15px] text-white/75">
@@ -89,6 +100,7 @@ export default async function ReviewByLinkPage({ params }: { params: Promise<{ t
 
   return (
     <ReviewShell eyebrow={context.propertyName} title="How was your stay?">
+      {removed ? <p className="mb-4 text-sm text-white/65">{removed.message}</p> : null}
       <p className="mb-6 text-sm text-white/65">
         Posting as <span className="text-white">{context.authorName}</span>
         {context.authorCountry ? ` (${context.authorCountry})` : ''} · {stayed} ·{' '}

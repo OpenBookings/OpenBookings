@@ -10,6 +10,7 @@ import { DeleteReviewButton } from '@/app/review/_components/ReviewActions';
 import { ReplyAnswerForm } from '@/app/review/_components/ReplyAnswerForm';
 import { ReviewForm } from '@/app/review/_components/ReviewForm';
 import { formatStayMonth, ReviewShell } from '@/app/review/_components/ReviewShell';
+import { removedReview } from '@/app/review/_lib/removed-review';
 
 export const metadata: Metadata = { title: 'Your review' };
 export const dynamic = 'force-dynamic';
@@ -21,11 +22,13 @@ const CLOSED: Record<string, string> = {
   not_stayed: 'Only stays that took place can be reviewed.',
 };
 
+const OBJECT = 'Email support@openbookings.co to object.';
+
 const STATUS: Record<string, string> = {
   published: 'Posted on the property page.',
   pending: "Waiting for a person to check it. It isn't shown yet.",
-  hidden: 'Hidden by OpenBookings. Email support@openbookings.co to object.',
-  removed: 'Removed by OpenBookings. Email support@openbookings.co to object.',
+  hidden: `Hidden by OpenBookings. ${OBJECT}`,
+  // removed: what removedReview says, then OBJECT.
 };
 
 /** The signed-in guest's review of one booking: write it, see it, delete it. */
@@ -52,6 +55,16 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
     </Link>
   );
 
+  const removed = removedReview(context);
+  if (removed?.canRewrite) {
+    return (
+      <ReviewShell eyebrow={eyebrow} title="How was your stay?">
+        <p className="mb-6 text-sm text-white/65">{removed.message}</p>
+        <ReviewForm proof={{ kind: 'session', bookingId }} propertyName={context.propertyName} />
+      </ReviewShell>
+    );
+  }
+
   if (context.review) {
     const { review } = context;
     if (review.status === 'deleted') {
@@ -72,7 +85,7 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
             <span className="text-2xl text-white/45"> / 10</span>
           </p>
           {review.body ? <p className="text-[15px] whitespace-pre-line text-white/85">{review.body}</p> : null}
-          <p className="text-sm text-white/55">{STATUS[review.status] ?? ''}</p>
+          <p className="text-sm text-white/55">{removed ? `${removed.message} ${OBJECT}` : (STATUS[review.status] ?? '')}</p>
           {review.replies.length > 0 ? (
             <div className="flex flex-col gap-4 border-t border-white/10 pt-5">
               {review.replies.map((r) => (
