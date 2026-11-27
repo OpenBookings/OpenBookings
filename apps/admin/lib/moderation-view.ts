@@ -64,7 +64,7 @@ export type ItemView = {
   footnote: string;
   reports: Array<{ who: "Host" | "Public"; rule: string; note: string | null; extra: string | null }>;
   decision: { label: "Kept" | "Removed"; rules: Rule[]; note: string | null; byline: string } | null;
-  /** Null once decided. */
+  /** Null once decided, unless it was kept and reported since. */
   actions: {
     keepLabel: string;
     removeLabel: string;
@@ -149,6 +149,12 @@ function heldBadge(row: QueueRow, now: Date): { badge: ItemView["badge"]; explan
 }
 
 function badge(row: QueueRow, now: Date): { badge: ItemView["badge"]; explanation: string | null } {
+  if (row.reopened) {
+    return {
+      badge: { text: "Kept · reported again", tone: "amber" },
+      explanation: "It was kept, then reported again. It stays live while you decide once more.",
+    };
+  }
   if (row.decision) {
     return { badge: row.decision.decision === "kept" ? { text: "Kept", tone: "green" } : { text: "Removed", tone: "red" }, explanation: null };
   }
@@ -233,9 +239,10 @@ export function itemView(row: QueueRow, now: Date): ItemView {
           byline: `${row.decision.decidedBy ?? "Unknown"} · ${moment(row.decision.decidedAt)}`,
         }
       : null,
-    actions: row.decision
-      ? null
-      : {
+    actions:
+      row.decision && !row.reopened
+        ? null
+        : {
           keepLabel: openReports ? "Keep · dismiss reports" : "Keep as written",
           removeLabel: openReports ? "Remove · uphold…" : "Remove…",
           remove: {

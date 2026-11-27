@@ -8,7 +8,8 @@
  * Decisions are compare-and-set on `decided_at IS NULL`, so two tabs, or a
  * moderator and the deadline job, never both act on one item. The deadline
  * job never sets decided_at, so a decision after publish-by-deadline still
- * goes through (once).
+ * goes through (once). A kept item that is reported again may be decided
+ * once more (openToDecideSql).
  *
  * Rules, the deadline, the retention and the mask live in
  * @openbookings/pricing (moderation.ts).
@@ -60,6 +61,21 @@ const liveSql = (kind: ModerationItem["kind"], t: string) =>
  */
 const decidableSql = (kind: ModerationItem["kind"], t: string) => `${t}.status IN ('pending', 'published') AND ${liveSql(kind, t)}`;
 
+/** The item's own reports (a review's, not its replies'). `t` is the item's alias, `rp` the report's. */
+const reportsOfSql = (kind: ModerationItem["kind"], t: string) =>
+  kind === "review" ? `rp.review_id = ${t}.id AND rp.reply_id IS NULL` : `rp.reply_id = ${t}.id`;
+
+/**
+ * Whether a moderator may decide it (again): nobody has, or it has an open
+ * report made after the decision. So a problem missed at a Keep stays
+ * reportable, and the new report reopens the item. A removed item isn't
+ * published, so it can't be reported again. `t` is the item's alias.
+ */
+const openToDecideSql = (kind: ModerationItem["kind"], t: string) =>
+  `(${t}.decided_at IS NULL OR EXISTS (
+     SELECT 1 FROM review_reports rp
+      WHERE rp.status = 'open' AND ${reportsOfSql(kind, t)} AND rp.created_at > ${t}.decided_at))`;
+
 /** An item's property, whose public page shows it. `t` is the item's alias. */
 const propertyIdSql = (kind: ModerationItem["kind"], t: string) =>
   kind === "review" ? `${t}.property_id` : `(SELECT rv.property_id FROM reviews rv WHERE rv.id = ${t}.review_id)`;
@@ -104,7 +120,8 @@ export type DecideResult =
  * open reports close as upheld (removed) or dismissed (kept); `reportIds`
  * names them for the outcome emails.
  *
- * Only a held or published item is decided. With `version` (as
+ * Only a held or published item is decided, and only once, unless it was
+ * kept and reported since (then once more). With `version` (as
  * moderationVersionSql read it when the moderator opened the item), only that
  * version: an item edited since answers "changed", so a stale tab never
  * decides words nobody looked at. Already decided wins over changed.
@@ -137,7 +154,7 @@ export async function decideItem(
             status = CASE WHEN $2 = 'removed' THEN 'removed' ELSE 'published' END,
             published_at = CASE WHEN $2 = 'kept' THEN COALESCE(t.published_at, $6) ELSE t.published_at END,
             masked_body = CASE WHEN $2 = 'kept' THEN NULL ELSE t.masked_body END
-      WHERE t.id = $1::uuid AND t.decided_at IS NULL AND ${decidableSql(kind, "t")}
+      WHERE t.id = $1::uuid AND ${openToDecideSql(kind, "t")} AND ${decidableSql(kind, "t")}
         AND ($7::text IS NULL OR ${moderationVersionSql(kind, "t")} = $7::text)
       RETURNING t.id, ${propertyIdSql(kind, "t")} AS property_id`,
     [id, i.decision, rules, note, i.decidedBy, i.now, i.version ?? null],
@@ -146,7 +163,7 @@ export async function decideItem(
   if (!decided) {
     const found = (
       await db.query(
-        `SELECT t.decided_at IS NOT NULL AS decided, (${decidableSql(kind, "t")}) AS decidable
+        `SELECT NOT ${openToDecideSql(kind, "t")} AS decided, (${decidableSql(kind, "t")}) AS decidable
            FROM ${table} t WHERE t.id = $1::uuid AND ${liveSql(kind, "t")}`,
         [id],
       )

@@ -33,6 +33,7 @@ const row = (over: Partial<QueueRow> = {}): QueueRow => ({
   rewriteUntil: new Date("2031-12-26T12:00:00Z"),
   rewriteUsed: false,
   reports: [],
+  reopened: false,
   decision: null,
   ...over,
 });
@@ -123,5 +124,23 @@ describe("itemView", () => {
     expect(view.badge).toEqual({ text: "Removed", tone: "red" });
     expect(view.decision).toMatchObject({ label: "Removed", note: "No insults.", rules: [{ id: "abuse", title: "No abuse or hate" }] });
     expect(view.text).toEqual([{ text: row().body!, flagged: false }]);
+  });
+
+  test("a kept item reported again shows the Keep, and can be decided once more", () => {
+    const view = itemView(
+      row({
+        status: "published",
+        decision: { decision: "kept", rules: [], note: null, decidedAt: WRITTEN, decidedBy: "staff@example.test" },
+        reopened: true,
+        reports: [
+          { id: "r1", reporterKind: "host", rule: "personal_details", note: "Names our staff", emailLeft: false, status: "open", createdAt: new Date(WRITTEN.getTime() + 3_600_000) },
+        ],
+      }),
+      WRITTEN,
+    );
+    expect(view.badge).toEqual({ text: "Kept · reported again", tone: "amber" });
+    expect(view.decision).toMatchObject({ label: "Kept" });
+    expect(view.actions).toMatchObject({ keepLabel: "Keep · dismiss reports", removeLabel: "Remove · uphold…" });
+    expect(view.actions!.remove.preselected).toContain("personal_details");
   });
 });

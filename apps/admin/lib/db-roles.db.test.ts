@@ -541,6 +541,35 @@ describeWithDb("admin console as its own database roles", () => {
     expect(problems.map((p) => (p as Error).message)).toEqual(expect.arrayContaining(["upstash down", "smtp down"]));
   });
 
+  test("a kept review reported again is in the Reported tab, and can be decided once more", async () => {
+    const q = await seedQueue();
+    reset();
+    // q.decided was kept an hour before WRITTEN; a host reports it after that.
+    const again = (
+      await db.query(
+        `INSERT INTO review_reports (review_id, reporter_kind, reporter_user_id, reporter_org_id, rule, created_at)
+         VALUES ($1, 'host', $2, 'org-again', 'personal_details', $3) RETURNING id`,
+        [q.decided.id, ownerId, later(HOUR)],
+      )
+    ).rows[0].id as string;
+    const reopened = await as("ob_admin_read", async () => {
+      expect(await loadModerationCounts(db)).toEqual({ held: 2, reported: 3, deadline: 1 });
+      return byId(await loadModerationQueue(db, "reported", later(2 * HOUR)), q.decided.id);
+    });
+    expect(reopened).toMatchObject({ reopened: true, decision: { decision: "kept" } });
+    expect(reopened.reports.map((r) => [r.id, r.status])).toEqual([[again, "open"]]);
+
+    await as("ob_admin_write", async () => {
+      expect(await removeItem(decisionDeps(later(3 * HOUR)), { ...item(reopened), rules: ["personal_details"], note: null })).toEqual({ ok: true });
+      expect(await keepItem(decisionDeps(later(3 * HOUR)), item(reopened))).toEqual({ ok: false, error: "Already decided" });
+    });
+    expect((await db.query(`SELECT status FROM review_reports WHERE id = $1`, [again])).rows[0]).toEqual({ status: "upheld" });
+    expect(sent).toEqual(
+      expect.arrayContaining([{ to: `${ownerId}@example.test`, subject: expect.stringMatching(/^Your report about/) }]),
+    );
+    expect((await loadModerationQueue(db, "reported", later(4 * HOUR))).map((r) => r.id)).not.toContain(q.decided.id);
+  });
+
   test("removeItem without a rule is refused", async () => {
     const q = await seedQueue();
     reset();

@@ -80,8 +80,10 @@ export type QueueRow = {
    */
   rewriteUntil: Date | null;
   rewriteUsed: boolean;
-  /** Open reports; on a decided item, the ones its decision closed. */
+  /** Open reports; on a decided item, the ones its decision closed too. */
   reports: QueueReport[];
+  /** Kept, then reported again: it can be decided once more. */
+  reopened: boolean;
   decision: {
     decision: "kept" | "removed";
     rules: ReviewRuleId[];
@@ -123,11 +125,15 @@ const ITEMS = `
 const reportsOf = (i: string) => `
   (rp.reply_id = ${i}.id OR (${i}.kind = 'review' AND rp.review_id = ${i}.id AND rp.reply_id IS NULL))`;
 const OPEN_REPORT = (i: string) => `EXISTS (SELECT 1 FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf(i)})`;
+/** Nobody decided it, or it was kept and reported since: decideItem decides it (again). */
+const OPEN_TO_DECIDE = (i: string) =>
+  `(${i}.decided_at IS NULL OR EXISTS (
+     SELECT 1 FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf(i)} AND rp.created_at > ${i}.decided_at))`;
 
 const TAB: Record<ModerationTab, { where: string; order: string; limit: number }> = {
   held: { where: `i.status = 'pending' AND i.decided_at IS NULL`, order: `i.written_at, i.id`, limit: QUEUE_LIMIT },
   reported: {
-    where: `i.decided_at IS NULL AND i.status IN ('pending', 'published') AND ${OPEN_REPORT("i")}`,
+    where: `${OPEN_TO_DECIDE("i")} AND i.status IN ('pending', 'published') AND ${OPEN_REPORT("i")}`,
     order: `(SELECT min(rp.created_at) FROM review_reports rp WHERE rp.status = 'open' AND ${reportsOf("i")}), i.id`,
     limit: QUEUE_LIMIT,
   },
@@ -188,6 +194,17 @@ const rulesOf = (ids: readonly string[]) => [...new Set(ids.filter(isReviewRuleI
 function toRow(r: Row, now: Date): QueueRow {
   const reasons = (r.flagged_reason ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const fragments = Array.isArray(r.flagged_fragments) ? r.flagged_fragments.filter((f): f is string => typeof f === "string" && f !== "") : [];
+  const reports: QueueReport[] = (r.reports ?? [])
+    .filter((p) => isReviewRuleId(p.rule))
+    .map((p) => ({
+      id: p.id,
+      reporterKind: p.reporter_kind,
+      rule: p.rule as ReviewRuleId,
+      note: p.note,
+      emailLeft: p.email_left,
+      status: p.status,
+      createdAt: new Date(p.created_at),
+    }));
   const closesAt =
     r.kind === "review"
       ? reviewWindow(projectedCheckOutAt({ checkOutDate: r.check_out_date, checkOutTime: r.check_out_time, timeZone: r.timezone })).closesAt
@@ -219,17 +236,8 @@ function toRow(r: Row, now: Date): QueueRow {
     authorReachable: r.author_reachable,
     rewriteUntil: closesAt && !r.rewrite_used && closesAt > now ? closesAt : null,
     rewriteUsed: r.rewrite_used,
-    reports: (r.reports ?? [])
-      .filter((p) => isReviewRuleId(p.rule))
-      .map((p) => ({
-        id: p.id,
-        reporterKind: p.reporter_kind,
-        rule: p.rule as ReviewRuleId,
-        note: p.note,
-        emailLeft: p.email_left,
-        status: p.status,
-        createdAt: new Date(p.created_at),
-      })),
+    reports,
+    reopened: r.decided_at !== null && reports.some((p) => p.status === "open" && p.createdAt > r.decided_at!),
     decision:
       r.decision && r.decided_at
         ? {
@@ -275,7 +283,7 @@ export async function loadModerationCounts(db: Queryable): Promise<Record<Exclud
             count(*) FILTER (WHERE ${TAB.reported.where})::int AS reported,
             count(*) FILTER (WHERE ${TAB.deadline.where})::int AS deadline
        FROM (${ITEMS}) i
-      WHERE i.decided_at IS NULL`,
+      WHERE ${OPEN_TO_DECIDE("i")}`,
   );
   const r = rows[0] as { held: number; reported: number; deadline: number };
   return { held: r.held, reported: r.reported, deadline: r.deadline };

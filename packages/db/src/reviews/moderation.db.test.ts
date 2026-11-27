@@ -291,6 +291,41 @@ describeWithDb("review moderation against Postgres", () => {
     expect(await reviewRow(held.reviewId)).toMatchObject({ published_by_deadline: false, masked_body: null });
   });
 
+  test("a kept item reported after the decision can be decided once more", async () => {
+    const held = await review(NAMED);
+    expect(await decide(held.item, "kept", later(HOUR), [])).toMatchObject({ ok: true });
+    // An open report from before the decision (one that raced it) doesn't reopen it.
+    const raced = await report(held.reviewId, null, "org-raced", later(HOUR - 1));
+    expect(await decide(held.item, "removed", later(2 * HOUR))).toEqual({ ok: false, error: "already_decided" });
+
+    // A new report does, for one more decision.
+    const fresh = await report(held.reviewId, null, "org-new", later(3 * HOUR));
+    expect(await decide(held.item, "removed", later(4 * HOUR))).toMatchObject({ ok: true, reportIds: expect.arrayContaining([raced, fresh]) });
+    expect(await reviewRow(held.reviewId)).toMatchObject({ status: "removed", decision: "removed", decided_at: later(4 * HOUR) });
+    expect(await reportStatus(fresh)).toEqual({ status: "upheld", decided: true });
+    expect(await decide(held.item, "kept", later(5 * HOUR), [])).toEqual({ ok: false, error: "already_decided" });
+
+    // A kept reply reported again can be kept again; then it is decided.
+    const published = await review(CLEAN, "Lovely.");
+    const reply = await postReviewReply(db, {
+      reviewId: published.reviewId,
+      role: "host",
+      authorUserId: hostId,
+      body: "Thank you.",
+      check: CLEAN,
+      now: later(HOUR),
+    });
+    if (!reply.ok) throw new Error("reply failed");
+    const replyItem: ModerationItem = { kind: "reply", id: reply.replyId };
+    expect(await decide(replyItem, "kept", later(2 * HOUR), [])).toMatchObject({ ok: true });
+    // A report on the review doesn't reopen its reply.
+    await report(published.reviewId, null, "org-review", later(3 * HOUR));
+    expect(await decide(replyItem, "kept", later(4 * HOUR), [])).toEqual({ ok: false, error: "already_decided" });
+    const onReply = await report(published.reviewId, reply.replyId, "org-reply", later(3 * HOUR));
+    expect(await decide(replyItem, "kept", later(4 * HOUR), [])).toMatchObject({ ok: true, reportIds: [onReply] });
+    expect(await decide(replyItem, "kept", later(5 * HOUR), [])).toEqual({ ok: false, error: "already_decided" });
+  });
+
   test("decideItem refuses a decision on a version of the item the moderator didn't see", async () => {
     const held = await review(NAMED);
     const reply = await postReviewReply(db, {
