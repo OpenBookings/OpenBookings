@@ -83,6 +83,12 @@ describe("screenReviewFragments", () => {
     }
   });
 
+  test("ordinals and spans of time are not handles", () => {
+    for (const text of ["on whatsapp 2nd day", "3hrs later on telegram", "whatsapp 5mins later", "signal 30secs in", "insta 2days later", "telegram 4th floor"]) {
+      expect(screenReviewFragments(text)).toEqual({ rules: [], fragments: [] });
+    }
+  });
+
   test("dates are not phone numbers", () => {
     const empty = { rules: [], fragments: [] };
     expect(screenReviewFragments("from 01.05.2025 to 05.05.2025")).toEqual(empty);

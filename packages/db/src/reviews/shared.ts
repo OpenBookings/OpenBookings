@@ -16,7 +16,7 @@ export function authorFirstName(firstName: string | null): string {
 
 /** Trims a review or reply text; empty means none. */
 export function normalizeReviewBody(body: string | null | undefined): string | null {
-  const text = (body ?? "").replace(/\r\n/g, "\n").trim();
+  const text = (body ?? "").replace(/\r\n?/g, "\n").trim();
   return text.length > 0 ? text : null;
 }
 

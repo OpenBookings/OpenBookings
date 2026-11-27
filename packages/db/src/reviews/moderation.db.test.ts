@@ -193,6 +193,22 @@ describeWithDb("review moderation against Postgres", () => {
     });
   });
 
+  test("a recheck that fails again sends the item to the back of the line", async () => {
+    const first = await review(UNCHECKED, "One.");
+    const second = await review(UNCHECKED, "Two.", later(HOUR / 2));
+    const ids = async (limit = 10) => (await uncheckedItems(db, limit)).map((i) => i.id);
+    expect(await ids()).toEqual([first.reviewId, second.reviewId]);
+    expect(await ids(1)).toEqual([first.reviewId]);
+
+    // The model fails on the first again: nothing is stored, but the second now goes first.
+    expect(await applyRecheck(db, first.item, UNCHECKED, later(HOUR))).toEqual({ stored: false, publishedPropertyId: null });
+    expect(await ids(1)).toEqual([second.reviewId]);
+    expect(await reviewRow(first.reviewId)).toMatchObject({ status: "pending", check_source: "unchecked", checked_at: null });
+
+    await applyRecheck(db, second.item, UNCHECKED, later(2 * HOUR));
+    expect(await ids()).toEqual([first.reviewId, second.reviewId]);
+  });
+
   test("publishOverdue publishes at 72 hours with fragments masked, not at 71", async () => {
     const held = await review(NAMED);
     expect((await publishOverdue(db, later(71 * HOUR))).published).toBe(0);

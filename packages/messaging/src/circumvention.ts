@@ -78,7 +78,7 @@ function trimDots(s: string): string {
  * A number with a known unit or a time after it: "100mbps", "2.5ghz", "7pm".
  * Only these: any other letters ("@123anna", "007bond") may name an account.
  */
-const NUMBER_UNIT_RE = /^\d{1,6}(?:[.,]\d{1,3})?(?:mbps|kbps|gbps|ghz|mhz|mb|gb|kb|am|pm|km|m|cm|mm|kg|g|l|ml|h|min|s|%|°c|°f)$/i;
+const NUMBER_UNIT_RE = /^\d{1,6}(?:[.,]\d{1,3})?(?:mbps|kbps|gbps|ghz|mhz|mb|gb|kb|am|pm|km|m|cm|mm|kg|g|l|ml|h|min|s|%|°c|°f|st|nd|rd|th|hrs?|mins?|secs?|days?)$/i;
 
 /** A token that could name an account: it has a letter and isn't a measurement or a time. */
 function nameLike(token: string): boolean {

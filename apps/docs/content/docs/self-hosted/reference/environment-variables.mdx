@@ -95,7 +95,7 @@ I = invoice job, R = root scripts.
 | `REALTIME_TOKEN_SECRET` / `REALTIME_SERVICE_SECRET` | W, B | with realtime | Secrets shared with the realtime worker. |
 | `MESSAGE_RETENTION_DAYS` | W, B | no | How long message text is kept before it's redacted. |
 | `CRON_SECRET` | W, B | for jobs | Bearer token for `/api/cron/*`. See [Schedule the background jobs](/self-hosted/how-to/schedule-the-background-jobs). |
-| `MISTRAL_API_KEY` / `MISTRAL_MODEL` | W, B, S | yes | The language model. In W and B it checks review and reply texts before they publish; without it every one is held for a person. The support bot answers with it. |
+| `MISTRAL_API_KEY` / `MISTRAL_MODEL` | W, B, S | no | The language model. In W and B it checks review and reply texts before they publish. Without a key they can't be checked automatically: each one waits up to 72 hours, then publishes with only the automatic contact-detail finds masked. The support bot answers with it. |
 | `PII_RETENTION_MONTHS` | B | no | Months after a stay before guest notes are redacted. Default `18`. |
 
 ## Billing and invoices

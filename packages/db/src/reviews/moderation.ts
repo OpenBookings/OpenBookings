@@ -229,18 +229,22 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<{ publis
 
 // ── The recheck ──────────────────────────────────────────────────────────────
 
-/** Held items the model couldn't check (failed or timed out), oldest first. */
+/**
+ * Held items the model couldn't check (failed or timed out). Least recently
+ * tried first (updated_at; a failed recheck touches it, see applyRecheck), so
+ * items whose recheck keeps failing go to the back and can't starve the rest.
+ */
 export async function uncheckedItems(db: Queryable, limit: number): Promise<Array<ModerationItem & { body: string }>> {
   const { rows } = await db.query(
     `SELECT kind, id, body FROM (
-       SELECT 'review' AS kind, rv.id, rv.body, rv.created_at FROM reviews rv
+       SELECT 'review' AS kind, rv.id, rv.body, rv.created_at, rv.updated_at FROM reviews rv
         WHERE rv.status = 'pending' AND rv.check_source = 'unchecked' AND rv.decided_at IS NULL AND rv.body IS NOT NULL
        UNION ALL
-       SELECT 'reply' AS kind, rr.id, rr.body, rr.created_at FROM review_replies rr
+       SELECT 'reply' AS kind, rr.id, rr.body, rr.created_at, rr.updated_at FROM review_replies rr
         WHERE rr.status = 'pending' AND rr.check_source = 'unchecked' AND rr.decided_at IS NULL AND rr.body IS NOT NULL
           AND ${liveSql("reply", "rr")}
      ) held
-     ORDER BY created_at, id
+     ORDER BY updated_at, created_at, id
      LIMIT $1`,
     [limit],
   );
@@ -249,7 +253,8 @@ export async function uncheckedItems(db: Queryable, limit: number): Promise<Arra
 
 /**
  * Stores a recheck of an unchecked item: published when clean, else held with
- * what was found. A recheck that is itself unchecked changes nothing. Only an
+ * what was found. A recheck that is itself unchecked only marks the attempt
+ * (updated_at), so uncheckedItems tries other items first. Only an
  * item still held, unchecked and undecided is touched, and, given the `body`
  * that was checked, only while its text is still that (an edit during the
  * check has a check of its own). Returns whether it was stored, and the
@@ -261,7 +266,13 @@ export async function applyRecheck(
   check: TextCheck,
   now: Date,
 ): Promise<{ stored: boolean; publishedPropertyId: string | null }> {
-  if (!Object.hasOwn(TABLE, item.kind) || !UUID.test(item.id) || check.verdict === "unchecked") {
+  if (!Object.hasOwn(TABLE, item.kind) || !UUID.test(item.id)) return { stored: false, publishedPropertyId: null };
+  if (check.verdict === "unchecked") {
+    await db.query(
+      `UPDATE ${TABLE[item.kind]} t SET updated_at = $2
+        WHERE t.id = $1::uuid AND t.status = 'pending' AND t.check_source = 'unchecked' AND t.decided_at IS NULL`,
+      [item.id, now],
+    );
     return { stored: false, publishedPropertyId: null };
   }
   const s = storedCheck(check, now);
