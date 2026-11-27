@@ -29,6 +29,11 @@ const HOUR = 3_600_000;
 export type ModerationItem = { kind: "review" | "reply"; id: string };
 
 const TABLE = { review: "reviews", reply: "review_replies" } as const;
+/** The body columns' CHECK limits (0038, 0039). */
+const BODY_MAX = { review: 2000, reply: 1000 } as const;
+/** When a held item's 72 hours started: a host's edit or a guest's rewrite restarts them. `t` is the item's alias. */
+const heldSinceSql = (kind: ModerationItem["kind"], t: string) =>
+  kind === "review" ? `${t}.created_at` : `COALESCE(${t}.edited_at, ${t}.created_at)`;
 
 /**
  * Whether an item is still there to moderate: not deleted by its author, and
@@ -38,6 +43,12 @@ const liveSql = (kind: ModerationItem["kind"], t: string) =>
   kind === "review"
     ? `${t}.status <> 'deleted'`
     : `${t}.status <> 'deleted' AND EXISTS (SELECT 1 FROM reviews rv WHERE rv.id = ${t}.review_id AND rv.status <> 'deleted')`;
+
+/**
+ * Whether a moderator may decide it now: held or published, still there.
+ * Never a hidden row, or one removed before moderation existed.
+ */
+const decidableSql = (kind: ModerationItem["kind"], t: string) => `${t}.status IN ('pending', 'published') AND ${liveSql(kind, t)}`;
 
 /** What a check's outcome stores on the item. */
 export type StoredCheck = {
@@ -77,6 +88,10 @@ export type DecideResult =
  * loses its mask (published_by_deadline stays true, as history). The item's
  * open reports close as upheld (removed) or dismissed (kept); `reportIds`
  * names them for the outcome emails.
+ *
+ * Only a held or published item is decided. Run it in a transaction: it is
+ * two statements (the item, then its reports), and they stand or fall
+ * together.
  */
 export async function decideItem(
   db: Queryable,
@@ -95,13 +110,15 @@ export async function decideItem(
             status = CASE WHEN $2 = 'removed' THEN 'removed' ELSE 'published' END,
             published_at = CASE WHEN $2 = 'kept' THEN COALESCE(t.published_at, $6) ELSE t.published_at END,
             masked_body = CASE WHEN $2 = 'kept' THEN NULL ELSE t.masked_body END
-      WHERE t.id = $1::uuid AND t.decided_at IS NULL AND ${liveSql(kind, "t")}
+      WHERE t.id = $1::uuid AND t.decided_at IS NULL AND ${decidableSql(kind, "t")}
       RETURNING t.id`,
     [id, i.decision, rules, note, i.decidedBy, i.now],
   );
   if (rows.length === 0) {
-    const exists = (await db.query(`SELECT 1 FROM ${table} t WHERE t.id = $1::uuid AND ${liveSql(kind, "t")}`, [id])).rows.length > 0;
-    return { ok: false, error: exists ? "already_decided" : "not_found" };
+    const decided =
+      (await db.query(`SELECT 1 FROM ${table} t WHERE t.id = $1::uuid AND t.decided_at IS NOT NULL AND ${liveSql(kind, "t")}`, [id]))
+        .rows.length > 0;
+    return { ok: false, error: decided ? "already_decided" : "not_found" };
   }
 
   const reports = await db.query(
@@ -115,21 +132,24 @@ export async function decideItem(
 }
 
 /**
- * Closes an item's open reports as dismissed when its author deletes it: there
- * is nothing left to decide. With `replyId` null, every report on the review
- * and its replies.
+ * Closes a deleted item's open reports as dismissed: there is nothing left to
+ * decide. With `replyId` null, every report on the (deleted) review and its
+ * replies; otherwise those on the (deleted) reply.
+ *
+ * Through app.dismiss_deleted_review_reports (0061): under the app roles the
+ * guest or host who deleted the item can't see other people's reports
+ * (public ones included), so row-level security would quietly skip them.
  */
 export async function dismissReportsOfDeleted(
   db: Queryable,
   i: { reviewId: string; replyId: string | null; now: Date },
 ): Promise<number> {
-  const { rows } = await db.query(
-    `UPDATE review_reports SET status = 'dismissed', decided_at = $2
-      WHERE status = 'open' AND ${i.replyId ? "reply_id = $1::uuid" : "review_id = $1::uuid"}
-      RETURNING id`,
-    [i.replyId ?? i.reviewId, i.now],
-  );
-  return rows.length;
+  const { rows } = await db.query(`SELECT app.dismiss_deleted_review_reports($1::uuid, $2::uuid, $3) AS n`, [
+    i.reviewId,
+    i.replyId,
+    i.now,
+  ]);
+  return (rows[0] as { n: number }).n;
 }
 
 // ── The deadline ─────────────────────────────────────────────────────────────
@@ -141,15 +161,20 @@ type HeldRow = { id: string; body: string | null; flagged_fragments: string[] };
  * each flagged fragment replaced by "[removed]" (masked_body; the original
  * stays for the moderator until the purge). A reply's clock restarts when its
  * host edits it, a review's when its guest rewrites it. Returns how many.
+ *
+ * An item never checked under 0061 (check_source NULL) never publishes here:
+ * 0061 marks the held ones 'unchecked' so the recheck finds their fragments.
+ * The final UPDATE repeats every condition, so an edit or decision landing
+ * after the SELECT is never published with a mask of the old text.
  */
 export async function publishOverdue(db: Queryable, now: Date): Promise<number> {
   const cutoff = new Date(now.getTime() - MODERATION_DEADLINE_HOURS * HOUR);
   const held = {
     review: (
       await db.query(
-        `SELECT id, body, flagged_fragments FROM reviews
-          WHERE status = 'pending' AND decided_at IS NULL AND created_at <= $1
-          ORDER BY created_at
+        `SELECT t.id, t.body, t.flagged_fragments FROM reviews t
+          WHERE t.status = 'pending' AND t.decided_at IS NULL AND t.check_source IS NOT NULL AND ${heldSinceSql("review", "t")} <= $1
+          ORDER BY t.created_at
             FOR UPDATE SKIP LOCKED`,
         [cutoff],
       )
@@ -157,8 +182,8 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<number> 
     reply: (
       await db.query(
         `SELECT rr.id, rr.body, rr.flagged_fragments FROM review_replies rr
-          WHERE rr.status = 'pending' AND rr.decided_at IS NULL AND COALESCE(rr.edited_at, rr.created_at) <= $1
-            AND ${liveSql("reply", "rr")}
+          WHERE rr.status = 'pending' AND rr.decided_at IS NULL AND rr.check_source IS NOT NULL
+            AND ${heldSinceSql("reply", "rr")} <= $1 AND ${liveSql("reply", "rr")}
           ORDER BY rr.created_at
             FOR UPDATE OF rr SKIP LOCKED`,
         [cutoff],
@@ -171,11 +196,12 @@ export async function publishOverdue(db: Queryable, now: Date): Promise<number> 
       const fragments = Array.isArray(row.flagged_fragments) ? row.flagged_fragments : [];
       const masked = row.body && fragments.length > 0 ? maskFragments(row.body, fragments) : null;
       const { rows } = await db.query(
-        `UPDATE ${TABLE[kind]}
+        `UPDATE ${TABLE[kind]} t
             SET status = 'published', published_at = $2, masked_body = $3, published_by_deadline = true, updated_at = $2
-          WHERE id = $1 AND status = 'pending' AND decided_at IS NULL
-          RETURNING id`,
-        [row.id, now, masked],
+          WHERE t.id = $1 AND t.status = 'pending' AND t.decided_at IS NULL AND t.check_source IS NOT NULL
+            AND ${heldSinceSql(kind, "t")} <= $4 AND t.body IS NOT DISTINCT FROM $5 AND ${liveSql(kind, "t")}
+          RETURNING t.id`,
+        [row.id, now, masked, cutoff, row.body],
       );
       published += rows.length;
     }
@@ -223,19 +249,30 @@ export async function applyRecheck(db: Queryable, item: ModerationItem, check: T
 // ── Retention ────────────────────────────────────────────────────────────────
 
 /**
- * MODERATION_RECORD_RETENTION_MONTHS after a decision: closed reports are
- * deleted; a removed item loses its text, masked or not, and the flagged
- * fragments that quote it (the row stays: a review keeps its score and the
- * booking stays reviewed, a reply keeps its turn in the thread). A kept item
- * has nothing to purge: Keep already published it as written, unmasked.
+ * After MODERATION_RECORD_RETENTION_MONTHS:
+ *   - reports go: closed ones counted from their decision, open ones (never
+ *     decided) from when they were made;
+ *   - a removed item loses its text, masked or not, and the flagged fragments
+ *     that quote it, counted from the decision (the row stays: a review keeps
+ *     its score and the booking stays reviewed, a reply keeps its turn in the
+ *     thread);
+ *   - an item published masked by the deadline that nobody ever decided keeps
+ *     only its masked text, counted from that publication.
+ * A kept item has nothing to purge: Keep published it as written.
  */
 export async function purgeModerationRecords(db: Queryable, now: Date): Promise<{ reports: number; texts: number }> {
   const cutoff = new Date(now);
   cutoff.setUTCMonth(cutoff.getUTCMonth() - MODERATION_RECORD_RETENTION_MONTHS);
 
-  const reports = await db.query(`DELETE FROM review_reports WHERE status <> 'open' AND decided_at <= $1 RETURNING id`, [cutoff]);
+  const reports = await db.query(
+    `DELETE FROM review_reports
+      WHERE (status <> 'open' AND decided_at <= $1) OR (status = 'open' AND created_at <= $1)
+      RETURNING id`,
+    [cutoff],
+  );
   let texts = 0;
-  for (const table of Object.values(TABLE)) {
+  for (const kind of ["review", "reply"] as const) {
+    const table = TABLE[kind];
     const removed = await db.query(
       `UPDATE ${table}
           SET body = NULL, masked_body = NULL, flagged_fragments = '[]', updated_at = $2
@@ -244,7 +281,16 @@ export async function purgeModerationRecords(db: Queryable, now: Date): Promise<
         RETURNING id`,
       [cutoff, now],
     );
-    texts += removed.rows.length;
+    // left(): masking short fragments can lengthen a text past the column's
+    // limit, and one such row must not stop the purge.
+    const masked = await db.query(
+      `UPDATE ${table}
+          SET body = left(masked_body, ${BODY_MAX[kind]}), masked_body = NULL, flagged_fragments = '[]', updated_at = $2
+        WHERE published_by_deadline AND decided_at IS NULL AND masked_body IS NOT NULL AND published_at <= $1
+        RETURNING id`,
+      [cutoff, now],
+    );
+    texts += removed.rows.length + masked.rows.length;
   }
   return { reports: reports.rows.length, texts };
 }

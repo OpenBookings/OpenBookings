@@ -36,9 +36,11 @@
 --
 -- review_reports: a host or a member of the public reports a published review
 -- or reply against one rule. One open report per reporter per item.
--- Closed reports, and the text of removed items, are deleted 12 months after
--- the decision (purgeModerationRecords). A masked item that is decided is
--- either removed (its text goes) or kept (published as written).
+-- After 12 months (purgeModerationRecords): reports go (closed ones counted
+-- from the decision, open ones from when they were made); removed items lose
+-- their text (from the decision); an item published masked by the deadline
+-- that nobody decided keeps only the masked text (from its publication). A
+-- kept item is published as written and has nothing to purge.
 --
 -- Grants. ob_admin_read reads the three tables (the queue); ob_admin_write
 -- reads them and changes only what a decision changes. The apps (ob_app) and
@@ -78,6 +80,13 @@ ALTER TABLE review_replies
   ADD COLUMN IF NOT EXISTS decided_by text NULL,
   ADD COLUMN IF NOT EXISTS decided_at timestamptz NULL,
   ADD COLUMN IF NOT EXISTS published_by_deadline boolean NOT NULL DEFAULT false;
+
+-- Items held before this migration were never checked the new way: no
+-- fragments, so the deadline would publish them unmasked. Mark them
+-- 'unchecked' so the recheck finds their fragments first; publishOverdue
+-- never publishes an item whose check_source is NULL.
+UPDATE reviews SET check_source = 'unchecked' WHERE status = 'pending' AND check_source IS NULL;
+UPDATE review_replies SET check_source = 'unchecked' WHERE status = 'pending' AND check_source IS NULL;
 
 -- A reply can be removed by a moderator, and a removed reply loses its text
 -- after 12 months (see above).
@@ -148,6 +157,57 @@ CREATE POLICY ob_app_public_insert ON review_reports FOR INSERT TO ob_app
   WITH CHECK (reporter_kind = 'public' AND EXISTS (
     SELECT 1 FROM reviews r WHERE r.id = review_reports.review_id AND r.status = 'published' AND r.deleted_at IS NULL
   ));
+
+-- Closing a deleted item's reports. The guest who deletes a review, or the
+-- host who deletes a reply, can't see the other reports on it under the
+-- policies above (other hosts', the public's), so a plain UPDATE would skip
+-- them. This function closes them, and nothing else:
+--   - only open reports, only on an item that is actually 'deleted' (a whole
+--     review with p_reply_id NULL, else that one reply);
+--   - only for the review's guest or a reader of its property (app.user_id),
+--     or for a role row-level security doesn't bind anyway (the owner the
+--     apps connect as until they switch roles, a superuser, BYPASSRLS).
+-- The invoker is read from the `role` setting (SET ROLE, or a login role's
+-- default) or else session_user: inside SECURITY DEFINER current_user is the
+-- owner. A role can only set `role` to a role it may become.
+CREATE OR REPLACE FUNCTION app.dismiss_deleted_review_reports(p_review_id uuid, p_reply_id uuid, p_now timestamptz)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  invoker text := coalesce(nullif(current_setting('role', true), 'none'), session_user::text);
+  closed integer;
+BEGIN
+  IF NOT EXISTS (
+       SELECT 1 FROM pg_roles r
+        WHERE r.rolname = invoker
+          AND (r.rolsuper OR r.rolbypassrls OR r.oid = (SELECT c.relowner FROM pg_class c WHERE c.oid = 'public.review_reports'::regclass))
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM reviews rv
+        WHERE rv.id = p_review_id AND app.user_id() IS NOT NULL
+          AND (rv.guest_user_id = app.user_id() OR rv.property_id = ANY (app.readable_property_ids()))
+     ) THEN
+    RAISE EXCEPTION 'not allowed to close the reports on review %', p_review_id USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE review_reports rr
+     SET status = 'dismissed', decided_at = p_now
+   WHERE rr.status = 'open' AND rr.review_id = p_review_id
+     AND CASE
+           WHEN p_reply_id IS NULL THEN
+             EXISTS (SELECT 1 FROM reviews rv WHERE rv.id = p_review_id AND rv.status = 'deleted')
+           ELSE
+             rr.reply_id = p_reply_id
+             AND EXISTS (SELECT 1 FROM review_replies x WHERE x.id = p_reply_id AND x.review_id = p_review_id AND x.status = 'deleted')
+         END;
+  GET DIAGNOSTICS closed = ROW_COUNT;
+  RETURN closed;
+END
+$$;
+REVOKE ALL ON FUNCTION app.dismiss_deleted_review_reports(uuid, uuid, timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.dismiss_deleted_review_reports(uuid, uuid, timestamptz) TO ob_app;
 
 -- ---------------------------------------------------------------------------
 -- Admin roles (0054)

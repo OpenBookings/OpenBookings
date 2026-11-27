@@ -20,6 +20,7 @@ import {
 } from "../testing/db-harness";
 import {
   deleteGuestReview,
+  deleteHostReply,
   getReviewContext,
   loadPropertyReviews,
   loadReviewReplies,
@@ -80,12 +81,23 @@ describeWithDb("review moderation against Postgres", () => {
       [id],
     );
 
-  async function report(reviewId: string, replyId: string | null = null, org = `org-${crypto.randomUUID()}`) {
+  /** A host's report, made an hour after the reviews were written unless `createdAt` says otherwise. */
+  async function report(reviewId: string, replyId: string | null = null, org = `org-${crypto.randomUUID()}`, createdAt = later(HOUR)) {
     return (
       await one<{ id: string }>(
-        `INSERT INTO review_reports (review_id, reply_id, reporter_kind, reporter_user_id, reporter_org_id, rule, note)
-         VALUES ($1, $2, 'host', $3, $4, 'personal_details', 'Names our staff') RETURNING id`,
-        [reviewId, replyId, hostId, org],
+        `INSERT INTO review_reports (review_id, reply_id, reporter_kind, reporter_user_id, reporter_org_id, rule, note, created_at)
+         VALUES ($1, $2, 'host', $3, $4, 'personal_details', 'Names our staff', $5) RETURNING id`,
+        [reviewId, replyId, hostId, org, createdAt],
+      )
+    ).id;
+  }
+  /** A report from the public form, with an email for the outcome. */
+  async function publicReport(reviewId: string, replyId: string | null = null) {
+    return (
+      await one<{ id: string }>(
+        `INSERT INTO review_reports (review_id, reply_id, reporter_kind, reporter_email, rule, created_at)
+         VALUES ($1, $2, 'public', $3, 'abuse', $4) RETURNING id`,
+        [reviewId, replyId, `reporter-${crypto.randomUUID()}@example.test`, later(HOUR)],
       )
     ).id;
   }
@@ -410,8 +422,8 @@ describeWithDb("review moderation against Postgres", () => {
     await decide(removed.item, "removed", decidedAt);
     await decide(masked.item, "kept", decidedAt, []);
     await decide({ kind: "reply", id: reply.replyId }, "removed", decidedAt, ["links_contact"]);
-    // Still open: not purged however old.
-    const open = await report(masked.reviewId);
+    // Still open, and made less than 12 months before: stays.
+    const open = await report(masked.reviewId, null, undefined, later(300 * DAY));
 
     const yearLater = new Date(decidedAt);
     yearLater.setUTCMonth(yearLater.getUTCMonth() + 12);
@@ -434,6 +446,188 @@ describeWithDb("review moderation against Postgres", () => {
     });
     // Nothing left to do.
     expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 0, texts: 0 });
+  });
+
+  test("purge keeps only the masked text of a deadline-published item nobody decided, 12 months after publication", async () => {
+    const held = await review(NAMED);
+    const publishedAt = later(72 * HOUR);
+    await publishOverdue(db, publishedAt);
+    const yearLater = new Date(publishedAt);
+    yearLater.setUTCMonth(yearLater.getUTCMonth() + 12);
+
+    expect(await purgeModerationRecords(db, new Date(yearLater.getTime() - 1))).toEqual({ reports: 0, texts: 0 });
+    expect(await reviewRow(held.reviewId)).toMatchObject({ body: RUDE, masked_body: "[removed] at the desk was rude to us." });
+
+    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 0, texts: 1 });
+    expect(await reviewRow(held.reviewId)).toMatchObject({
+      status: "published",
+      body: "[removed] at the desk was rude to us.",
+      masked_body: null,
+      flagged_fragments: [],
+      published_by_deadline: true,
+      decided_at: null,
+    });
+    expect((await loadPropertyReviews(db, ids.propertyId, yearLater)).reviews[0]?.body).toBe("[removed] at the desk was rude to us.");
+    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 0, texts: 0 });
+  });
+
+  test("purge deletes a report nobody decided 12 months after it was made", async () => {
+    const published = await review(CLEAN, "Lovely.");
+    const madeAt = later(DAY);
+    const open = await report(published.reviewId, null, undefined, madeAt);
+    const yearLater = new Date(madeAt);
+    yearLater.setUTCMonth(yearLater.getUTCMonth() + 12);
+
+    expect(await purgeModerationRecords(db, new Date(yearLater.getTime() - 1))).toEqual({ reports: 0, texts: 0 });
+    expect(await reportStatus(open)).toEqual({ status: "open", decided: false });
+    expect(await purgeModerationRecords(db, yearLater)).toEqual({ reports: 1, texts: 0 });
+    expect(await one(`SELECT count(*)::int AS n FROM review_reports WHERE id = $1`, [open])).toEqual({ n: 0 });
+  });
+
+  test("an item held before 0061 is marked unchecked for the recheck, and never published unmasked", async () => {
+    const held = await review(NAMED);
+    // As 0038's code left it: held by the regex, no fragments, no check source.
+    await db.query(
+      `UPDATE reviews SET flagged_reason = 'url', flagged_fragments = '[]', check_source = NULL, checked_at = NULL WHERE id = $1`,
+      [held.reviewId],
+    );
+    expect(await publishOverdue(db, later(30 * DAY))).toBe(0);
+    expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", masked_body: null });
+
+    // 0061's backfill (its UPDATE statements only: replaying the whole file
+    // would take table locks other suites may be waiting on).
+    const backfill = pendingMigrationSql("0061_review_moderation.sql")
+      .split("\n")
+      .filter((line) => /^UPDATE (reviews|review_replies) SET check_source = 'unchecked'/.test(line));
+    expect(backfill).toHaveLength(2);
+    for (const statement of backfill) await db.query(statement);
+
+    expect(await reviewRow(held.reviewId)).toMatchObject({ status: "pending", check_source: "unchecked" });
+    expect(await uncheckedItems(db, 10)).toEqual([{ kind: "review", id: held.reviewId, body: RUDE }]);
+    // The recheck finds the fragments, so the deadline masks them.
+    await applyRecheck(db, held.item, NAMED, later(30 * DAY));
+    expect(await publishOverdue(db, later(30 * DAY))).toBe(1);
+    expect(await reviewRow(held.reviewId)).toMatchObject({ masked_body: "[removed] at the desk was rude to us." });
+  });
+
+  test("the deadline doesn't publish an item edited after it was picked up", async () => {
+    const published = await review(CLEAN, "Lovely.");
+    const reply = await postReviewReply(db, {
+      reviewId: published.reviewId,
+      role: "host",
+      authorUserId: hostId,
+      body: "Ask Jan Jansen.",
+      check: NAMED,
+      now: later(HOUR),
+    });
+    if (!reply.ok) throw new Error("reply failed");
+    // The host's edit lands between the deadline run's SELECT and its UPDATE:
+    // new text, new clock. (One connection, so the edit is run right after
+    // the SELECT returns, where another connection's would commit.)
+    const racing = {
+      query: async (text: string, values?: unknown[]) => {
+        const result = await db.query(text, values);
+        if (/FROM review_replies rr/.test(text) && /SKIP LOCKED/.test(text)) {
+          await db.query(`UPDATE review_replies SET body = 'Ask the desk.', edited_at = $2 WHERE id = $1`, [
+            reply.replyId,
+            later(80 * HOUR),
+          ]);
+        }
+        return result;
+      },
+    };
+    expect(await publishOverdue(racing, later(80 * HOUR))).toBe(0);
+    expect(await one(`SELECT status, masked_body FROM review_replies WHERE id = $1`, [reply.replyId])).toEqual({
+      status: "pending",
+      masked_body: null,
+    });
+  });
+
+  test("decideItem leaves hidden and pre-moderation removed items alone", async () => {
+    const hidden = await review(CLEAN, "Lovely.");
+    await db.query(`UPDATE reviews SET status = 'hidden' WHERE id = $1`, [hidden.reviewId]);
+    const legacyRemoved = await review(CLEAN, "Bad.");
+    await db.query(`UPDATE reviews SET status = 'removed' WHERE id = $1`, [legacyRemoved.reviewId]);
+    for (const item of [hidden.item, legacyRemoved.item]) {
+      expect(await decide(item, "kept", later(DAY), [])).toEqual({ ok: false, error: "not_found" });
+    }
+    expect(await reviewRow(hidden.reviewId)).toMatchObject({ status: "hidden", decided_at: null });
+    expect(await reviewRow(legacyRemoved.reviewId)).toMatchObject({ status: "removed", decided_at: null });
+  });
+
+  // ── The app roles (0049): deleting closes every report ────────────────────
+
+  /** Run `fn` as an app role for one user, as packages/authz/src/rls.db.test.ts does. */
+  async function asApp<T>(role: "ob_web" | "ob_business", userId: string, fn: () => Promise<T>): Promise<T> {
+    await db.query(`SELECT set_config('app.user_id', $1, true)`, [userId]);
+    await db.query(`SET LOCAL ROLE ${role}`);
+    const result = await fn();
+    await db.query("RESET ROLE");
+    await db.query(`SELECT set_config('app.user_id', '', true)`);
+    return result;
+  }
+  /**
+   * What 0049 sets up for the app roles, for this suite's tables. A database
+   * rebuilt from a schema dump has the roles without their memberships (and,
+   * locally, without these grants). Rolled back with the rest.
+   */
+  const grantAppRoles = () =>
+    db.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ob_web') THEN CREATE ROLE ob_web; END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ob_business') THEN CREATE ROLE ob_business; END IF;
+      GRANT ob_app TO ob_web, ob_business;
+      EXECUTE format('GRANT ob_web, ob_business TO %I WITH INHERIT FALSE, SET TRUE', current_user);
+      GRANT USAGE ON SCHEMA public, app TO ob_app;
+      GRANT EXECUTE ON FUNCTION app.user_id(), app.readable_property_ids() TO ob_app;
+      GRANT SELECT, INSERT, UPDATE, DELETE ON reviews, review_replies, review_reports TO ob_app;
+    END $$`);
+
+  test("as the app roles, a deleted reply and a deleted review close every open report, public ones included", async () => {
+    await grantAppRoles();
+    const published = await review(CLEAN, "Jan stole my bag.");
+    const reply = await postReviewReply(db, {
+      reviewId: published.reviewId,
+      role: "host",
+      authorUserId: hostId,
+      body: "That is not true.",
+      check: CLEAN,
+      now: later(HOUR),
+    });
+    if (!reply.ok) throw new Error("reply failed");
+    const onReply = [await report(published.reviewId, reply.replyId, "org-other"), await publicReport(published.reviewId, reply.replyId)];
+    const onReview = [await report(published.reviewId, null, "org-other"), await publicReport(published.reviewId)];
+
+    // The host deletes their reply: its reports close, the review's stay open.
+    expect(await asApp("ob_business", hostId, () => deleteHostReply(db, { replyId: reply.replyId, now: later(DAY) }))).toMatchObject({
+      ok: true,
+    });
+    for (const id of onReply) expect(await reportStatus(id)).toEqual({ status: "dismissed", decided: true });
+    for (const id of onReview) expect(await reportStatus(id)).toEqual({ status: "open", decided: false });
+
+    // The guest deletes their review: the rest close.
+    expect(
+      await asApp("ob_web", published.guestId, () =>
+        deleteGuestReview(db, { bookingId: published.bookingId, guestUserId: published.guestId, now: later(2 * DAY) }),
+      ),
+    ).toBe(true);
+    for (const id of onReview) expect(await reportStatus(id)).toEqual({ status: "dismissed", decided: true });
+  });
+
+  test("the dismissal function closes nothing for a stranger, or on an item that isn't deleted", async () => {
+    await grantAppRoles();
+    const published = await review(CLEAN, "Lovely.");
+    const open = await publicReport(published.reviewId);
+    const dismiss = () =>
+      db.query(`SELECT app.dismiss_deleted_review_reports($1::uuid, NULL, $2) AS n`, [published.reviewId, later(DAY)]);
+
+    // Not deleted: nothing to close, even for the guest.
+    expect((await asApp("ob_web", published.guestId, dismiss)).rows[0]).toEqual({ n: 0 });
+    await db.query(`UPDATE reviews SET status = 'deleted', score = NULL, body = NULL WHERE id = $1`, [published.reviewId]);
+    // A stranger may not.
+    await db.query("SAVEPOINT stranger");
+    await expect(asApp("ob_web", `stranger-${crypto.randomUUID()}`, dismiss)).rejects.toThrow(/not allowed/);
+    await db.query("ROLLBACK TO SAVEPOINT stranger");
+    expect(await reportStatus(open)).toEqual({ status: "open", decided: false });
   });
 
   // ── The admin console's roles (0054) ──────────────────────────────────────
